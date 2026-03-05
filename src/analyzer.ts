@@ -11,6 +11,19 @@ import type {
 import { v4 as uuidv4 } from "uuid";
 import { callLLM } from "./llm.js";
 
+// Extract JSON from LLM response that might contain markdown code blocks
+function extractJSON(text: string): string {
+  // Try to find JSON in markdown code blocks
+  const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (codeBlockMatch) return codeBlockMatch[1].trim();
+
+  // Try to find JSON object or array directly
+  const jsonMatch = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+  if (jsonMatch) return jsonMatch[1].trim();
+
+  return text.trim();
+}
+
 // In-memory analysis store
 const analyses = new Map<string, AnalysisResult>();
 
@@ -117,29 +130,19 @@ async function runAnalysis(
 }
 
 async function extractArticle(url: string): Promise<ExtractedArticle> {
-  // Use LLM to extract and summarize article content
-  // In production, this would use a headless browser or readability parser
   const extractionPrompt = `You are an article extraction agent. Given a URL, describe what you know about the article or content at this URL.
 
 URL: ${url}
 
-Respond in this exact JSON format:
-{
-  "title": "article title or best guess",
-  "author": "author name if known, or null",
-  "published_date": "date if known, or null",
-  "source": "domain/publication name",
-  "content": "the main text content or your best summary of what this URL contains",
-  "word_count": estimated word count,
-  "excerpt": "first 200 characters of content"
-}
+IMPORTANT: Respond with ONLY a JSON object, no markdown, no code blocks, no explanation. Just raw JSON:
+{"title": "article title or best guess", "author": "author name if known, or null", "published_date": "date if known, or null", "source": "domain/publication name", "content": "the main text content or your best summary of what this URL contains", "word_count": 0, "excerpt": "first 200 characters of content"}
 
-If you don't know the specific article, provide your best analysis based on the URL structure, domain reputation, and any knowledge you have. Always return valid JSON.`;
+If you don't know the specific article, provide your best analysis based on the URL structure, domain reputation, and any knowledge you have.`;
 
   const response = await callLLM(extractionPrompt);
 
   try {
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(extractJSON(response));
     return {
       title: parsed.title || "Unknown Title",
       author: parsed.author || undefined,
@@ -197,11 +200,11 @@ ${content}
 Return a JSON array of deception indicators:
 [{"type": "technique_name", "severity": "low|medium|high", "description": "explanation", "quote": "relevant quote if applicable"}]
 
-Return [] if no deception detected. Always return valid JSON array.`;
+Return [] if no deception detected. IMPORTANT: Return ONLY raw JSON, no markdown, no code blocks.`;
 
   const response = await callLLM(prompt);
   try {
-    return JSON.parse(response);
+    return JSON.parse(extractJSON(response));
   } catch {
     return [];
   }
@@ -215,11 +218,11 @@ ${content}
 Return a JSON array of fallacies found:
 [{"name": "fallacy name", "description": "how it's used here", "quote": "relevant quote"}]
 
-Return [] if no fallacies detected. Always return valid JSON array.`;
+Return [] if no fallacies detected. IMPORTANT: Return ONLY raw JSON, no markdown, no code blocks.`;
 
   const response = await callLLM(prompt);
   try {
-    return JSON.parse(response);
+    return JSON.parse(extractJSON(response));
   } catch {
     return [];
   }
@@ -243,11 +246,11 @@ ${content}
 Return JSON:
 {"score": 0-100, "source_count": number, "primary_sources": number, "expert_citations": number, "details": ["detail1", "detail2"]}
 
-Always return valid JSON.`;
+IMPORTANT: Return ONLY raw JSON, no markdown, no code blocks.`;
 
   const response = await callLLM(prompt);
   try {
-    return JSON.parse(response);
+    return JSON.parse(extractJSON(response));
   } catch {
     return { score: 50, source_count: 0, primary_sources: 0, expert_citations: 0, details: ["Unable to assess evidence quality"] };
   }
@@ -261,11 +264,11 @@ ${content}
 Return a JSON array of claims:
 [{"text": "the claim", "verdict": "supported|partially_supported|unsupported|misleading", "confidence": 0.0-1.0, "evidence": "your reasoning"}]
 
-Return up to 5 most important claims. Always return valid JSON array.`;
+Return up to 5 most important claims. IMPORTANT: Return ONLY raw JSON, no markdown, no code blocks.`;
 
   const response = await callLLM(prompt);
   try {
-    return JSON.parse(response);
+    return JSON.parse(extractJSON(response));
   } catch {
     return [];
   }
@@ -279,11 +282,11 @@ ${content}
 Return JSON:
 {"direction": "left|center-left|center|center-right|right|unclear", "confidence": 0.0-1.0, "indicators": ["indicator1", "indicator2"]}
 
-Always return valid JSON.`;
+IMPORTANT: Return ONLY raw JSON, no markdown, no code blocks.`;
 
   const response = await callLLM(prompt);
   try {
-    return JSON.parse(response);
+    return JSON.parse(extractJSON(response));
   } catch {
     return { direction: "unclear", confidence: 0, indicators: [] };
   }
@@ -297,11 +300,11 @@ ${content}
 Return JSON:
 {"techniques": [{"name": "technique", "description": "how it's used", "effectiveness": "low|medium|high"}], "emotional_appeal_score": 0-100, "rational_appeal_score": 0-100}
 
-Always return valid JSON.`;
+IMPORTANT: Return ONLY raw JSON, no markdown, no code blocks.`;
 
   const response = await callLLM(prompt);
   try {
-    return JSON.parse(response);
+    return JSON.parse(extractJSON(response));
   } catch {
     return { techniques: [], emotional_appeal_score: 50, rational_appeal_score: 50 };
   }
@@ -315,11 +318,11 @@ ${content}
 Return JSON:
 {"score": 0-100, "verdict": "reliable|mostly_reliable|mixed|questionable|unreliable", "genre": "news|opinion|analysis|satire|press_release|other", "summary": "2-3 sentence assessment", "recommendations": ["recommendation1", "recommendation2"]}
 
-Always return valid JSON.`;
+IMPORTANT: Return ONLY raw JSON, no markdown, no code blocks.`;
 
   const response = await callLLM(prompt);
   try {
-    return JSON.parse(response);
+    return JSON.parse(extractJSON(response));
   } catch {
     return { score: 50, verdict: "mixed", genre: "other", summary: "Unable to fully assess credibility.", recommendations: [] };
   }
@@ -333,11 +336,11 @@ ${content}
 Return a JSON array of strings:
 ["takeaway 1", "takeaway 2", "takeaway 3"]
 
-Always return valid JSON array.`;
+IMPORTANT: Return ONLY raw JSON, no markdown, no code blocks.`;
 
   const response = await callLLM(prompt);
   try {
-    return JSON.parse(response);
+    return JSON.parse(extractJSON(response));
   } catch {
     return ["Unable to extract key takeaways"];
   }
