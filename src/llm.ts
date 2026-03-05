@@ -2,7 +2,7 @@ import type { TokenUsage } from "./types.js";
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "meta-llama/llama-3.3-70b-instruct:free";
+const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "deepseek/deepseek-chat";
 
 // Pricing per 1M tokens
 const PRICING: Record<string, { input: number; output: number }> = {
@@ -48,52 +48,65 @@ export async function callLLMFull(
     return dryRun(messages, selectedModel);
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
+  // Retry with backoff for rate limits
+  const maxRetries = 3;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
 
-  try {
-    const res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://parseforagents.dev",
-        "X-Title": "Parse for Agents",
-      },
-      body: JSON.stringify({
+    try {
+      const res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://parseforagents.dev",
+          "X-Title": "Parse for Agents",
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          messages,
+          max_tokens: 2048,
+          temperature: 0.3,
+        }),
+        signal: controller.signal,
+      });
+
+      if (res.status === 429 && attempt < maxRetries) {
+        clearTimeout(timeout);
+        const wait = (attempt + 1) * 3000; // 3s, 6s, 9s
+        console.log(`Rate limited on ${selectedModel}, retrying in ${wait}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`OpenRouter API error ${res.status}: ${errText}`);
+      }
+
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content || "";
+      const usage = data.usage || {};
+
+      const tokenUsage: TokenUsage = {
+        prompt: usage.prompt_tokens || 0,
+        completion: usage.completion_tokens || 0,
+        total: usage.total_tokens || 0,
+      };
+
+      return {
+        content,
+        tokenUsage,
+        costEstimate: calculateCost(selectedModel, tokenUsage),
         model: selectedModel,
-        messages,
-        max_tokens: 2048,
-        temperature: 0.3,
-        response_format: { type: "text" },
-      }),
-      signal: controller.signal,
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`OpenRouter API error ${res.status}: ${errText}`);
+      };
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content || "";
-    const usage = data.usage || {};
-
-    const tokenUsage: TokenUsage = {
-      prompt: usage.prompt_tokens || 0,
-      completion: usage.completion_tokens || 0,
-      total: usage.total_tokens || 0,
-    };
-
-    return {
-      content,
-      tokenUsage,
-      costEstimate: calculateCost(selectedModel, tokenUsage),
-      model: selectedModel,
-    };
-  } finally {
-    clearTimeout(timeout);
   }
+
+  throw new Error(`Failed after ${maxRetries} retries on ${selectedModel}`);
 }
 
 /**
