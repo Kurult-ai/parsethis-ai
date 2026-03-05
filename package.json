@@ -1,7 +1,7 @@
 {
   "name": "parse-for-agents",
   "version": "1.0.0",
-  "description": "Prompt testing sandbox API - evaluate prompts for safety, quality, and cost",
+  "description": "Parse for Agents - Agent-optimized media credibility analysis API",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -9,8 +9,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["agents", "media-analysis", "credibility", "ai"],
+  "author": "Kurultai",
   "license": "ISC",
   "dependencies": {
     "@hono/node-server": "^1.19.11",
