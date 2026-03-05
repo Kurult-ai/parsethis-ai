@@ -378,8 +378,9 @@ export function getDashboardHTML(demoKey: string): string {
           <div class="form-group">
             <label>Model</label>
             <select id="eval-model">
-              <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 (Free)</option>
-              <option value="google/gemini-2.0-flash-exp:free">Gemini Flash (Free)</option>
+              <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (Free)</option>
+              <option value="google/gemma-3-27b-it:free">Gemma 3 27B (Free)</option>
+              <option value="mistralai/mistral-small-3.1-24b-instruct:free">Mistral Small 3.1 (Free)</option>
               <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
               <option value="anthropic/claude-3-haiku">Claude 3 Haiku</option>
             </select>

@@ -254,7 +254,7 @@ app.post("/v1/evaluate", authMiddleware("evaluate"), async (c) => {
   }
 
   const id = uuidv4();
-  const model = body.model || "deepseek/deepseek-chat-v3-0324:free";
+  const model = body.model || "meta-llama/llama-3.3-70b-instruct:free";
   const testInputs = body.test_inputs || [""];
   const evaluatorNames = body.evaluators || ["safety", "quality", "cost"];
 

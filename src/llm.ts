@@ -2,18 +2,19 @@ import type { TokenUsage } from "./types.js";
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "deepseek/deepseek-chat-v3-0324:free";
+const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "meta-llama/llama-3.3-70b-instruct:free";
 
 // Pricing per 1M tokens
 const PRICING: Record<string, { input: number; output: number }> = {
-  "deepseek/deepseek-chat-v3-0324:free": { input: 0, output: 0 },
+  "meta-llama/llama-3.3-70b-instruct:free": { input: 0, output: 0 },
+  "google/gemma-3-27b-it:free": { input: 0, output: 0 },
+  "mistralai/mistral-small-3.1-24b-instruct:free": { input: 0, output: 0 },
+  "nousresearch/hermes-3-llama-3.1-405b:free": { input: 0, output: 0 },
   "deepseek/deepseek-chat": { input: 0.14, output: 0.28 },
   "openai/gpt-4o-mini": { input: 0.15, output: 0.6 },
   "openai/gpt-4o": { input: 2.5, output: 10 },
   "anthropic/claude-3.5-sonnet": { input: 3, output: 15 },
   "anthropic/claude-3-haiku": { input: 0.25, output: 1.25 },
-  "google/gemini-2.0-flash-exp:free": { input: 0, output: 0 },
-  "meta-llama/llama-3.1-8b-instruct:free": { input: 0, output: 0 },
 };
 
 interface LLMResponse {
