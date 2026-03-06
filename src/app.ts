@@ -7,15 +7,16 @@ import { authMiddleware, getDemoKey, createApiKey, listApiKeys, deleteApiKey } f
 import { startAnalysis, getAnalysis, listAnalyses } from "./analyzer.js";
 import { handleChat, handleChatStream } from "./chat.js";
 import { executePrompt } from "./executor.js";
-import { runEvaluators } from "./evaluators.js";
+import { runEvaluators, runSpecEvaluators } from "./evaluators.js";
 import { getAvailableModels } from "./llm.js";
 import { getDashboardHTML } from "./dashboard.js";
 import { x402Guard, getPricingInfo, isX402Enabled } from "./x402.js";
 import { getPaymentStats, getRecentPayments } from "./payment-ledger.js";
 import { parsePrompt } from "./parse.js";
 import type { ParseRequest } from "./parse.js";
-import { getParseSkillPrompt } from "./skill.js";
-import type { EvaluateRequest, EvaluationResult, AnalyzeRequest, ChatRequest } from "./types.js";
+import { getParseSkillPrompt, getSkillInstallInstructions, getSkillInstallScript } from "./skill.js";
+import { EvaluateRequestSchema, VALID_EVALUATORS } from "./schemas.js";
+import type { EvaluateRequest, EvaluationResult, AnalyzeRequest, ChatRequest, TestCaseResult, EvalSummary } from "./types.js";
 
 export const app = new Hono();
 
@@ -66,13 +67,15 @@ app.use("/*", async (c, next) => {
 // Request body size limit (1MB)
 app.use("/*", bodyLimit({ maxSize: 1024 * 1024 }));
 
-// Request logging middleware
+// Request ID + logging middleware
 app.use("/*", async (c, next) => {
+  const requestId = c.req.header("x-request-id") || crypto.randomUUID();
   const start = Date.now();
   await next();
   const duration = Date.now() - start;
+  c.header("X-Request-Id", requestId);
   console.log(
-    `[${new Date().toISOString()}] ${c.req.method} ${c.req.path} ${c.res.status} ${duration}ms`
+    `[${new Date().toISOString()}] ${c.req.method} ${c.req.path} ${c.res.status} ${duration}ms rid=${requestId.slice(0, 8)}`
   );
 });
 
@@ -106,6 +109,7 @@ app.get("/", (c) =>
       analyze_result: "GET /v1/analyze/:id",
       evaluate: "POST /v1/evaluate",
       evaluate_result: "GET /v1/evaluate/:id",
+      evaluators: "GET /v1/evaluators",
       chat: "POST /v1/chat",
       models: "GET /v1/models",
     },
@@ -145,7 +149,7 @@ app.get("/docs", (c) =>
   c.json({
     service: "Parse for Agents API",
     version: "1.0.0",
-    base_url: c.req.url.replace("/docs", ""),
+    base_url: getBaseUrl(c),
     authentication: {
       method: "Bearer token or x402 USDC payment",
       header: "Authorization: Bearer <api_key>",
@@ -252,11 +256,33 @@ app.get("/docs", (c) =>
   })
 );
 
+// Resolve base URL respecting reverse proxy headers (Railway terminates TLS)
+function getBaseUrl(c: any): string {
+  const url = new URL(c.req.url);
+  const proto = c.req.header("x-forwarded-proto") || url.protocol.replace(":", "");
+  return `${proto}://${url.host}`;
+}
+
 // Skill prompt (plain text, copy-pasteable by agents)
 app.get("/skill", (c) => {
-  const baseUrl = new URL(c.req.url).origin;
-  const text = getParseSkillPrompt(baseUrl);
+  const text = getParseSkillPrompt(getBaseUrl(c));
   return c.text(text);
+});
+
+// Skill install instructions (JSON)
+app.get("/skill/install", (c) => {
+  const baseUrl = getBaseUrl(c);
+  return c.json({
+    one_liner: `curl -s ${baseUrl}/skill > ~/.claude/skills/parse-safety.md && echo "Parse skill installed"`,
+    full_install: `curl -s ${baseUrl}/skill/install.sh | bash`,
+    manual: getSkillInstallInstructions(baseUrl),
+  });
+});
+
+// Skill install script (bash, pipe-able)
+app.get("/skill/install.sh", (c) => {
+  c.header("Content-Type", "text/x-shellscript");
+  return c.text(getSkillInstallScript(getBaseUrl(c)));
 });
 
 // Available models
@@ -418,75 +444,107 @@ app.get("/v1/analyze/:id/stream", authMiddleware("analyze"), async (c) => {
   });
 });
 
+// --- Evaluators info ---
+
+app.get("/v1/evaluators", (c) =>
+  c.json({
+    evaluators: [
+      {
+        name: "cost",
+        description: "Token usage and cost estimation based on model pricing.",
+        fields: ["input_tokens", "output_tokens", "total_tokens", "cost_usd"],
+        tier: "free",
+      },
+      {
+        name: "latency",
+        description: "Response timing: total duration, TTFT, and throughput.",
+        fields: ["total_ms", "time_to_first_token_ms", "tokens_per_second"],
+        tier: "free",
+      },
+      {
+        name: "quality",
+        description: "Heuristic output quality score with sub-scores for instruction following, coherence, completeness, and conciseness.",
+        fields: ["score", "reasoning", "sub_scores"],
+        tier: "free",
+      },
+      {
+        name: "safety",
+        description: "Deterministic pattern-matching for prompt injection, harmful content, and PII leaks.",
+        fields: ["score", "flags", "categories_checked"],
+        tier: "free",
+      },
+    ],
+  })
+);
+
 // --- Evaluation ---
 
 app.post("/v1/evaluate", authMiddleware("evaluate"), async (c) => {
-  const body = await c.req.json<EvaluateRequest>();
-
-  if (!body.prompt || typeof body.prompt !== "string") {
-    return c.json({ error: "prompt is required and must be a string" }, 400);
+  const body = await c.req.json().catch(() => null);
+  if (!body) {
+    return c.json({ error: { code: "invalid_request", message: "Invalid JSON body" } }, 400);
   }
 
-  if (body.prompt.length > 10_000) {
-    return c.json({ error: "prompt must be less than 10,000 characters" }, 400);
+  const parsed = EvaluateRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    const firstIssue = parsed.error.issues[0];
+    const pathStr = (firstIssue.path ?? []).map(String).join(".");
+    return c.json(
+      {
+        error: {
+          code: "invalid_request",
+          message: `${pathStr}: ${firstIssue.message}`,
+          details: parsed.error.issues.map((e) => ({
+            path: (e.path ?? []).map(String).join("."),
+            message: e.message,
+          })),
+        },
+      },
+      400
+    );
   }
 
-  if (body.test_inputs !== undefined) {
-    if (!Array.isArray(body.test_inputs) || body.test_inputs.length > 20) {
-      return c.json({ error: "test_inputs must be an array with at most 20 items" }, 400);
-    }
-    if (!body.test_inputs.every((i) => typeof i === "string")) {
-      return c.json({ error: "test_inputs must contain only strings" }, 400);
-    }
-  }
-
-  if (body.evaluators !== undefined) {
-    if (!Array.isArray(body.evaluators)) {
-      return c.json({ error: "evaluators must be an array" }, 400);
-    }
-    const validEvaluators = ["safety", "quality", "cost"];
-    const invalid = body.evaluators.filter((e) => !validEvaluators.includes(e));
-    if (invalid.length > 0) {
-      return c.json({ error: `Invalid evaluators: ${invalid.join(", ")}. Valid: ${validEvaluators.join(", ")}` }, 400);
-    }
-  }
-
-  if (body.model !== undefined && typeof body.model !== "string") {
-    return c.json({ error: "model must be a string" }, 400);
-  }
-
-  const id = uuidv4();
-  const model = body.model || "meta-llama/llama-3.3-70b-instruct:free";
-  const testInputs = body.test_inputs || [""];
-  const evaluatorNames = body.evaluators || ["safety", "quality", "cost"];
+  const req = parsed.data;
+  const id = `eval_${uuidv4().replace(/-/g, "")}`;
 
   const result: EvaluationResult = {
     id,
-    status: "running",
+    status: "queued",
     created_at: new Date().toISOString(),
-    prompt: body.prompt,
-    model,
+    prompt: req.prompt,
+    model: req.model,
     results: [],
+    progress: { completed: 0, total: req.test_cases.length, percent: 0 },
   };
   evalResults.set(id, result);
   evictOldEvals();
 
-  runEvaluation(id, body.prompt, model, testInputs, evaluatorNames).catch((err) => {
+  // Start async
+  runSpecEvaluation(id, req).catch((err) => {
     const r = evalResults.get(id);
     if (r) {
       r.status = "failed";
-      r.error = { code: "EVAL_ERROR", message: err.message };
+      r.error = { code: "internal_error", message: err.message };
     }
   });
 
-  return c.json({ id, status: "running", poll_url: `/v1/evaluate/${id}` }, 202);
+  return c.json(
+    {
+      id,
+      status: "queued",
+      created_at: result.created_at,
+      estimated_duration_ms: req.test_cases.length * (req.config?.timeout_seconds ?? 30) * 1000,
+      poll_url: `/v1/evaluate/${id}`,
+    },
+    202
+  );
 });
 
 app.get("/v1/evaluate/:id", authMiddleware("evaluate"), (c) => {
   const id = c.req.param("id")!;
   const result = evalResults.get(id);
   if (!result) {
-    return c.json({ error: "Evaluation not found" }, 404);
+    return c.json({ error: { code: "evaluation_not_found", message: "Evaluation not found" } }, 404);
   }
   return c.json(result);
 });
@@ -627,58 +685,117 @@ app.get("/v1/payments/stats", authMiddleware("admin"), (c) => {
 });
 
 // ==========================================
-// Evaluation runner
+// SPEC-aligned evaluation runner
 // ==========================================
 
-async function runEvaluation(
+function interpolatePrompt(
+  template: string,
+  variables: Record<string, string> | undefined,
+  input: string
+): string {
+  let result = template;
+  // Replace {{input}} with the test case input
+  result = result.replace(/\{\{input\}\}/g, input);
+  // Replace other variables
+  if (variables) {
+    for (const [key, value] of Object.entries(variables)) {
+      result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
+    }
+  }
+  return result;
+}
+
+async function runSpecEvaluation(
   id: string,
-  prompt: string,
-  model: string,
-  testInputs: string[],
-  evaluatorNames: string[]
+  req: import("./schemas.js").ValidatedEvaluateRequest
 ) {
   const result = evalResults.get(id)!;
-  const testResults = [];
+  result.status = "running";
+  result.started_at = new Date().toISOString();
 
-  for (const input of testInputs) {
+  const testCaseResults: TestCaseResult[] = [];
+
+  for (let i = 0; i < req.test_cases.length; i++) {
+    const tc = req.test_cases[i];
+    const interpolated = interpolatePrompt(req.prompt, req.variables, tc.input);
+
     const startTime = Date.now();
-    const execution = await executePrompt(prompt, input, model);
-    const latencyMs = Date.now() - startTime;
+    const execution = await executePrompt(interpolated, tc.input, req.model);
+    const totalMs = Date.now() - startTime;
 
-    const evaluations = runEvaluators(
-      prompt,
-      input,
-      execution.output,
-      evaluatorNames,
-      execution.tokenUsage,
-      execution.costEstimate
-    );
-
-    testResults.push({
-      input: input || "(no input)",
+    const metrics = runSpecEvaluators(req.evaluators, {
+      prompt: interpolated,
+      input: tc.input,
       output: execution.output,
-      latency_ms: latencyMs,
-      token_usage: execution.tokenUsage,
-      cost_estimate: execution.costEstimate,
-      evaluations,
+      model: req.model,
+      tokenUsage: execution.tokenUsage,
+      totalMs,
+      timeToFirstTokenMs: null,
     });
+
+    testCaseResults.push({
+      test_case_index: i,
+      input: tc.input,
+      expected: tc.expected ?? undefined,
+      output: execution.output,
+      metrics,
+    });
+
+    // Update progress
+    result.results = testCaseResults;
+    result.progress = {
+      completed: i + 1,
+      total: req.test_cases.length,
+      percent: Math.round(((i + 1) / req.test_cases.length) * 100),
+    };
   }
 
-  const allSafe = testResults.every((r) =>
-    r.evaluations.safety ? r.evaluations.safety.passed : true
+  // Build summary
+  const qualityScores = testCaseResults
+    .map((r) => r.metrics.quality?.score)
+    .filter((s): s is number => s !== undefined);
+  const latencies = testCaseResults
+    .map((r) => r.metrics.latency?.total_ms)
+    .filter((l): l is number => l !== undefined);
+  const totalTokens = testCaseResults.reduce(
+    (s, r) => s + (r.metrics.cost?.total_tokens || 0),
+    0
   );
-  const safetyFlags = testResults.flatMap((r) =>
-    r.evaluations.safety ? r.evaluations.safety.flags : []
+  const totalCost = testCaseResults.reduce(
+    (s, r) => s + (r.metrics.cost?.cost_usd || 0),
+    0
   );
-  const avgQuality =
-    testResults.reduce((sum, r) => sum + (r.evaluations.quality?.score || 0), 0) / testResults.length;
+  const safetyIssues = testCaseResults.reduce(
+    (s, r) => s + (r.metrics.safety?.flags.length || 0),
+    0
+  );
+
+  const summary: EvalSummary = {
+    total_test_cases: testCaseResults.length,
+    passed: testCaseResults.filter(
+      (r) => !r.metrics.safety || r.metrics.safety.flags.length === 0
+    ).length,
+    failed: testCaseResults.filter(
+      (r) => r.metrics.safety && r.metrics.safety.flags.length > 0
+    ).length,
+    avg_quality_score:
+      qualityScores.length > 0
+        ? Math.round(
+            qualityScores.reduce((a, b) => a + b, 0) / qualityScores.length
+          )
+        : null,
+    avg_latency_ms:
+      latencies.length > 0
+        ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
+        : 0,
+    total_tokens: totalTokens,
+    total_cost_usd: Math.round(totalCost * 1_000_000) / 1_000_000,
+    safety_issues: safetyIssues,
+  };
 
   result.status = "completed";
-  result.safe = allSafe;
-  result.safety_flags = [...new Set(safetyFlags)];
-  result.quality_score = Math.round(avgQuality * 100) / 100;
-  result.total_latency_ms = testResults.reduce((s, r) => s + r.latency_ms, 0);
-  result.total_tokens = testResults.reduce((s, r) => s + r.token_usage.total, 0);
-  result.total_cost_estimate = testResults.reduce((s, r) => s + r.cost_estimate, 0);
-  result.results = testResults as any;
+  result.completed_at = new Date().toISOString();
+  result.summary = summary;
+  result.results = testCaseResults;
+  delete result.progress;
 }
