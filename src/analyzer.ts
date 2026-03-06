@@ -24,8 +24,19 @@ function extractJSON(text: string): string {
   return text.trim();
 }
 
-// In-memory analysis store
+// In-memory analysis store (bounded to prevent memory leaks)
+const MAX_ANALYSES = 500;
 const analyses = new Map<string, AnalysisResult>();
+
+function evictOldAnalyses() {
+  if (analyses.size <= MAX_ANALYSES) return;
+  const sorted = Array.from(analyses.entries())
+    .sort((a, b) => new Date(a[1].created_at).getTime() - new Date(b[1].created_at).getTime());
+  const toRemove = sorted.slice(0, analyses.size - MAX_ANALYSES);
+  for (const [key] of toRemove) {
+    analyses.delete(key);
+  }
+}
 
 export function getAnalysis(id: string): AnalysisResult | undefined {
   return analyses.get(id);
@@ -62,6 +73,7 @@ export async function startAnalysis(
   };
 
   analyses.set(id, result);
+  evictOldAnalyses();
 
   // Run analysis asynchronously
   runAnalysis(id, url, depth, agents, onProgress).catch((err) => {

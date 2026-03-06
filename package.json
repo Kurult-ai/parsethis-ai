@@ -7,20 +7,29 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/**/*.test.ts"
   },
-  "keywords": ["agents", "media-analysis", "credibility", "ai"],
+  "keywords": [
+    "agents",
+    "media-analysis",
+    "credibility",
+    "ai"
+  ],
   "author": "Kurultai",
   "license": "ISC",
   "dependencies": {
     "@hono/node-server": "^1.19.11",
+    "@x402/core": "^2.5.0",
+    "@x402/evm": "^2.5.0",
+    "@x402/hono": "^2.5.0",
     "hono": "^4.12.5",
+    "tsx": "^4.21.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",
     "@types/uuid": "^10.0.0",
-    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }

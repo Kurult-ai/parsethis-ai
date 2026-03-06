@@ -1,5 +1,6 @@
 import { Context, Next } from "hono";
 import { v4 as uuidv4 } from "uuid";
+import { timingSafeEqual } from "node:crypto";
 import type { ApiKey } from "./types.js";
 
 // In-memory API key store (production would use a database)
@@ -7,6 +8,38 @@ const apiKeys = new Map<string, ApiKey>();
 
 // Rate limit tracking: key -> { count, window_start }
 const rateLimits = new Map<string, { count: number; window_start: number }>();
+
+// Timing-safe API key lookup to prevent timing attacks
+function findApiKey(input: string): ApiKey | undefined {
+  // First do a quick map lookup for the key
+  const candidate = apiKeys.get(input);
+  if (!candidate) return undefined;
+
+  // Then verify with timing-safe comparison
+  const inputBuf = Buffer.from(input);
+  const keyBuf = Buffer.from(candidate.key);
+  if (inputBuf.length !== keyBuf.length) return undefined;
+
+  if (timingSafeEqual(inputBuf, keyBuf)) {
+    return candidate;
+  }
+  return undefined;
+}
+
+// Periodic cleanup of expired rate limit entries (every 5 minutes)
+const cleanupInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimits) {
+    if (now - entry.window_start > 120_000) {
+      rateLimits.delete(key);
+    }
+  }
+}, 300_000);
+cleanupInterval.unref();
+
+export function cleanup() {
+  clearInterval(cleanupInterval);
+}
 
 // Create a default demo key on startup
 const DEMO_KEY = process.env.DEMO_API_KEY || "pfa_demo_" + uuidv4().replace(/-/g, "").slice(0, 24);
@@ -74,34 +107,42 @@ export function deleteApiKey(id: string): boolean {
   return false;
 }
 
-function checkRateLimit(key: string, limit: number): boolean {
+function checkRateLimit(key: string, limit: number): { allowed: boolean; remaining: number; resetMs: number } {
   const now = Date.now();
   const windowMs = 60_000; // 1 minute window
 
   const entry = rateLimits.get(key);
   if (!entry || now - entry.window_start > windowMs) {
     rateLimits.set(key, { count: 1, window_start: now });
-    return true;
+    return { allowed: true, remaining: limit - 1, resetMs: windowMs };
   }
 
+  const resetMs = windowMs - (now - entry.window_start);
+
   if (entry.count >= limit) {
-    return false;
+    return { allowed: false, remaining: 0, resetMs };
   }
 
   entry.count++;
-  return true;
+  return { allowed: true, remaining: limit - entry.count, resetMs };
 }
 
 // Auth middleware - extracts API key from Authorization header or query param
 export function authMiddleware(requiredScope?: string) {
   return async (c: Context, next: Next) => {
+    // Skip auth if x402 payment was verified by upstream middleware
+    if (c.get("x402Paid")) {
+      await next();
+      return;
+    }
+
     // Extract API key
     const authHeader = c.req.header("Authorization");
     const queryKey = c.req.query("api_key");
     let keyStr: string | undefined;
 
     if (authHeader?.startsWith("Bearer ")) {
-      keyStr = authHeader.slice(7);
+      keyStr = authHeader.slice(7).trim();
     } else if (queryKey) {
       keyStr = queryKey;
     }
@@ -116,7 +157,12 @@ export function authMiddleware(requiredScope?: string) {
       );
     }
 
-    const apiKey = apiKeys.get(keyStr);
+    // Reject obviously malformed keys early
+    if (keyStr.length > 256) {
+      return c.json({ error: "Invalid API key" }, 401);
+    }
+
+    const apiKey = findApiKey(keyStr);
     if (!apiKey) {
       return c.json({ error: "Invalid API key" }, 401);
     }
@@ -130,11 +176,17 @@ export function authMiddleware(requiredScope?: string) {
     }
 
     // Check rate limit
-    if (!checkRateLimit(keyStr, apiKey.rate_limit)) {
+    const rateCheck = checkRateLimit(keyStr, apiKey.rate_limit);
+    c.header("X-RateLimit-Limit", String(apiKey.rate_limit));
+    c.header("X-RateLimit-Remaining", String(rateCheck.remaining));
+    c.header("X-RateLimit-Reset", String(Math.ceil(rateCheck.resetMs / 1000)));
+
+    if (!rateCheck.allowed) {
+      c.header("Retry-After", String(Math.ceil(rateCheck.resetMs / 1000)));
       return c.json(
         {
           error: "Rate limit exceeded",
-          retry_after_seconds: 60,
+          retry_after_seconds: Math.ceil(rateCheck.resetMs / 1000),
           limit: apiKey.rate_limit,
         },
         429

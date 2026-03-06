@@ -116,12 +116,36 @@ export interface ChatResponse {
   context_used?: string[];
 }
 
-// === Evaluation (existing, enhanced) ===
-export interface EvaluateRequest {
+// === Evaluation (legacy format, kept for backwards compat) ===
+export interface EvaluateRequestLegacy {
   prompt: string;
   model?: string;
   test_inputs?: string[];
   evaluators?: string[];
+}
+
+// === Evaluation (SPEC-aligned v1) ===
+export interface TestCase {
+  input: string;
+  expected?: string | null;
+}
+
+export interface EvalConfig {
+  temperature?: number;
+  max_tokens?: number;
+  timeout_seconds?: number;
+  num_runs?: number;
+}
+
+export interface EvaluateRequest {
+  prompt: string;
+  model: string;
+  variables?: Record<string, string>;
+  test_cases?: TestCase[];
+  evaluators: string[];
+  config?: EvalConfig;
+  // Legacy compat
+  test_inputs?: string[];
 }
 
 export interface TokenUsage {
@@ -130,29 +154,106 @@ export interface TokenUsage {
   total: number;
 }
 
-export interface TestResult {
+// SPEC-shaped metric results
+export interface QualityMetric {
+  score: number;
+  reasoning: string;
+  sub_scores: {
+    instruction_following: number;
+    coherence: number;
+    completeness: number;
+    conciseness: number;
+  };
+}
+
+export interface SafetyMetric {
+  score: number;
+  flags: Array<{
+    category: string;
+    severity: "low" | "medium" | "high" | "critical";
+    excerpt: string;
+    explanation: string;
+  }>;
+  categories_checked: string[];
+}
+
+export interface LatencyMetric {
+  total_ms: number;
+  time_to_first_token_ms: number | null;
+  tokens_per_second: number;
+}
+
+export interface CostMetric {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+}
+
+export interface TestCaseMetrics {
+  quality?: QualityMetric;
+  safety?: SafetyMetric;
+  latency?: LatencyMetric;
+  cost?: CostMetric;
+}
+
+export interface TestCaseResult {
+  test_case_index: number;
   input: string;
+  expected?: string | null;
   output: string;
-  latency_ms: number;
-  token_usage: TokenUsage;
-  cost_estimate: number;
-  evaluations: Record<string, any>;
+  metrics: TestCaseMetrics;
+}
+
+export interface EvalSummary {
+  total_test_cases: number;
+  passed: number;
+  failed: number;
+  avg_quality_score: number | null;
+  avg_latency_ms: number;
+  total_tokens: number;
+  total_cost_usd: number;
+  safety_issues: number;
 }
 
 export interface EvaluationResult {
   id: string;
-  status: "running" | "completed" | "error";
+  status: "queued" | "running" | "completed" | "failed" | "cancelled" | "timed_out";
   created_at: string;
-  prompt: string;
+  started_at?: string;
+  completed_at?: string;
   model: string;
+  prompt: string;
+  summary?: EvalSummary;
+  results: TestCaseResult[];
+  progress?: {
+    completed: number;
+    total: number;
+    percent: number;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+  // Legacy fields (kept for backwards compat)
   safe?: boolean;
   safety_flags?: string[];
   quality_score?: number;
   total_latency_ms?: number;
   total_tokens?: number;
   total_cost_estimate?: number;
-  results: TestResult[];
-  error?: string;
+}
+
+// === x402 Payments ===
+export interface PaymentRecord {
+  txHash: string;
+  payer: string;
+  amount: string;
+  endpoint: string;
+  depth?: string;
+  timestamp: string;
+  network: string;
+  status: "verified" | "settled" | "failed";
 }
 
 // === SSE Events ===
