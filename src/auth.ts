@@ -1,30 +1,14 @@
 import { Context, Next } from "hono";
-import { v4 as uuidv4 } from "uuid";
-import { timingSafeEqual } from "node:crypto";
-import type { ApiKey } from "./types.js";
-
-// In-memory API key store (production would use a database)
-const apiKeys = new Map<string, ApiKey>();
+import {
+  validateApiKey as validateApiKeyFromService,
+  createApiKey as createApiKeyFromService,
+  listApiKeys as listApiKeysFromService,
+  revokeApiKey as revokeApiKeyFromService,
+  type ApiKeyRecord,
+} from "./api-key-service.js";
 
 // Rate limit tracking: key -> { count, window_start }
 const rateLimits = new Map<string, { count: number; window_start: number }>();
-
-// Timing-safe API key lookup to prevent timing attacks
-function findApiKey(input: string): ApiKey | undefined {
-  // First do a quick map lookup for the key
-  const candidate = apiKeys.get(input);
-  if (!candidate) return undefined;
-
-  // Then verify with timing-safe comparison
-  const inputBuf = Buffer.from(input);
-  const keyBuf = Buffer.from(candidate.key);
-  if (inputBuf.length !== keyBuf.length) return undefined;
-
-  if (timingSafeEqual(inputBuf, keyBuf)) {
-    return candidate;
-  }
-  return undefined;
-}
 
 // Periodic cleanup of expired rate limit entries (every 5 minutes)
 const cleanupInterval = setInterval(() => {
@@ -41,71 +25,11 @@ export function cleanup() {
   clearInterval(cleanupInterval);
 }
 
-// Create a default demo key on startup
-const DEMO_KEY = process.env.DEMO_API_KEY || "pfa_demo_" + uuidv4().replace(/-/g, "").slice(0, 24);
-apiKeys.set(DEMO_KEY, {
-  id: uuidv4(),
-  key: DEMO_KEY,
-  name: "Demo Key",
-  created_at: new Date().toISOString(),
-  scopes: ["analyze", "evaluate", "chat"],
-  rate_limit: 30,
-  usage_count: 0,
-});
-
 // Master key from env (bypasses rate limits)
 const MASTER_KEY = process.env.MASTER_API_KEY;
-if (MASTER_KEY) {
-  apiKeys.set(MASTER_KEY, {
-    id: "master",
-    key: MASTER_KEY,
-    name: "Master Key",
-    created_at: new Date().toISOString(),
-    scopes: ["analyze", "evaluate", "chat", "admin"],
-    rate_limit: 1000,
-    usage_count: 0,
-  });
-}
 
-export function getDemoKey(): string {
-  return DEMO_KEY;
-}
-
-export function getApiKey(key: string): ApiKey | undefined {
-  return apiKeys.get(key);
-}
-
-export function createApiKey(name: string, scopes: string[]): ApiKey {
-  const key = "pfa_" + uuidv4().replace(/-/g, "");
-  const apiKey: ApiKey = {
-    id: uuidv4(),
-    key,
-    name,
-    created_at: new Date().toISOString(),
-    scopes,
-    rate_limit: 60,
-    usage_count: 0,
-  };
-  apiKeys.set(key, apiKey);
-  return apiKey;
-}
-
-export function listApiKeys(): ApiKey[] {
-  return Array.from(apiKeys.values()).map((k) => ({
-    ...k,
-    key: k.key.slice(0, 8) + "..." + k.key.slice(-4), // mask key
-  }));
-}
-
-export function deleteApiKey(id: string): boolean {
-  for (const [key, apiKey] of apiKeys) {
-    if (apiKey.id === id && apiKey.id !== "master") {
-      apiKeys.delete(key);
-      return true;
-    }
-  }
-  return false;
-}
+// Demo key from env only — no random generation
+const DEMO_KEY = process.env.DEMO_API_KEY || null;
 
 function checkRateLimit(key: string, limit: number): { allowed: boolean; remaining: number; resetMs: number } {
   const now = Date.now();
@@ -127,7 +51,7 @@ function checkRateLimit(key: string, limit: number): { allowed: boolean; remaini
   return { allowed: true, remaining: limit - entry.count, resetMs };
 }
 
-// Auth middleware - extracts API key from Authorization header or query param
+// Auth middleware - extracts API key from Authorization header
 export function authMiddleware(requiredScope?: string) {
   return async (c: Context, next: Next) => {
     // Skip auth if x402 payment was verified by upstream middleware
@@ -136,22 +60,30 @@ export function authMiddleware(requiredScope?: string) {
       return;
     }
 
-    // Extract API key
-    const authHeader = c.req.header("Authorization");
+    // Check for deprecated query parameter auth
     const queryKey = c.req.query("api_key");
+    if (queryKey) {
+      return c.json(
+        {
+          error: "Query parameter authentication is deprecated. Use Authorization: Bearer header.",
+        },
+        401
+      );
+    }
+
+    // Extract API key from Authorization header
+    const authHeader = c.req.header("Authorization");
     let keyStr: string | undefined;
 
     if (authHeader?.startsWith("Bearer ")) {
       keyStr = authHeader.slice(7).trim();
-    } else if (queryKey) {
-      keyStr = queryKey;
     }
 
     if (!keyStr) {
       return c.json(
         {
           error: "Authentication required",
-          detail: "Provide API key via Authorization: Bearer <key> header or ?api_key= query parameter",
+          detail: "Provide API key via Authorization: Bearer <key> header",
         },
         401
       );
@@ -162,13 +94,80 @@ export function authMiddleware(requiredScope?: string) {
       return c.json({ error: "Invalid API key" }, 401);
     }
 
-    const apiKey = findApiKey(keyStr);
-    if (!apiKey) {
+    // Fast-path: master key bypass
+    if (MASTER_KEY && keyStr === MASTER_KEY) {
+      const rateCheck = checkRateLimit(keyStr, 1000);
+      c.header("X-RateLimit-Limit", "1000");
+      c.header("X-RateLimit-Remaining", String(rateCheck.remaining));
+      c.header("X-RateLimit-Reset", String(Math.ceil(rateCheck.resetMs / 1000)));
+      c.set("apiKey", {
+        id: "master",
+        name: "Master Key",
+        scopes: ["analyze", "evaluate", "chat", "admin"],
+        rate_limit: 1000,
+      });
+      await next();
+      return;
+    }
+
+    // Fast-path: demo key bypass (if set in env)
+    if (DEMO_KEY && keyStr === DEMO_KEY) {
+      const rateCheck = checkRateLimit(keyStr, 30);
+      c.header("X-RateLimit-Limit", "30");
+      c.header("X-RateLimit-Remaining", String(rateCheck.remaining));
+      c.header("X-RateLimit-Reset", String(Math.ceil(rateCheck.resetMs / 1000)));
+
+      if (!rateCheck.allowed) {
+        c.header("Retry-After", String(Math.ceil(rateCheck.resetMs / 1000)));
+        return c.json(
+          {
+            error: "Rate limit exceeded",
+            retry_after_seconds: Math.ceil(rateCheck.resetMs / 1000),
+            limit: 30,
+          },
+          429
+        );
+      }
+
+      // Check scope for demo key
+      const demoScopes = ["analyze", "evaluate", "chat"];
+      if (requiredScope && !demoScopes.includes(requiredScope)) {
+        return c.json(
+          { error: "Insufficient permissions", required_scope: requiredScope },
+          403
+        );
+      }
+
+      c.set("apiKey", {
+        id: "demo",
+        name: "Demo Key",
+        scopes: demoScopes,
+        rate_limit: 30,
+      });
+      await next();
+      return;
+    }
+
+    // Postgres-backed key validation via api-key-service (bcrypt + Redis cache)
+    let apiKeyRecord: ApiKeyRecord | null;
+    try {
+      apiKeyRecord = await validateApiKeyFromService(keyStr);
+    } catch (err) {
+      console.error("[auth] Key validation error:", (err as Error).message);
+      return c.json({ error: "Authentication service unavailable" }, 503);
+    }
+
+    if (!apiKeyRecord) {
       return c.json({ error: "Invalid API key" }, 401);
     }
 
+    // Check expiry
+    if (apiKeyRecord.expiresAt && new Date(apiKeyRecord.expiresAt) < new Date()) {
+      return c.json({ error: "API key has expired" }, 401);
+    }
+
     // Check scope
-    if (requiredScope && !apiKey.scopes.includes(requiredScope) && !apiKey.scopes.includes("admin")) {
+    if (requiredScope && !apiKeyRecord.scopes.includes(requiredScope) && !apiKeyRecord.scopes.includes("admin")) {
       return c.json(
         { error: "Insufficient permissions", required_scope: requiredScope },
         403
@@ -176,8 +175,8 @@ export function authMiddleware(requiredScope?: string) {
     }
 
     // Check rate limit
-    const rateCheck = checkRateLimit(keyStr, apiKey.rate_limit);
-    c.header("X-RateLimit-Limit", String(apiKey.rate_limit));
+    const rateCheck = checkRateLimit(keyStr, apiKeyRecord.rateLimit);
+    c.header("X-RateLimit-Limit", String(apiKeyRecord.rateLimit));
     c.header("X-RateLimit-Remaining", String(rateCheck.remaining));
     c.header("X-RateLimit-Reset", String(Math.ceil(rateCheck.resetMs / 1000)));
 
@@ -187,18 +186,50 @@ export function authMiddleware(requiredScope?: string) {
         {
           error: "Rate limit exceeded",
           retry_after_seconds: Math.ceil(rateCheck.resetMs / 1000),
-          limit: apiKey.rate_limit,
+          limit: apiKeyRecord.rateLimit,
         },
         429
       );
     }
 
-    // Track usage
-    apiKey.usage_count++;
-    apiKey.last_used_at = new Date().toISOString();
-
     // Attach key info to context
-    c.set("apiKey", apiKey);
+    c.set("apiKey", {
+      id: apiKeyRecord.id,
+      name: apiKeyRecord.name,
+      scopes: apiKeyRecord.scopes,
+      rate_limit: apiKeyRecord.rateLimit,
+      tier: apiKeyRecord.tier,
+    });
     await next();
   };
+}
+
+// Delegate key management to api-key-service (Postgres-backed)
+// Simplified signatures for route handlers (self-service context, no userId)
+export async function createApiKey(
+  name: string,
+  scopes: string[],
+  expiresAt?: Date
+): Promise<{ id: string; key: string; name: string; scopes: string[]; created_at: string }> {
+  const result = await createApiKeyFromService("self-service", name, "free", undefined, expiresAt);
+  return {
+    id: result.record.id,
+    key: result.key,
+    name: result.record.name,
+    scopes,
+    created_at: new Date().toISOString(),
+  };
+}
+
+export async function listApiKeys(): Promise<ApiKeyRecord[]> {
+  return listApiKeysFromService("self-service");
+}
+
+export async function deleteApiKey(id: string): Promise<boolean> {
+  try {
+    await revokeApiKeyFromService(id);
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -1,5 +1,5 @@
 import type { ChatMessage, ChatResponse, TokenUsage } from "./types.js";
-import { callLLMFull, streamLLM } from "./llm.js";
+import { callLLMFull, streamLLM } from "./model-client.js";
 import { getAnalysis } from "./analyzer.js";
 import { v4 as uuidv4 } from "uuid";
 

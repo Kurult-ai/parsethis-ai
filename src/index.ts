@@ -1,6 +1,8 @@
 import { serve } from "@hono/node-server";
 import { app } from "./app.js";
 import { cleanup } from "./auth.js";
+import { disconnectDb } from "./db.js";
+import { disconnectRedis } from "./redis.js";
 
 const port = parseInt(process.env.PORT || "3000");
 
@@ -13,9 +15,14 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
 function shutdown(signal: string) {
   console.log(`\n${signal} received. Shutting down gracefully...`);
   cleanup();
-  server.close(() => {
-    console.log("Server closed.");
-    process.exit(0);
+  Promise.allSettled([
+    disconnectDb(),
+    disconnectRedis(),
+  ]).then(() => {
+    server.close(() => {
+      console.log("Server closed.");
+      process.exit(0);
+    });
   });
   // Force exit after 10 seconds
   setTimeout(() => {

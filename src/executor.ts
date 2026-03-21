@@ -1,5 +1,5 @@
 import type { TokenUsage } from "./types.js";
-import { callLLMFull } from "./llm.js";
+import { callLLMFull } from "./model-client.js";
 
 interface ExecutionResult {
   output: string;

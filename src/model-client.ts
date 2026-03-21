@@ -1,21 +1,14 @@
 import type { TokenUsage } from "./types.js";
+import { calculateCost, getAvailableModels } from "./lib/pricing.js";
+
+// Re-export pricing utilities so consumers can import from model-client
+export { calculateCost, getAvailableModels };
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "deepseek/deepseek-chat";
 
-// Pricing per 1M tokens
-const PRICING: Record<string, { input: number; output: number }> = {
-  "meta-llama/llama-3.3-70b-instruct:free": { input: 0, output: 0 },
-  "google/gemma-3-27b-it:free": { input: 0, output: 0 },
-  "mistralai/mistral-small-3.1-24b-instruct:free": { input: 0, output: 0 },
-  "nousresearch/hermes-3-llama-3.1-405b:free": { input: 0, output: 0 },
-  "deepseek/deepseek-chat": { input: 0.14, output: 0.28 },
-  "openai/gpt-4o-mini": { input: 0.15, output: 0.6 },
-  "openai/gpt-4o": { input: 2.5, output: 10 },
-  "anthropic/claude-3.5-sonnet": { input: 3, output: 15 },
-  "anthropic/claude-3-haiku": { input: 0.25, output: 1.25 },
-};
+// === LLM Response type ===
 
 interface LLMResponse {
   content: string;
@@ -23,6 +16,8 @@ interface LLMResponse {
   costEstimate: number;
   model: string;
 }
+
+// === Simple LLM call ===
 
 /**
  * Simple LLM call - returns just the text content
@@ -35,8 +30,11 @@ export async function callLLM(
   return result.content;
 }
 
+// === Full LLM call (callModel / callLLMFull) ===
+
 /**
- * Full LLM call with messages array - returns content + metadata
+ * Full LLM call with messages array - returns content + metadata.
+ * Retries on 429 (rate limit) with exponential backoff, up to 3 attempts.
  */
 export async function callLLMFull(
   messages: Array<{ role: string; content: string }>,
@@ -110,7 +108,35 @@ export async function callLLMFull(
 }
 
 /**
- * Streaming LLM call - yields text chunks via async generator
+ * callModel - supports both new and legacy signatures:
+ * New: callModel(messages, model?) — same as callLLMFull
+ * Legacy: callModel(model, prompt, systemPrompt?, options?) — agent compat, returns {output, ...}
+ */
+export async function callModel(
+  messagesOrModel: Array<{ role: string; content: string }> | string,
+  modelOrPrompt?: string,
+  systemPrompt?: string,
+  _options?: { timeout_seconds?: number; temperature?: number }
+): Promise<LLMResponse & { output: string }> {
+  // Detect legacy signature: first arg is a string (model name)
+  if (typeof messagesOrModel === "string") {
+    const model = messagesOrModel;
+    const prompt = modelOrPrompt || "";
+    const messages: Array<{ role: string; content: string }> = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    messages.push({ role: "user", content: prompt });
+    const result = await callLLMFull(messages, model);
+    return { ...result, output: result.content };
+  }
+  // New signature: messages array
+  const result = await callLLMFull(messagesOrModel, modelOrPrompt);
+  return { ...result, output: result.content };
+}
+
+// === Streaming LLM call ===
+
+/**
+ * Streaming LLM call - yields text chunks via async generator.
  */
 export async function* streamLLM(
   messages: Array<{ role: string; content: string }>,
@@ -183,12 +209,10 @@ export async function* streamLLM(
   }
 }
 
-function calculateCost(model: string, usage: TokenUsage): number {
-  const pricing = PRICING[model] || { input: 1, output: 2 };
-  const inputCost = (usage.prompt / 1_000_000) * pricing.input;
-  const outputCost = (usage.completion / 1_000_000) * pricing.output;
-  return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000;
-}
+/** Alias for streamLLM */
+export const streamModel = streamLLM;
+
+// === Dry-run fallback when no API key is set ===
 
 function dryRun(
   messages: Array<{ role: string; content: string }>,
@@ -198,7 +222,6 @@ function dryRun(
   const estimatedPromptTokens = Math.ceil(totalChars / 4);
   const estimatedCompletionTokens = 200;
 
-  // Return a realistic-looking dry run response for analysis
   const lastMessage = messages[messages.length - 1]?.content || "";
   const isJsonRequest = lastMessage.includes("Return") && lastMessage.includes("JSON");
 
@@ -247,15 +270,4 @@ function dryRun(
     costEstimate: 0,
     model,
   };
-}
-
-export function getAvailableModels() {
-  return Object.entries(PRICING).map(([id, pricing]) => ({
-    id,
-    pricing: {
-      input_per_1m: pricing.input,
-      output_per_1m: pricing.output,
-    },
-    free: pricing.input === 0 && pricing.output === 0,
-  }));
 }

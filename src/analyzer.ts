@@ -9,7 +9,7 @@ import type {
   EvidenceQuality,
 } from "./types.js";
 import { v4 as uuidv4 } from "uuid";
-import { callLLM } from "./llm.js";
+import { callLLM } from "./model-client.js";
 
 // Extract JSON from LLM response that might contain markdown code blocks
 function extractJSON(text: string): string {

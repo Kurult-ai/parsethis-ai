@@ -6,10 +6,10 @@ import { recordPayment } from "./payment-ledger.js";
 
 const X402_ENABLED = process.env.X402_ENABLED === "true";
 const WALLET = process.env.X402_PAY_TO_ADDRESS || "";
-const NETWORK = (process.env.X402_NETWORK || "eip155:8453") as `${string}:${string}`;
-const FACILITATOR_URL = process.env.X402_FACILITATOR_URL || "https://facilitator.x402.org";
+const NETWORK = (process.env.X402_NETWORK || "eip155:84532") as `${string}:${string}`;
+const FACILITATOR_URL = process.env.X402_FACILITATOR_URL || "https://x402.org/facilitator";
 
-// Pricing table (USDC on Base L2)
+// Pricing table (USDC on Base Sepolia testnet)
 export const PRICING = {
   parse: "$0.005",
   analyze: { quick: "$0.01", standard: "$0.05", deep: "$0.15" },
@@ -19,88 +19,102 @@ export const PRICING = {
 
 // Initialize x402 middleware only when enabled and wallet configured
 let x402MW: ((c: Context, next: Next) => Promise<Response | void>) | null = null;
+let x402Ready = false;
 
-if (X402_ENABLED && WALLET) {
-  const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
-  const resourceServer = new x402ResourceServer(facilitatorClient)
-    .register(NETWORK, new ExactEvmScheme());
-
-  // Log settled payments to the in-memory ledger
-  resourceServer.onAfterSettle(async (context) => {
-    if (context.result.success) {
-      // Convert base units back to decimal (USDC has 6 decimals)
-      const amountDecimal = (parseInt(context.requirements.amount, 10) / 1_000_000).toString();
-      const endpoint = context.paymentPayload.resource?.url || "unknown";
-      // Extract just the path portion from the full URL
-      let path = endpoint;
-      try {
-        path = new URL(endpoint).pathname;
-      } catch {
-        // already a path or unparseable — use as-is
-      }
-
-      recordPayment({
-        txHash: context.result.transaction,
-        payer: context.result.payer || "unknown",
-        amount: amountDecimal,
-        endpoint: path,
-        timestamp: new Date().toISOString(),
-        network: context.result.network,
-        status: "settled",
-      });
-
-      console.log(
-        `[x402] Payment settled: ${amountDecimal} USDC from ${(context.result.payer || "unknown").slice(0, 10)}... tx:${context.result.transaction.slice(0, 10)}...`,
-      );
+/**
+ * Initialize x402 payment middleware.
+ * Uses try/catch + timeout race instead of deprecated node:domain.
+ */
+async function initX402(): Promise<void> {
+  if (!X402_ENABLED || !WALLET) {
+    if (X402_ENABLED && !WALLET) {
+      console.warn("[x402] X402_ENABLED=true but X402_PAY_TO_ADDRESS not set — payments disabled");
     }
-  });
+    return;
+  }
 
-  x402MW = paymentMiddleware(
-    {
-      "POST /v1/parse": {
-        accepts: {
-          scheme: "exact",
-          price: PRICING.parse,
-          network: NETWORK,
-          payTo: WALLET,
+  const INIT_TIMEOUT_MS = 10_000;
+
+  const initPromise = (async () => {
+    const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
+    const resourceServer = new x402ResourceServer(facilitatorClient);
+
+    // Register the network/scheme - this triggers async initialization
+    resourceServer.register(NETWORK, new ExactEvmScheme());
+
+    // Persist settled payments to Postgres
+    resourceServer.onAfterSettle(async (context) => {
+      if (context.result.success) {
+        const amountDecimal = (parseInt(context.requirements.amount, 10) / 1_000_000).toString();
+        const endpoint = context.paymentPayload.resource?.url || "unknown";
+        let path = endpoint;
+        try {
+          path = new URL(endpoint).pathname;
+        } catch {
+          // already a path or unparseable — use as-is
+        }
+
+        await recordPayment({
+          txHash: context.result.transaction,
+          payer: context.result.payer || "unknown",
+          amount: amountDecimal,
+          endpoint: path,
+          timestamp: new Date().toISOString(),
+          network: context.result.network,
+          status: "settled",
+        });
+
+        console.log(
+          `[x402] Payment settled: ${amountDecimal} USDC from ${(context.result.payer || "unknown").slice(0, 10)}... tx:${context.result.transaction.slice(0, 10)}...`,
+        );
+      }
+    });
+
+    x402MW = paymentMiddleware(
+      {
+        "POST /v1/parse": {
+          accepts: { scheme: "exact", price: PRICING.parse, network: NETWORK, payTo: WALLET },
+          description: "Agent prompt safety analysis (0-10 risk score)",
         },
-        description: "Agent prompt safety analysis (0-10 risk score)",
-      },
-      "POST /v1/analyze": {
-        accepts: {
-          scheme: "exact",
-          price: PRICING.analyze.standard,
-          network: NETWORK,
-          payTo: WALLET,
+        "POST /v1/analyze": {
+          accepts: { scheme: "exact", price: PRICING.analyze.standard, network: NETWORK, payTo: WALLET },
+          description: "Media credibility analysis",
         },
-        description: "Media credibility analysis",
-      },
-      "POST /v1/evaluate": {
-        accepts: {
-          scheme: "exact",
-          price: PRICING.evaluate,
-          network: NETWORK,
-          payTo: WALLET,
+        "POST /v1/evaluate": {
+          accepts: { scheme: "exact", price: PRICING.evaluate, network: NETWORK, payTo: WALLET },
+          description: "Prompt safety and quality evaluation",
         },
-        description: "Prompt safety and quality evaluation",
-      },
-      "POST /v1/chat": {
-        accepts: {
-          scheme: "exact",
-          price: PRICING.chat,
-          network: NETWORK,
-          payTo: WALLET,
+        "POST /v1/chat": {
+          accepts: { scheme: "exact", price: PRICING.chat, network: NETWORK, payTo: WALLET },
+          description: "Chat with Parse AI assistant",
         },
-        description: "Chat with Parse AI assistant",
       },
-    },
-    resourceServer,
+      resourceServer,
+    );
+
+    x402Ready = true;
+    console.log(`[x402] Payment middleware enabled — wallet: ${WALLET.slice(0, 6)}...${WALLET.slice(-4)}, network: ${NETWORK}`);
+  })();
+
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("x402 init timed out")), INIT_TIMEOUT_MS)
   );
 
-  console.log(`[x402] Payment middleware enabled — wallet: ${WALLET.slice(0, 6)}...${WALLET.slice(-4)}, network: ${NETWORK}`);
-} else if (X402_ENABLED && !WALLET) {
-  console.warn("[x402] X402_ENABLED=true but X402_PAY_TO_ADDRESS not set — payments disabled");
+  try {
+    await Promise.race([initPromise, timeoutPromise]);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[x402] Failed to initialize payment middleware: ${message}`);
+    console.error("[x402] Server will continue without x402 payments — fix facilitator connectivity and redeploy");
+    x402MW = null;
+    x402Ready = false;
+  }
 }
+
+// Initialize async — does not block server startup
+initX402().catch((err) => {
+  console.error(`[x402] Unhandled init error: ${err.message}`);
+});
 
 /**
  * Middleware that intercepts x402 payment headers on POST routes.
@@ -132,7 +146,7 @@ export function x402Guard() {
 }
 
 export function isX402Enabled(): boolean {
-  return X402_ENABLED && !!WALLET;
+  return X402_ENABLED && !!WALLET && x402Ready;
 }
 
 export function getPricingInfo() {
