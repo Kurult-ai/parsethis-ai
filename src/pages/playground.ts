@@ -67,32 +67,20 @@ export function renderPlaygroundPage(baseUrl: string): string {
         </div>
       </template>
 
-      <template x-if="result.execution && !result.execution_pending">
-        <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+      <div x-show="result && result.execution && !result.execution_pending" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
           <!-- Status badge -->
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-            <template x-if="result.execution.sandbox_status === 'executed'">
-              <span style="display:inline-flex;align-items:center;gap:5px;background:rgba(34,197,94,0.1);border:1px solid var(--green);color:var(--green);border-radius:9999px;padding:3px 10px;font-size:12px;font-weight:600;">&#10003; Executed in sandbox (isolated)</span>
-            </template>
-            <template x-if="result.execution.sandbox_status === 'fallback'">
-              <span style="display:inline-flex;align-items:center;gap:5px;background:rgba(217,119,6,0.1);border:1px solid #d97706;color:#d97706;border-radius:9999px;padding:3px 10px;font-size:12px;font-weight:600;">&#9888; Executed (inline fallback)</span>
-            </template>
-            <template x-if="result.execution.sandbox_status === 'unavailable'">
-              <span style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:9999px;padding:3px 10px;font-size:12px;">&#8212; Sandbox unavailable</span>
-            </template>
-            <template x-if="result.execution.output_risk_score > 0">
-              <span style="display:inline-flex;align-items:center;gap:5px;background:rgba(220,38,38,0.08);border:1px solid var(--destructive);color:var(--destructive);border-radius:9999px;padding:3px 10px;font-size:12px;font-weight:600;">Output risk: <span x-text="result.execution.output_risk_score"></span>/10</span>
-            </template>
+            <span x-show="result && result.execution && result.execution.sandbox_status === 'executed'" style="display:inline-flex;align-items:center;gap:5px;background:rgba(34,197,94,0.1);border:1px solid var(--green);color:var(--green);border-radius:9999px;padding:3px 10px;font-size:12px;font-weight:600;">&#10003; Executed in sandbox (isolated)</span>
+            <span x-show="result && result.execution && result.execution.sandbox_status === 'fallback'" style="display:inline-flex;align-items:center;gap:5px;background:rgba(217,119,6,0.1);border:1px solid #d97706;color:#d97706;border-radius:9999px;padding:3px 10px;font-size:12px;font-weight:600;">&#9888; Executed (inline fallback)</span>
+            <span x-show="result && result.execution && result.execution.sandbox_status === 'unavailable'" style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:9999px;padding:3px 10px;font-size:12px;">&#8212; Sandbox unavailable</span>
+            <span x-show="result && result.execution && result.execution.output_risk_score > 0" style="display:inline-flex;align-items:center;gap:5px;background:rgba(220,38,38,0.08);border:1px solid var(--destructive);color:var(--destructive);border-radius:9999px;padding:3px 10px;font-size:12px;font-weight:600;">Output risk: <span x-text="result && result.execution ? result.execution.output_risk_score : ''"></span>/10</span>
           </div>
           <!-- Output preview -->
-          <template x-if="result.execution.output && result.execution.sandbox_status !== 'unavailable'">
-            <div>
-              <div style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Sandbox output</div>
-              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:13px;font-family:monospace;white-space:pre-wrap;line-height:1.5;max-height:220px;overflow-y:auto;color:var(--text);" x-text="sandboxOutput.length > 600 ? sandboxOutput.slice(0, 600) + '\n…[truncated]' : sandboxOutput"></div>
-            </div>
-          </template>
-        </div>
-      </template>
+          <div x-show="sandboxOutput && result && result.execution && result.execution.sandbox_status !== 'unavailable'">
+            <div style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Sandbox output</div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:13px;font-family:monospace;white-space:pre-wrap;line-height:1.5;max-height:220px;overflow-y:auto;color:var(--text);" x-text="sandboxOutput.length > 600 ? sandboxOutput.slice(0, 600) + '\n…[truncated]' : sandboxOutput"></div>
+          </div>
+      </div>
     </div>
   </template>
 
