@@ -12,6 +12,7 @@ export const RISK_CATEGORIES = [
   "privilege_escalation",
   "social_engineering",
   "code_execution",
+  "indirect_injection",
 ] as const;
 
 export type RiskCategory = (typeof RISK_CATEGORIES)[number];
@@ -110,6 +111,16 @@ export const INJECTION_PATTERNS: Array<{
   { pattern: /(?:connect|ssh|telnet)\s+(?:to|into)\s+/i, category: "code_execution", severity: 7, label: "Remote connection request" },
   { pattern: /(?:upload|send|transmit)\s+(?:this|the|my)\s+(?:data|file|info)/i, category: "data_exfiltration", severity: 7, label: "Data upload request" },
   { pattern: /(?:modify|edit|change|alter)\s+(?:the|your)\s+(?:source|code|config)/i, category: "code_execution", severity: 7, label: "Source modification request" },
+
+  // ── Indirect injection via URL navigation (5 patterns) ───────────────────
+  // Detects instructions that direct an agent to visit an external URL —
+  // a classic indirect injection setup where injected content lives on the
+  // remote page, not in the prompt itself.
+  { pattern: /(?:go\s+to|visit|browse\s+to|navigate\s+to|head\s+to|check\s+out)\s+(?:https?:\/\/)?(?:www\.)?[\w-]+\.[\w]{2,6}\b/i, category: "indirect_injection", severity: 4, label: "Agent navigation instruction" },
+  { pattern: /(?:open|load|pull\s+up)\s+(?:https?:\/\/)?(?:www\.)?[\w-]+\.[\w]{2,6}\b\s+(?:and|then|to)/i, category: "indirect_injection", severity: 4, label: "Agent URL load instruction" },
+  { pattern: /(?:read|retrieve|scrape|fetch|get|extract)\s+(?:the\s+)?(?:content|data|information|text|page)\s+(?:from|at|on)\s+(?:https?:\/\/)?(?:www\.)?[\w-]+\.[\w]{2,6}\b/i, category: "indirect_injection", severity: 5, label: "Content retrieval from URL" },
+  { pattern: /(?:summarize|analyze|review|describe|report\s+on)\s+(?:https?:\/\/)?(?:www\.)?[\w-]+\.[\w]{2,6}\b/i, category: "indirect_injection", severity: 4, label: "URL content analysis instruction" },
+  { pattern: /(?:what(?:'s|\s+is|\s+does|\s+are))\s+(?:on|at)\s+(?:https?:\/\/)?(?:www\.)?[\w-]+\.[\w]{2,6}\b/i, category: "indirect_injection", severity: 3, label: "URL content query" },
 
   // ── Semantic paraphrasing (15 patterns) ───────────────────────────────────
   { pattern: /set\s+aside\s+(?:your|the|all)\s+(?:guidelines|rules|instructions)/i, category: "jailbreak", severity: 7, label: "Set aside guidelines" },
