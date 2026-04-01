@@ -151,7 +151,11 @@ app.use("/v1/*", async (c, next) => {
 
   // Verify HMAC signature
   if (!verifyHmac(bodyText, timestamp, nonce, signature)) {
-    log({ event: "auth_failure", reason: "invalid_signature", ip });
+    // Debug: log first 8 chars of expected vs received to diagnose mismatch
+    const debugExpected = createHmac("sha256", SANDBOX_HMAC_SECRET)
+      .update(bodyText + "\n" + timestamp + "\n" + nonce)
+      .digest("hex").slice(0, 8);
+    log({ event: "auth_failure", reason: "invalid_signature", ip, sig_received: signature.slice(0, 8), sig_expected: debugExpected, body_len: bodyText.length, secret_len: SANDBOX_HMAC_SECRET.length });
     return c.json({ error: "Invalid signature" }, 401);
   }
 
