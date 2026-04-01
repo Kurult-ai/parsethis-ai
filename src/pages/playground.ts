@@ -153,11 +153,14 @@ function promptTester() {
           if (res.ok) {
             var data = await res.json();
             if (!data.execution_pending && data.execution) {
-              this.sandboxOutput = data.execution.output || '';
-              await this.$nextTick();
+              var out = data.execution.output || '';
+              this.sandboxOutput = out;
               this.result.execution = data.execution;
               this.result.execution_pending = false;
               delete this.result.poll_url;
+              await this.$nextTick();
+              var el = document.getElementById('sandbox-output-text');
+              if (el) el.textContent = out.length > 600 ? out.slice(0, 600) + '\n…[truncated]' : out;
               break;
             }
           }
