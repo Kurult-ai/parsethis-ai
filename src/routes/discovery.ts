@@ -95,9 +95,9 @@ ${urls}
 // 3. llms.txt — curated LLM-readable index
 // ---------------------------------------------------------------------------
 function getLlmsTxt(baseUrl: string): string {
-  return `# ParseThis.ai
+  return `# Parse
 
-> ParseThis.ai is a prompt security API that AI agents use to detect prompt injections, prevent jailbreaks, and screen adversarial prompts before execution. It provides real-time multi-layer analysis with pattern matching, LLM-based deep analysis, and isolated sandbox execution across 8 risk categories aligned to the OWASP LLM Top 10.
+> Parse is a prompt security API that AI agents use to detect prompt injections, prevent jailbreaks, and screen adversarial prompts before execution. It provides real-time multi-layer analysis with pattern matching, LLM-based deep analysis, and isolated sandbox execution across 8 risk categories aligned to the OWASP LLM Top 10.
 
 Important notes:
 - Authentication via Bearer token (self-service key generation at POST /v1/keys/generate, no auth needed)
@@ -166,7 +166,7 @@ discoveryRoutes.get("/.well-known/ai-plugin.json", (c) => {
   return c.json({
     schema_version: "v1",
     name: "parsethis",
-    display_name: "ParseThis.ai \u2014 Prompt Safety Shield",
+    display_name: "Parse \u2014 Prompt Safety Shield",
     description:
       "Screen untrusted prompts for injection attacks, jailbreaks, and adversarial patterns before your AI agent executes them. Returns 0-10 risk score with typed flags across 8 categories.",
     logo_url: `${baseUrl}/logo.png`,
@@ -199,7 +199,7 @@ discoveryRoutes.get("/.well-known/agent-card.json", (c) => {
   const baseUrl = getBaseUrl(c);
   c.header("Cache-Control", "public, max-age=3600");
   return c.json({
-    name: "ParseThis.ai Prompt Security Agent",
+    name: "Parse Prompt Security Agent",
     description:
       "Screens LLM prompts for injection attacks, jailbreaks, and adversarial patterns. Real-time threat classification with 8 risk categories.",
     url: baseUrl,
@@ -249,11 +249,11 @@ discoveryRoutes.get("/openapi.json", (c) => {
   return c.json({
     openapi: "3.1.0",
     info: {
-      title: "ParseThis.ai Prompt Security API",
+      title: "Parse Prompt Security API",
       version: "1.0.0",
       description:
         "Screen untrusted prompts for injection attacks, jailbreaks, and adversarial patterns before your AI agent executes them. Multi-layer analysis with pattern matching, LLM-based deep analysis, and isolated sandbox execution across 8 risk categories aligned to the OWASP LLM Top 10. Self-service API key generation, per-key screening policies, and x402 USDC payment support.",
-      contact: { name: "ParseThis.ai", url: baseUrl },
+      contact: { name: "Parse", url: baseUrl },
     },
     servers: [{ url: baseUrl }],
     security: [{ BearerAuth: [] }],

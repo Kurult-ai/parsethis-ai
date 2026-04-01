@@ -6,7 +6,7 @@ export function renderPricingPage(baseUrl: string): string {
 <!-- Chunk 1: Overview (Miller's Law: 1 of 5) -->
 <div class="section-chunk animate-in">
   <h1>Pricing</h1>
-  <p class="answer-capsule">ParseThis.ai is free to start. Generate an API key instantly via POST /v1/keys/generate &mdash; no credit card, no sign-up, 60 requests per minute included. For higher volume or anonymous access, use x402 USDC micropayments on Base L2.</p>
+  <p class="answer-capsule">Parse is free to start. Generate an API key instantly via POST /v1/keys/generate &mdash; no credit card, no sign-up, 60 requests per minute included. For higher volume or anonymous access, use x402 USDC micropayments on Base L2.</p>
 </div>
 
 <!-- Chunk 2: x402 payment (Miller's Law: 2 of 5) -->
@@ -127,6 +127,7 @@ res = session.post("https://parsethis.ai/v1/parse", json={"prompt": "..."})</cod
   <p id="fn-threshold" style="font-size:13px;color:var(--text-dim);margin-top:8px;">* <strong>Auto-block threshold</strong> is the maximum risk score you can set via <code>PUT /v1/policy</code>. Higher tiers allow finer-grained blocking. Free tier caps at 5, meaning prompts scored 5+ are auto-blocked.</p>
 
   <p style="font-size:13px;color:var(--text-dim);">For Pro, Team, or Enterprise plans, contact <a href="mailto:hello@parsethis.ai">hello@parsethis.ai</a>.</p>
+
 </div>
 
 <!-- Chunk 4: Decision guide (Miller's Law: 4 of 5) -->
@@ -186,7 +187,7 @@ res = session.post("https://parsethis.ai/v1/parse", json={"prompt": "..."})</cod
   return renderPage({
     title: "Pricing — Free Tier & Pay-per-Request",
     description:
-      "ParseThis.ai pricing: free tier with 60 req/min, no credit card needed. Optional pay-per-request with x402 USDC micropayments.",
+      "Parse pricing: free tier with 60 req/min, no credit card needed. Optional pay-per-request with x402 USDC micropayments.",
     path: "/pricing",
     content,
     baseUrl,

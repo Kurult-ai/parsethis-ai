@@ -13,9 +13,9 @@ interface FaqItem {
 const FAQ_ITEMS: FaqItem[] = [
   // --- Getting Started (5 items) ---
   {
-    question: "What is ParseThis.ai?",
+    question: "What is Parse?",
     answer:
-      "ParseThis.ai is a prompt security API that screens untrusted prompts for injection attacks, jailbreaks, data exfiltration, and adversarial patterns before your AI agent executes them. It evaluates prompts across 8 risk categories aligned to the OWASP LLM Top 10 (2025 edition, LLM01), returning a 0\u201310 risk score with categorized flags and an auto-block policy.",
+      "Parse is a prompt security API that screens untrusted prompts for injection attacks, jailbreaks, data exfiltration, and adversarial patterns before your AI agent executes them. It evaluates prompts across 8 risk categories aligned to the OWASP LLM Top 10 (2025 edition, LLM01), returning a 0\u201310 risk score with categorized flags and an auto-block policy.",
   },
   {
     question: "How do I get an API key?",
@@ -28,14 +28,14 @@ const FAQ_ITEMS: FaqItem[] = [
       'Run curl -s parsethis.ai/skill > ~/.claude/skills/parse.md to install the skill file for Claude Code. The skill teaches the agent when to screen prompts (user input, tool output, forwarded messages) and how to call POST /v1/parse. On first use, the agent self-provisions an API key via POST /v1/keys/generate \u2014 no manual setup required.',
   },
   {
-    question: "What models does ParseThis.ai support?",
+    question: "What models does Parse support?",
     answer:
-      "ParseThis.ai routes LLM analysis through OpenRouter, supporting 18+ models including DeepSeek (deepseek-chat, deepseek-r1), OpenAI GPT-4o and GPT-4o-mini, Anthropic Claude 3.5 Sonnet, Google Gemini 2.0 Flash, Mistral Large, and Meta Llama 3.1 405B. The default model is deepseek/deepseek-chat. List all available models at GET /v1/models.",
+      "Parse routes LLM analysis through OpenRouter, supporting 18+ models including DeepSeek (deepseek-chat, deepseek-r1), OpenAI GPT-4o and GPT-4o-mini, Anthropic Claude 3.5 Sonnet, Google Gemini 2.0 Flash, Mistral Large, and Meta Llama 3.1 405B. The default model is deepseek/deepseek-chat. List all available models at GET /v1/models.",
   },
   {
     question: "Is there a free tier?",
     answer:
-      "Yes. Self-service API keys have a free tier with 60 requests per minute rate limit and 5 sandbox executions per hour. No credit card is required. For higher limits, use x402 USDC payments on Base L2 for pay-per-request access, or contact ParseThis.ai for enterprise plans with custom rate limits and SLAs.",
+      "Yes. Self-service API keys have a free tier with 60 requests per minute rate limit and 5 sandbox executions per hour. No credit card is required. For higher limits, use x402 USDC payments on Base L2 for pay-per-request access, or contact Parse for enterprise plans with custom rate limits and SLAs.",
   },
 
   // --- Prompt Safety (5 items) ---
@@ -45,14 +45,14 @@ const FAQ_ITEMS: FaqItem[] = [
       "Prompt injection (OWASP LLM01:2025) is an attack where an adversary manipulates LLM input to override the system\u2019s intended instructions. Direct injection embeds malicious instructions in user input; indirect injection hides them in external data sources (web pages, tool outputs, emails). NIST SP 800-228 and MITRE ATLAS classify prompt injection as a top AI security risk.",
   },
   {
-    question: "How does ParseThis.ai detect prompt injections?",
+    question: "How does Parse detect prompt injections?",
     answer:
-      "ParseThis.ai uses three detection layers: (1) pattern matching scans against 50+ known injection signatures including instruction overrides, role-play exploits, and encoding tricks; (2) LLM deep analysis evaluates semantic intent using DeepSeek or GPT-4o to catch novel attacks; (3) structural risk signals detect suspicious patterns like base64 payloads, nested delimiters, and token-boundary manipulation.",
+      "Parse uses three detection layers: (1) pattern matching scans against 50+ known injection signatures including instruction overrides, role-play exploits, and encoding tricks; (2) LLM deep analysis evaluates semantic intent using DeepSeek or GPT-4o to catch novel attacks; (3) structural risk signals detect suspicious patterns like base64 payloads, nested delimiters, and token-boundary manipulation.",
   },
   {
-    question: "What risk categories does ParseThis.ai check?",
+    question: "What risk categories does Parse check?",
     answer:
-      "ParseThis.ai evaluates prompts across 8 risk categories: prompt_injection (instruction override), jailbreak (safety bypass), data_exfiltration (unauthorized data access), harmful_content (violence, abuse, illegal activity), system_prompt_leak (system prompt extraction), privilege_escalation (unauthorized capability access), social_engineering (manipulation, deception), and code_execution (arbitrary code running).",
+      "Parse evaluates prompts across 8 risk categories: prompt_injection (instruction override), jailbreak (safety bypass), data_exfiltration (unauthorized data access), harmful_content (violence, abuse, illegal activity), system_prompt_leak (system prompt extraction), privilege_escalation (unauthorized capability access), social_engineering (manipulation, deception), and code_execution (arbitrary code running).",
   },
   {
     question: "What is sandbox execution?",
@@ -72,14 +72,14 @@ const FAQ_ITEMS: FaqItem[] = [
       "Run curl -s parsethis.ai/skill > ~/.claude/skills/parse.md to install the skill file. Claude Code reads this file and learns when to call POST /v1/parse \u2014 before executing user prompts, tool outputs, or forwarded messages. The agent auto-generates an API key on first use via POST /v1/keys/generate and stores it in localStorage.",
   },
   {
-    question: "Does ParseThis.ai support MCP?",
+    question: "Does Parse support MCP?",
     answer:
-      "Yes. ParseThis.ai publishes MCP (Model Context Protocol) tool definitions at /mcp.json. MCP-compatible agents like Claude Desktop, Cursor, and Windsurf can discover and call ParseThis.ai tools (parse, trust_verify, policy) without manual configuration. The MCP endpoint describes input schemas, authentication requirements, and response formats.",
+      "Yes. Parse publishes MCP (Model Context Protocol) tool definitions at /mcp.json. MCP-compatible agents like Claude Desktop, Cursor, and Windsurf can discover and call Parse tools (parse, trust_verify, policy) without manual configuration. The MCP endpoint describes input schemas, authentication requirements, and response formats.",
   },
   {
     question: "What is x402 payment?",
     answer:
-      "x402 is a pay-per-request payment protocol using USDC stablecoin on the Base L2 blockchain. Attach an X-PAYMENT header with a signed USDC transfer to any ParseThis.ai endpoint \u2014 no API key needed. Pricing details at GET /v1/pricing. This enables anonymous, per-request access ideal for one-off agent calls where key management is impractical.",
+      "x402 is a pay-per-request payment protocol using USDC stablecoin on the Base L2 blockchain. Attach an X-PAYMENT header with a signed USDC transfer to any Parse endpoint \u2014 no API key needed. Pricing details at GET /v1/pricing. This enables anonymous, per-request access ideal for one-off agent calls where key management is impractical.",
   },
   {
     question: "What are the rate limits?",
@@ -95,9 +95,9 @@ const FAQ_ITEMS: FaqItem[] = [
   // --- Advanced (5 items) ---
   {
     question:
-      "What\u2019s the difference between ParseThis.ai and Lakera Guard?",
+      "What\u2019s the difference between Parse and Lakera Guard?",
     answer:
-      "ParseThis.ai is developer-focused with an open REST API, self-service API keys, sandbox execution, and x402 crypto payments. Lakera Guard (acquired by Check Point in 2025) targets enterprise security teams with dashboard-centric workflows and SOC integration. ParseThis.ai also offers agent-to-agent trust verification (POST /v1/agent/trust/verify) and MCP tool definitions, which Lakera does not.",
+      "Parse is developer-focused with an open REST API, self-service API keys, sandbox execution, and x402 crypto payments. Lakera Guard (acquired by Check Point in 2025) targets enterprise security teams with dashboard-centric workflows and SOC integration. Parse also offers agent-to-agent trust verification (POST /v1/agent/trust/verify) and MCP tool definitions, which Lakera does not.",
   },
   {
     question: "How does async execution work?",
@@ -110,9 +110,9 @@ const FAQ_ITEMS: FaqItem[] = [
       "A screening policy is a per-API-key configuration that controls what the agent screens and how it responds. Fields include autoBlockThreshold (risk score 0\u201310 above which prompts are auto-blocked), screenAllPrompts (whether to screen even trusted inputs), and source filters (user_input, tool_output, forwarded_message). Manage via GET/PUT/DELETE /v1/policy.",
   },
   {
-    question: "How does ParseThis.ai handle sandbox output?",
+    question: "How does Parse handle sandbox output?",
     answer:
-      "Sandbox output is treated as untrusted regardless of the original prompt\u2019s risk score. After execution, the output goes through the full ParseThis.ai pipeline: pattern matching against known exfiltration and injection signatures, LLM deep analysis for semantic threats, and structural risk evaluation. This prevents attacks that use sandboxed code to generate secondary payloads.",
+      "Sandbox output is treated as untrusted regardless of the original prompt\u2019s risk score. After execution, the output goes through the full Parse pipeline: pattern matching against known exfiltration and injection signatures, LLM deep analysis for semantic threats, and structural risk evaluation. This prevents attacks that use sandboxed code to generate secondary payloads.",
   },
   {
     question: "What is agent-to-agent trust verification?",
@@ -149,7 +149,7 @@ export function renderFaqPage(baseUrl: string): string {
   return renderPage({
     title: "FAQ \u2014 Prompt Injection Detection",
     description:
-      "Answers to common questions about prompt injection detection, AI agent security, and the ParseThis.ai API.",
+      "Answers to common questions about prompt injection detection, AI agent security, and the Parse API.",
     path: "/faq",
     content,
     baseUrl,

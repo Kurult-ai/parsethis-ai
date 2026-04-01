@@ -31,7 +31,7 @@ function renderContentPage(
   const description = (fm.description as string) || "";
   const datePublished = (fm.date as string) || "2026-03-22";
   const dateModified = (fm.lastUpdated as string) || datePublished;
-  const author = (fm.author as string) || "ParseThis.ai";
+  const author = (fm.author as string) || "Parse";
   const path = `/${sectionPath}/${slug}`;
 
   // Fix #12: Add <link rel="alternate"> for markdown version

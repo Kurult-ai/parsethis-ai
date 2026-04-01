@@ -174,7 +174,7 @@ publicRoutes.get("/docs", (c) => {
   const content = `
 <h1>Documentation</h1>
 
-<p class="answer-capsule">ParseThis.ai is a prompt security API that screens LLM prompts for injection attacks, jailbreaks, and adversarial patterns. Get started in under 5 minutes.</p>
+<p class="answer-capsule">Parse is a prompt security API that screens LLM prompts for injection attacks, jailbreaks, and adversarial patterns. Get started in under 5 minutes.</p>
 
 <h2>Quick Start</h2>
 
@@ -225,7 +225,7 @@ publicRoutes.get("/docs", (c) => {
 
 <h2>Authentication</h2>
 
-<p class="answer-capsule">ParseThis.ai supports two authentication methods: Bearer token (API key) and x402 USDC payment per request.</p>
+<p class="answer-capsule">Parse supports two authentication methods: Bearer token (API key) and x402 USDC payment per request.</p>
 
 <h3>API Key Authentication</h3>
 
@@ -298,7 +298,7 @@ const res = await x402Fetch("https://parsethis.ai/v1/parse", {
 `;
   return c.html(renderPage({
     title: "Documentation",
-    description: "ParseThis.ai API documentation for prompt security screening, injection detection, and AI agent safety.",
+    description: "Parse API documentation for prompt security screening, injection detection, and AI agent safety.",
     path: "/docs",
     content,
     baseUrl,
@@ -400,13 +400,13 @@ publicRoutes.get("/privacy", (c) => {
 
 <h2>Overview</h2>
 
-<p class="answer-capsule">ParseThis.ai ("we," "our," or "us") respects your privacy and is committed to protecting your personal data. This privacy policy explains how we collect, use, disclose, and safeguard your information when you use our prompt security API service.</p>
+<p class="answer-capsule">Parse ("we," "our," or "us") respects your privacy and is committed to protecting your personal data. This privacy policy explains how we collect, use, disclose, and safeguard your information when you use our prompt security API service.</p>
 
 <h2>Information We Collect</h2>
 
 <h3>1. API Request Data</h3>
 
-<p class="answer-capsule">We process prompts and content you submit to the ParseThis.ai API for security analysis. This includes:</p>
+<p class="answer-capsule">We process prompts and content you submit to the Parse API for security analysis. This includes:</p>
 
 <ul>
   <li><strong>Prompts:</strong> Text content submitted for injection screening and safety analysis</li>
@@ -540,11 +540,11 @@ publicRoutes.get("/privacy", (c) => {
 
 <h2>Children's Privacy</h2>
 
-<p class="answer-capsule">ParseThis.ai is not intended for children under 13. We do not knowingly collect personal information from children under 13. If we become aware of such collection, we will delete it promptly.</p>
+<p class="answer-capsule">Parse is not intended for children under 13. We do not knowingly collect personal information from children under 13. If we become aware of such collection, we will delete it promptly.</p>
 
 <h2>International Data Transfers</h2>
 
-<p class="answer-capsule">ParseThis.ai may store and process data in the United States and other countries where our service providers operate. By using our service, you consent to this transfer, processing, and storage of your data.</p>
+<p class="answer-capsule">Parse may store and process data in the United States and other countries where our service providers operate. By using our service, you consent to this transfer, processing, and storage of your data.</p>
 
 <h2>Changes to This Privacy Policy</h2>
 
@@ -556,7 +556,7 @@ publicRoutes.get("/privacy", (c) => {
   <li>Sending a notification to your registered email (if provided)</li>
 </ul>
 
-<p class="answer-capsule">Your continued use of ParseThis.ai after changes constitutes acceptance of the new policy.</p>
+<p class="answer-capsule">Your continued use of Parse after changes constitutes acceptance of the new policy.</p>
 
 <h2>Contact Us</h2>
 
@@ -570,7 +570,7 @@ publicRoutes.get("/privacy", (c) => {
 `;
   return c.html(renderPage({
     title: "Privacy Policy",
-    description: "ParseThis.ai privacy policy — how we collect, use, and protect your data when using our prompt security API.",
+    description: "Parse privacy policy — how we collect, use, and protect your data when using our prompt security API.",
     path: "/privacy",
     content,
     baseUrl,

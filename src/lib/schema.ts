@@ -7,11 +7,11 @@ export function organizationSchema(baseUrl: string): object {
   return {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "ParseThis.ai",
+    name: "Parse",
     url: baseUrl,
     logo: `${baseUrl}/logo.png`,
     description:
-      "Prompt security API that screens LLM prompts for injection attacks, jailbreaks, and adversarial patterns. AI agents use ParseThis.ai to detect prompt injections (OWASP LLM01:2025), data exfiltration attempts, and jailbreak patterns before execution with real-time multi-layer analysis.",
+      "Prompt security API that screens LLM prompts for injection attacks, jailbreaks, and adversarial patterns. AI agents use Parse to detect prompt injections (OWASP LLM01:2025), data exfiltration attempts, and jailbreak patterns before execution with real-time multi-layer analysis.",
     foundingDate: "2025",
     sameAs: ["https://github.com/nicobailon/parse-for-agents"],
   };
@@ -21,7 +21,7 @@ export function webApplicationSchema(baseUrl: string): object {
   return {
     "@context": "https://schema.org",
     "@type": "WebApplication",
-    name: "ParseThis.ai",
+    name: "Parse",
     url: baseUrl,
     applicationCategory: "SecurityApplication",
     description:
@@ -47,13 +47,13 @@ export function webAPISchema(baseUrl: string): object {
   return {
     "@context": "https://schema.org",
     "@type": "WebAPI",
-    name: "ParseThis.ai API",
+    name: "Parse API",
     description:
       "RESTful API for prompt safety analysis, content evaluation, and agent-optimized URL parsing.",
     documentation: `${baseUrl}/docs`,
     provider: {
       "@type": "Organization",
-      name: "ParseThis.ai",
+      name: "Parse",
       url: baseUrl,
     },
   };
@@ -82,7 +82,7 @@ export function articleSchema(opts: {
     },
     publisher: {
       "@type": "Organization",
-      name: "ParseThis.ai",
+      name: "Parse",
       url: opts.baseUrl,
     },
     mainEntityOfPage: {
