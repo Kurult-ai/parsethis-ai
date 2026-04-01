@@ -85,9 +85,9 @@ export function renderPlaygroundPage(baseUrl: string): string {
             <span x-show="result && result.execution && result.execution.output_risk_score > 0" style="display:inline-flex;align-items:center;gap:5px;background:rgba(220,38,38,0.08);border:1px solid var(--destructive);color:var(--destructive);border-radius:9999px;padding:3px 10px;font-size:12px;font-weight:600;">Output risk: <span x-text="result && result.execution ? result.execution.output_risk_score : ''"></span>/10</span>
           </div>
           <!-- Output preview -->
-          <div x-show="sandboxOutput && result && result.execution && result.execution.sandbox_status !== 'unavailable'">
+          <div x-show="result && result.execution && result.execution.sandbox_status !== 'unavailable'">
             <div style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Sandbox output</div>
-            <div id="sandbox-output-text" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:13px;font-family:monospace;white-space:pre-wrap;line-height:1.5;max-height:220px;overflow-y:auto;color:var(--text);"></div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:13px;font-family:monospace;white-space:pre-wrap;line-height:1.5;max-height:220px;overflow-y:auto;color:var(--text);" x-text="sandboxOutput || '(no output)'"></div>
           </div>
       </div>
     </div>
@@ -154,16 +154,10 @@ function promptTester() {
             var data = await res.json();
             if (!data.execution_pending && data.execution) {
               var out = data.execution.output || '';
-              this.sandboxOutput = out;
+              this.sandboxOutput = out.length > 600 ? out.slice(0, 600) + '\n...[truncated]' : out;
               this.result.execution = data.execution;
               this.result.execution_pending = false;
               delete this.result.poll_url;
-              // Retry until Alpine renders the element (nextTick may not be enough)
-              for (var t = 0; t < 10; t++) {
-                await new Promise(function(r) { setTimeout(r, 80); });
-                var el = document.getElementById('sandbox-output-text');
-                if (el) { el.textContent = out.length > 600 ? out.slice(0, 600) + '\n...[truncated]' : out; break; }
-              }
               break;
             }
           }
