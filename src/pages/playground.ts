@@ -153,7 +153,9 @@ function promptTester() {
           if (res.ok) {
             var data = await res.json();
             if (!data.execution_pending && data.execution) {
-              this.result = data;
+              this.result.execution = data.execution;
+              this.result.execution_pending = false;
+              delete this.result.poll_url;
               break;
             }
           }
