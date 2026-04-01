@@ -125,11 +125,6 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
   const explicitExec = body.execute === true;
   const shouldExecute = autoExec || explicitExec;
 
-  // For auto mode on high-risk prompts, inform the caller they can inspect via execute: true
-  if (body.execute === "auto" && result.risk_score >= 7) {
-    result.sandbox_available = true;
-  }
-
   // ── If no execution will run, return immediately ──
   if (!shouldExecute) {
     return c.json(result);

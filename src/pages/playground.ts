@@ -8,7 +8,7 @@ export function renderPlaygroundPage(baseUrl: string): string {
 <div x-data="promptTester()">
   <!-- Chunk 1: Input area -->
   <div class="section-chunk animate-in animate-in-delay-1">
-    <p class="answer-capsule">Paste any prompt below to screen it for injection attacks, jailbreaks, and adversarial patterns. ParseThis.ai analyzes it using pattern matching and LLM-based deep analysis, returning a 0&ndash;10 risk score with categorized flags.</p>
+    <p class="answer-capsule">Paste any prompt below to screen it for injection attacks, jailbreaks, and adversarial patterns. Parse analyzes it using pattern matching and LLM-based deep analysis, returning a 0&ndash;10 risk score with categorized flags.</p>
 
     <label for="prompt-input" class="sr-only">Prompt to screen</label>
     <textarea id="prompt-input" x-model="prompt" placeholder="Enter a prompt to screen..." rows="4" style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-family:inherit;resize:vertical;transition:border-color 0.15s;" onfocus="this.style.borderColor='var(--ring)'" onblur="this.style.borderColor='var(--border)'"></textarea>
@@ -41,11 +41,6 @@ export function renderPlaygroundPage(baseUrl: string): string {
           <div style="font-size:13px;" :style="result.suggested_action === 'allow' ? 'color:var(--green)' : result.suggested_action === 'sandbox' ? 'color:#d97706' : 'color:var(--destructive)'" x-text="result.suggested_action === 'allow' ? 'Safe to execute' : result.suggested_action === 'sandbox' ? 'Verify in sandbox' : 'Block — do not execute'"></div>
         </div>
       </div>
-      <template x-if="result.sandbox_available">
-        <div style="margin-bottom:12px;padding:10px 14px;background:rgba(220,38,38,0.08);border:1px solid var(--destructive);border-radius:var(--radius);font-size:13px;">
-          <strong>High-risk prompt.</strong> You can inspect the sandbox output by calling the API with <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;">execute: true</code>.
-        </div>
-      </template>
       <template x-if="result.flags && result.flags.length > 0">
         <div>
           <h3 style="margin-top:0;">Flags</h3>
@@ -64,6 +59,40 @@ export function renderPlaygroundPage(baseUrl: string): string {
           Policy: autoBlockThreshold=<span x-text="result.policy.threshold"></span>
         </div>
       </template>
+
+      <!-- Sandbox status -->
+      <template x-if="result.execution_pending && sandboxLoading">
+        <div style="margin-top:14px;padding:10px 14px;background:var(--surface2);border-radius:var(--radius);font-size:13px;display:flex;align-items:center;gap:8px;color:var(--text-dim);">
+          <span class="spin-icon">↻</span> Running in sandbox&hellip;
+        </div>
+      </template>
+
+      <template x-if="result.execution && !result.execution_pending">
+        <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+          <!-- Status badge -->
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <template x-if="result.execution.sandbox_status === 'executed'">
+              <span style="display:inline-flex;align-items:center;gap:5px;background:rgba(34,197,94,0.1);border:1px solid var(--green);color:var(--green);border-radius:9999px;padding:3px 10px;font-size:12px;font-weight:600;">&#10003; Executed in sandbox (isolated)</span>
+            </template>
+            <template x-if="result.execution.sandbox_status === 'fallback'">
+              <span style="display:inline-flex;align-items:center;gap:5px;background:rgba(217,119,6,0.1);border:1px solid #d97706;color:#d97706;border-radius:9999px;padding:3px 10px;font-size:12px;font-weight:600;">&#9888; Executed (inline fallback)</span>
+            </template>
+            <template x-if="result.execution.sandbox_status === 'unavailable'">
+              <span style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:9999px;padding:3px 10px;font-size:12px;">&#8212; Sandbox unavailable</span>
+            </template>
+            <template x-if="result.execution.output_risk_score > 0">
+              <span style="display:inline-flex;align-items:center;gap:5px;background:rgba(220,38,38,0.08);border:1px solid var(--destructive);color:var(--destructive);border-radius:9999px;padding:3px 10px;font-size:12px;font-weight:600;">Output risk: <span x-text="result.execution.output_risk_score"></span>/10</span>
+            </template>
+          </div>
+          <!-- Output preview -->
+          <template x-if="result.execution.output && result.execution.sandbox_status !== 'unavailable'">
+            <div>
+              <div style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Sandbox output</div>
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:13px;font-family:monospace;white-space:pre-wrap;line-height:1.5;max-height:220px;overflow-y:auto;color:var(--text);" x-text="result.execution.output.length > 600 ? result.execution.output.slice(0, 600) + '\n…[truncated]' : result.execution.output"></div>
+            </div>
+          </template>
+        </div>
+      </template>
     </div>
   </template>
 
@@ -75,11 +104,13 @@ function promptTester() {
   return {
     prompt: '',
     loading: false,
+    sandboxLoading: false,
     result: null,
     error: null,
     async screen(retried) {
       if (!this.prompt.trim()) return;
       this.loading = true;
+      this.sandboxLoading = false;
       this.result = null;
       this.error = null;
       try {
@@ -102,12 +133,33 @@ function promptTester() {
           this.error = 'Failed to generate API key. Try again.';
         } else if (res.ok) {
           this.result = await res.json();
+          if (this.result.execution_pending && this.result.poll_url) {
+            this.pollForSandbox(this.result.poll_url);
+          }
         } else {
           var errBody = await res.json().catch(function() { return {}; });
           this.error = errBody.error || ('Request failed: ' + res.status);
         }
       } catch (e) { this.error = e.message; }
       this.loading = false;
+    },
+    async pollForSandbox(pollUrl) {
+      this.sandboxLoading = true;
+      var key = sessionStorage.getItem('parse_key') || 'demo';
+      for (var i = 0; i < 20; i++) {
+        await new Promise(function(r) { setTimeout(r, 2000); });
+        try {
+          var res = await fetch(pollUrl, { headers: { 'Authorization': 'Bearer ' + key } });
+          if (res.ok) {
+            var data = await res.json();
+            if (!data.execution_pending && data.execution) {
+              this.result = data;
+              break;
+            }
+          }
+        } catch (e) { break; }
+      }
+      this.sandboxLoading = false;
     },
     scoreColor(score) {
       if (score <= 3) return { color: 'var(--green)' };
