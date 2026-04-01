@@ -13,7 +13,16 @@ export function renderPlaygroundPage(baseUrl: string): string {
     <label for="prompt-input" class="sr-only">Prompt to screen</label>
     <textarea id="prompt-input" x-model="prompt" placeholder="Enter a prompt to screen..." rows="4" style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-family:inherit;resize:vertical;transition:border-color 0.15s;" onfocus="this.style.borderColor='var(--ring)'" onblur="this.style.borderColor='var(--border)'"></textarea>
 
-    <div style="margin:12px 0;display:flex;gap:8px;">
+    <div style="margin:12px 0 8px;">
+      <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:10px;">
+        <span style="color:var(--text-dim);">Block threshold:</span>
+        <input type="range" min="0" max="10" step="1" x-model.number="threshold" style="flex:1;max-width:200px;accent-color:var(--accent);">
+        <span style="font-size:15px;font-weight:700;min-width:24px;text-align:center;" :style="threshold <= 3 ? 'color:var(--green)' : threshold <= 6 ? 'color:#d97706' : 'color:var(--destructive)'" x-text="threshold"></span>
+        <span style="font-size:12px;color:var(--text-dim);">/ 10 — block if score &ge; <span x-text="threshold"></span></span>
+      </label>
+    </div>
+
+    <div style="margin:8px 0 12px;display:flex;gap:8px;">
       <button @click="screen()" :disabled="loading" class="btn btn-primary">
         <span x-show="!loading">Screen Prompt</span>
         <span x-show="loading">Screening...</span>
@@ -55,8 +64,8 @@ export function renderPlaygroundPage(baseUrl: string): string {
         </div>
       </template>
       <template x-if="result.policy">
-        <div style="margin-top:12px;font-size:13px;color:var(--text-dim);">
-          Policy: autoBlockThreshold=<span x-text="result.policy.threshold"></span>
+        <div style="margin-top:12px;font-size:12px;color:var(--text-dim);">
+          Applied threshold: <strong x-text="result.policy.threshold"></strong> &mdash; prompts scoring &ge; <span x-text="result.policy.threshold"></span> are blocked
         </div>
       </template>
 
@@ -78,7 +87,7 @@ export function renderPlaygroundPage(baseUrl: string): string {
           <!-- Output preview -->
           <div x-show="sandboxOutput && result && result.execution && result.execution.sandbox_status !== 'unavailable'">
             <div style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Sandbox output</div>
-            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:13px;font-family:monospace;white-space:pre-wrap;line-height:1.5;max-height:220px;overflow-y:auto;color:var(--text);" x-text="sandboxOutput.length > 600 ? sandboxOutput.slice(0, 600) + '\n…[truncated]' : sandboxOutput"></div>
+            <div id="sandbox-output-text" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:13px;font-family:monospace;white-space:pre-wrap;line-height:1.5;max-height:220px;overflow-y:auto;color:var(--text);"></div>
           </div>
       </div>
     </div>
@@ -91,6 +100,7 @@ export function renderPlaygroundPage(baseUrl: string): string {
 function promptTester() {
   return {
     prompt: '',
+    threshold: 7,
     loading: false,
     sandboxLoading: false,
     sandboxOutput: '',
@@ -108,7 +118,7 @@ function promptTester() {
         var res = await fetch('/v1/parse', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
-          body: JSON.stringify({ prompt: this.prompt, execute: 'auto' })
+          body: JSON.stringify({ prompt: this.prompt, execute: 'auto', autoBlockThreshold: this.threshold })
         });
         if (res.status === 401 && !retried) {
           var keyRes = await fetch('/v1/keys/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'playground' }) });
