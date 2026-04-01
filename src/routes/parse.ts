@@ -249,7 +249,16 @@ parseRoutes.get("/v1/parse/:id", authMiddleware("evaluate"), async (c) => {
   }
 
   if (job.status === "pending" || job.status === "running") {
-    return c.json({ ...parseResult, execution_pending: true, status: job.status });
+    // Treat jobs stuck in running/pending for >3 min as failed (e.g. killed by deploy)
+    const ageMs = Date.now() - new Date(job.created_at).getTime();
+    if (ageMs > 180_000) {
+      job.status = "failed";
+      job.error = "Execution timed out (process was interrupted)";
+      await redis.set(`exec:job:${parseId}`, JSON.stringify(job), "EX", 600);
+      // fall through to failed handler below
+    } else {
+      return c.json({ ...parseResult, execution_pending: true, status: job.status });
+    }
   }
 
   if (job.status === "completed" && job.result) {
