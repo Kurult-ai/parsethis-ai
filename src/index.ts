@@ -3,8 +3,11 @@ import { app } from "./app.js";
 import { cleanup } from "./auth.js";
 import { disconnectDb } from "./db.js";
 import { getRedis, disconnectRedis } from "./redis.js";
+import { runMigrations } from "./migrate.js";
 
 const port = parseInt(process.env.PORT || "3000");
+
+await runMigrations();
 
 // Initialize Redis connection (lazy connect — will connect on first use)
 if (process.env.REDIS_URL) {
