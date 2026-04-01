@@ -162,7 +162,7 @@ function promptTester() {
               for (var t = 0; t < 10; t++) {
                 await new Promise(function(r) { setTimeout(r, 80); });
                 var el = document.getElementById('sandbox-output-text');
-                if (el) { el.textContent = out.length > 600 ? out.slice(0, 600) + '\n\u2026[truncated]' : out; break; }
+                if (el) { el.textContent = out.length > 600 ? out.slice(0, 600) + '\n...[truncated]' : out; break; }
               }
               break;
             }
