@@ -88,7 +88,7 @@ export function renderPlaygroundPage(baseUrl: string): string {
           <template x-if="result.execution.output && result.execution.sandbox_status !== 'unavailable'">
             <div>
               <div style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Sandbox output</div>
-              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:13px;font-family:monospace;white-space:pre-wrap;line-height:1.5;max-height:220px;overflow-y:auto;color:var(--text);" x-text="result.execution.output.length > 600 ? result.execution.output.slice(0, 600) + '\n…[truncated]' : result.execution.output"></div>
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:13px;font-family:monospace;white-space:pre-wrap;line-height:1.5;max-height:220px;overflow-y:auto;color:var(--text);" x-text="sandboxOutput.length > 600 ? sandboxOutput.slice(0, 600) + '\n…[truncated]' : sandboxOutput"></div>
             </div>
           </template>
         </div>
@@ -105,12 +105,14 @@ function promptTester() {
     prompt: '',
     loading: false,
     sandboxLoading: false,
+    sandboxOutput: '',
     result: null,
     error: null,
     async screen(retried) {
       if (!this.prompt.trim()) return;
       this.loading = true;
       this.sandboxLoading = false;
+      this.sandboxOutput = '';
       this.result = null;
       this.error = null;
       try {
@@ -155,6 +157,7 @@ function promptTester() {
             if (!data.execution_pending && data.execution) {
               this.result.execution = data.execution;
               this.result.execution_pending = false;
+              this.sandboxOutput = data.execution.output || '';
               delete this.result.poll_url;
               break;
             }
