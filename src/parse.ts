@@ -191,7 +191,7 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
         category: rule.category,
         severity: rule.severity,
         label: rule.label,
-        detail: `Pattern matched: ${rule.pattern.source}`,
+        detail: `Detected: ${rule.label.toLowerCase()}`,
       });
     }
   }
@@ -284,7 +284,7 @@ export function analyzeOutputRisks(output: string, originalPrompt: string): {
         category: rule.category,
         severity: rule.severity,
         label: `Output: ${rule.label}`,
-        detail: `Output contained risky pattern: ${rule.pattern.source}`,
+        detail: `Output contained: ${rule.label.toLowerCase()}`,
       });
     }
   }
