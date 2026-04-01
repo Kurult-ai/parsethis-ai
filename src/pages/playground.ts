@@ -143,9 +143,10 @@ function promptTester() {
           if (res.ok) {
             var data = await res.json();
             if (!data.execution_pending && data.execution) {
+              this.sandboxOutput = data.execution.output || '';
+              await this.$nextTick();
               this.result.execution = data.execution;
               this.result.execution_pending = false;
-              this.sandboxOutput = data.execution.output || '';
               delete this.result.poll_url;
               break;
             }
