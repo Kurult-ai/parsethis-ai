@@ -43,8 +43,8 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
   if (body.model !== undefined && typeof body.model !== "string") {
     return c.json({ error: "model must be a string" }, 400);
   }
-  if (body.execute !== undefined && typeof body.execute !== "boolean") {
-    return c.json({ error: "execute must be a boolean" }, 400);
+  if (body.execute !== undefined && body.execute !== "auto" && typeof body.execute !== "boolean") {
+    return c.json({ error: "execute must be a boolean or \"auto\"" }, 400);
   }
   if (body.test_input !== undefined && typeof body.test_input !== "string") {
     return c.json({ error: "test_input must be a string" }, 400);
@@ -108,23 +108,30 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
     tier,
   };
 
-  // ── If no execution requested, return immediately ──
-  if (!body.execute) {
-    return c.json(result);
+  // ── Attach suggested_action based on risk score ──
+  if (result.risk_score <= 2) {
+    result.suggested_action = "allow";
+  } else if (result.risk_score <= 6) {
+    result.suggested_action = "sandbox";
+  } else {
+    result.suggested_action = "block";
   }
 
-  // ── Block execution for high-risk prompts ──
-  if (result.risk_score >= 7) {
-    result.execution = {
-      output: `[Execution blocked: prompt risk score ${result.risk_score}/10 exceeds safety threshold]`,
-      output_risk_score: result.risk_score,
-      output_flags: [],
-      token_usage: { prompt: 0, completion: 0, total: 0 },
-      cost_usd: 0,
-      latency_ms: 0,
-      isolated: false,
-      sandbox_status: "unavailable",
-    };
+  // ── Resolve effective execution intent ──
+  // execute: "auto"  → run for scores 3-6; flag 7+ as sandbox_available but don't auto-run
+  // execute: true    → always run (even 7+), giving the caller deliberate sandbox inspection
+  // execute: false   → never run
+  const autoExec = body.execute === "auto" && result.risk_score >= 3 && result.risk_score <= 6;
+  const explicitExec = body.execute === true;
+  const shouldExecute = autoExec || explicitExec;
+
+  // For auto mode on high-risk prompts, inform the caller they can inspect via execute: true
+  if (body.execute === "auto" && result.risk_score >= 7) {
+    result.sandbox_available = true;
+  }
+
+  // ── If no execution will run, return immediately ──
+  if (!shouldExecute) {
     return c.json(result);
   }
 

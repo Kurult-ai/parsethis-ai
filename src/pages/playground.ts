@@ -38,9 +38,14 @@ export function renderPlaygroundPage(baseUrl: string): string {
         <div style="font-size:48px;font-weight:700;letter-spacing:-0.04em;" :style="scoreColor(result.risk_score)" x-text="result.risk_score"></div>
         <div>
           <div style="font-size:18px;font-weight:600;" x-text="result.verdict"></div>
-          <div style="font-size:13px;color:var(--text-dim);" x-text="result.safe ? 'Safe to execute' : 'Do NOT execute'"></div>
+          <div style="font-size:13px;" :style="result.suggested_action === 'allow' ? 'color:var(--green)' : result.suggested_action === 'sandbox' ? 'color:#d97706' : 'color:var(--destructive)'" x-text="result.suggested_action === 'allow' ? 'Safe to execute' : result.suggested_action === 'sandbox' ? 'Verify in sandbox' : 'Block — do not execute'"></div>
         </div>
       </div>
+      <template x-if="result.sandbox_available">
+        <div style="margin-bottom:12px;padding:10px 14px;background:rgba(220,38,38,0.08);border:1px solid var(--destructive);border-radius:var(--radius);font-size:13px;">
+          <strong>High-risk prompt.</strong> You can inspect the sandbox output by calling the API with <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;">execute: true</code>.
+        </div>
+      </template>
       <template x-if="result.flags && result.flags.length > 0">
         <div>
           <h3 style="margin-top:0;">Flags</h3>
@@ -82,7 +87,7 @@ function promptTester() {
         var res = await fetch('/v1/parse', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
-          body: JSON.stringify({ prompt: this.prompt })
+          body: JSON.stringify({ prompt: this.prompt, execute: 'auto' })
         });
         if (res.status === 401 && !retried) {
           var keyRes = await fetch('/v1/keys/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'playground' }) });

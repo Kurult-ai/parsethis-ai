@@ -115,7 +115,7 @@ export interface ParseRequest {
     session_id?: string;
     source?: string;
   };
-  execute?: boolean; // if true, also run the prompt and analyze output
+  execute?: boolean | "auto"; // if true, run prompt; "auto" runs only for scores 3-6 and flags 7+ for inspection
   test_input?: string; // optional input to pair with prompt during execution
   agent_config?: {
     model: string;
@@ -154,6 +154,8 @@ export interface ParseResponse {
   execution?: ExecutionResult;
   execution_pending?: boolean;
   poll_url?: string;
+  suggested_action?: "allow" | "sandbox" | "block"; // recommended next step based on risk score
+  sandbox_available?: boolean; // true when score >= 7 and caller can re-call with execute: true to inspect
   policy?: { auto_block: boolean; threshold: number; tier: string };
   model_used?: string;
   analyzed_at: string;
