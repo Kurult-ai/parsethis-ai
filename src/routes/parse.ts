@@ -130,8 +130,8 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
     return c.json(result);
   }
 
-  // ── Execution rate limit check ──
-  if (isRedisAvailable()) {
+  // ── Execution rate limit check (master key is exempt) ──
+  if (apiKey.id !== "master" && isRedisAvailable()) {
     try {
       const redis = getRedis();
       const connected = await ensureRedisConnected();
