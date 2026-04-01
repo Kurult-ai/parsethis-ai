@@ -158,9 +158,12 @@ function promptTester() {
               this.result.execution = data.execution;
               this.result.execution_pending = false;
               delete this.result.poll_url;
-              await this.$nextTick();
-              var el = document.getElementById('sandbox-output-text');
-              if (el) el.textContent = out.length > 600 ? out.slice(0, 600) + '\n…[truncated]' : out;
+              // Retry until Alpine renders the element (nextTick may not be enough)
+              for (var t = 0; t < 10; t++) {
+                await new Promise(function(r) { setTimeout(r, 80); });
+                var el = document.getElementById('sandbox-output-text');
+                if (el) { el.textContent = out.length > 600 ? out.slice(0, 600) + '\n\u2026[truncated]' : out; break; }
+              }
               break;
             }
           }
