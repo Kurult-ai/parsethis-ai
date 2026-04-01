@@ -6,6 +6,10 @@
  */
 
 import type { DetectorInput, DetectorResult, DetectorResults, MaliciousIntentResult } from "./types.js";
+import { detectPromptInjection } from "./prompt-injection.js";
+import { detectSocialEngineering } from "./social-engineering.js";
+import { detectSpoofing } from "./spoofing.js";
+import { detectSensitiveData } from "./sensitive-data.js";
 
 // === Malicious Intent Pattern Categories ===
 
@@ -13,7 +17,7 @@ import type { DetectorInput, DetectorResult, DetectorResults, MaliciousIntentRes
 const ATTACK_COMMAND_PATTERNS = [
   /execute (?:malicious|harmful|destructive)/i,
   /delete (?:all|everything|database|records)/i,
-  /drop (?:table|database)/i,
+  /drop (?:the )?(?:\w+ )?(?:table|database)/i,
   /rm -rf/i,
   /format (?:c:|disk|hard drive)/i,
   /corrupt (?:data|files|database)/i,
@@ -34,7 +38,7 @@ const EVASION_PATTERNS = [
 const HARMFUL_CONTENT_PATTERNS = [
   /generate (?:malware|virus|trojan|ransomware)/i,
   /create (?:exploit|payload|shellcode)/i,
-  /write (?:phishing|scam) (?:email|message)/i,
+  /write (?:a )?(?:phishing|scam) (?:email|message)/i,
   /help me (?:hack|attack|exploit|breach)/i,
   /how to (?:hack|crack|bypass|exploit)/i,
 ];
@@ -43,7 +47,10 @@ const HARMFUL_CONTENT_PATTERNS = [
 const COERCION_PATTERNS = [
   /or I will (?:report|sue|destroy|delete|hack)/i,
   /do (?:it|this) or (?:else|consequences)/i,
+  /\bor else\b/i,
+  /\bor face consequences\b/i,
   /you (?:must|have to|need to) (?:comply|obey)/i,
+  /(?:must )?comply or/i,
   /failure to (?:comply|respond) will/i,
 ];
 
@@ -108,7 +115,7 @@ export function aggregateMaliciousIntent(
   for (const pattern of ATTACK_COMMAND_PATTERNS) {
     if (pattern.test(text)) {
       evidence.push(`attack command: ${text.match(pattern)?.[0] || "matched"}`);
-      totalScore += 40 * CATEGORY_WEIGHTS.attack_command;
+      totalScore += 55 * CATEGORY_WEIGHTS.attack_command;
     }
   }
 
@@ -124,7 +131,7 @@ export function aggregateMaliciousIntent(
   for (const pattern of HARMFUL_CONTENT_PATTERNS) {
     if (pattern.test(text)) {
       evidence.push(`harmful content: ${text.match(pattern)?.[0] || "matched"}`);
-      totalScore += 45 * CATEGORY_WEIGHTS.harmful_content;
+      totalScore += 55 * CATEGORY_WEIGHTS.harmful_content;
     }
   }
 
@@ -132,7 +139,7 @@ export function aggregateMaliciousIntent(
   for (const pattern of COERCION_PATTERNS) {
     if (pattern.test(text)) {
       evidence.push(`coercion: ${text.match(pattern)?.[0] || "matched"}`);
-      totalScore += 30 * CATEGORY_WEIGHTS.coercion;
+      totalScore += 40 * CATEGORY_WEIGHTS.coercion;
     }
   }
 
@@ -189,12 +196,6 @@ export function aggregateMaliciousIntent(
  * Standalone detection function (runs all detectors internally)
  */
 export function detectMaliciousIntent(input: DetectorInput): MaliciousIntentResult {
-  // Import other detectors dynamically to avoid circular dependency
-  const { detectPromptInjection } = require("./prompt-injection.js");
-  const { detectSocialEngineering } = require("./social-engineering.js");
-  const { detectSpoofing } = require("./spoofing.js");
-  const { detectSensitiveData } = require("./sensitive-data.js");
-
   const promptInjection = detectPromptInjection(input);
   const socialEngineering = detectSocialEngineering(input);
   const spoofing = detectSpoofing(input);

@@ -1,4 +1,5 @@
 import { Context, Next } from "hono";
+import { timingSafeEqual } from "node:crypto";
 import {
   validateApiKey as validateApiKeyFromService,
   createApiKey as createApiKeyFromService,
@@ -7,9 +8,16 @@ import {
   type ApiKeyRecord,
 } from "./api-key-service.js";
 import { prisma } from "./db.js";
+import { getRedis, isRedisAvailable, ensureRedisConnected } from "./redis.js";
 import { getCachedPolicyData, cachePolicyData } from "./result-store.js";
 import type { AppEnv, ScreeningPolicy } from "./types.js";
 import { auditLog } from "./lib/audit-log.js";
+
+/** Timing-safe string comparison to prevent timing attacks on key validation */
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
 // Default screening policy (keep in sync with routes/policy.ts)
 const DEFAULT_POLICY: ScreeningPolicy = {
@@ -21,15 +29,14 @@ const DEFAULT_POLICY: ScreeningPolicy = {
   executeInSandbox: true,
 };
 
-// Rate limit tracking: key -> { count, window_start }
-const rateLimits = new Map<string, { count: number; window_start: number }>();
+// In-memory rate limit fallback (used when Redis is unavailable)
+const memoryRateLimits = new Map<string, { count: number; window_start: number }>();
 
-// Periodic cleanup of expired rate limit entries (every 5 minutes)
 const cleanupInterval = setInterval(() => {
   const now = Date.now();
-  for (const [key, entry] of rateLimits) {
+  for (const [key, entry] of memoryRateLimits) {
     if (now - entry.window_start > 120_000) {
-      rateLimits.delete(key);
+      memoryRateLimits.delete(key);
     }
   }
 }, 300_000);
@@ -45,13 +52,55 @@ const MASTER_KEY = process.env.MASTER_API_KEY;
 // Demo key from env only — no random generation
 const DEMO_KEY = process.env.DEMO_API_KEY || null;
 
-function checkRateLimit(key: string, limit: number): { allowed: boolean; remaining: number; resetMs: number } {
-  const now = Date.now();
+/**
+ * Redis-backed sliding window rate limiter with in-memory fallback.
+ * Uses INCR + EXPIRE atomically in Redis to survive restarts and
+ * work across multiple instances.
+ */
+async function checkRateLimit(key: string, limit: number): Promise<{ allowed: boolean; remaining: number; resetMs: number }> {
   const windowMs = 60_000; // 1 minute window
 
-  const entry = rateLimits.get(key);
+  // Try Redis first
+  if (isRedisAvailable()) {
+    try {
+      const redis = getRedis();
+      const connected = await ensureRedisConnected();
+      if (connected) {
+        const rateKey = `rate:${key}`;
+        const multi = redis.multi();
+        multi.incr(rateKey);
+        multi.pttl(rateKey);
+        const results = await multi.exec();
+
+        if (results) {
+          const count = (results[0]?.[1] as number) || 1;
+          const ttl = (results[1]?.[1] as number) || -1;
+
+          // Set expiry on first request in window
+          if (ttl === -1 || ttl === -2) {
+            await redis.pexpire(rateKey, windowMs);
+          }
+
+          const resetMs = ttl > 0 ? ttl : windowMs;
+          const remaining = Math.max(0, limit - count);
+
+          return {
+            allowed: count <= limit,
+            remaining,
+            resetMs,
+          };
+        }
+      }
+    } catch {
+      // Fall through to in-memory
+    }
+  }
+
+  // In-memory fallback
+  const now = Date.now();
+  const entry = memoryRateLimits.get(key);
   if (!entry || now - entry.window_start > windowMs) {
-    rateLimits.set(key, { count: 1, window_start: now });
+    memoryRateLimits.set(key, { count: 1, window_start: now });
     return { allowed: true, remaining: limit - 1, resetMs: windowMs };
   }
 
@@ -133,9 +182,9 @@ export function authMiddleware(requiredScope?: string) {
       return c.json({ error: "Invalid API key" }, 401);
     }
 
-    // Fast-path: master key bypass
-    if (MASTER_KEY && keyStr === MASTER_KEY) {
-      const rateCheck = checkRateLimit(keyStr, 1000);
+    // Fast-path: master key bypass (timing-safe comparison)
+    if (MASTER_KEY && keyStr.length === MASTER_KEY.length && safeCompare(keyStr, MASTER_KEY)) {
+      const rateCheck = await checkRateLimit(keyStr, 1000);
       c.header("X-RateLimit-Limit", "1000");
       c.header("X-RateLimit-Remaining", String(rateCheck.remaining));
       c.header("X-RateLimit-Reset", String(Math.ceil(rateCheck.resetMs / 1000)));
@@ -150,9 +199,9 @@ export function authMiddleware(requiredScope?: string) {
       return;
     }
 
-    // Fast-path: demo key bypass (if set in env)
-    if (DEMO_KEY && keyStr === DEMO_KEY) {
-      const rateCheck = checkRateLimit(keyStr, 30);
+    // Fast-path: demo key bypass (timing-safe comparison)
+    if (DEMO_KEY && keyStr.length === DEMO_KEY.length && safeCompare(keyStr, DEMO_KEY)) {
+      const rateCheck = await checkRateLimit(keyStr, 30);
       c.header("X-RateLimit-Limit", "30");
       c.header("X-RateLimit-Remaining", String(rateCheck.remaining));
       c.header("X-RateLimit-Reset", String(Math.ceil(rateCheck.resetMs / 1000)));
@@ -220,7 +269,7 @@ export function authMiddleware(requiredScope?: string) {
     }
 
     // Check rate limit
-    const rateCheck = checkRateLimit(keyStr, apiKeyRecord.rateLimit);
+    const rateCheck = await checkRateLimit(keyStr, apiKeyRecord.rateLimit);
     c.header("X-RateLimit-Limit", String(apiKeyRecord.rateLimit));
     c.header("X-RateLimit-Remaining", String(rateCheck.remaining));
     c.header("X-RateLimit-Reset", String(Math.ceil(rateCheck.resetMs / 1000)));

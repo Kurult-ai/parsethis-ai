@@ -55,7 +55,7 @@ When \`execute: true\`, screening returns immediately and execution runs in the 
   "risk_score": 3,
   "verdict": "low_risk",
   "flags": [],
-  "policy": { "auto_block_threshold": 5, "screen_all_prompts": true },
+  "policy": { "autoBlockThreshold": 5, "screenAllPrompts": true },
   "execution_pending": true,
   "poll_url": "/v1/parse/:id"
 }
@@ -81,7 +81,7 @@ Authorization: Bearer ${keyPlaceholder}
 ## Acting on Results (Policy-Aware)
 
 \`\`\`
-if (response.policy.auto_block) → BLOCK
+if (response.risk_score >= response.policy.autoBlockThreshold) → BLOCK
 if (response.risk_score <= 3)   → SAFE, proceed
 if (response.risk_score <= 6)   → CAUTION, log flags
 if (response.risk_score >= 7)   → BLOCK, report to user
@@ -154,7 +154,7 @@ export function getSkillInstallScript(baseUrl: string): string {
 set -e
 
 SKILL_DIR="\${HOME}/.claude/skills"
-SKILL_FILE="\${SKILL_DIR}/parse-safety.md"
+SKILL_FILE="\${SKILL_DIR}/parse.md"
 
 echo "Installing Parse safety skill..."
 

@@ -78,7 +78,7 @@ curl -s -X POST https://parseforagents.dev/v1/analyze \
 For Claude Code agents, install the Parse skill directly:
 
 ```bash
-curl -s https://parseforagents.dev/skill > ~/.claude/skills/parse-safety.md
+curl -s https://parseforagents.dev/skill > ~/.claude/skills/parse.md
 ```
 
 This gives your agent a `/parse` command that checks prompt safety inline.

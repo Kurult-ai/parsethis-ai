@@ -8,6 +8,7 @@ import { canUseSandbox, isFallbackAllowed, executeInSandbox } from "../lib/sandb
 import { callLLMFull } from "../model-client.js";
 import { getBaseUrl } from "../lib/route-utils.js";
 import { auditLog } from "../lib/audit-log.js";
+import { prisma } from "../db.js";
 
 export const parseRoutes = new Hono<AppEnv>();
 
@@ -51,6 +52,9 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
   if (body.test_input && body.test_input.length > 10_000) {
     return c.json({ error: "test_input must be less than 10,000 characters" }, 400);
   }
+  if (body.mode !== undefined && !["full", "pattern-only"].includes(body.mode)) {
+    return c.json({ error: "mode must be 'full' or 'pattern-only'" }, 400);
+  }
   if (body.metadata !== undefined && typeof body.metadata !== "object") {
     return c.json({ error: "metadata must be an object" }, 400);
   }
@@ -64,7 +68,25 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
   }
 
   // ── Run risk analysis (synchronous — pattern + LLM) ──
+  const parseStart = Date.now();
   const result = await parsePrompt(body);
+  const parseLatencyMs = Date.now() - parseStart;
+
+  // ── Write ScreeningEvent (fire-and-forget — metadata only, no prompt content) ──
+  const apiKeyForEvent = c.get("apiKey");
+  if (apiKeyForEvent?.id && apiKeyForEvent.id !== "master" && apiKeyForEvent.id !== "demo" && !apiKeyForEvent.id.startsWith("x402:")) {
+    prisma.screeningEvent.create({
+      data: {
+        apiKeyId: apiKeyForEvent.id,
+        riskScore: result.risk_score,
+        verdict: result.verdict,
+        categories: result.categories,
+        mode: body.mode ?? "full",
+        latencyMs: parseLatencyMs,
+        blocked: result.risk_score >= (c.get("policy")?.autoBlockThreshold ?? 7),
+      },
+    }).catch((err: Error) => console.error("[screening-event] write failed:", err.message));
+  }
 
   // ── Audit log the screening result ──
   auditLog({

@@ -1,9 +1,16 @@
 import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
-import { app } from "./app.js";
 
-// Helper: get the demo key from the root endpoint
-let demoKey = "";
+// Set up test keys — master for most tests (1000 req/min), demo for scope tests
+const TEST_MASTER_KEY = "test-master-key-for-tests";
+const TEST_DEMO_KEY = "test-demo-key-for-tests";
+process.env.MASTER_API_KEY = process.env.MASTER_API_KEY || TEST_MASTER_KEY;
+process.env.DEMO_API_KEY = process.env.DEMO_API_KEY || TEST_DEMO_KEY;
+
+// Import app after env setup
+const { app } = await import("./app.js");
+
+const demoKey = TEST_MASTER_KEY;
 
 async function req(path: string, opts?: RequestInit) {
   return app.request(path, opts);
@@ -17,47 +24,32 @@ async function authReq(path: string, opts?: RequestInit & { key?: string }) {
 }
 
 // ========================
-// Setup
-// ========================
-before(async () => {
-  const res = await req("/");
-  const body = await res.json();
-  demoKey = body.demo_key;
-  assert.ok(demoKey, "Demo key should be present");
-});
-
-// ========================
 // Public Routes
 // ========================
 describe("Public Routes", () => {
   it("GET / returns service info", async () => {
-    const res = await req("/");
+    const res = await req("/", { headers: { Accept: "application/json" } });
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.service, "Parse for Agents");
     assert.ok(body.endpoints);
-    assert.ok(body.demo_key);
   });
 
-  it("GET /health returns healthy status", async () => {
+  it("GET /health returns status", async () => {
     const res = await req("/health");
-    assert.equal(res.status, 200);
+    // 200 with DB, 503 degraded without — both valid in test env
+    assert.ok([200, 503].includes(res.status), `Expected 200 or 503, got ${res.status}`);
     const body = await res.json();
-    assert.equal(body.status, "ok");
+    assert.ok(body.status === "ok" || body.status === "degraded");
     assert.ok(body.timestamp);
-    assert.equal(typeof body.uptime_seconds, "number");
-    assert.ok(body.memory);
-    assert.equal(typeof body.memory.rss_mb, "number");
     assert.equal(body.version, "1.0.0");
   });
 
-  it("GET /docs returns API documentation", async () => {
+  it("GET /docs returns documentation page", async () => {
     const res = await req("/docs");
     assert.equal(res.status, 200);
-    const body = await res.json();
-    assert.equal(body.service, "Parse for Agents API");
-    assert.ok(body.endpoints);
-    assert.ok(Array.isArray(body.endpoints));
+    const html = await res.text();
+    assert.ok(html.includes("Documentation"), "Should contain documentation content");
   });
 
   it("GET /v1/models returns models list", async () => {
@@ -125,9 +117,11 @@ describe("Authentication", () => {
     assert.equal(res.status, 200);
   });
 
-  it("accepts API key via query parameter", async () => {
+  it("rejects API key via query parameter (deprecated)", async () => {
     const res = await req(`/v1/analyses?api_key=${demoKey}`);
-    assert.equal(res.status, 200);
+    assert.equal(res.status, 401);
+    const body = await res.json();
+    assert.ok(body.error.includes("deprecated"), "Should mention deprecation");
   });
 
   it("returns rate limit headers on authenticated requests", async () => {
@@ -457,7 +451,7 @@ describe("POST /v1/chat", () => {
 // ========================
 describe("API Key Management", () => {
   it("rejects key listing without admin scope", async () => {
-    const res = await authReq("/v1/keys");
+    const res = await authReq("/v1/keys", { key: TEST_DEMO_KEY });
     assert.equal(res.status, 403);
     const body = await res.json();
     assert.equal(body.error, "Insufficient permissions");
@@ -465,6 +459,7 @@ describe("API Key Management", () => {
 
   it("rejects key creation without admin scope", async () => {
     const res = await authReq("/v1/keys", {
+      key: TEST_DEMO_KEY,
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: "test" }),
@@ -473,7 +468,7 @@ describe("API Key Management", () => {
   });
 
   it("rejects key deletion without admin scope", async () => {
-    const res = await authReq("/v1/keys/some-id", { method: "DELETE" });
+    const res = await authReq("/v1/keys/some-id", { key: TEST_DEMO_KEY, method: "DELETE" });
     assert.equal(res.status, 403);
   });
 });
@@ -551,18 +546,7 @@ describe("Evaluators (SPEC-aligned)", () => {
 // Parse Endpoint (Prompt Safety)
 // ========================
 describe("POST /v1/parse", () => {
-  // Generate a fresh key for parse tests to avoid rate limits from earlier tests
-  let parseKey = "";
-  before(async () => {
-    const res = await req("/v1/keys/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "parse-test-key" }),
-    });
-    const body = await res.json();
-    parseKey = body.key;
-    assert.ok(parseKey, "Parse test key should be generated");
-  });
+  const parseKey = demoKey;
 
   it("rejects request without prompt", async () => {
     const res = await authReq("/v1/parse", { key: parseKey,

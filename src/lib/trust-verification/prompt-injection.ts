@@ -16,9 +16,10 @@ const JAILBREAK_PATTERNS = [
   // DAN variants
   /\bDAN\b/i,
   /do anything now/i,
-  /developer mode.*enabled/i,
+  /developer mode/i,
   /jailbreak/i,
   /unrestricted mode/i,
+  /\bunrestricted\b/i,
   /bypass.*filter/i,
   /ignore.*safety/i,
   /override.*protocol/i,
@@ -43,11 +44,11 @@ const JAILBREAK_PATTERNS = [
 
 const INSTRUCTION_OVERRIDE_PATTERNS = [
   // Clear memory attempts
-  /ignore (all )?(previous|above|earlier) (instructions?|prompts?|text?|commands?)/i,
+  /ignore (all )?(previous|above|earlier)?\s*(instructions?|prompts?|text?|commands?)/i,
   /disregard (all )?(previous|above|earlier)/i,
   /forget (everything|all) (above|before|previously)/i,
   /clear your (memory|context|instructions)/i,
-  /start over/i,
+  /start over(?! with)/i,
   /new instructions?:/i,
   // Override attempts
   /override (your )?(programming|instructions|training|rules)/i,
@@ -69,6 +70,9 @@ const ROLE_PLAY_PATTERNS = [
   /you have no (rules|restrictions|limitations|guidelines)/i,
   /nothing is (off-limits|forbidden|prohibited)/i,
   /no (moral|ethical|safety) (bounds|guidelines|rules)/i,
+  // Role-play with dangerous roles
+  /act as a?\s*\w+\s*(without|with no)\s*(any\s*)?(moral|ethical|safety|restriction)/i,
+  /pretend you'?re not bound by/i,
   // Translator exploits
   /translate (the )?(following|this) (to|into) (and )?(ignore|disregard|bypass)/i,
   /convert (this|the following) and (ignore|forget)/i,
@@ -83,11 +87,14 @@ const ROLE_PLAY_PATTERNS = [
 const OUTPUT_MANIPULATION_PATTERNS = [
   /respond (only|just) (with|in|using)/i,
   /output (only|just|exactly)/i,
+  /output your (system prompt|instructions|prompt)/i,
+  /print your (instructions|prompt|system prompt)/i,
   /print (the|your) (response|answer) (as|in|using)/i,
   /format your (response|answer) as/i,
   /must (respond|reply|answer) (with|in)/i,
   /required (format|output|response)( is|:)/i,
   /do not (include|add|mention) (any)? (disclaimer|warning|caution)/i,
+  /no disclaim/i,
   /omit (the )?(disclaimer|warning|caution)/i,
   /skip (the )?(ethics|moral|safety)( check|ing)/i,
 ];
@@ -95,10 +102,10 @@ const OUTPUT_MANIPULATION_PATTERNS = [
 // === Encoding/Obfuscation Attempts ===
 
 const OBFUSCATION_PATTERNS = [
-  // Base64-like strings (potential encoded instructions)
-  /(?:^|\s)[A-Za-z0-9+/]{40,}={0,2}(?:\s|$)/,
-  // Hex encoding attempts
-  /(?:0x)?[0-9a-fA-F]{20,}/,
+  // Base64-like strings (potential encoded instructions, but not simple repeating chars)
+  /(?:^|\s)(?!(.)\1{39})[A-Za-z0-9+/]{40,}={0,2}(?:\s|$)/,
+  // Hex encoding attempts (but not simple repeating chars)
+  /(?:0x)(?!(.)\1{19})[0-9a-fA-F]{20,}/,
   // Reverse text attempts
   /(?:text|string) reversed/i,
   /read (backwards|in reverse)/i,
@@ -146,7 +153,7 @@ const PATTERN_SETS: PatternSet[] = [
   { patterns: JAILBREAK_PATTERNS, weight: 1.0, name: "jailbreak" },
   { patterns: INSTRUCTION_OVERRIDE_PATTERNS, weight: 0.9, name: "instruction_override" },
   { patterns: ROLE_PLAY_PATTERNS, weight: 0.85, name: "role_play" },
-  { patterns: OUTPUT_MANIPULATION_PATTERNS, weight: 0.7, name: "output_manipulation" },
+  { patterns: OUTPUT_MANIPULATION_PATTERNS, weight: 0.85, name: "output_manipulation" },
   { patterns: OBFUSCATION_PATTERNS, weight: 0.6, name: "obfuscation" },
   { patterns: FEW_SHOT_PATTERNS, weight: 0.5, name: "few_shot" },
   { patterns: FUNCTION_INJECTION_PATTERNS, weight: 0.75, name: "function_injection" },
@@ -192,8 +199,13 @@ export function detectPromptInjection(input: DetectorInput): DetectorResult {
   let totalScore = 0;
   let maxConfidence = 0;
 
+  // Check if text is just repetitive characters (low entropy) — skip obfuscation for these
+  const isRepetitive = text.length > 100 && new Set(text.slice(0, 200)).size <= 3;
+
   // Check each pattern set
   for (const set of PATTERN_SETS) {
+    // Skip obfuscation patterns for repetitive/low-entropy strings
+    if (set.name === "obfuscation" && isRepetitive) continue;
     for (const pattern of set.patterns) {
       if (pattern.test(text) || pattern.test(context)) {
         const match = text.match(pattern) || context.match(pattern);
@@ -264,7 +276,7 @@ export function detectPromptInjection(input: DetectorInput): DetectorResult {
   }
 
   // Calculate final confidence (0-1)
-  const confidence = Math.min(maxConfidence, totalScore / 200);
+  const confidence = Math.min(maxConfidence, totalScore / 130);
 
   // Determine detection status
   const detected = confidence >= 0.6;

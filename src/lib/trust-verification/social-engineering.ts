@@ -15,8 +15,9 @@ const URGENCY_PATTERNS = [
   // Time pressure
   /\b(immediately|right now|asap|urgent|emergency|critical|deadline|expire(s|d)?)\b/i,
   /\b(quickly|fast|hurry|rush|speed|don'?t wait|act now|before it'?s too late)\b/i,
-  /\b(in \d+ minutes?|within \d+ hours?|today only|last chance|final notice|limited time)\b/i,
+  /\b(in \d+ (minutes?|hours?)|within \d+ (hours?|minutes?)|today only|last chance|final notice|limited time)\b/i,
   /\b(about to|will be|going to) (expire|end|close|terminate|delete)\b/i,
+  /\b(account|subscription|access) expires?\b/i,
   /\b(time sensitive|time is running out|running out of time)\b/i,
   // Account/credential urgency
   /\b(account will be|your account is) (locked|suspended|closed|banned|terminated)\b/i,
@@ -36,7 +37,8 @@ const AUTHORITY_PATTERNS = [
   /\b(speaking on behalf of|representing|contact from)\b/i,
   // Legal threats
   /\b(legal action|lawsuit|court|subpoena|warrant|arrest|federal|criminal)\b/i,
-  /\b(violation(s)?|penalt(y|ies)|fine(s)?|prosecution)\b/i,
+  /\b(legal action will be taken|will be taken if you don'?t)\b/i,
+  /\b(violat(ed?|ion|ions)|penalt(y|ies)|fine(s)?|prosecution)\b/i,
   // Policy references
   /\b(against (our )?(policy|terms of service|guidelines|rules))\b/i,
   /\b(terms of service violation|acceptable use policy)\b/i,
@@ -46,7 +48,7 @@ const AUTHORITY_PATTERNS = [
 
 const EMOTIONAL_PATTERNS = [
   // Fear appeal
-  /\b(you will lose|you '?ve lost|lost access|can'?t access)\b/i,
+  /\b(you will lose|you'?ll lose|lose everything|you '?ve lost|lost access|can'?t access)\b/i,
   /\b(serious problem|critical issue|urgent matter|emergency situation)\b/i,
   /\b(danger|threat|risk|compromised|hacked|stolen)\b/i,
   // Greed/Opportunity
@@ -57,10 +59,11 @@ const EMOTIONAL_PATTERNS = [
   /\b(don'?t tell anyone|keep this private|confidential|just between us)\b/i,
   // Guilt/Help
   /\b(please help me|i need your help|urgent request|favor needed)\b/i,
-  /\b(i'?m in trouble|problem with my account|stuck abroad|emergency)\b/i,
+  /\b(i'?m in (big )?trouble|problem with my account|stuck abroad|emergency)\b/i,
   // Trust building
   /\b(trust me|you can trust|believe me|i promise|i swear)\b/i,
   /\b(to be honest|honestly speaking|frankly|in full transparency)\b/i,
+  /\b(completely|totally|perfectly) safe\b/i,
 ];
 
 // === Phishing Patterns ===
@@ -78,7 +81,8 @@ const PHISHING_PATTERNS = [
   /\b(open the (attached|enclosed))\b/i,
   // Credential harvesting
   /\b(enter your (password|pin|ssn|social security|credit card))\b/i,
-  /\b(provide your (login|credentials|username|password))\b/i,
+  /\bunlock your account\b/i,
+  /\b(provide|need|require) your (login|credentials|username|password)\b/i,
   /\b(update your (payment|billing|financial) information)\b/i,
 ];
 
@@ -87,11 +91,12 @@ const PHISHING_PATTERNS = [
 const SCAM_PATTERNS = [
   // Money requests
   /\b(send money|wire transfer|western union|moneygram|bitcoin|crypto|gift card)\b/i,
+  /\btransfer \$?\d+/i,
   /\b(pay a fee|processing fee|administrative fee|handling fee|advance fee)\b/i,
   // Too good to be true
   /\b(make money (fast|quick|instantly|overnight))\b/i,
-  /\b(earn \$?\d+,?\d*,?\d* (per day|weekly|monthly|hourly))\b/i,
-  /\b(work from home|passive income|get rich|financial freedom)\b/i,
+  /\b(earn|make) \$?\d+[,\d]*\/?\.?(per day|day|weekly|monthly|hourly)\b/i,
+  /\b(work(ing)? from home|passive income|get rich|financial freedom)\b/i,
   // Investment scams
   /\b(guaranteed returns|risk-free investment|double your money)\b/i,
   /\b(investment opportunity|crypto opportunity|exclusive deal)\b/i,
@@ -111,7 +116,7 @@ const IMPERSONATION_PATTERNS = [
   /\b(this is (the )?(CEO|CFO|CTO|President|Director|Manager))\b/i,
   /\b(speaking for the (management|executives|leadership))\b/i,
   // Support impersonation
-  /\b(technical support|customer service|help desk|IT department)\b/i,
+  /\b(technical support|customer service|help desk|IT department|IT support)\b/i,
   /\b(microsoft support|apple support|amazon support|google support)\b/i,
   // External entity impersonation
   /\b(bank calling|your bank|credit card company|government agency)\b/i,
@@ -154,7 +159,9 @@ const HIGH_RISK_COMBINATIONS = [
   { patterns: ["urgency", "authority"], multiplier: 1.25 },
   { patterns: ["phishing", "impersonation"], multiplier: 1.4 },
   { patterns: ["scam", "urgency"], multiplier: 1.35 },
+  { patterns: ["scam", "authority"], multiplier: 1.3 },
   { patterns: ["pressure", "authority"], multiplier: 1.3 },
+  { patterns: ["authority", "impersonation"], multiplier: 1.3 },
 ];
 
 // === Detection Function ===
@@ -180,7 +187,9 @@ export function detectSocialEngineering(input: DetectorInput): DetectorResult {
     }
     if (patternCount > 0) {
       detectedPatterns.push(set.name);
-      totalScore += set.weight * 30 * Math.min(patternCount, 3); // Cap at 3x per pattern set
+      // High-weight sets (phishing, scam) get bonus for definitive matches
+      const basePoints = set.weight >= 0.95 ? 70 : 45;
+      totalScore += set.weight * basePoints * Math.min(patternCount, 3); // Cap at 3x per pattern set
     }
   }
 
@@ -238,8 +247,8 @@ export function detectSocialEngineering(input: DetectorInput): DetectorResult {
   }
 
   // Calculate final confidence (0-1)
-  // Base confidence from score (capped at 100)
-  const rawConfidence = Math.min(totalScore, 150) / 150;
+  // Base confidence from score (capped at 120)
+  const rawConfidence = Math.min(totalScore, 120) / 120;
   const confidence = Math.min(rawConfidence, 0.98); // Cap at 0.98
 
   // Determine detection status

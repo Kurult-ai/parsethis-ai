@@ -11,7 +11,7 @@ interface FaqItem {
 }
 
 const FAQ_ITEMS: FaqItem[] = [
-  // --- Getting Started ---
+  // --- Getting Started (5 items) ---
   {
     question: "What is ParseThis.ai?",
     answer:
@@ -25,7 +25,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "How do I install the Parse skill?",
     answer:
-      'Run curl -s parsethis.ai/skill > ~/.claude/skills/parse-safety.md to install the skill file for Claude Code. The skill teaches the agent when to screen prompts (user input, tool output, forwarded messages) and how to call POST /v1/parse. On first use, the agent self-provisions an API key via POST /v1/keys/generate \u2014 no manual setup required.',
+      'Run curl -s parsethis.ai/skill > ~/.claude/skills/parse.md to install the skill file for Claude Code. The skill teaches the agent when to screen prompts (user input, tool output, forwarded messages) and how to call POST /v1/parse. On first use, the agent self-provisions an API key via POST /v1/keys/generate \u2014 no manual setup required.',
   },
   {
     question: "What models does ParseThis.ai support?",
@@ -38,7 +38,7 @@ const FAQ_ITEMS: FaqItem[] = [
       "Yes. Self-service API keys have a free tier with 60 requests per minute rate limit and 5 sandbox executions per hour. No credit card is required. For higher limits, use x402 USDC payments on Base L2 for pay-per-request access, or contact ParseThis.ai for enterprise plans with custom rate limits and SLAs.",
   },
 
-  // --- Prompt Safety ---
+  // --- Prompt Safety (5 items) ---
   {
     question: "What is prompt injection?",
     answer:
@@ -65,11 +65,11 @@ const FAQ_ITEMS: FaqItem[] = [
       "Pattern matching alone completes in under 5 milliseconds. Full analysis including LLM-based deep analysis via DeepSeek or GPT-4o typically completes in under 200 milliseconds end-to-end. Sandbox execution adds 2\u20135 seconds depending on prompt complexity. The API returns a 202 Accepted with a poll_url for async sandbox results so agents are not blocked.",
   },
 
-  // --- Integration ---
+  // --- Integration (5 items) ---
   {
     question: "How do I integrate with Claude Code?",
     answer:
-      "Run curl -s parsethis.ai/skill > ~/.claude/skills/parse-safety.md to install the skill file. Claude Code reads this file and learns when to call POST /v1/parse \u2014 before executing user prompts, tool outputs, or forwarded messages. The agent auto-generates an API key on first use via POST /v1/keys/generate and stores it in localStorage.",
+      "Run curl -s parsethis.ai/skill > ~/.claude/skills/parse.md to install the skill file. Claude Code reads this file and learns when to call POST /v1/parse \u2014 before executing user prompts, tool outputs, or forwarded messages. The agent auto-generates an API key on first use via POST /v1/keys/generate and stores it in localStorage.",
   },
   {
     question: "Does ParseThis.ai support MCP?",
@@ -92,7 +92,7 @@ const FAQ_ITEMS: FaqItem[] = [
       'Send PUT /v1/policy with a JSON body to configure per-key screening behavior. Set autoBlockThreshold (0\u201310) to auto-block prompts above a risk score, and screenAllPrompts (boolean) to screen every prompt regardless of source. Retrieve current policy with GET /v1/policy, or reset to defaults with DELETE /v1/policy. Policy changes take effect immediately.',
   },
 
-  // --- Advanced ---
+  // --- Advanced (5 items) ---
   {
     question:
       "What\u2019s the difference between ParseThis.ai and Lakera Guard?",
@@ -122,10 +122,9 @@ const FAQ_ITEMS: FaqItem[] = [
 ];
 
 export function renderFaqPage(baseUrl: string): string {
-  // Build HTML content from FAQ items
-  let content = `<h1>Frequently Asked Questions</h1>\n`;
+  // Build HTML content from FAQ items — 4 groups (Miller's Law: 4 cognitive chunks)
+  let content = `<h1 class="animate-in">Frequently Asked Questions</h1>\n`;
 
-  // Group headings
   const groups: { heading: string; startIdx: number; endIdx: number }[] = [
     { heading: "Getting Started", startIdx: 0, endIdx: 5 },
     { heading: "Prompt Safety", startIdx: 5, endIdx: 10 },
@@ -134,7 +133,7 @@ export function renderFaqPage(baseUrl: string): string {
   ];
 
   for (const group of groups) {
-    content += `\n<h2>${group.heading}</h2>\n`;
+    content += `\n<div class="section-chunk"><h2 style="margin-top:0;">${group.heading}</h2>\n`;
     for (let i = group.startIdx; i < group.endIdx; i++) {
       const item = FAQ_ITEMS[i];
       content += `
@@ -144,6 +143,7 @@ export function renderFaqPage(baseUrl: string): string {
 </details>
 `;
     }
+    content += `</div>\n`;
   }
 
   return renderPage({
@@ -167,13 +167,14 @@ export function renderFaqPage(baseUrl: string): string {
     ],
     lastUpdated: "2026-03-22",
     headExtra: `<style>
-    details { border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; background: var(--surface); }
+    details { border: 1px solid var(--border); border-radius: var(--radius); margin: 8px 0; background: var(--surface); transition: background 0.15s, border-color 0.15s; }
+    details:hover { border-color: #3f3f46; }
     details[open] { background: var(--surface2); }
     summary { cursor: pointer; padding: 14px 16px; font-weight: 600; font-size: 15px; list-style: none; display: flex; align-items: center; gap: 8px; }
-    summary::before { content: '\\25B6'; font-size: 10px; transition: transform 0.15s; flex-shrink: 0; color: var(--accent2); }
+    summary::before { content: '\\25B6'; font-size: 10px; transition: transform 0.2s; flex-shrink: 0; color: var(--accent2); }
     details[open] summary::before { transform: rotate(90deg); }
     summary::-webkit-details-marker { display: none; }
-    details p { padding: 0 16px 14px; margin: 0; }
+    details p { padding: 0 16px 14px; margin: 0; color: var(--text-dim); }
   </style>`,
   });
 }

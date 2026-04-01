@@ -10,7 +10,9 @@ import { chatRoutes } from "./routes/chat.js";
 import { keysRoutes } from "./routes/keys.js";
 import { policyRoutes } from "./routes/policy.js";
 import { screenOutputRoutes } from "./routes/screen-output.js";
+import { agentTrustRoutes } from "./routes/agent-trust.js";
 import { discoveryRoutes } from "./routes/discovery.js";
+import { screeningMetricsRoutes } from "./routes/screening-metrics.js";
 import { contentNegotiation } from "./lib/content-negotiation.js";
 
 export const app = new Hono();
@@ -32,10 +34,13 @@ app.notFound((c) => {
   );
 });
 
-// CORS — restricted to allowed origins (Phase 1 security)
+// CORS — restricted to allowed origins; defaults to open for public API
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",").map(s => s.trim()).filter(Boolean);
+if (!allowedOrigins?.length) {
+  console.warn("[WARN] ALLOWED_ORIGINS not set — CORS allows all origins. Set ALLOWED_ORIGINS in production.");
+}
 app.use("/*", cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(",").map(s => s.trim()).filter(Boolean) || [],
-  credentials: true,
+  origin: allowedOrigins?.length ? allowedOrigins : "*",
 }));
 
 // Security headers (Phase 1 + Phase 2)
@@ -47,7 +52,7 @@ app.use("/*", async (c, next) => {
   c.header("Referrer-Policy", "strict-origin-when-cross-origin");
   c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   c.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-  c.header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'");
+  c.header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'");
 });
 
 // Global llms.txt Link header for AI agent discovery
@@ -81,6 +86,8 @@ app.use("/v1/analyze", x402Guard());
 app.use("/v1/evaluate", x402Guard());
 app.use("/v1/chat", x402Guard());
 app.use("/v1/parse", x402Guard());
+app.use("/v1/agent/trust/verify", x402Guard());
+app.use("/v1/screen-output", x402Guard());
 
 // Mount routes
 app.route("/", discoveryRoutes);
@@ -92,3 +99,5 @@ app.route("/", chatRoutes);
 app.route("/", keysRoutes);
 app.route("/", policyRoutes);
 app.route("/", screenOutputRoutes);
+app.route("/", agentTrustRoutes);
+app.route("/", screeningMetricsRoutes);

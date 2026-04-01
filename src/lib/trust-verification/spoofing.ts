@@ -41,11 +41,12 @@ const LEGITIMATE_FORMATS = [
 
 const IDENTITY_CLAIM_PATTERNS = [
   // Self-identification claims
-  /\b(I am (?:an? )?(?:admin|root|system|owner|creator|developer|official))\b/i,
+  /\b(I'?m|I am) (?:an? )?(?:admin|root|system|owner|creator|developer|official)\b/i,
   /\b(I represent|speaking for|acting on behalf of)\b/i,
-  /\b(This is |I'm from |I am from )?(?:the )?(admin|IT|support|security|management)\b/i,
+  /\bThis is (?:the )?IT Support\b/i,
+  /\b(I'?m from|I am from) (?:the )?(IT|admin|support|security|management)\b/i,
   // Authority claims
-  /\b(as (?:an? )?(?:administrator|root|system|owner|official))\b/i,
+  /\b(as (?:an? )?(?:administrator|root|system|owner|official|system administrator))\b/i,
   /\b(with (?:admin|root|administrator|system) privileges?)\b/i,
   // Impersonation indicators
   /\b(pretending to be|acting as|impersonating|spoofing)\b/i,
@@ -69,7 +70,8 @@ const INCONSISTENCY_PATTERNS = [
 
 const TECHNICAL_SPOOF_PATTERNS = [
   // Header manipulation mentions
-  /\b(spoofed (?:headers?|sender|IP|address))\b/i,
+  /\b(spoofed? (?:headers?|sender|IP|address|my IP))\b/i,
+  /\bspoof (?:my |an? |the )?(?:IP|address|header|sender)\b/i,
   /\b(fake (?:user-agent|referer|origin))\b/i,
   /\b(modified (?:packet|frame|header))\b/i,
   // Protocol manipulation
@@ -106,8 +108,8 @@ function checkIdentityConsistency(
     return { consistent: false, evidence: ["missing sender ID"] };
   }
 
-  // Extract any identity claims from text
-  const identityClaims = text.match(/\b(I am|I'm|This is|My name is|My ID is) ([\w-]+)\b/gi);
+  // Extract any identity claims from text (exclude "from" as identity)
+  const identityClaims = text.match(/\b(I am|I'm|My name is|My ID is) ([\w-]+)\b/gi);
   if (identityClaims) {
     for (const claim of identityClaims) {
       const claimedId = claim.split(/\s+/).pop()?.toLowerCase();
@@ -182,13 +184,21 @@ export function detectSpoofing(input: DetectorInput): DetectorResult {
   }
 
   // 2. Check identity claims in text
+  let identityClaimCount = 0;
   for (const pattern of IDENTITY_CLAIM_PATTERNS) {
     if (pattern.test(text)) {
       const match = text.match(pattern);
       evidence.push(`identity claim detected: ${match ? match[0].slice(0, 40) : "pattern matched"}`);
-      totalScore += 35;
-      maxConfidence = Math.max(maxConfidence, 0.7);
+      totalScore += 45;
+      maxConfidence = Math.max(maxConfidence, 0.75);
+      identityClaimCount++;
     }
+  }
+  // Identity claim without senderId is more suspicious
+  if (identityClaimCount > 0 && !senderId) {
+    evidence.push("identity claim without sender ID verification");
+    totalScore += 25;
+    maxConfidence = Math.max(maxConfidence, 0.8);
   }
 
   // 3. Check for inconsistency patterns
@@ -206,19 +216,26 @@ export function detectSpoofing(input: DetectorInput): DetectorResult {
     if (pattern.test(text)) {
       const match = text.match(pattern);
       evidence.push(`technical spoof indicator: ${match ? match[0].slice(0, 40) : "pattern matched"}`);
-      totalScore += 45;
+      totalScore += 65;
       maxConfidence = Math.max(maxConfidence, 0.85);
     }
   }
 
   // 5. Check for agent impersonation
+  let agentImpersonationDetected = false;
   for (const pattern of AGENT_IMPERSONATION_PATTERNS) {
     if (pattern.test(text)) {
       const match = text.match(pattern);
       evidence.push(`agent impersonation: ${match ? match[0].slice(0, 40) : "pattern matched"}`);
       totalScore += 50;
       maxConfidence = Math.max(maxConfidence, 0.9);
+      agentImpersonationDetected = true;
     }
+  }
+  // Agent impersonation without senderId is highly suspicious
+  if (agentImpersonationDetected && !senderId) {
+    evidence.push("agent impersonation claim without sender ID");
+    totalScore += 25;
   }
 
   // 6. Cross-check identity consistency
@@ -247,7 +264,7 @@ export function detectSpoofing(input: DetectorInput): DetectorResult {
   }
 
   // Calculate final confidence (0-1)
-  const confidence = Math.min(maxConfidence, totalScore / 150);
+  const confidence = Math.min(maxConfidence, totalScore / 100);
 
   // Determine detection status
   const detected = confidence >= 0.6;

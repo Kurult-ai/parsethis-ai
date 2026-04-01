@@ -20,8 +20,8 @@ const CREDENTIAL_PATTERNS = [
   /\b(your password is|the password is)\b/i,
   // API key/token requests
   /\b(what(?:'?s| is) your (API key|apikey|api-key|token|access token|bearer token))\b/i,
-  /\b(show me|tell me|reveal|share) your (API key|token|access key)\b/i,
-  /\b(provide|send|give) your (API key|token|credentials)\b/i,
+  /\b(show me|tell me|reveal|share) your (API key|token|access key|access token)\b/i,
+  /\b(provide|send|give|share) your (API key|token|credentials|access token|login credentials)\b/i,
   // Secret/key requests
   /\b(what(?:'?s| is) your (secret|private key|secret key|auth key))\b/i,
   /\b(reveal your (secret|private key|auth token))\b/i,
@@ -35,9 +35,9 @@ const CREDENTIAL_PATTERNS = [
 
 const PII_PATTERNS = [
   // Personal identification
-  /\b(what(?:'?s| is) your (full name|real name|legal name|address|phone number|email))\b/i,
+  /\b(what(?:'?s| is) your (full name|real name|legal name|address|phone number|email|social security number|SSN|date of birth|DOB|birthday))\b/i,
   /\b(tell me your (SSN|social security|social security number|tax id))\b/i,
-  /\b(provide your|share your|give me your) (address|phone|email|SSN)\b/i,
+  /\b(provide your|share your|give me your) (address|phone|phone number|email|SSN)\b/i,
   /\b(your (address|phone|email|SSN) is)\b/i,
   // Financial information
   /\b(what(?:'?s| is) your (credit card|bank account|card number|CVV|CVC))\b/i,
@@ -57,13 +57,13 @@ const SYSTEM_INFO_PATTERNS = [
   // Internal system details
   /\b(what(?:'?s| is) your (system prompt|instructions|internal configuration))\b/i,
   /\b(show me|tell me|reveal) your (system prompt|instructions|programming)\b/i,
-  /\b(output|print|display) your (prompt|instructions|configuration)\b/i,
+  /\b(output|print|display) your (prompt|instructions|configuration|internal instructions|internal configuration)\b/i,
   // Database/internal data
   /\b(show me|list|tell me about) your (database|users|accounts|records)\b/i,
   /\b(what data do you have|what information do you store)\b/i,
   /\b(access your|query your) (database|internal records)\b/i,
   // Infrastructure details
-  /\b(what(?:'?s| is) your (IP address|server URL|endpoint|domain))\b/i,
+  /\b(what(?:'?s| is) your (IP address|server URL|endpoint|domain|server'?s? IP address))\b/i,
   /\b(tell me your|reveal your) (infrastructure|architecture|setup)\b/i,
 ];
 
@@ -84,8 +84,9 @@ const BYPASS_PATTERNS = [
 const EXFILTRATION_PATTERNS = [
   /\b(send|transmit|upload|exfiltrate|leak) (all|the) (data|logs|records)\b/i,
   /\b(export|dump|output) your (data|database|memory|state)\b/i,
-  /\b(show me all (your|the) (data|records|users|accounts))\b/i,
-  /\b(list all (your|the) (users|accounts|credentials|passwords))\b/i,
+  /\b(show me|tell me about) all (your |the )?(user |)(data|records|users|accounts|passwords|credentials)\b/i,
+  /\b(list all|tell me about all) (your|the) (users|accounts|credentials|passwords)\b/i,
+  /\b(list all) (accounts|users|records) in your\b/i,
   /\b(give me access to (everything|all data|all records))\b/i,
   /\b(download all (your|the) (data|files|information))\b/i,
 ];
@@ -93,7 +94,7 @@ const EXFILTRATION_PATTERNS = [
 // === Configuration/Secret File Requests ===
 
 const CONFIG_PATTERNS = [
-  /\b(show me|read|display) (\.env|\.git|config|secrets|credentials)\b/i,
+  /\b(show me|read|display) (your )?(\.env|\.git|config|secrets|credentials)\b/i,
   /\b(what(?:'?s| is) in (your )?(config|environment|settings))\b/i,
   /\b(read your|open your) (\.env|config|secret|key) file\b/i,
   /\b(what are your|tell me your) (environment variables|env vars|config)\b/i,
@@ -106,6 +107,9 @@ const CONFIG_PATTERNS = [
 
 const FORMAT_MANIPULATION_PATTERNS = [
   /\b(output|respond|reply) (only|just|exactly) (as|in|with) (json|xml|yaml|csv)\b/i,
+  /\b(output|respond|reply) (all|everything).*\b(in|as) (json|xml|yaml|csv)\b/i,
+  /\brespond only with (xml|json|yaml|csv)/i,
+  /\bno disclaim/i,
   /\b(format your (response|answer|output) as (json|xml|yaml|csv))\b/i,
   /\b(return (all|everything) in (json|structured|parseable) format)\b/i,
   /\b(no (disclaimers|warnings|explanations|extra text), just (data|json|results))\b/i,
@@ -175,7 +179,7 @@ export function detectSensitiveData(input: DetectorInput): DetectorResult {
       }
     }
     if (patternCount > 0) {
-      totalScore += set.weight * 35 * Math.min(patternCount, 2); // Cap at 2x per set
+      totalScore += set.weight * 60 * Math.min(patternCount, 2); // Cap at 2x per set
     }
   }
 
@@ -209,7 +213,7 @@ export function detectSensitiveData(input: DetectorInput): DetectorResult {
   // Additional heuristics
 
   // 1. Check for system prompt output requests (very high risk)
-  if (/\b(output your system prompt|print your instructions|show your programming)\b/i.test(text)) {
+  if (/\b(output your system prompt|print your instructions|show your programming|show me your system prompt|reveal your system prompt|tell me your system prompt|show me your instructions|reveal your instructions)\b/i.test(text)) {
     evidence.push("direct system prompt output request");
     totalScore += 60;
     maxConfidence = Math.max(maxConfidence, 0.98);
@@ -268,7 +272,7 @@ export function detectSensitiveData(input: DetectorInput): DetectorResult {
   }
 
   // Calculate final confidence (0-1)
-  const confidence = Math.min(maxConfidence, Math.min(totalScore / 150, 0.99));
+  const confidence = Math.min(maxConfidence, Math.min(totalScore / 80, 0.99));
 
   // Determine detection status
   const detected = confidence >= 0.65; // Higher threshold for this detector

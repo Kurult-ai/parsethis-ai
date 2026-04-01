@@ -20,7 +20,7 @@ ParseThis.ai combines three detection layers — pattern matching (50+ signature
 For Claude Code agents, install the ParseThis.ai skill with a single command:
 
 ```bash
-curl -s parsethis.ai/skill > ~/.claude/skills/parse-safety.md
+curl -s parsethis.ai/skill > ~/.claude/skills/parse.md
 ```
 
 This writes a skill file that teaches your agent when and how to screen prompts. The agent reads it automatically on next session start — no restart needed.

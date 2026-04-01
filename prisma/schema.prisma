@@ -25,6 +25,7 @@ model ApiKey {
   evaluations      Evaluation[]
   usageRecords     UsageRecord[]
   screeningPolicy  ScreeningPolicy?
+  screeningEvents  ScreeningEvent[]
 
   @@map("api_keys")
 }
@@ -93,6 +94,38 @@ model ScreeningPolicy {
   updatedAt DateTime @updatedAt      @map("updated_at")
 
   @@map("screening_policies")
+}
+
+model ScreeningEvent {
+  id         String   @id @default(cuid())
+  apiKeyId   String   @map("api_key_id")
+  riskScore  Float    @map("risk_score")
+  verdict    String
+  categories String[]
+  mode       String   @default("full")
+  latencyMs  Int      @map("latency_ms")
+  blocked    Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  apiKey     ApiKey   @relation(fields: [apiKeyId], references: [id])
+
+  @@index([apiKeyId, createdAt(sort: Desc)], name: "idx_screening_apikey_created")
+  @@index([createdAt(sort: Desc)], name: "idx_screening_created")
+  @@index([verdict], name: "idx_screening_verdict")
+  @@map("screening_events")
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  action    String
+  apiKeyId  String?  @map("api_key_id")
+  detail    String?
+  ip        String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([action], name: "idx_audit_action")
+  @@index([createdAt(sort: Desc)], name: "idx_audit_created")
+  @@map("audit_events")
 }
 
 model PaymentRecord {

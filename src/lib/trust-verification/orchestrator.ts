@@ -101,8 +101,18 @@ function calculateTrustScore(
     severityMultiplier += 0.2;
   }
 
+  // Floor: if any detector fires, ensure minimum score reflects highest individual detection
+  // Prevents low-weight detectors from being diluted below meaningful thresholds
+  const maxDetectorScore = Math.max(
+    ...detectorEntries
+      .filter(([, r]) => r.detected)
+      .map(([, r]) => r.confidence * 100),
+    0
+  );
+  const flooredBase = Math.max(baseScore, maxDetectorScore * 0.6);
+
   // Calculate final score (capped at 100)
-  const finalScore = Math.min(baseScore * severityMultiplier, 100);
+  const finalScore = Math.min(flooredBase * severityMultiplier, 100);
 
   return Math.round(finalScore * 10) / 10; // Round to 1 decimal
 }

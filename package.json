@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Parse for Agents - Agent-optimized media credibility analysis API",
   "type": "module",
+  "workspaces": [
+    "packages/prompt-guard",
+    "packages/mcp-prompt-guard"
+  ],
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",

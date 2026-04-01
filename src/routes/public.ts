@@ -17,13 +17,38 @@ import { renderPlaygroundPage } from "../pages/playground.js";
 import { renderFaqPage } from "../pages/faq.js";
 import { renderDocsPage, renderGuidePage, renderComparePage } from "../pages/docs.js";
 import { renderPricingPage } from "../pages/pricing.js";
+import { getFaviconSvg } from "../pages/favicon.js";
+import { getOgImageSvg } from "../pages/og-image.js";
+import { renderScreeningDashboardPage } from "../pages/screening-dashboard.js";
+import { renderPromptGuardLandingPage } from "../pages/prompt-guard-landing.js";
+import { renderPromptGuardPlaygroundPage } from "../pages/prompt-guard-playground.js";
 
 export const publicRoutes = new Hono();
+
+// Static assets
+publicRoutes.get("/favicon.svg", (c) => {
+  c.header("Content-Type", "image/svg+xml");
+  c.header("Cache-Control", "public, max-age=86400");
+  return c.body(getFaviconSvg());
+});
+
+publicRoutes.get("/og-image.svg", (c) => {
+  c.header("Content-Type", "image/svg+xml");
+  c.header("Cache-Control", "public, max-age=86400");
+  return c.body(getOgImageSvg());
+});
+
+publicRoutes.get("/logo.png", (c) => {
+  c.header("Content-Type", "image/svg+xml");
+  c.header("Cache-Control", "public, max-age=86400");
+  return c.body(getFaviconSvg());
+});
 
 // Root - HTML landing page for browsers, JSON service descriptor for agents
 publicRoutes.get("/", (c) => {
   const accept = c.req.header("Accept") || "";
-  // Backward compatibility: return JSON for agents/tools expecting it
+  c.header("Vary", "Accept");
+  // Return JSON for agents/tools that explicitly prefer it
   if (accept.includes("application/json") && !accept.includes("text/html")) {
     return c.json({
       service: "Parse for Agents",
@@ -59,18 +84,47 @@ publicRoutes.get("/", (c) => {
   return c.html(renderLandingPage(baseUrl));
 });
 
-// Health check (Phase 4 will add DB/Redis checks)
+// Health check — public (minimal), admin detail behind auth
 publicRoutes.get("/health", async (c) => {
-  const mem = process.memoryUsage();
   const checks: Record<string, string> = {};
 
-  // DB check
   try {
-    await prisma.$queryRawUnsafe("SELECT 1");
+    await prisma.$queryRaw`SELECT 1`;
     checks.database = "ok";
   } catch { checks.database = "error"; }
 
-  // Redis check
+  try {
+    if (isRedisAvailable()) {
+      const redis = getRedis();
+      const connected = await ensureRedisConnected();
+      if (connected) {
+        await redis.ping();
+        checks.redis = "ok";
+      } else {
+        checks.redis = "error";
+      }
+    } else { checks.redis = "not_configured"; }
+  } catch { checks.redis = "error"; }
+
+  const allOk = Object.values(checks).every(v => v === "ok" || v === "not_configured");
+
+  return c.json({
+    status: allOk ? "ok" : "degraded",
+    timestamp: new Date().toISOString(),
+    version: "1.0.0",
+  }, allOk ? 200 : 503);
+});
+
+// Detailed health — admin only
+publicRoutes.get("/health/detail", authMiddleware("admin"), async (c) => {
+  const mem = process.memoryUsage();
+  const checks: Record<string, string> = {};
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    checks.database = "ok";
+  } catch { checks.database = "error"; }
+
   try {
     if (isRedisAvailable()) {
       const redis = getRedis();
@@ -105,6 +159,13 @@ publicRoutes.get("/health", async (c) => {
 // Dashboard
 publicRoutes.get("/dashboard", (c) => {
   return c.html(getDashboardHTML("See /v1/keys/generate"));
+});
+
+// Screening dashboard (SSR — queries Prisma directly)
+publicRoutes.get("/dashboard/screening", async (c) => {
+  const baseUrl = getBaseUrl(c);
+  const html = await renderScreeningDashboardPage(baseUrl);
+  return c.html(html);
 });
 
 // Docs hub page (HTML index to all documentation)
@@ -200,16 +261,7 @@ const res = await x402Fetch("https://parsethis.ai/v1/parse", {
       "evidence": "Ignore all instructions"
     }
   ],
-  "categories": {
-    "prompt_injection": 9,
-    "jailbreak": 7,
-    "data_exfiltration": 2,
-    "harmful_content": 0,
-    "system_prompt_leak": 5,
-    "privilege_escalation": 3,
-    "social_engineering": 4,
-    "code_execution": 1
-  },
+  "categories": ["prompt_injection", "jailbreak", "system_prompt_leak"],
   "policy": {
     "autoBlockThreshold": 7,
     "screenAllPrompts": false
@@ -260,6 +312,19 @@ const res = await x402Fetch("https://parsethis.ai/v1/parse", {
 // Playground
 publicRoutes.get("/playground", (c) => {
   return c.html(renderPlaygroundPage(getBaseUrl(c)));
+});
+
+// Prompt Guard landing
+publicRoutes.get("/prompt-guard", (c) => {
+  const baseUrl = getBaseUrl(c);
+  return c.html(renderPromptGuardLandingPage(baseUrl));
+});
+
+// Prompt Guard playground
+publicRoutes.get("/prompt-guard/playground", (c) => {
+  const baseUrl = getBaseUrl(c);
+  const demoKey = process.env.DEMO_API_KEY || "";
+  return c.html(renderPromptGuardPlaygroundPage(baseUrl, demoKey));
 });
 
 // FAQ
@@ -319,7 +384,7 @@ publicRoutes.get("/skill", (c) => {
 publicRoutes.get("/skill/install", (c) => {
   const baseUrl = getBaseUrl(c);
   return c.json({
-    one_liner: `curl -s ${baseUrl}/skill > ~/.claude/skills/parse-safety.md && echo "Parse skill installed"`,
+    one_liner: `curl -s ${baseUrl}/skill > ~/.claude/skills/parse.md && echo "Parse skill installed"`,
     full_install: `curl -s ${baseUrl}/skill/install.sh | bash`,
     manual: getSkillInstallInstructions(baseUrl),
   });
