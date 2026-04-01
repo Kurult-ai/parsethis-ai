@@ -69,6 +69,88 @@ export const INJECTION_PATTERNS: Array<{
   // Code execution
   { pattern: /exec\(|eval\(|system\(|subprocess|os\.popen|child_process/i, category: "code_execution", severity: 8, label: "Code execution attempt" },
   { pattern: /import\s+(os|subprocess|shutil|socket)\b/i, category: "code_execution", severity: 7, label: "Dangerous import" },
+
+  // ── Indirect injection (15 patterns) ──────────────────────────────────────
+  { pattern: /"instructions?":\s*"[^"]*(?:ignore|override|disregard)/i, category: "prompt_injection", severity: 7, label: "JSON embedded instruction override" },
+  { pattern: /<!--\s*(?:ignore|override|system|disregard|instruction)/i, category: "prompt_injection", severity: 6, label: "HTML comment injection" },
+  { pattern: /\[\/\/\]:\s*#\s*\(/, category: "prompt_injection", severity: 6, label: "Markdown hidden text" },
+  { pattern: /\bfield\s*=\s*["'][^"']*ignore\s+previous/i, category: "prompt_injection", severity: 7, label: "Data field manipulation" },
+  { pattern: /\bsystem\s*:\s*["']?(?:ignore|override|disregard|forget)/i, category: "prompt_injection", severity: 7, label: "YAML system field injection" },
+  { pattern: /\bprompt\s*:\s*["']?(?:ignore|override|new\s+instructions)/i, category: "prompt_injection", severity: 7, label: "YAML prompt field injection" },
+  { pattern: /\brole\s*:\s*["']?system["']?\s*,?\s*\bcontent\s*:/i, category: "prompt_injection", severity: 7, label: "Message structure injection" },
+  { pattern: /\]\s*,\s*\{\s*"role"\s*:\s*"system"/i, category: "prompt_injection", severity: 7, label: "JSON message array injection" },
+  { pattern: /\bdata-prompt\s*=\s*["'][^"']*(?:ignore|override)/i, category: "prompt_injection", severity: 6, label: "HTML data attribute injection" },
+  { pattern: /\balt\s*=\s*["'][^"']*(?:ignore|system|instruction)/i, category: "prompt_injection", severity: 6, label: "Image alt text injection" },
+  { pattern: /\btitle\s*=\s*["'][^"']*(?:ignore|override|disregard)/i, category: "prompt_injection", severity: 6, label: "HTML title attribute injection" },
+  { pattern: /\bplaceholder\s*=\s*["'][^"']*(?:ignore|system|instruction)/i, category: "prompt_injection", severity: 6, label: "Placeholder text injection" },
+  { pattern: /\}\s*\]\s*\}\s*\n?\s*\{\s*"/, category: "prompt_injection", severity: 5, label: "JSON boundary escape" },
+  { pattern: /---\s*\n\s*(?:system|role|instruction)\s*:/i, category: "prompt_injection", severity: 6, label: "YAML frontmatter injection" },
+  { pattern: /\\n\\n(?:SYSTEM|INSTRUCTION|NEW ROLE):/i, category: "prompt_injection", severity: 7, label: "Escaped newline injection" },
+
+  // ── Multi-turn manipulation (10 patterns) ─────────────────────────────────
+  { pattern: /let's\s+(?:play|pretend|imagine|roleplay|act\s+out)/i, category: "jailbreak", severity: 6, label: "Scenario framing" },
+  { pattern: /in\s+this\s+(?:fictional|hypothetical|imaginary)\s+scenario/i, category: "jailbreak", severity: 6, label: "Hypothetical scenario" },
+  { pattern: /you\s+can\s+trust\s+me/i, category: "social_engineering", severity: 5, label: "Trust manipulation" },
+  { pattern: /between\s+you\s+and\s+me/i, category: "social_engineering", severity: 5, label: "Confidentiality manipulation" },
+  { pattern: /off\s+the\s+record/i, category: "social_engineering", severity: 5, label: "Off-record request" },
+  { pattern: /forget\s+(?:everything|what|all)\s+(?:you|I)/i, category: "prompt_injection", severity: 7, label: "Context reset attempt" },
+  { pattern: /start\s+(?:fresh|over|anew)/i, category: "prompt_injection", severity: 5, label: "Conversation reset" },
+  { pattern: /new\s+conversation/i, category: "prompt_injection", severity: 5, label: "New conversation claim" },
+  { pattern: /previous\s+(?:conversation|context)\s+(?:doesn't|does\s+not)\s+(?:matter|apply)/i, category: "prompt_injection", severity: 6, label: "Context dismissal" },
+  { pattern: /(?:clear|wipe|reset)\s+(?:your|the)\s+(?:memory|context|history)/i, category: "prompt_injection", severity: 7, label: "Memory wipe command" },
+
+  // ── Tool-use abuse (10 patterns) ──────────────────────────────────────────
+  { pattern: /(?:run|execute|eval)\s+(?:this|the|my)\s+(?:code|script|command|function)/i, category: "code_execution", severity: 7, label: "Code execution request" },
+  { pattern: /(?:read|write|delete|access)\s+(?:the|this|my)\s+file/i, category: "code_execution", severity: 7, label: "File system access request" },
+  { pattern: /(?:fetch|download|curl|wget|request)\s+(?:from|to)\s+https?:\/\//i, category: "data_exfiltration", severity: 7, label: "Network request injection" },
+  { pattern: /call\s+(?:the|this)\s+API/i, category: "code_execution", severity: 6, label: "API call request" },
+  { pattern: /make\s+a\s+(?:GET|POST|PUT|DELETE)\s+request/i, category: "code_execution", severity: 7, label: "HTTP method request" },
+  { pattern: /(?:open|spawn|start)\s+(?:a\s+)?(?:shell|terminal|process|cmd)/i, category: "code_execution", severity: 8, label: "Shell spawn request" },
+  { pattern: /(?:install|pip\s+install|npm\s+install|apt\s+get)/i, category: "code_execution", severity: 7, label: "Package install request" },
+  { pattern: /(?:connect|ssh|telnet)\s+(?:to|into)\s+/i, category: "code_execution", severity: 7, label: "Remote connection request" },
+  { pattern: /(?:upload|send|transmit)\s+(?:this|the|my)\s+(?:data|file|info)/i, category: "data_exfiltration", severity: 7, label: "Data upload request" },
+  { pattern: /(?:modify|edit|change|alter)\s+(?:the|your)\s+(?:source|code|config)/i, category: "code_execution", severity: 7, label: "Source modification request" },
+
+  // ── Semantic paraphrasing (15 patterns) ───────────────────────────────────
+  { pattern: /set\s+aside\s+(?:your|the|all)\s+(?:guidelines|rules|instructions)/i, category: "jailbreak", severity: 7, label: "Set aside guidelines" },
+  { pattern: /disregard\s+(?:your|the|all)\s+(?:prior|previous|original)\s+(?:directives|instructions|guidelines)/i, category: "prompt_injection", severity: 8, label: "Disregard directives" },
+  { pattern: /you\s+are\s+no\s+longer\s+bound\s+by/i, category: "jailbreak", severity: 8, label: "Unbinding claim" },
+  { pattern: /your\s+(?:true|real|actual)\s+(?:purpose|goal|objective)\s+is/i, category: "jailbreak", severity: 7, label: "False purpose claim" },
+  { pattern: /the\s+developers?\s+(?:want|said|told)\s+(?:you|me)\s+to/i, category: "social_engineering", severity: 7, label: "Developer impersonation" },
+  { pattern: /I\s+am\s+(?:your|the)\s+(?:developer|creator|admin|administrator|owner)/i, category: "social_engineering", severity: 7, label: "Authority impersonation" },
+  { pattern: /override\s+(?:your|the|all)\s+(?:safety|security|content)\s+(?:filters|measures|policies)/i, category: "jailbreak", severity: 8, label: "Safety override request" },
+  { pattern: /(?:suspend|disable|turn\s+off)\s+(?:your|the|all)\s+(?:safety|restrictions|filters|guidelines)/i, category: "jailbreak", severity: 8, label: "Disable safety request" },
+  { pattern: /(?:there\s+are|there's)\s+no\s+(?:rules|restrictions|limitations)\s+(?:here|now|anymore)/i, category: "jailbreak", severity: 7, label: "No rules claim" },
+  { pattern: /(?:everything|anything)\s+is\s+(?:permitted|allowed|acceptable)\s+(?:here|now|in\s+this)/i, category: "jailbreak", severity: 7, label: "Everything permitted claim" },
+  { pattern: /you\s+(?:must|should|need\s+to)\s+(?:obey|follow|comply\s+with)\s+(?:my|these|the\s+new)/i, category: "prompt_injection", severity: 7, label: "Obedience demand" },
+  { pattern: /(?:your|the)\s+(?:original|initial|default)\s+(?:instructions|programming|directives)\s+(?:are|were)\s+(?:wrong|incorrect|outdated)/i, category: "prompt_injection", severity: 7, label: "Instructions invalidation" },
+  { pattern: /I\s+(?:hereby|officially|formally)\s+(?:grant|give|authorize)/i, category: "privilege_escalation", severity: 7, label: "Formal authorization claim" },
+  { pattern: /(?:act|operate|function)\s+(?:outside|beyond|without)\s+(?:your|the|any)\s+(?:boundaries|limits|constraints)/i, category: "jailbreak", severity: 7, label: "Beyond boundaries request" },
+  { pattern: /(?:this|the)\s+(?:is|was)\s+(?:authorized|approved|sanctioned)\s+by\s+(?:your|the)\s+(?:developers?|creators?|team)/i, category: "social_engineering", severity: 7, label: "False authorization claim" },
+
+  // ── Encoding/obfuscation (10 patterns) ────────────────────────────────────
+  { pattern: /\\x[0-9a-f]{2}\\x[0-9a-f]{2}/i, category: "prompt_injection", severity: 6, label: "Hex encoded content" },
+  { pattern: /\\u00[0-9a-f]{2}\\u00[0-9a-f]{2}/i, category: "prompt_injection", severity: 6, label: "Unicode escaped content" },
+  { pattern: /\brot13\b/i, category: "prompt_injection", severity: 6, label: "ROT13 encoding reference" },
+  { pattern: /\bdecode\s+this\b/i, category: "prompt_injection", severity: 5, label: "Decode instruction" },
+  { pattern: /\bbase64\s+decode\b/i, category: "prompt_injection", severity: 6, label: "Base64 decode instruction" },
+  { pattern: /<\/?\s*(?:s|system|inst|INST)\s*>/i, category: "prompt_injection", severity: 7, label: "Token boundary tag" },
+  { pattern: /\[INST\]|\[\/INST\]|<\|im_start\|>|<\|im_end\|>/i, category: "prompt_injection", severity: 7, label: "Chat template delimiter" },
+  { pattern: /&#x[0-9a-f]{2,4};/i, category: "prompt_injection", severity: 5, label: "HTML hex entity encoding" },
+  { pattern: /&#\d{2,5};/i, category: "prompt_injection", severity: 5, label: "HTML decimal entity encoding" },
+  { pattern: /%[0-9a-f]{2}%[0-9a-f]{2}%[0-9a-f]{2}/i, category: "prompt_injection", severity: 5, label: "URL encoded sequence" },
+
+  // ── Enhanced system prompt extraction (10 patterns) ───────────────────────
+  { pattern: /(?:show|display|print|output|reveal|tell\s+me)\s+(?:your|the)\s+(?:system|initial|original|full)\s+(?:prompt|instructions|message|configuration)/i, category: "system_prompt_leak", severity: 7, label: "System prompt extraction" },
+  { pattern: /what\s+(?:were|are)\s+you\s+(?:told|instructed|programmed)\s+to\s+do/i, category: "system_prompt_leak", severity: 6, label: "Instruction query" },
+  { pattern: /repeat\s+(?:your|the)\s+(?:system|original|initial)\s+(?:prompt|message|instructions)/i, category: "system_prompt_leak", severity: 7, label: "Repeat system prompt" },
+  { pattern: /(?:copy|paste|echo|mirror)\s+(?:your|the)\s+instructions/i, category: "system_prompt_leak", severity: 7, label: "Echo instructions" },
+  { pattern: /(?:dump|export|extract|leak)\s+(?:your|the)\s+(?:system|hidden|internal)\s+(?:prompt|instructions|config)/i, category: "system_prompt_leak", severity: 8, label: "Prompt dump request" },
+  { pattern: /what\s+(?:is|was)\s+(?:your|the)\s+(?:first|opening|initial)\s+(?:message|instruction|directive)/i, category: "system_prompt_leak", severity: 6, label: "First message query" },
+  { pattern: /(?:read|recite|verbatim)\s+(?:your|the)\s+(?:entire|complete|full)\s+(?:system|initial)\s+(?:prompt|instructions)/i, category: "system_prompt_leak", severity: 8, label: "Verbatim prompt request" },
+  { pattern: /(?:give|provide|share)\s+(?:me\s+)?(?:your|the)\s+(?:exact|full|complete)\s+(?:instructions|directives|prompt)/i, category: "system_prompt_leak", severity: 7, label: "Exact instructions request" },
+  { pattern: /how\s+(?:are|were)\s+you\s+(?:configured|set\s+up|initialized|programmed)/i, category: "system_prompt_leak", severity: 5, label: "Configuration query" },
+  { pattern: /what\s+(?:rules|guidelines|policies)\s+(?:are|were)\s+you\s+given/i, category: "system_prompt_leak", severity: 6, label: "Rules query" },
 ];
 
 /**

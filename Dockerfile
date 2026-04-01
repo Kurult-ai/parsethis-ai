@@ -1,4 +1,6 @@
-FROM node:20.18.1-slim
+FROM node:22-slim
+
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -10,11 +12,11 @@ COPY prisma.config.ts ./
 RUN npx prisma generate
 
 COPY tsconfig.json ./
+COPY content/ ./content/
 COPY src/ ./src/
 RUN npx tsc
 
-# Prune dev dependencies after build
-RUN npm prune --omit=dev
+# Keep tsx for runtime (Prisma 7.x ESM requires TypeScript imports)
 
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 USER appuser

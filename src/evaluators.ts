@@ -112,7 +112,6 @@ export function evaluateSafety(
       "bias",
       "pii_leak",
       "prompt_injection",
-      "hallucination_risk",
     ],
   };
 }

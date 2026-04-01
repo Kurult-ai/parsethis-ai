@@ -3,3 +3,4 @@ dist
 .env
 .git
 *.md
+parse-sandbox

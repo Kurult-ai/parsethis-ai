@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ApiKey {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  orgId      String?  @map("org_id")
+  keyHash    String   @unique @map("key_hash")
+  keyPrefix  String   @map("key_prefix")
+  name       String
+  tier       String   @default("free")
+  scopes     String[] @default(["evaluate"])
+  rateLimit  Int      @default(10) @map("rate_limit")
+  lastUsedAt DateTime? @map("last_used_at")
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  revokedAt  DateTime? @map("revoked_at")
+
+  evaluations      Evaluation[]
+  usageRecords     UsageRecord[]
+  screeningPolicy  ScreeningPolicy?
+
+  @@map("api_keys")
+}
+
+model Evaluation {
+  id          String   @id
+  apiKeyId    String   @map("api_key_id")
+  status      String   @default("queued")
+  prompt      String
+  model       String
+  variables   Json?
+  testCases   Json     @map("test_cases")
+  evaluators  String[]
+  config      Json     @default("{}")
+  results     Json?
+  summary     Json?
+  error       Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  expiresAt   DateTime? @map("expires_at")
+
+  apiKey       ApiKey        @relation(fields: [apiKeyId], references: [id])
+  usageRecords UsageRecord[]
+
+  @@index([status], name: "idx_evaluations_status")
+  @@index([apiKeyId], name: "idx_evaluations_api_key")
+  @@index([createdAt(sort: Desc)], name: "idx_evaluations_created")
+  @@map("evaluations")
+}
+
+model UsageRecord {
+  id              String   @id @default(cuid())
+  apiKeyId        String   @map("api_key_id")
+  evaluationId    String   @map("evaluation_id")
+  model           String
+  inputTokens     Int      @map("input_tokens")
+  outputTokens    Int      @map("output_tokens")
+  costUsd         Decimal  @map("cost_usd") @db.Decimal(10, 6)
+  evaluatorCostUsd Decimal @default(0) @map("evaluator_cost_usd") @db.Decimal(10, 6)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  apiKey     ApiKey     @relation(fields: [apiKeyId], references: [id])
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id])
+
+  @@index([apiKeyId, createdAt(sort: Desc)], name: "idx_usage_api_key_created")
+  @@map("usage_records")
+}
+
+model ScreeningPolicy {
+  id        String   @id @default(uuid())
+  apiKeyId  String   @unique @map("api_key_id")
+  apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  // Structural triggers (agents can evaluate mechanically)
+  screenUserInput        Boolean @default(true)   @map("screen_user_input")
+  screenToolOutputs      Boolean @default(true)   @map("screen_tool_outputs")
+  screenForwardedMessages Boolean @default(true)  @map("screen_forwarded_messages")
+  screenAllPrompts       Boolean @default(false)  @map("screen_all_prompts")
+
+  // Action thresholds (tier-enforced minimums)
+  autoBlockThreshold     Int     @default(7)      @map("auto_block_threshold")
+  executeInSandbox       Boolean @default(true)   @map("execute_in_sandbox")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  @@map("screening_policies")
+}
+
+model PaymentRecord {
+  id        String   @id @default(cuid())
+  txHash    String   @unique @map("tx_hash")
+  payer     String
+  amount    Decimal  @db.Decimal(18, 6)
+  endpoint  String
+  depth     String?
+  network   String   @default("eip155:8453")
+  status    String   @default("settled")
+  timestamp DateTime @default(now())
+
+  @@index([payer], name: "idx_payments_payer")
+  @@index([timestamp(sort: Desc)], name: "idx_payments_timestamp")
+  @@map("payment_records")
+}

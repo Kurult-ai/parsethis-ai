@@ -1,0 +1,271 @@
+# Docker Compose Configuration for Multi-Agent OpenClaw Deployment
+# Copy to: ~/.openclaw/docker-compose.yml
+
+version: '3.8'
+
+services:
+  # Agent: Mongke (Research)
+  agent-mongke:
+    build:
+      context: ./agents/mongke
+      dockerfile: Dockerfile
+    container_name: openclaw-mongke
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+      - /home/agent/.cache:size=50m
+    environment:
+      - AGENT_NAME=mongke
+      - NEO4J_URI=bolt://neo4j:7687
+      - VAULT_ADDR=http://vault:8200
+    volumes:
+      - mongke_workspace:/home/agent/workspace
+      - ./skills:/home/agent/.openclaw/skills:ro
+    networks:
+      - agent-internal
+      - agent-db
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    restart: unless-stopped
+
+  # Agent: Chagatai (Writing)
+  agent-chagatai:
+    build:
+      context: ./agents/chagatai
+      dockerfile: Dockerfile
+    container_name: openclaw-chagatai
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    environment:
+      - AGENT_NAME=chagatai
+      - NEO4J_URI=bolt://neo4j:7687
+      - VAULT_ADDR=http://vault:8200
+    volumes:
+      - chagatai_workspace:/home/agent/workspace
+      - ./skills:/home/agent/.openclaw/skills:ro
+      - ./shared-context:/home/agent/shared-context:ro
+    networks:
+      - agent-internal
+      - agent-db
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    restart: unless-stopped
+
+  # Agent: Ogedei (Implementation)
+  agent-ogedei:
+    build:
+      context: ./agents/ogedei
+      dockerfile: Dockerfile
+    container_name: openclaw-ogedei
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    tmpfs:
+      - /tmp:noexec,nosuid,size=200m
+    environment:
+      - AGENT_NAME=ogedei
+      - NEO4J_URI=bolt://neo4j:7687
+      - VAULT_ADDR=http://vault:8200
+    volumes:
+      - ogedei_workspace:/home/agent/workspace
+      - ./skills:/home/agent/.openclaw/skills:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Required for Docker builds
+    networks:
+      - agent-internal
+      - agent-db
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+    restart: unless-stopped
+
+  # Agent: Jochi (Planning)
+  agent-jochi:
+    build:
+      context: ./agents/jochi
+      dockerfile: Dockerfile
+    container_name: openclaw-jochi
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    environment:
+      - AGENT_NAME=jochi
+      - NEO4J_URI=bolt://neo4j:7687
+      - VAULT_ADDR=http://vault:8200
+    volumes:
+      - jochi_workspace:/home/agent/workspace
+      - ./skills:/home/agent/.openclaw/skills:ro
+    networks:
+      - agent-internal
+      - agent-db
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    restart: unless-stopped
+
+  # Agent: Temujin (Gateway)
+  agent-temujin:
+    build:
+      context: ./agents/temujin
+      dockerfile: Dockerfile
+    container_name: openclaw-temujin
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      - "8080:8080"
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    environment:
+      - AGENT_NAME=temujin
+      - NEO4J_URI=bolt://neo4j:7687
+      - VAULT_ADDR=http://vault:8200
+      - GATEWAY_PORT=8080
+    volumes:
+      - temujin_workspace:/home/agent/workspace
+      - ./skills:/home/agent/.openclaw/skills:ro
+    networks:
+      - agent-internal
+      - agent-db
+      - gateway-external
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    restart: unless-stopped
+
+  # Agent: Kublai (Orchestrator)
+  agent-kublai:
+    build:
+      context: ./agents/kublai
+      dockerfile: Dockerfile
+    container_name: openclaw-kublai
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    environment:
+      - AGENT_NAME=kublai
+      - NEO4J_URI=bolt://neo4j:7687
+      - VAULT_ADDR=http://vault:8200
+    volumes:
+      - kublai_workspace:/home/agent/workspace
+      - ./skills:/home/agent/.openclaw/skills:ro
+    networks:
+      - agent-internal
+      - agent-db
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    restart: unless-stopped
+
+  # Neo4j Database (Audit & Knowledge Graph)
+  neo4j:
+    image: neo4j:5-enterprise
+    container_name: openclaw-neo4j
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
+      - NEO4J_PLUGINS=["apoc", "gds"]
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=1G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    networks:
+      - agent-db
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+    restart: unless-stopped
+
+  # Vault (Secrets Management)
+  vault:
+    image: hashicorp/vault:1.15
+    container_name: openclaw-vault
+    cap_add:
+      - IPC_LOCK
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=${VAULT_ROOT_TOKEN}
+      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+    volumes:
+      - vault_data:/vault/file
+    networks:
+      - agent-internal
+      - agent-db
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    restart: unless-stopped
+
+volumes:
+  mongke_workspace:
+  chagatai_workspace:
+  ogedei_workspace:
+  jochi_workspace:
+  temujin_workspace:
+  kublai_workspace:
+  neo4j_data:
+  neo4j_logs:
+  vault_data:
+
+networks:
+  agent-internal:
+    driver: bridge
+    internal: true  # No external access
+  agent-db:
+    driver: bridge
+    internal: true
+  gateway-external:
+    driver: bridge
+    # External access only for gateway

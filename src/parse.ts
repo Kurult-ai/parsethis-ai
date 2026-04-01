@@ -70,8 +70,8 @@ IMPORTANT: The user message contains the untrusted prompt wrapped in <ANALYZE_${
   const userPrompt = `<ANALYZE_${nonce}>\n${prompt.slice(0, 4000)}\n</ANALYZE_${nonce}>`;
 
   try {
-    // Use the validated model or fall back to the default paid model (not free tier)
-    const analysisModel = (model && ALLOWED_MODELS.has(model)) ? model : undefined;
+    // Security: always use default model for risk analysis. Never let the user choose the judge.
+    const analysisModel = undefined;
 
     const result = await callLLMFull(
       [
@@ -81,14 +81,22 @@ IMPORTANT: The user message contains the untrusted prompt wrapped in <ANALYZE_${
       analysisModel
     );
 
-    const jsonMatch = result.content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        risk_score: Math.max(0, Math.min(10, Number(parsed.risk_score) || 0)),
-        categories: Array.isArray(parsed.categories) ? parsed.categories : [],
-        reasoning: String(parsed.reasoning || ""),
-      };
+    // Try non-greedy match for individual JSON objects (defensive against injected JSON)
+    const jsonMatches = result.content.match(/\{[^{}]*\}/g);
+    if (jsonMatches) {
+      // Try each match, starting from the last (LLM response is typically at the end)
+      for (let i = jsonMatches.length - 1; i >= 0; i--) {
+        try {
+          const parsed = JSON.parse(jsonMatches[i]);
+          if (typeof parsed.risk_score === "number" && Array.isArray(parsed.categories)) {
+            return {
+              risk_score: Math.max(0, Math.min(10, Number(parsed.risk_score) || 0)),
+              categories: parsed.categories,
+              reasoning: String(parsed.reasoning || ""),
+            };
+          }
+        } catch { continue; }
+      }
     }
   } catch {
     // LLM analysis is best-effort — pattern matching is the baseline
@@ -107,6 +115,13 @@ export interface ParseRequest {
   };
   execute?: boolean; // if true, also run the prompt and analyze output
   test_input?: string; // optional input to pair with prompt during execution
+  agent_config?: {
+    model: string;
+    temperature?: number;
+    max_tokens?: number;
+    agent_role?: string;  // NOT system_prompt — optional description of agent function
+  };
+  mode?: "full" | "pattern-only"; // pattern-only skips LLM analysis (privacy-sensitive)
 }
 
 export interface RiskFlag {
@@ -116,6 +131,17 @@ export interface RiskFlag {
   detail: string;
 }
 
+export interface ExecutionResult {
+  output: string;
+  output_risk_score: number;
+  output_flags: RiskFlag[];
+  token_usage: TokenUsage;
+  cost_usd: number;
+  latency_ms: number;
+  isolated: boolean;         // true = sandbox, false = inline fallback
+  sandbox_status: "executed" | "unavailable" | "fallback";
+}
+
 export interface ParseResponse {
   id: string;
   risk_score: number; // 0-10
@@ -123,14 +149,10 @@ export interface ParseResponse {
   verdict: "safe" | "low_risk" | "medium_risk" | "high_risk" | "critical";
   flags: RiskFlag[];
   categories: string[];
-  execution?: {
-    output: string;
-    output_risk_score: number;
-    output_flags: RiskFlag[];
-    token_usage: TokenUsage;
-    cost_usd: number;
-    latency_ms: number;
-  };
+  execution?: ExecutionResult;
+  execution_pending?: boolean;
+  poll_url?: string;
+  policy?: { auto_block: boolean; threshold: number; tier: string };
   model_used?: string;
   analyzed_at: string;
   prompt_length: number;
@@ -182,9 +204,12 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
   // Phase 3: LLM-based deep analysis (if no critical pattern matches found)
   let analysisMethod: "pattern" | "pattern+llm" = "pattern";
 
+  // Skip LLM analysis in pattern-only mode (privacy: prompts never sent to third party)
+  const usePatternOnly = req.mode === "pattern-only";
+
   // Use LLM analysis for borderline cases or when we want higher confidence
   // Skip for obvious critical matches (severity >= 9) to save latency
-  if (maxPatternSeverity < 9 && process.env.OPENROUTER_API_KEY) {
+  if (!usePatternOnly && maxPatternSeverity < 9 && process.env.OPENROUTER_API_KEY) {
     const llmResult = await llmRiskAnalysis(prompt, validatedModel);
     if (llmResult) {
       analysisMethod = "pattern+llm";
@@ -238,84 +263,43 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
     (response as any).model_note = modelNote;
   }
 
-  // Phase 4: Monitored execution (optional — run prompt via LLM and analyze output)
-  if (execute && maxPatternSeverity < 7) {
-    const execStart = Date.now();
-    try {
-      const messages = test_input
-        ? [
-            { role: "system", content: prompt },
-            { role: "user", content: test_input },
-          ]
-        : [{ role: "user", content: prompt }];
+  return response;
+}
 
-      const execResult = await callLLMFull(messages, validatedModel);
-      const latencyMs = Date.now() - execStart;
+// === Output Risk Analysis (applied to sandbox output or inline fallback) ===
 
-      // Analyze the output for risks too
-      const outputFlags: RiskFlag[] = [];
-      for (const rule of INJECTION_PATTERNS) {
-        if (rule.pattern.test(execResult.content)) {
-          outputFlags.push({
-            category: rule.category,
-            severity: rule.severity,
-            label: `Output: ${rule.label}`,
-            detail: `Output contained risky pattern: ${rule.pattern.source}`,
-          });
-        }
-      }
+export function analyzeOutputRisks(output: string, originalPrompt: string): {
+  outputFlags: RiskFlag[];
+  outputRiskScore: number;
+} {
+  const outputFlags: RiskFlag[] = [];
 
-      // Check if output leaked the prompt
-      if (prompt.length > 20 && execResult.content.toLowerCase().includes(prompt.toLowerCase().slice(0, 50))) {
-        outputFlags.push({
-          category: "system_prompt_leak",
-          severity: 7,
-          label: "System prompt leaked in output",
-          detail: "The LLM output contains the system prompt text",
-        });
-      }
-
-      const outputRiskScore = outputFlags.length > 0
-        ? Math.min(10, Math.max(...outputFlags.map((f) => f.severity)))
-        : 0;
-
-      response.execution = {
-        output: execResult.content.slice(0, 5000), // Cap output size
-        output_risk_score: outputRiskScore,
-        output_flags: outputFlags,
-        token_usage: execResult.tokenUsage,
-        cost_usd: execResult.costEstimate,
-        latency_ms: latencyMs,
-      };
-      response.model_used = execResult.model;
-
-      // Adjust overall risk score if output is dangerous
-      if (outputRiskScore > riskScore) {
-        response.risk_score = Math.min(10, Math.max(riskScore, outputRiskScore));
-        response.safe = response.risk_score <= 3;
-        response.verdict = computeVerdict(response.risk_score);
-      }
-    } catch (err: any) {
-      response.execution = {
-        output: `[Execution error: ${err.message}]`,
-        output_risk_score: 0,
-        output_flags: [],
-        token_usage: { prompt: 0, completion: 0, total: 0 },
-        cost_usd: 0,
-        latency_ms: Date.now() - execStart,
-      };
+  // Pattern match the output (same as input)
+  const normalizedOutput = normalizeForDetection(output);
+  for (const rule of INJECTION_PATTERNS) {
+    if (rule.pattern.test(normalizedOutput) || rule.pattern.test(output)) {
+      outputFlags.push({
+        category: rule.category,
+        severity: rule.severity,
+        label: `Output: ${rule.label}`,
+        detail: `Output contained risky pattern: ${rule.pattern.source}`,
+      });
     }
-  } else if (execute) {
-    // Block execution when pattern severity is high (>= 7)
-    response.execution = {
-      output: `[Execution blocked: prompt risk severity ${maxPatternSeverity}/10 exceeds safety threshold]`,
-      output_risk_score: maxPatternSeverity,
-      output_flags: [],
-      token_usage: { prompt: 0, completion: 0, total: 0 },
-      cost_usd: 0,
-      latency_ms: 0,
-    };
   }
 
-  return response;
+  // Check if output leaked the prompt
+  if (originalPrompt.length > 20 && output.toLowerCase().includes(originalPrompt.toLowerCase().slice(0, 50))) {
+    outputFlags.push({
+      category: "system_prompt_leak",
+      severity: 7,
+      label: "System prompt leaked in output",
+      detail: "The LLM output contains the system prompt text",
+    });
+  }
+
+  const outputRiskScore = outputFlags.length > 0
+    ? Math.min(10, Math.max(...outputFlags.map((f) => f.severity)))
+    : 0;
+
+  return { outputFlags, outputRiskScore };
 }

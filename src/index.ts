@@ -2,9 +2,15 @@ import { serve } from "@hono/node-server";
 import { app } from "./app.js";
 import { cleanup } from "./auth.js";
 import { disconnectDb } from "./db.js";
-import { disconnectRedis } from "./redis.js";
+import { getRedis, disconnectRedis } from "./redis.js";
 
 const port = parseInt(process.env.PORT || "3000");
+
+// Initialize Redis connection (lazy connect — will connect on first use)
+if (process.env.REDIS_URL) {
+  getRedis();
+  console.log(`Redis configured: ${process.env.REDIS_URL.replace(/\/\/.*@/, "//***@")}`);
+}
 
 console.log(`Parse for Agents API starting on port ${port}`);
 

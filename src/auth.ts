@@ -6,6 +6,20 @@ import {
   revokeApiKey as revokeApiKeyFromService,
   type ApiKeyRecord,
 } from "./api-key-service.js";
+import { prisma } from "./db.js";
+import { getCachedPolicyData, cachePolicyData } from "./result-store.js";
+import type { AppEnv, ScreeningPolicy } from "./types.js";
+import { auditLog } from "./lib/audit-log.js";
+
+// Default screening policy (keep in sync with routes/policy.ts)
+const DEFAULT_POLICY: ScreeningPolicy = {
+  screenUserInput: true,
+  screenToolOutputs: true,
+  screenForwardedMessages: true,
+  screenAllPrompts: false,
+  autoBlockThreshold: 7,
+  executeInSandbox: true,
+};
 
 // Rate limit tracking: key -> { count, window_start }
 const rateLimits = new Map<string, { count: number; window_start: number }>();
@@ -53,9 +67,17 @@ function checkRateLimit(key: string, limit: number): { allowed: boolean; remaini
 
 // Auth middleware - extracts API key from Authorization header
 export function authMiddleware(requiredScope?: string) {
-  return async (c: Context, next: Next) => {
-    // Skip auth if x402 payment was verified by upstream middleware
+  return async (c: Context<AppEnv>, next: Next) => {
+    // x402 payment was verified by upstream middleware — set synthetic key + default policy
     if (c.get("x402Paid")) {
+      c.set("apiKey", {
+        id: `x402:${crypto.randomUUID().slice(0, 8)}`,
+        name: "x402 Payment",
+        scopes: ["analyze", "evaluate", "chat"],
+        rate_limit: 60,
+        tier: "free",
+      });
+      c.set("policy", DEFAULT_POLICY);
       await next();
       return;
     }
@@ -80,10 +102,25 @@ export function authMiddleware(requiredScope?: string) {
     }
 
     if (!keyStr) {
+      const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+      auditLog({ action: "auth_failure", detail: "No API key provided", ip });
+      const baseUrl = `${c.req.header("x-forwarded-proto") || "https"}://${new URL(c.req.url).host}`;
       return c.json(
         {
           error: "Authentication required",
           detail: "Provide API key via Authorization: Bearer <key> header",
+          _help: {
+            generate_key: {
+              method: "POST",
+              url: `${baseUrl}/v1/keys/generate`,
+              auth_required: false,
+              body: { name: "string (optional)" },
+              note: "Returns API key valid for 30 days. No auth needed."
+            },
+            docs: `${baseUrl}/llms.txt`,
+            skill_prompt: `${baseUrl}/skill`,
+            max_retry_attempts: 1
+          }
         },
         401
       );
@@ -91,6 +128,8 @@ export function authMiddleware(requiredScope?: string) {
 
     // Reject obviously malformed keys early
     if (keyStr.length > 256) {
+      const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+      auditLog({ action: "auth_failure", detail: "Malformed API key (too long)", ip });
       return c.json({ error: "Invalid API key" }, 401);
     }
 
@@ -106,6 +145,7 @@ export function authMiddleware(requiredScope?: string) {
         scopes: ["analyze", "evaluate", "chat", "admin"],
         rate_limit: 1000,
       });
+      c.set("policy", DEFAULT_POLICY);
       await next();
       return;
     }
@@ -144,6 +184,7 @@ export function authMiddleware(requiredScope?: string) {
         scopes: demoScopes,
         rate_limit: 30,
       });
+      c.set("policy", DEFAULT_POLICY);
       await next();
       return;
     }
@@ -158,11 +199,15 @@ export function authMiddleware(requiredScope?: string) {
     }
 
     if (!apiKeyRecord) {
+      const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+      auditLog({ action: "auth_failure", detail: "Invalid API key", ip });
       return c.json({ error: "Invalid API key" }, 401);
     }
 
     // Check expiry
     if (apiKeyRecord.expiresAt && new Date(apiKeyRecord.expiresAt) < new Date()) {
+      const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+      auditLog({ action: "auth_failure", apiKeyId: apiKeyRecord.id, detail: "Expired API key", ip });
       return c.json({ error: "API key has expired" }, 401);
     }
 
@@ -200,6 +245,34 @@ export function authMiddleware(requiredScope?: string) {
       rate_limit: apiKeyRecord.rateLimit,
       tier: apiKeyRecord.tier,
     });
+
+    // Load screening policy (from Redis cache or DB)
+    const cachedPolicy = await getCachedPolicyData(apiKeyRecord.id);
+    if (cachedPolicy) {
+      c.set("policy", cachedPolicy as ScreeningPolicy);
+    } else {
+      try {
+        const dbPolicy = await prisma.screeningPolicy.findUnique({
+          where: { apiKeyId: apiKeyRecord.id },
+        });
+        const policy = dbPolicy
+          ? {
+              screenUserInput: dbPolicy.screenUserInput,
+              screenToolOutputs: dbPolicy.screenToolOutputs,
+              screenForwardedMessages: dbPolicy.screenForwardedMessages,
+              screenAllPrompts: dbPolicy.screenAllPrompts,
+              autoBlockThreshold: dbPolicy.autoBlockThreshold,
+              executeInSandbox: dbPolicy.executeInSandbox,
+            }
+          : DEFAULT_POLICY;
+        c.set("policy", policy);
+        // Fire-and-forget cache
+        cachePolicyData(apiKeyRecord.id, policy).catch(() => {});
+      } catch {
+        c.set("policy", DEFAULT_POLICY);
+      }
+    }
+
     await next();
   };
 }

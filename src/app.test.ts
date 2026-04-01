@@ -505,7 +505,7 @@ describe("Evaluators (SPEC-aligned)", () => {
 
   it("evaluates quality for empty output", async () => {
     const { evaluateQuality } = await import("./evaluators.js");
-    const result = evaluateQuality("test", "", "");
+    const result = await evaluateQuality("test", "", "");
     assert.equal(result.score, 0);
     assert.ok(result.sub_scores);
     assert.equal(result.sub_scores.instruction_following, 0);
@@ -531,7 +531,7 @@ describe("Evaluators (SPEC-aligned)", () => {
 
   it("runSpecEvaluators combines all evaluators", async () => {
     const { runSpecEvaluators } = await import("./evaluators.js");
-    const result = runSpecEvaluators(["cost", "latency", "quality", "safety"], {
+    const result = await runSpecEvaluators(["cost", "latency", "quality", "safety"], {
       prompt: "test",
       input: "hello",
       output: "world",

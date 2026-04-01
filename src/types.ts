@@ -1,3 +1,29 @@
+// === Hono Environment (context variables set by middleware) ===
+export interface ScreeningPolicy {
+  screenUserInput: boolean;
+  screenToolOutputs: boolean;
+  screenForwardedMessages: boolean;
+  screenAllPrompts: boolean;
+  autoBlockThreshold: number;
+  executeInSandbox: boolean;
+}
+
+export interface ApiKeyContext {
+  id: string;
+  name: string;
+  scopes: string[];
+  rate_limit: number;
+  tier?: string;
+}
+
+export type AppEnv = {
+  Variables: {
+    apiKey: ApiKeyContext;
+    policy: ScreeningPolicy;
+    x402Paid: boolean;
+  };
+};
+
 // === API Key & Auth ===
 export interface ApiKey {
   id: string;

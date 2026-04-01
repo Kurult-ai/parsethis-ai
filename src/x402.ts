@@ -3,6 +3,7 @@ import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import type { Context, Next } from "hono";
 import { recordPayment } from "./payment-ledger.js";
+import type { AppEnv } from "./types.js";
 
 const X402_ENABLED = process.env.X402_ENABLED === "true";
 const WALLET = process.env.X402_PAY_TO_ADDRESS || "";
@@ -122,7 +123,7 @@ initX402().catch((err) => {
  * If no payment header → passes through to normal API key auth.
  */
 export function x402Guard() {
-  return async (c: Context, next: Next) => {
+  return async (c: Context<AppEnv>, next: Next) => {
     // Only handle POST requests with payment headers when x402 is active
     if (c.req.method !== "POST" || !x402MW) {
       await next();
