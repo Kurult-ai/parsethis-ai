@@ -175,7 +175,7 @@ function copyPrompt(btn) {
   </div>
 
   <aside style="border-left:3px solid var(--accent);">
-    <p style="font-size:13px;color:var(--text-dim);margin:0;">Parse is <a href="${GITHUB_URL}">open source</a> &mdash; audit the detection logic yourself. The multi-layer approach combines pattern matching, LLM classification, and structural analysis. We are building a public benchmark suite against standard injection corpora; results will be published at <code>/benchmarks</code>.</p>
+    <p style="font-size:13px;color:var(--text-dim);margin:0;">The multi-layer approach combines pattern matching, LLM classification, and structural analysis across 8 risk categories. Detection logic is continuously updated to cover new injection techniques and adversarial patterns.</p>
   </aside>
 </div>
 
