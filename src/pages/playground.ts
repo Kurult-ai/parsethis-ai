@@ -154,7 +154,7 @@ function promptTester() {
             var data = await res.json();
             if (!data.execution_pending && data.execution) {
               var out = data.execution.output || '';
-              this.sandboxOutput = out.length > 600 ? out.slice(0, 600) + '\n...[truncated]' : out;
+              this.sandboxOutput = out.length > 600 ? out.slice(0, 600) + '\\n...[truncated]' : out;
               this.result.execution = data.execution;
               this.result.execution_pending = false;
               delete this.result.poll_url;
