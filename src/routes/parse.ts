@@ -346,6 +346,8 @@ async function executeAsync(
           sandbox_status: "executed",
         };
       } catch (sandboxErr: any) {
+        // Sandbox failed — log the actual error for debugging
+        console.error(`[exec] Sandbox call failed (agentConfig path): ${sandboxErr?.message || sandboxErr}`);
         // Sandbox failed — check fallback policy
         if (isFallbackAllowed()) {
           console.warn("[SECURITY] Unisolated execution fallback triggered. Set ALLOW_UNISOLATED_EXECUTION=false for production.");
@@ -385,7 +387,9 @@ async function executeAsync(
           isolated: true,
           sandbox_status: "executed",
         };
-      } catch {
+      } catch (sandboxErr2: any) {
+        // Sandbox failed — log the actual error for debugging
+        console.error(`[exec] Sandbox call failed (default model path): ${sandboxErr2?.message || sandboxErr2}`);
         if (isFallbackAllowed()) {
           console.warn("[SECURITY] Unisolated execution fallback triggered. Set ALLOW_UNISOLATED_EXECUTION=false for production.");
           execResult = await inlineExecution(prompt, testInput, model, "fallback");
