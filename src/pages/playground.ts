@@ -44,10 +44,10 @@ export function renderPlaygroundPage(baseUrl: string): string {
   <template x-if="result">
     <div class="card animate-in" style="margin-top:16px;">
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
-        <div style="font-size:48px;font-weight:700;letter-spacing:-0.04em;" :style="scoreColor(result.risk_score)" x-text="result.risk_score"></div>
+        <div style="font-size:48px;font-weight:700;letter-spacing:-0.04em;" :style="result.execution_pending ? {color:'var(--text-dim)'} : scoreColor(result.risk_score)" x-text="result.execution_pending ? '—' : result.risk_score"></div>
         <div>
-          <div style="font-size:18px;font-weight:600;" x-text="result.verdict"></div>
-          <div style="font-size:13px;" :style="result.suggested_action === 'allow' ? 'color:var(--green)' : result.suggested_action === 'sandbox' ? 'color:#d97706' : 'color:var(--destructive)'" x-text="result.suggested_action === 'allow' ? 'Safe to execute' : result.suggested_action === 'sandbox' ? 'Verify in sandbox' : 'Block — do not execute'"></div>
+          <div style="font-size:18px;font-weight:600;" x-text="result.execution_pending ? 'Pending sandbox analysis' : result.verdict"></div>
+          <div style="font-size:13px;" :style="result.execution_pending ? 'color:var(--text-dim)' : (result.suggested_action === 'allow' ? 'color:var(--green)' : result.suggested_action === 'sandbox' ? 'color:#d97706' : 'color:var(--destructive)')" x-text="result.execution_pending ? 'Running in sandbox\u2026' : (result.suggested_action === 'allow' ? 'Safe to execute' : result.suggested_action === 'sandbox' ? 'Verify in sandbox' : 'Block \u2014 do not execute')"></div>
         </div>
       </div>
       <template x-if="result.flags && result.flags.length > 0">
