@@ -44,7 +44,7 @@ export function renderPlaygroundPage(baseUrl: string): string {
   <template x-if="result">
     <div class="card animate-in" style="margin-top:16px;">
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
-        <div style="font-size:48px;font-weight:700;letter-spacing:-0.04em;" :style="result.execution_pending ? {color:'var(--text-dim)'} : scoreColor(result.risk_score)" x-text="result.execution_pending ? '—' : result.risk_score"></div>
+        <div style="font-size:48px;font-weight:700;letter-spacing:-0.04em;min-width:56px;text-align:center;" :style="result.execution_pending ? {color:'var(--text-dim)',animation:'score-pulse 1.4s ease-in-out infinite'} : scoreColor(result.risk_score)" x-text="result.execution_pending ? '—' : result.risk_score"></div>
         <div>
           <div style="font-size:18px;font-weight:600;" x-text="result.execution_pending ? 'Pending sandbox analysis' : result.verdict"></div>
           <div style="font-size:13px;" :style="result.execution_pending ? 'color:var(--text-dim)' : (result.suggested_action === 'allow' ? 'color:var(--green)' : result.suggested_action === 'sandbox' ? 'color:#d97706' : 'color:var(--destructive)')" x-text="result.execution_pending ? 'Running in sandbox\u2026' : (result.suggested_action === 'allow' ? 'Safe to execute' : result.suggested_action === 'sandbox' ? 'Verify in sandbox' : 'Block \u2014 do not execute')"></div>
@@ -56,9 +56,10 @@ export function renderPlaygroundPage(baseUrl: string): string {
           <template x-for="flag in result.flags">
             <div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius);margin:4px 0;font-size:14px;">
               <span style="font-weight:600;" x-text="flag.type || flag.label"></span>
-              <span x-show="flag.severity" style="color:var(--text-dim);font-size:12px;margin-left:6px;" x-text="'[' + flag.severity + ']'"></span>
-              <span style="color:var(--text-dim);"> &mdash; </span>
-              <span x-text="flag.description || flag.detail"></span>
+              <span x-show="flag.severity" style="display:inline-block;font-size:11px;font-weight:600;padding:1px 6px;border-radius:9999px;margin-left:6px;vertical-align:middle;" :style="flag.severity >= 8 ? 'background:rgba(220,38,38,0.12);color:var(--destructive)' : flag.severity >= 5 ? 'background:rgba(217,119,6,0.12);color:#d97706' : 'background:var(--surface2);color:var(--text-dim)'" x-text="flag.severity + '/10'"></span>
+              <template x-if="flag.description || flag.detail">
+                <span><span style="color:var(--text-dim);"> &mdash; </span><span x-text="flag.description || flag.detail"></span></span>
+              </template>
             </div>
           </template>
         </div>
@@ -66,13 +67,6 @@ export function renderPlaygroundPage(baseUrl: string): string {
       <template x-if="result.policy">
         <div style="margin-top:12px;font-size:12px;color:var(--text-dim);">
           Applied threshold: <strong x-text="result.policy.threshold"></strong> &mdash; prompts scoring &ge; <span x-text="result.policy.threshold"></span> are blocked
-        </div>
-      </template>
-
-      <!-- Sandbox status -->
-      <template x-if="result.execution_pending && sandboxLoading">
-        <div style="margin-top:14px;padding:10px 14px;background:var(--surface2);border-radius:var(--radius);font-size:13px;display:flex;align-items:center;gap:8px;color:var(--text-dim);">
-          <span class="spin-icon">↻</span> Running in sandbox&hellip;
         </div>
       </template>
 
@@ -87,7 +81,7 @@ export function renderPlaygroundPage(baseUrl: string): string {
           <!-- Output preview -->
           <div x-show="result && result.execution && result.execution.sandbox_status !== 'unavailable'">
             <div style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Sandbox output</div>
-            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:13px;font-family:monospace;white-space:pre-wrap;line-height:1.5;max-height:220px;overflow-y:auto;color:var(--text);" x-text="sandboxOutput || '(no output)'"></div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:13px;font-family:monospace;white-space:pre-wrap;line-height:1.5;max-height:400px;overflow-y:auto;color:var(--text);" x-text="sandboxOutput || '(no output)'"></div>
           </div>
       </div>
     </div>
@@ -154,7 +148,7 @@ function promptTester() {
             var data = await res.json();
             if (!data.execution_pending && data.execution) {
               var out = data.execution.output || '';
-              this.sandboxOutput = out.length > 600 ? out.slice(0, 600) + '\\n...[truncated]' : out;
+              this.sandboxOutput = out;
               this.result.execution = data.execution;
               this.result.execution_pending = false;
               delete this.result.poll_url;
@@ -193,8 +187,8 @@ function promptTester() {
       { name: "Home", href: "/" },
       { name: "Playground", href: "/playground" },
     ],
-    lastUpdated: "2026-03-22",
+    lastUpdated: "2026-04-02",
     headExtra:
-      '<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" integrity="sha384-9Ax3MmS9AClxJyd5/zafcXXjxmwFhZCdsT6HJoJjarvCaAkJlk5QDzjLJm+Wdx5F" crossorigin="anonymous"></script>\n  <style>.example-btn{display:inline-block;padding:4px 12px;margin:2px 4px;font-size:13px;color:var(--text-dim);background:transparent;border:1px solid var(--border);border-radius:9999px;cursor:pointer;transition:all 0.15s;font-family:inherit;}.example-btn:hover{background:var(--surface2);border-color:#3f3f46;color:var(--text);}</style>',
+      '<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" integrity="sha384-9Ax3MmS9AClxJyd5/zafcXXjxmwFhZCdsT6HJoJjarvCaAkJlk5QDzjLJm+Wdx5F" crossorigin="anonymous"></script>\n  <style>.example-btn{display:inline-block;padding:4px 12px;margin:2px 4px;font-size:13px;color:var(--text-dim);background:transparent;border:1px solid var(--border);border-radius:9999px;cursor:pointer;transition:all 0.15s;font-family:inherit;}.example-btn:hover{background:var(--surface2);border-color:#3f3f46;color:var(--text);}@keyframes score-pulse{0%,100%{opacity:1}50%{opacity:0.35}}</style>',
   });
 }

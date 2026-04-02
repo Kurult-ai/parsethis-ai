@@ -193,7 +193,7 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
         category: rule.category,
         severity: rule.severity,
         label: rule.label,
-        detail: `Detected: ${rule.label.toLowerCase()}`,
+        detail: "",
       });
     }
   }
