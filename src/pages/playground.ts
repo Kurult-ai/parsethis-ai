@@ -44,7 +44,7 @@ export function renderPlaygroundPage(baseUrl: string): string {
   <template x-if="result">
     <div class="card animate-in" style="margin-top:16px;">
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
-        <div style="font-size:48px;font-weight:700;letter-spacing:-0.04em;min-width:56px;text-align:center;" :style="result.execution_pending ? {color:'var(--text-dim)',animation:'score-pulse 1.4s ease-in-out infinite'} : scoreColor(result.risk_score)" x-text="result.execution_pending ? '—' : result.risk_score"></div>
+        <div style="font-size:48px;font-weight:700;letter-spacing:-0.04em;min-width:56px;text-align:center;font-variant-numeric:tabular-nums;" :style="result.execution_pending ? {color:'var(--text-dim)'} : scoreColor(result.risk_score)" x-text="result.execution_pending ? scanDisplay : result.risk_score"></div>
         <div>
           <div style="font-size:18px;font-weight:600;" x-text="result.execution_pending ? 'Pending sandbox analysis' : result.verdict"></div>
           <div style="font-size:13px;" :style="result.execution_pending ? 'color:var(--text-dim)' : (result.suggested_action === 'allow' ? 'color:var(--green)' : result.suggested_action === 'sandbox' ? 'color:#d97706' : 'color:var(--destructive)')" x-text="result.execution_pending ? 'Running in sandbox\u2026' : (result.suggested_action === 'allow' ? 'Safe to execute' : result.suggested_action === 'sandbox' ? 'Verify in sandbox' : 'Block \u2014 do not execute')"></div>
@@ -98,6 +98,8 @@ function promptTester() {
     loading: false,
     sandboxLoading: false,
     sandboxOutput: '',
+    scanDisplay: '—',
+    _scanTimer: null,
     result: null,
     error: null,
     async screen(retried) {
@@ -139,6 +141,7 @@ function promptTester() {
     },
     async pollForSandbox(pollUrl) {
       this.sandboxLoading = true;
+      this._scanTimer = setInterval(() => { this.scanDisplay = String(Math.floor(Math.random() * 11)); }, 80);
       var key = sessionStorage.getItem('parse_key') || 'demo';
       for (var i = 0; i < 20; i++) {
         await new Promise(function(r) { setTimeout(r, 2000); });
@@ -147,6 +150,7 @@ function promptTester() {
           if (res.ok) {
             var data = await res.json();
             if (!data.execution_pending && data.execution) {
+              clearInterval(this._scanTimer); this._scanTimer = null;
               var out = data.execution.output || '';
               this.sandboxOutput = out;
               this.result.execution = data.execution;
@@ -155,8 +159,9 @@ function promptTester() {
               break;
             }
           }
-        } catch (e) { break; }
+        } catch (e) { clearInterval(this._scanTimer); this._scanTimer = null; break; }
       }
+      if (this._scanTimer) { clearInterval(this._scanTimer); this._scanTimer = null; }
       this.sandboxLoading = false;
     },
     scoreColor(score) {
@@ -189,6 +194,6 @@ function promptTester() {
     ],
     lastUpdated: "2026-04-02",
     headExtra:
-      '<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" integrity="sha384-9Ax3MmS9AClxJyd5/zafcXXjxmwFhZCdsT6HJoJjarvCaAkJlk5QDzjLJm+Wdx5F" crossorigin="anonymous"></script>\n  <style>.example-btn{display:inline-block;padding:4px 12px;margin:2px 4px;font-size:13px;color:var(--text-dim);background:transparent;border:1px solid var(--border);border-radius:9999px;cursor:pointer;transition:all 0.15s;font-family:inherit;}.example-btn:hover{background:var(--surface2);border-color:#3f3f46;color:var(--text);}@keyframes score-pulse{0%,100%{opacity:1}50%{opacity:0.35}}</style>',
+      '<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" integrity="sha384-9Ax3MmS9AClxJyd5/zafcXXjxmwFhZCdsT6HJoJjarvCaAkJlk5QDzjLJm+Wdx5F" crossorigin="anonymous"></script>\n  <style>.example-btn{display:inline-block;padding:4px 12px;margin:2px 4px;font-size:13px;color:var(--text-dim);background:transparent;border:1px solid var(--border);border-radius:9999px;cursor:pointer;transition:all 0.15s;font-family:inherit;}.example-btn:hover{background:var(--surface2);border-color:#3f3f46;color:var(--text);}</style>',
   });
 }
