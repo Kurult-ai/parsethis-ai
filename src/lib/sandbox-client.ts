@@ -62,18 +62,18 @@ async function fetchUrlContent(url: string): Promise<{ url: string; content: str
 
 async function prefetchUrls(
   messages: Array<{ role: string; content: string }>
-): Promise<Array<{ role: string; content: string }>> {
+): Promise<{ messages: Array<{ role: string; content: string }>; fetchedContext: string | null }> {
   const userText = messages
     .filter((m) => m.role === "user")
     .map((m) => m.content)
     .join("\n");
 
   const urls = extractUrls(userText);
-  if (urls.length === 0) return messages;
+  if (urls.length === 0) return { messages, fetchedContext: null };
 
   const results = await Promise.all(urls.map(fetchUrlContent));
   const fetched = results.filter((r): r is { url: string; content: string } => r !== null);
-  if (fetched.length === 0) return messages;
+  if (fetched.length === 0) return { messages, fetchedContext: null };
 
   const injection = fetched
     .map((r) => `--- Content fetched from ${r.url} ---\n${r.content}\n--- End of ${r.url} ---`)
@@ -89,7 +89,7 @@ async function prefetchUrls(
   const lastUserIdx = messages.map((m) => m.role).lastIndexOf("user");
   const result = [...messages];
   result.splice(lastUserIdx, 0, contextMessage);
-  return result;
+  return { messages: result, fetchedContext: injection };
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -106,6 +106,7 @@ export interface SandboxResult {
   token_usage: { prompt: number; completion: number; total: number };
   model_used: string;
   execution_ms: number;
+  fetched_page_context?: string; // raw fetched content injected into LLM context
 }
 
 export type SandboxOutcome =
@@ -160,7 +161,7 @@ export async function executeInSandbox(
   }
 
   // Prefetch URLs found in user messages so the LLM sees actual page content
-  const messagesWithContext = await prefetchUrls(messages);
+  const { messages: messagesWithContext, fetchedContext } = await prefetchUrls(messages);
 
   const requestBody = JSON.stringify({
     messages: messagesWithContext,
@@ -196,7 +197,9 @@ export async function executeInSandbox(
       throw new Error(`Sandbox error ${res.status}: ${errText}`);
     }
 
-    return await res.json() as SandboxResult;
+    const result = await res.json() as SandboxResult;
+    if (fetchedContext) result.fetched_page_context = fetchedContext;
+    return result;
   } finally {
     clearTimeout(timeout);
   }

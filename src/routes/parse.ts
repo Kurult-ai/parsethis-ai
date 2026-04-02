@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../auth.js";
-import { parsePrompt, analyzeOutputRisks } from "../parse.js";
+import { parsePrompt, analyzeOutputRisks, llmOutputInjectionAnalysis } from "../parse.js";
 import type { ParseRequest, ExecutionResult } from "../parse.js";
 import type { AppEnv } from "../types.js";
 import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
@@ -333,15 +333,23 @@ async function executeAsync(
           prompt
         );
 
-        // LLM-based output analysis if pattern-flagged or output is long
-        if (outputFlags.length > 0 || sandboxResult.output.length > 2000) {
-          // Additional LLM risk analysis on output would go here
-          // For now, pattern matching provides the baseline
+        // LLM-based injection influence analysis (only when URLs were fetched and injected)
+        if (sandboxResult.fetched_page_context && outputRiskScore < 8) {
+          const injectionFlag = await llmOutputInjectionAnalysis(
+            sandboxResult.output,
+            prompt,
+            sandboxResult.fetched_page_context
+          );
+          if (injectionFlag) outputFlags.push(injectionFlag);
         }
+
+        const finalOutputRiskScore = outputFlags.length > 0
+          ? Math.min(10, Math.max(...outputFlags.map((f) => f.severity)))
+          : 0;
 
         execResult = {
           output: sanitizeOutput(sandboxResult.output),
-          output_risk_score: outputRiskScore,
+          output_risk_score: finalOutputRiskScore,
           output_flags: outputFlags,
           token_usage: sandboxResult.token_usage,
           cost_usd: 0, // Sandbox uses its own spending-capped key
@@ -380,9 +388,22 @@ async function executeAsync(
           prompt
         );
 
+        if (sandboxResult.fetched_page_context && outputRiskScore < 8) {
+          const injectionFlag = await llmOutputInjectionAnalysis(
+            sandboxResult.output,
+            prompt,
+            sandboxResult.fetched_page_context
+          );
+          if (injectionFlag) outputFlags.push(injectionFlag);
+        }
+
+        const finalOutputRiskScore2 = outputFlags.length > 0
+          ? Math.min(10, Math.max(...outputFlags.map((f) => f.severity)))
+          : 0;
+
         execResult = {
           output: sanitizeOutput(sandboxResult.output),
-          output_risk_score: outputRiskScore,
+          output_risk_score: finalOutputRiskScore2,
           output_flags: outputFlags,
           token_usage: sandboxResult.token_usage,
           cost_usd: 0,
