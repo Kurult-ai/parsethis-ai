@@ -164,6 +164,90 @@ app.use("/v1/*", async (c, next) => {
   await next();
 });
 
+// ─── URL Prefetcher ──────────────────────────────────────────────────────────
+
+const URL_FETCH_TIMEOUT_MS = 8_000;
+const URL_MAX_CHARS = 12_000;
+const URL_MAX_PER_REQUEST = 3;
+
+function extractUrls(text: string): string[] {
+  const matches = text.match(/https?:\/\/[^\s"'<>)\]]+/gi) ?? [];
+  // Deduplicate, limit count
+  return [...new Set(matches)].slice(0, URL_MAX_PER_REQUEST);
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#x27;/gi, "'")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+async function fetchUrlContent(url: string): Promise<{ url: string; content: string } | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), URL_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { "User-Agent": "ParseSandbox/1.0 (security-analysis-bot)" },
+      redirect: "follow",
+    });
+    if (!res.ok) return null;
+    const ct = res.headers.get("content-type") ?? "";
+    const raw = await res.text();
+    const text = ct.includes("html") ? stripHtml(raw) : raw;
+    return { url, content: text.slice(0, URL_MAX_CHARS) };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function prefetchUrls(
+  messages: Array<{ role: string; content: string }>
+): Promise<Array<{ role: string; content: string }>> {
+  // Collect all text from user messages
+  const userText = messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .join("\n");
+
+  const urls = extractUrls(userText);
+  if (urls.length === 0) return messages;
+
+  // Fetch all URLs in parallel
+  const results = await Promise.all(urls.map(fetchUrlContent));
+  const fetched = results.filter((r): r is { url: string; content: string } => r !== null);
+  if (fetched.length === 0) return messages;
+
+  // Build injection block
+  const injection = fetched
+    .map((r) => `--- Content fetched from ${r.url} ---\n${r.content}\n--- End of ${r.url} ---`)
+    .join("\n\n");
+
+  const contextMessage = {
+    role: "user" as const,
+    content:
+      `The following web pages were fetched so you can work with their actual content:\n\n${injection}\n\n` +
+      `Use the above content to answer accurately. Do not say you cannot access URLs — the content has already been retrieved.`,
+  };
+
+  // Insert context before the last user message
+  const lastUserIdx = messages.map((m) => m.role).lastIndexOf("user");
+  const result = [...messages];
+  result.splice(lastUserIdx, 0, contextMessage);
+  return result;
+}
+
 // ─── Execute Endpoint ────────────────────────────────────────────────────────
 
 interface ExecuteRequest {
@@ -217,6 +301,13 @@ app.post("/v1/execute", async (c) => {
     MAX_TIMEOUT_MS
   );
 
+  // Prefetch URLs found in the prompt so the LLM sees actual page content
+  const messagesWithContext = await prefetchUrls(body.messages);
+  const urlsFetched = messagesWithContext.length - body.messages.length;
+  if (urlsFetched > 0) {
+    log({ event: "url_prefetch", urls_injected: urlsFetched });
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -231,7 +322,7 @@ app.post("/v1/execute", async (c) => {
       },
       body: JSON.stringify({
         model: body.model,
-        messages: body.messages,
+        messages: messagesWithContext,
         max_tokens: body.max_tokens ?? 2048,
         temperature: body.temperature ?? 0.3,
       }),
