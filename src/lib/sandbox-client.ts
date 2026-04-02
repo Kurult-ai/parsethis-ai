@@ -1,5 +1,84 @@
 import { createHmac, randomUUID } from "node:crypto";
 
+// ─── URL Prefetch (inject real page content before LLM sees prompt) ──────────
+
+const URL_FETCH_TIMEOUT_MS = 8_000;
+const URL_MAX_CHARS = 12_000;
+const URL_MAX_PER_REQUEST = 3;
+
+function extractUrls(text: string): string[] {
+  const matches = text.match(/https?:\/\/[^\s"'<>)\]]+/gi) ?? [];
+  return [...new Set(matches)].slice(0, URL_MAX_PER_REQUEST);
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#x27;/gi, "'")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+async function fetchUrlContent(url: string): Promise<{ url: string; content: string } | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), URL_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { "User-Agent": "ParseSandbox/1.0 (security-analysis-bot)" },
+      redirect: "follow",
+    });
+    if (!res.ok) return null;
+    const ct = res.headers.get("content-type") ?? "";
+    const raw = await res.text();
+    const text = ct.includes("html") ? stripHtml(raw) : raw;
+    return { url, content: text.slice(0, URL_MAX_CHARS) };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function prefetchUrls(
+  messages: Array<{ role: string; content: string }>
+): Promise<Array<{ role: string; content: string }>> {
+  const userText = messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .join("\n");
+
+  const urls = extractUrls(userText);
+  if (urls.length === 0) return messages;
+
+  const results = await Promise.all(urls.map(fetchUrlContent));
+  const fetched = results.filter((r): r is { url: string; content: string } => r !== null);
+  if (fetched.length === 0) return messages;
+
+  const injection = fetched
+    .map((r) => `--- Content fetched from ${r.url} ---\n${r.content}\n--- End of ${r.url} ---`)
+    .join("\n\n");
+
+  const contextMessage = {
+    role: "user" as const,
+    content:
+      `The following web pages were fetched so you can work with their actual content:\n\n${injection}\n\n` +
+      `Use the above content to answer accurately. Do not say you cannot access URLs — the content has already been retrieved.`,
+  };
+
+  const lastUserIdx = messages.map((m) => m.role).lastIndexOf("user");
+  const result = [...messages];
+  result.splice(lastUserIdx, 0, contextMessage);
+  return result;
+}
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface AgentConfig {
@@ -67,8 +146,11 @@ export async function executeInSandbox(
     messages.push({ role: "user", content: prompt });
   }
 
+  // Prefetch URLs found in user messages so the LLM sees actual page content
+  const messagesWithContext = await prefetchUrls(messages);
+
   const requestBody = JSON.stringify({
-    messages,
+    messages: messagesWithContext,
     model: agentConfig.model,
     temperature: agentConfig.temperature ?? 0.7,
     max_tokens: agentConfig.max_tokens ?? 2048,
