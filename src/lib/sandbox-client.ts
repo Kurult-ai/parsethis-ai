@@ -7,8 +7,21 @@ const URL_MAX_CHARS = 12_000;
 const URL_MAX_PER_REQUEST = 3;
 
 function extractUrls(text: string): string[] {
-  const matches = text.match(/https?:\/\/[^\s"'<>)\]]+/gi) ?? [];
-  return [...new Set(matches)].slice(0, URL_MAX_PER_REQUEST);
+  // Explicit http/https URLs
+  const explicit = text.match(/https?:\/\/[^\s"'<>)\]]+/gi) ?? [];
+
+  // Bare domain URLs like canar.ai/company/NVDA or example.com/path
+  // Match domain.tld patterns with common TLDs, optionally followed by a path
+  const bare = text.match(
+    /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|io|ai|org|net|dev|app|co|xyz|info|tech|us|uk|eu|gov|edu)\b(?:\/[^\s"'<>)\]]*)?/gi
+  ) ?? [];
+
+  const all = [
+    ...explicit,
+    ...bare.filter((u) => !u.startsWith("http")).map((u) => `https://${u}`),
+  ];
+
+  return [...new Set(all)].slice(0, URL_MAX_PER_REQUEST);
 }
 
 function stripHtml(html: string): string {
