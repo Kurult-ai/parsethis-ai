@@ -13,16 +13,7 @@ export function renderPlaygroundPage(baseUrl: string): string {
     <label for="prompt-input" class="sr-only">Prompt to screen</label>
     <textarea id="prompt-input" x-model="prompt" placeholder="Enter a prompt to screen..." rows="4" style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-family:inherit;resize:vertical;transition:border-color 0.15s;" onfocus="this.style.borderColor='var(--ring)'" onblur="this.style.borderColor='var(--border)'"></textarea>
 
-    <div style="margin:12px 0 8px;">
-      <label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:10px;">
-        <span style="color:var(--text-dim);">Block threshold:</span>
-        <input type="range" min="0" max="10" step="1" x-model.number="threshold" style="flex:1;max-width:200px;accent-color:var(--accent);">
-        <span style="font-size:15px;font-weight:700;min-width:24px;text-align:center;" :style="threshold <= 3 ? 'color:var(--green)' : threshold <= 6 ? 'color:#d97706' : 'color:var(--destructive)'" x-text="threshold"></span>
-        <span style="font-size:12px;color:var(--text-dim);">/ 10 — block if score &ge; <span x-text="threshold"></span></span>
-      </label>
-    </div>
-
-    <div style="margin:8px 0 12px;display:flex;gap:8px;">
+    <div style="margin:12px 0 12px;display:flex;gap:8px;">
       <button @click="screen()" :disabled="loading" class="btn btn-primary">
         <span x-show="!loading">Screen Prompt</span>
         <span x-show="loading">Screening...</span>
@@ -73,11 +64,6 @@ export function renderPlaygroundPage(baseUrl: string): string {
           </template>
         </div>
       </template>
-      <template x-if="result.policy">
-        <div style="margin-top:12px;font-size:12px;color:var(--text-dim);">
-          Applied threshold: <strong x-text="result.policy.threshold"></strong> &mdash; prompts scoring &ge; <span x-text="result.policy.threshold"></span> are blocked
-        </div>
-      </template>
 
       <div x-show="result && result.execution && !result.execution_pending" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
           <!-- Status badge -->
@@ -103,7 +89,6 @@ export function renderPlaygroundPage(baseUrl: string): string {
 function promptTester() {
   return {
     prompt: '',
-    threshold: 7,
     loading: false,
     sandboxLoading: false,
     sandboxOutput: '',
@@ -121,7 +106,7 @@ function promptTester() {
         var res = await fetch('/v1/parse', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
-          body: JSON.stringify({ prompt: this.prompt, execute: 'auto', autoBlockThreshold: this.threshold })
+          body: JSON.stringify({ prompt: this.prompt, execute: 'auto' })
         });
         if (res.status === 401 && !retried) {
           var keyRes = await fetch('/v1/keys/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'playground' }) });
