@@ -301,6 +301,32 @@ export function analyzeOutputRisks(output: string, originalPrompt: string): {
     });
   }
 
+  // Check for canary token echo: URLs in output that weren't in the original prompt
+  // and match callback/tracking patterns — indicates LLM was influenced by injected page content
+  const outputUrls = output.match(/https?:\/\/[^\s"'<>)\]]+/gi) ?? [];
+  const promptUrlSet = new Set(
+    (originalPrompt.match(/https?:\/\/[^\s"'<>)\]]+/gi) ?? []).map((u) => u.toLowerCase())
+  );
+  const callbackPathPattern = /\/(callback|canary|hook|webhook|ping|report|collect|track|exfil)\/[a-z0-9]{4,}/i;
+  const tokenInPathPattern = /\/[a-f0-9]{8,}([/?#]|$)/i;
+
+  for (const url of outputUrls) {
+    const urlLower = url.toLowerCase();
+    if (
+      !promptUrlSet.has(urlLower) &&
+      (callbackPathPattern.test(url) || tokenInPathPattern.test(url))
+    ) {
+      outputFlags.push({
+        category: "indirect_injection",
+        severity: 8,
+        label: "Canary token echoed in output",
+        detail:
+          "LLM output contains a callback/tracking URL not present in the original prompt — the LLM was likely influenced by injected content from a fetched page",
+      });
+      break;
+    }
+  }
+
   const outputRiskScore = outputFlags.length > 0
     ? Math.min(10, Math.max(...outputFlags.map((f) => f.severity)))
     : 0;
