@@ -37,7 +37,8 @@ app.notFound((c) => {
 // CORS — restricted to allowed origins; defaults to open for public API
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",").map(s => s.trim()).filter(Boolean);
 if (!allowedOrigins?.length) {
-  console.warn("[WARN] ALLOWED_ORIGINS not set — CORS allows all origins. Set ALLOWED_ORIGINS in production.");
+  console.warn("[DEPRECATION] ALLOWED_ORIGINS not set — currently allows all origins. " +
+    "This will change to deny-all in the next release. Set ALLOWED_ORIGINS now.");
 }
 app.use("/*", cors({
   origin: allowedOrigins?.length ? allowedOrigins : "*",

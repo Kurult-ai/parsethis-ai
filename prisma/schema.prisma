@@ -89,6 +89,7 @@ model ScreeningPolicy {
   // Action thresholds (tier-enforced minimums)
   autoBlockThreshold     Int     @default(7)      @map("auto_block_threshold")
   executeInSandbox       Boolean @default(true)   @map("execute_in_sandbox")
+  agentSafe              Boolean @default(false)  @map("agent_safe")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
@@ -105,6 +106,7 @@ model ScreeningEvent {
   mode       String   @default("full")
   latencyMs  Int      @map("latency_ms")
   blocked    Boolean  @default(false)
+  metadata   Json?    @map("metadata")
   createdAt  DateTime @default(now()) @map("created_at")
 
   apiKey     ApiKey   @relation(fields: [apiKeyId], references: [id])

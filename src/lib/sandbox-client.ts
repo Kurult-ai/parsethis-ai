@@ -1,17 +1,18 @@
 import { createHmac, randomUUID } from "node:crypto";
+import { validateUrl } from "./ssrf-guard.js";
 
 // ─── URL Prefetch (inject real page content before LLM sees prompt) ──────────
 
 const URL_FETCH_TIMEOUT_MS = 8_000;
 const URL_MAX_CHARS = 12_000;
 const URL_MAX_PER_REQUEST = 3;
+const MAX_REDIRECTS = 3;
 
 function extractUrls(text: string): string[] {
   // Explicit http/https URLs
   const explicit = text.match(/https?:\/\/[^\s"'<>)\]]+/gi) ?? [];
 
   // Bare domain URLs like canar.ai/company/NVDA or example.com/path
-  // Match domain.tld patterns with common TLDs, optionally followed by a path
   const bare = text.match(
     /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|io|ai|org|net|dev|app|co|xyz|info|tech|us|uk|eu|gov|edu)\b(?:\/[^\s"'<>)\]]*)?/gi
   ) ?? [];
@@ -26,6 +27,7 @@ function extractUrls(text: string): string[] {
 
 function stripHtml(html: string): string {
   return html
+    .replace(/<!--[\s\S]*?-->/g, " ")          // Strip HTML comments (injection vector)
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<style[\s\S]*?<\/style>/gi, "")
     .replace(/<[^>]+>/g, " ")
@@ -40,19 +42,48 @@ function stripHtml(html: string): string {
 }
 
 async function fetchUrlContent(url: string): Promise<{ url: string; content: string } | null> {
+  // SSRF check before any network request
+  const ssrfCheck = await validateUrl(url);
+  if (!ssrfCheck.safe) {
+    console.warn(`[ssrf-guard] Blocked URL: ${url} — ${ssrfCheck.reason}`);
+    return null;
+  }
+
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), URL_FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      headers: { "User-Agent": "ParseSandbox/1.0 (security-analysis-bot)" },
-      redirect: "follow",
-    });
-    if (!res.ok) return null;
-    const ct = res.headers.get("content-type") ?? "";
-    const raw = await res.text();
-    const text = ct.includes("html") ? stripHtml(raw) : raw;
-    return { url, content: text.slice(0, URL_MAX_CHARS) };
+    let currentUrl = url;
+    let redirectCount = 0;
+
+    while (redirectCount <= MAX_REDIRECTS) {
+      const res = await fetch(currentUrl, {
+        signal: ctrl.signal,
+        headers: { "User-Agent": "ParseSandbox/1.0 (security-analysis-bot)" },
+        redirect: "manual",  // Handle redirects manually to validate each target
+      });
+
+      // Follow redirects with SSRF validation on each hop
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get("location");
+        if (!location) break;
+        const redirectUrl = new URL(location, currentUrl).toString();
+        const redirectCheck = await validateUrl(redirectUrl);
+        if (!redirectCheck.safe) {
+          console.warn(`[ssrf-guard] Blocked redirect to: ${redirectUrl} — ${redirectCheck.reason}`);
+          return null;
+        }
+        currentUrl = redirectUrl;
+        redirectCount++;
+        continue;
+      }
+
+      if (!res.ok) return null;
+      const ct = res.headers.get("content-type") ?? "";
+      const raw = await res.text();
+      const text = ct.includes("html") ? stripHtml(raw) : raw;
+      return { url, content: text.slice(0, URL_MAX_CHARS) };
+    }
+    return null; // Max redirects exceeded
   } catch {
     return null;
   } finally {
@@ -62,18 +93,18 @@ async function fetchUrlContent(url: string): Promise<{ url: string; content: str
 
 async function prefetchUrls(
   messages: Array<{ role: string; content: string }>
-): Promise<{ messages: Array<{ role: string; content: string }>; fetchedContext: string | null }> {
+): Promise<{ messages: Array<{ role: string; content: string }>; fetchedContext: string | null; fetchedUrls: string[] }> {
   const userText = messages
     .filter((m) => m.role === "user")
     .map((m) => m.content)
     .join("\n");
 
   const urls = extractUrls(userText);
-  if (urls.length === 0) return { messages, fetchedContext: null };
+  if (urls.length === 0) return { messages, fetchedContext: null, fetchedUrls: [] };
 
   const results = await Promise.all(urls.map(fetchUrlContent));
   const fetched = results.filter((r): r is { url: string; content: string } => r !== null);
-  if (fetched.length === 0) return { messages, fetchedContext: null };
+  if (fetched.length === 0) return { messages, fetchedContext: null, fetchedUrls: [] };
 
   const injection = fetched
     .map((r) => `--- Content fetched from ${r.url} ---\n${r.content}\n--- End of ${r.url} ---`)
@@ -89,7 +120,7 @@ async function prefetchUrls(
   const lastUserIdx = messages.map((m) => m.role).lastIndexOf("user");
   const result = [...messages];
   result.splice(lastUserIdx, 0, contextMessage);
-  return { messages: result, fetchedContext: injection };
+  return { messages: result, fetchedContext: injection, fetchedUrls: fetched.map((r) => r.url) };
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -107,6 +138,7 @@ export interface SandboxResult {
   model_used: string;
   execution_ms: number;
   fetched_page_context?: string; // raw fetched content injected into LLM context
+  fetched_urls?: string[];       // which URLs were actually fetched
 }
 
 export type SandboxOutcome =
@@ -120,9 +152,7 @@ export function canUseSandbox(): boolean {
   return !!(process.env.SANDBOX_URL && process.env.SANDBOX_HMAC_SECRET);
 }
 
-export function isFallbackAllowed(): boolean {
-  return process.env.ALLOW_UNISOLATED_EXECUTION === "true";
-}
+// isFallbackAllowed removed — unisolated execution is never allowed (security hardening)
 
 // ─── HMAC Signing ──────────────────────────────────────────────────────────
 
@@ -147,9 +177,13 @@ export async function executeInSandbox(
 
   // Use agent_role to construct a generic system message (NOT the agent's actual system prompt)
   if (agentConfig.agent_role) {
+    const sanitized = agentConfig.agent_role
+      .replace(/[\n\r\x0B\x0C\x85\u2028\u2029]/g, " ")  // Strip ALL line separators
+      .replace(/[^\w \t.,!?()-]/g, "")  // Explicit space+tab, not \s (VT/FF leak via \s)
+      .slice(0, 200);
     messages.push({
       role: "system",
-      content: `You are a ${agentConfig.agent_role}.`,
+      content: `You are a ${sanitized}.`,
     });
   }
 
@@ -161,7 +195,7 @@ export async function executeInSandbox(
   }
 
   // Prefetch URLs found in user messages so the LLM sees actual page content
-  const { messages: messagesWithContext, fetchedContext } = await prefetchUrls(messages);
+  const { messages: messagesWithContext, fetchedContext, fetchedUrls } = await prefetchUrls(messages);
 
   const requestBody = JSON.stringify({
     messages: messagesWithContext,
@@ -199,6 +233,7 @@ export async function executeInSandbox(
 
     const result = await res.json() as SandboxResult;
     if (fetchedContext) result.fetched_page_context = fetchedContext;
+    if (fetchedUrls.length > 0) result.fetched_urls = fetchedUrls;
     return result;
   } finally {
     clearTimeout(timeout);

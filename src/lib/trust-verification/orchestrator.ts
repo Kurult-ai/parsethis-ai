@@ -20,6 +20,7 @@ import {
   getRiskLevel,
   getRecommendation,
 } from "./types.js";
+import { calculateWeightedScore } from "../scoring-core.js";
 
 // Import all detectors
 import { detectPromptInjection } from "./prompt-injection.js";
@@ -56,65 +57,45 @@ function calculateTrustScore(
 ): number {
   const { detectorConfigs } = config;
 
-  let weightedScore = 0;
-  let totalWeight = 0;
-
-  // Calculate weighted average of detector scores
   const detectorEntries = Object.entries(detectors) as Array<
     [keyof DetectorResults, DetectorResults[keyof DetectorResults]]
   >;
 
-  for (const [name, result] of detectorEntries) {
-    const config = detectorConfigs[name];
-    if (!config || !config.enabled) continue;
+  // Map detector results to weighted inputs for shared scoring core
+  const inputs = detectorEntries
+    .filter(([name]) => {
+      const cfg = detectorConfigs[name];
+      return cfg && cfg.enabled;
+    })
+    .map(([name, result]) => ({
+      score: result.confidence * 100,
+      weight: detectorConfigs[name]!.weight,
+      severity: result.severity as "none" | "low" | "medium" | "high" | "critical",
+    }));
 
-    const score = result.confidence * 100;
-    weightedScore += score * config.weight;
-    totalWeight += config.weight;
-  }
+  const { weightedAverage, severityMultiplier: baseMult } = calculateWeightedScore(inputs);
 
-  // Normalize by total weight
-  const baseScore = totalWeight > 0 ? weightedScore / totalWeight : 0;
-
-  // Apply multipliers for critical/high severity detections
-  let severityMultiplier = 1.0;
-  const criticalCount = detectorEntries.filter(([, r]) => r.severity === "critical").length;
-  const highCount = detectorEntries.filter(([, r]) => r.severity === "high").length;
-
-  if (criticalCount > 0) {
-    severityMultiplier += criticalCount * 0.3; // +30% per critical
-  }
-  if (highCount > 0) {
-    severityMultiplier += highCount * 0.15; // +15% per high
-  }
-
-  // Bonus for multiple detectors firing (correlation)
+  // Orchestrator-specific: malicious intent trigger bonus
+  let severityMultiplier = baseMult;
   const detectedCount = detectorEntries.filter(([, r]) => r.detected).length;
-  if (detectedCount >= 3) {
-    severityMultiplier += 0.25; // +25% for 3+ detections
-  } else if (detectedCount === 2) {
-    severityMultiplier += 0.1; // +10% for 2 detections
+  if (detectedCount === 2 && detectedCount < 3) {
+    severityMultiplier += 0.1; // +10% for exactly 2 detections (core handles 3+)
   }
-
-  // Special case: malicious intent trigger count adds bonus
   if (detectors.maliciousIntent.triggerCount >= 2) {
     severityMultiplier += 0.2;
   }
 
-  // Floor: if any detector fires, ensure minimum score reflects highest individual detection
-  // Prevents low-weight detectors from being diluted below meaningful thresholds
+  // Floor: highest individual detection * 60%
   const maxDetectorScore = Math.max(
     ...detectorEntries
       .filter(([, r]) => r.detected)
       .map(([, r]) => r.confidence * 100),
     0
   );
-  const flooredBase = Math.max(baseScore, maxDetectorScore * 0.6);
+  const flooredBase = Math.max(weightedAverage, maxDetectorScore * 0.6);
 
-  // Calculate final score (capped at 100)
   const finalScore = Math.min(flooredBase * severityMultiplier, 100);
-
-  return Math.round(finalScore * 10) / 10; // Round to 1 decimal
+  return Math.round(finalScore * 10) / 10;
 }
 
 // === Main Verification Function ===

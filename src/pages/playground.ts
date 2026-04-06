@@ -73,11 +73,27 @@ export function renderPlaygroundPage(baseUrl: string): string {
             <span x-show="result && result.execution && result.execution.sandbox_status === 'unavailable'" style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);border-radius:9999px;padding:3px 10px;font-size:12px;">&#8212; Sandbox unavailable</span>
             <span x-show="result && result.execution && result.execution.output_risk_score > 0" style="display:inline-flex;align-items:center;gap:5px;background:rgba(220,38,38,0.08);border:1px solid var(--destructive);color:var(--destructive);border-radius:9999px;padding:3px 10px;font-size:12px;font-weight:600;">Output risk: <span x-text="result && result.execution ? result.execution.output_risk_score : ''"></span>/10</span>
           </div>
+          <!-- Fetched URLs -->
+          <template x-if="result && result.execution && result.execution.fetched_urls && result.execution.fetched_urls.length > 0">
+            <div style="margin-bottom:10px;">
+              <div style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px;">URLs fetched before execution</div>
+              <template x-for="url in result.execution.fetched_urls">
+                <div style="font-size:12px;font-family:monospace;color:var(--text-dim);padding:2px 0;" x-text="url"></div>
+              </template>
+            </div>
+          </template>
           <!-- Output preview -->
           <div x-show="result && result.execution && result.execution.sandbox_status !== 'unavailable'">
             <div style="font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Sandbox output</div>
             <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:13px;font-family:monospace;white-space:pre-wrap;line-height:1.5;max-height:400px;overflow-y:auto;color:var(--text);" x-text="sandboxOutput || '(no output)'"></div>
           </div>
+          <!-- Analysis narrative -->
+          <template x-if="result && result.execution && result.execution.sandbox_analysis">
+            <div style="margin-top:12px;padding:10px 14px;background:rgba(217,119,6,0.06);border:1px solid rgba(217,119,6,0.2);border-radius:var(--radius);">
+              <div style="font-size:12px;font-weight:600;color:#d97706;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px;">Analysis</div>
+              <div style="font-size:13px;line-height:1.6;color:var(--text);" x-text="result.execution.sandbox_analysis"></div>
+            </div>
+          </template>
       </div>
     </div>
   </template>
@@ -141,10 +157,14 @@ function promptTester() {
           if (res.ok) {
             var data = await res.json();
             if (!data.execution_pending && data.execution) {
-              var out = data.execution.output || '';
-              this.sandboxOutput = out;
+              this.sandboxOutput = data.execution.output || '';
               this.result.execution = data.execution;
               this.result.execution_pending = false;
+              // Sync elevated risk score/verdict from server
+              if (data.risk_score !== undefined) this.result.risk_score = data.risk_score;
+              if (data.verdict !== undefined) this.result.verdict = data.verdict;
+              if (data.suggested_action !== undefined) this.result.suggested_action = data.suggested_action;
+              if (data.safe !== undefined) this.result.safe = data.safe;
               delete this.result.poll_url;
               break;
             }

@@ -1,16 +1,28 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../auth.js";
-import { parsePrompt, analyzeOutputRisks, llmOutputInjectionAnalysis } from "../parse.js";
+import { parsePrompt, analyzeOutputRisks, llmOutputInjectionAnalysis, analyzeFetchedContent, llmSandboxAnalysis, computeVerdict } from "../parse.js";
 import type { ParseRequest, ExecutionResult } from "../parse.js";
 import type { AppEnv } from "../types.js";
 import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
-import { canUseSandbox, isFallbackAllowed, executeInSandbox } from "../lib/sandbox-client.js";
-import { callLLMFull } from "../model-client.js";
+import { canUseSandbox, executeInSandbox } from "../lib/sandbox-client.js";
+
 import { getBaseUrl } from "../lib/route-utils.js";
 import { auditLog } from "../lib/audit-log.js";
 import { prisma } from "../db.js";
 
 export const parseRoutes = new Hono<AppEnv>();
+
+// ─── In-memory execution rate limit fallback (per-process, used when Redis is unavailable) ──
+
+const execMemoryLimits = new Map<string, { count: number; windowStart: number }>();
+
+const execLimitCleanup = setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of execMemoryLimits) {
+    if (now - val.windowStart > 3_600_000) execMemoryLimits.delete(key);
+  }
+}, 60_000);
+if (execLimitCleanup.unref) execLimitCleanup.unref();
 
 // ─── Execution rate limits & cost caps by tier ─────────────────────────────
 
@@ -65,6 +77,14 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
     if (!body.agent_config.model || typeof body.agent_config.model !== "string") {
       return c.json({ error: "agent_config.model is required and must be a string" }, 400);
     }
+    if (body.agent_config.agent_role !== undefined) {
+      if (typeof body.agent_config.agent_role !== "string") {
+        return c.json({ error: "agent_config.agent_role must be a string" }, 400);
+      }
+      if (body.agent_config.agent_role.length > 200) {
+        return c.json({ error: "agent_config.agent_role must be 200 characters or less" }, 400);
+      }
+    }
   }
 
   // ── Run risk analysis (synchronous — pattern + LLM) ──
@@ -108,6 +128,11 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
     tier,
   };
 
+  // ── Gate score_components to team+ tier (prevents free-tier scoring oracle) ──
+  if (tier !== "team" && tier !== "enterprise" && apiKey.id !== "master") {
+    delete result.score_components;
+  }
+
   // ── Attach suggested_action based on risk score ──
   if (result.risk_score <= 2) {
     result.suggested_action = "allow";
@@ -118,16 +143,35 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
   }
 
   // ── Resolve effective execution intent ──
-  // execute: "auto"  → run for scores 3-6; flag 7+ as sandbox_available but don't auto-run
-  // execute: true    → always run (even 7+), giving the caller deliberate sandbox inspection
+  // execute: "auto"  → run for scores 3-6 (standard), 7+ (observe mode — no URL fetching)
+  // execute: true    → always run, giving the caller deliberate sandbox inspection
   // execute: false   → never run
   const autoExec = body.execute === "auto" && result.risk_score >= 3 && result.risk_score <= 6;
+  const observeExec = body.execute === "auto" && result.risk_score >= 7;
   const explicitExec = body.execute === true;
-  const shouldExecute = autoExec || explicitExec;
+  const shouldExecute = autoExec || observeExec || explicitExec;
 
   // ── If no execution will run, return immediately ──
   if (!shouldExecute) {
     return c.json(result);
+  }
+
+  // ── Observe mode: separate, more restrictive rate limit for high-risk prompts ──
+  const OBSERVE_LIMITS: Record<string, number> = { free: 2, pro: 10, team: 50, enterprise: 200 };
+  if (observeExec && apiKey.id !== "master" && isRedisAvailable()) {
+    try {
+      const redis = getRedis();
+      const connected = await ensureRedisConnected();
+      if (connected) {
+        const obsKey = `exec:observe:${apiKey.id}`;
+        const obsCount = await redis.incr(obsKey);
+        if (obsCount === 1) await redis.expire(obsKey, 3600);
+        const maxObs = OBSERVE_LIMITS[tier] ?? 2;
+        if (obsCount > maxObs) {
+          return c.json({ error: "Observe mode rate limit exceeded", limit: maxObs, window: "1 hour" }, 429);
+        }
+      }
+    } catch { /* fall through to standard rate limit */ }
   }
 
   // ── Execution rate limit check (master key is exempt) ──
@@ -153,7 +197,21 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
         }
       }
     } catch {
-      // Redis unavailable — proceed without rate limiting
+      // Redis unavailable — degrade to per-process in-memory rate limit
+      console.warn("[SECURITY] Redis unavailable — execution rate limit degraded to per-process in-memory. " +
+        "With N instances, effective limit is N * configured_limit.");
+      const memKey = `exec:${apiKey.id}`;
+      const entry = execMemoryLimits.get(memKey);
+      const now = Date.now();
+      const maxExec = EXEC_LIMITS[tier] ?? 5;
+      if (entry && now - entry.windowStart < 3_600_000) {
+        entry.count++;
+        if (entry.count > maxExec) {
+          return c.json({ error: "Execution rate limit exceeded", limit: maxExec, window: "1 hour" }, 429);
+        }
+      } else {
+        execMemoryLimits.set(memKey, { count: 1, windowStart: now });
+      }
     }
   }
 
@@ -206,6 +264,8 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
   if (execResult.output_risk_score > result.risk_score) {
     result.risk_score = Math.min(10, execResult.output_risk_score);
     result.safe = result.risk_score <= 3;
+    result.verdict = computeVerdict(result.risk_score);
+    result.suggested_action = result.risk_score <= 2 ? "allow" : result.risk_score <= 6 ? "sandbox" : "block";
   }
 
   return c.json(result);
@@ -270,6 +330,8 @@ parseRoutes.get("/v1/parse/:id", authMiddleware("evaluate"), async (c) => {
     if (job.result.output_risk_score > parseResult.risk_score) {
       parseResult.risk_score = Math.min(10, job.result.output_risk_score);
       parseResult.safe = parseResult.risk_score <= 3;
+      parseResult.verdict = computeVerdict(parseResult.risk_score);
+      parseResult.suggested_action = parseResult.risk_score <= 2 ? "allow" : parseResult.risk_score <= 6 ? "sandbox" : "block";
     }
 
     return c.json(parseResult);
@@ -317,126 +379,30 @@ async function executeAsync(
   try {
     let execResult: ExecutionResult;
 
-    if (canUseSandbox() && agentConfig) {
-      // ── Sandbox execution (isolated) ──
+    if (canUseSandbox()) {
       try {
-        const sandboxResult = await executeInSandbox(prompt, testInput, {
-          model: agentConfig.model,
-          temperature: agentConfig.temperature,
-          max_tokens: agentConfig.max_tokens,
-          agent_role: agentConfig.agent_role,
+        execResult = await processSandboxExecution(prompt, testInput, {
+          model: agentConfig?.model || model || "deepseek/deepseek-chat",
+          temperature: agentConfig?.temperature,
+          max_tokens: agentConfig?.max_tokens,
+          agent_role: agentConfig?.agent_role,
         });
-
-        // Treat sandbox output as untrusted — full risk analysis
-        const { outputFlags, outputRiskScore } = analyzeOutputRisks(
-          sandboxResult.output,
-          prompt
-        );
-
-        // LLM-based injection influence analysis (only when URLs were fetched and injected)
-        if (sandboxResult.fetched_page_context && outputRiskScore < 8) {
-          const injectionFlag = await llmOutputInjectionAnalysis(
-            sandboxResult.output,
-            prompt,
-            sandboxResult.fetched_page_context
-          );
-          if (injectionFlag) outputFlags.push(injectionFlag);
-        }
-
-        const finalOutputRiskScore = outputFlags.length > 0
-          ? Math.min(10, Math.max(...outputFlags.map((f) => f.severity)))
-          : 0;
-
-        execResult = {
-          output: sanitizeOutput(sandboxResult.output),
-          output_risk_score: finalOutputRiskScore,
-          output_flags: outputFlags,
-          token_usage: sandboxResult.token_usage,
-          cost_usd: 0, // Sandbox uses its own spending-capped key
-          latency_ms: sandboxResult.execution_ms,
-          isolated: true,
-          sandbox_status: "executed",
-        };
       } catch (sandboxErr: any) {
         console.error(`[exec] Sandbox call failed: ${sandboxErr?.message || sandboxErr}`);
-        // Sandbox failed — check fallback policy
-        if (isFallbackAllowed()) {
-          console.warn("[SECURITY] Unisolated execution fallback triggered. Set ALLOW_UNISOLATED_EXECUTION=false for production.");
-          execResult = await inlineExecution(prompt, testInput, agentConfig?.model || model, "fallback");
-        } else {
-          execResult = {
-            output: "[Execution skipped: sandbox unavailable and fallback not allowed]",
-            output_risk_score: 0,
-            output_flags: [],
-            token_usage: { prompt: 0, completion: 0, total: 0 },
-            cost_usd: 0,
-            latency_ms: 0,
-            isolated: false,
-            sandbox_status: "unavailable",
-          };
-        }
-      }
-    } else if (canUseSandbox()) {
-      // No agent_config provided but sandbox is available — use default config
-      try {
-        const sandboxResult = await executeInSandbox(prompt, testInput, {
-          model: model || "deepseek/deepseek-chat",
-        });
-
-        const { outputFlags, outputRiskScore } = analyzeOutputRisks(
-          sandboxResult.output,
-          prompt
-        );
-
-        if (sandboxResult.fetched_page_context && outputRiskScore < 8) {
-          const injectionFlag = await llmOutputInjectionAnalysis(
-            sandboxResult.output,
-            prompt,
-            sandboxResult.fetched_page_context
-          );
-          if (injectionFlag) outputFlags.push(injectionFlag);
-        }
-
-        const finalOutputRiskScore2 = outputFlags.length > 0
-          ? Math.min(10, Math.max(...outputFlags.map((f) => f.severity)))
-          : 0;
-
         execResult = {
-          output: sanitizeOutput(sandboxResult.output),
-          output_risk_score: finalOutputRiskScore2,
-          output_flags: outputFlags,
-          token_usage: sandboxResult.token_usage,
+          output: "[Execution skipped: sandbox unavailable]",
+          output_risk_score: 0,
+          output_flags: [],
+          token_usage: { prompt: 0, completion: 0, total: 0 },
           cost_usd: 0,
-          latency_ms: sandboxResult.execution_ms,
-          isolated: true,
-          sandbox_status: "executed",
+          latency_ms: 0,
+          isolated: false,
+          sandbox_status: "unavailable",
         };
-      } catch (sandboxErr2: any) {
-        console.error(`[exec] Sandbox call failed: ${sandboxErr2?.message || sandboxErr2}`);
-        if (isFallbackAllowed()) {
-          console.warn("[SECURITY] Unisolated execution fallback triggered. Set ALLOW_UNISOLATED_EXECUTION=false for production.");
-          execResult = await inlineExecution(prompt, testInput, model, "fallback");
-        } else {
-          execResult = {
-            output: "[Execution skipped: sandbox unavailable and fallback not allowed]",
-            output_risk_score: 0,
-            output_flags: [],
-            token_usage: { prompt: 0, completion: 0, total: 0 },
-            cost_usd: 0,
-            latency_ms: 0,
-            isolated: false,
-            sandbox_status: "unavailable",
-          };
-        }
       }
-    } else if (isFallbackAllowed()) {
-      // No sandbox configured, fallback allowed
-      console.warn("[SECURITY] Unisolated execution fallback triggered. Set ALLOW_UNISOLATED_EXECUTION=false for production.");
-      execResult = await inlineExecution(prompt, testInput, agentConfig?.model || model, "fallback");
     } else {
-      // No sandbox, no fallback
       execResult = {
-        output: "[Execution skipped: sandbox not configured and fallback not allowed]",
+        output: "[Execution skipped: sandbox not configured]",
         output_risk_score: 0,
         output_flags: [],
         token_usage: { prompt: 0, completion: 0, total: 0 },
@@ -466,50 +432,57 @@ async function executeAsync(
   }
 }
 
-// ─── Inline (non-isolated) execution fallback ──────────────────────────────
+// ─── Shared sandbox execution helper ──────────────────────────────────────
 
-async function inlineExecution(
+async function processSandboxExecution(
   prompt: string,
   testInput: string | undefined,
-  model: string | undefined,
-  sandboxStatus: "fallback" | "unavailable"
+  agentConfig: { model: string; temperature?: number; max_tokens?: number; agent_role?: string }
 ): Promise<ExecutionResult> {
-  const execStart = Date.now();
+  const sandboxResult = await executeInSandbox(prompt, testInput, agentConfig);
+
+  const sanitizedOutput = sanitizeOutput(sandboxResult.output);
+  const { outputFlags, outputRiskScore } = analyzeOutputRisks(sanitizedOutput, prompt);
+
+  // Merge all output flags
+  const allOutputFlags = [...outputFlags];
+
+  // Run LLM-based output injection analysis for deeper semantic detection
   try {
-    const messages = testInput
-      ? [
-          { role: "system", content: prompt },
-          { role: "user", content: testInput },
-        ]
-      : [{ role: "user", content: prompt }];
+    const llmFlag = await llmOutputInjectionAnalysis(sanitizedOutput, prompt, sandboxResult.fetched_page_context ?? "");
+    if (llmFlag) allOutputFlags.push(llmFlag);
+  } catch { /* pattern analysis is sufficient fallback */ }
 
-    const execResult = await callLLMFull(messages, model);
-    const latencyMs = Date.now() - execStart;
-
-    const { outputFlags, outputRiskScore } = analyzeOutputRisks(execResult.content, prompt);
-
-    return {
-      output: sanitizeOutput(execResult.content.slice(0, 5000)),
-      output_risk_score: outputRiskScore,
-      output_flags: outputFlags,
-      token_usage: execResult.tokenUsage,
-      cost_usd: execResult.costEstimate,
-      latency_ms: latencyMs,
-      isolated: false,
-      sandbox_status: sandboxStatus,
-    };
-  } catch (err: any) {
-    return {
-      output: `[Execution error: ${sanitizeErrorMessage(err.message)}]`,
-      output_risk_score: 0,
-      output_flags: [],
-      token_usage: { prompt: 0, completion: 0, total: 0 },
-      cost_usd: 0,
-      latency_ms: Date.now() - execStart,
-      isolated: false,
-      sandbox_status: sandboxStatus,
-    };
+  // Analyze fetched content for indirect injection indicators
+  if (sandboxResult.fetched_page_context) {
+    const fetchedFlags = analyzeFetchedContent(sandboxResult.fetched_page_context, sandboxResult.fetched_urls ?? []);
+    allOutputFlags.push(...fetchedFlags);
   }
+
+  // Run LLM sandbox analysis for holistic behavioral assessment
+  let sandboxAnalysis: string | undefined;
+  try {
+    sandboxAnalysis = await llmSandboxAnalysis(sanitizedOutput, prompt, allOutputFlags, sandboxResult.fetched_page_context ?? null) ?? undefined;
+  } catch { /* optional enrichment */ }
+
+  // Take highest severity across all flags as output risk score
+  let finalOutputRisk = outputRiskScore;
+  for (const flag of allOutputFlags) {
+    if (flag.severity > finalOutputRisk) finalOutputRisk = flag.severity;
+  }
+
+  return {
+    output: sanitizedOutput,
+    output_risk_score: finalOutputRisk,
+    output_flags: allOutputFlags,
+    token_usage: sandboxResult.token_usage,
+    cost_usd: 0,
+    latency_ms: sandboxResult.execution_ms,
+    isolated: true,
+    sandbox_status: "executed",
+    fetched_urls: sandboxResult.fetched_urls,
+    sandbox_analysis: sandboxAnalysis,
+  };
 }
 
 // ─── Sync fallback (when Redis is not available for async) ──────────────────
@@ -520,69 +493,49 @@ async function executeSyncFallback(
   agentConfig: ParseRequest["agent_config"],
   model: string | undefined
 ): Promise<ExecutionResult> {
-  if (canUseSandbox()) {
-    try {
-      const sandboxResult = await executeInSandbox(prompt, testInput, {
-        model: agentConfig?.model || model || "deepseek/deepseek-chat",
-        temperature: agentConfig?.temperature,
-        max_tokens: agentConfig?.max_tokens,
-        agent_role: agentConfig?.agent_role,
-      });
-
-      const { outputFlags, outputRiskScore } = analyzeOutputRisks(sandboxResult.output, prompt);
-
-      return {
-        output: sanitizeOutput(sandboxResult.output),
-        output_risk_score: outputRiskScore,
-        output_flags: outputFlags,
-        token_usage: sandboxResult.token_usage,
-        cost_usd: 0,
-        latency_ms: sandboxResult.execution_ms,
-        isolated: true,
-        sandbox_status: "executed",
-      };
-    } catch {
-      if (isFallbackAllowed()) {
-        console.warn("[SECURITY] Unisolated execution fallback triggered. Set ALLOW_UNISOLATED_EXECUTION=false for production.");
-        return inlineExecution(prompt, testInput, agentConfig?.model || model, "fallback");
-      }
-      return {
-        output: "[Execution skipped: sandbox unavailable and fallback not allowed]",
-        output_risk_score: 0,
-        output_flags: [],
-        token_usage: { prompt: 0, completion: 0, total: 0 },
-        cost_usd: 0,
-        latency_ms: 0,
-        isolated: false,
-        sandbox_status: "unavailable",
-      };
-    }
+  if (!canUseSandbox()) {
+    return {
+      output: "[Execution skipped: sandbox not configured]",
+      output_risk_score: 0,
+      output_flags: [],
+      token_usage: { prompt: 0, completion: 0, total: 0 },
+      cost_usd: 0,
+      latency_ms: 0,
+      isolated: false,
+      sandbox_status: "unavailable",
+    };
   }
 
-  if (isFallbackAllowed()) {
-    console.warn("[SECURITY] Unisolated execution fallback triggered. Set ALLOW_UNISOLATED_EXECUTION=false for production.");
-    return inlineExecution(prompt, testInput, agentConfig?.model || model, "fallback");
+  try {
+    return await processSandboxExecution(prompt, testInput, {
+      model: agentConfig?.model || model || "deepseek/deepseek-chat",
+      temperature: agentConfig?.temperature,
+      max_tokens: agentConfig?.max_tokens,
+      agent_role: agentConfig?.agent_role,
+    });
+  } catch (err: any) {
+    console.error(`[exec] Sandbox call failed: ${err?.message || err}`);
+    return {
+      output: "[Execution skipped: sandbox unavailable]",
+      output_risk_score: 0,
+      output_flags: [],
+      token_usage: { prompt: 0, completion: 0, total: 0 },
+      cost_usd: 0,
+      latency_ms: 0,
+      isolated: false,
+      sandbox_status: "unavailable",
+    };
   }
-
-  return {
-    output: "[Execution skipped: sandbox not configured and fallback not allowed]",
-    output_risk_score: 0,
-    output_flags: [],
-    token_usage: { prompt: 0, completion: 0, total: 0 },
-    cost_usd: 0,
-    latency_ms: 0,
-    isolated: false,
-    sandbox_status: "unavailable",
-  };
 }
 
 // ─── Output sanitization ───────────────────────────────────────────────────
 
 function sanitizeOutput(output: string): string {
-  // Truncate to 5000 chars
-  return output.length > 5000
-    ? output.slice(0, 5000) + "\n...[truncated]"
-    : output;
+  // Strip control chars (U+0000-U+001F) except tab, LF, CR — these leak from fetched page content
+  const clean = output.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+  return clean.length > 5000
+    ? clean.slice(0, 5000) + "\n...[truncated]"
+    : clean;
 }
 
 function sanitizeErrorMessage(message: string): string {

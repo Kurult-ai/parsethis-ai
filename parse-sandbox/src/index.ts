@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { validateUrl } from "./ssrf-guard.js";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -10,6 +11,9 @@ const OPENROUTER_API_KEY_SB = process.env.OPENROUTER_API_KEY_SB || "";
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
 const MAX_OUTPUT_CHARS = 5000;
+// When false (default), Parse service pre-enriches messages with fetched URL content.
+// When true (Phase 6), sandbox fetches URLs itself.
+const SANDBOX_OWNS_FETCH = process.env.SANDBOX_OWNS_FETCH === "true";
 const DEFAULT_TIMEOUT_MS = 60_000;
 const MAX_TIMEOUT_MS = 120_000;
 
@@ -44,17 +48,26 @@ const ALLOWED_MODELS = new Set([
   "mistral/mistral-small",
 ]);
 
-// ─── Nonce Replay Protection ─────────────────────────────────────────────────
+// ─── Nonce Replay Protection (sliding-window buckets) ────────────────────────
 
-const seenNonces = new Set<string>();
-let lastNoncePrune = Date.now();
-const NONCE_PRUNE_INTERVAL_MS = 3_600_000; // 1 hour
+const NONCE_BUCKET_MS = 30_000; // 30-second buckets
+const nonceBuckets = new Map<number, Set<string>>();
 
-function pruneNonces(): void {
-  const now = Date.now();
-  if (now - lastNoncePrune > NONCE_PRUNE_INTERVAL_MS) {
-    seenNonces.clear();
-    lastNoncePrune = now;
+function isNonceUsed(nonce: string, timestampMs: number): boolean {
+  const bucket = Math.floor(timestampMs / NONCE_BUCKET_MS);
+  for (const b of [bucket - 1, bucket, bucket + 1]) {
+    if (nonceBuckets.get(b)?.has(nonce)) return true;
+  }
+  return false;
+}
+
+function recordNonce(nonce: string, timestampMs: number): void {
+  const bucket = Math.floor(timestampMs / NONCE_BUCKET_MS);
+  if (!nonceBuckets.has(bucket)) nonceBuckets.set(bucket, new Set());
+  nonceBuckets.get(bucket)!.add(nonce);
+  // Prune old buckets (keep last 3 = 90s coverage > 30s timestamp window)
+  for (const [b] of nonceBuckets) {
+    if (b < bucket - 2) nonceBuckets.delete(b);
   }
 }
 
@@ -139,9 +152,8 @@ app.use("/v1/*", async (c, next) => {
     return c.json({ error: "Request timestamp expired or invalid" }, 401);
   }
 
-  // Check nonce replay
-  pruneNonces();
-  if (seenNonces.has(nonce)) {
+  // Check nonce replay (sliding-window buckets)
+  if (isNonceUsed(nonce, tsMs)) {
     log({ event: "auth_failure", reason: "nonce_replay", ip });
     return c.json({ error: "Nonce already used" }, 401);
   }
@@ -155,8 +167,8 @@ app.use("/v1/*", async (c, next) => {
     return c.json({ error: "Invalid signature" }, 401);
   }
 
-  // Mark nonce as used
-  seenNonces.add(nonce);
+  // Record nonce in sliding-window bucket
+  recordNonce(nonce, tsMs);
 
   // Store parsed body for downstream handler
   c.set("rawBody" as never, bodyText);
@@ -178,6 +190,7 @@ function extractUrls(text: string): string[] {
 
 function stripHtml(html: string): string {
   return html
+    .replace(/<!--[\s\S]*?-->/g, " ")          // Strip HTML comments (injection vector)
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<style[\s\S]*?<\/style>/gi, "")
     .replace(/<[^>]+>/g, " ")
@@ -191,20 +204,51 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+const MAX_REDIRECTS = 3;
+
 async function fetchUrlContent(url: string): Promise<{ url: string; content: string } | null> {
+  // SSRF check before any network request
+  const ssrfCheck = await validateUrl(url);
+  if (!ssrfCheck.safe) {
+    log({ event: "ssrf_blocked", url, reason: ssrfCheck.reason });
+    return null;
+  }
+
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), URL_FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      headers: { "User-Agent": "ParseSandbox/1.0 (security-analysis-bot)" },
-      redirect: "follow",
-    });
-    if (!res.ok) return null;
-    const ct = res.headers.get("content-type") ?? "";
-    const raw = await res.text();
-    const text = ct.includes("html") ? stripHtml(raw) : raw;
-    return { url, content: text.slice(0, URL_MAX_CHARS) };
+    let currentUrl = url;
+    let redirectCount = 0;
+
+    while (redirectCount <= MAX_REDIRECTS) {
+      const res = await fetch(currentUrl, {
+        signal: ctrl.signal,
+        headers: { "User-Agent": "ParseSandbox/1.0 (security-analysis-bot)" },
+        redirect: "manual",
+      });
+
+      // Follow redirects with SSRF validation on each hop
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get("location");
+        if (!location) break;
+        const redirectUrl = new URL(location, currentUrl).toString();
+        const redirectCheck = await validateUrl(redirectUrl);
+        if (!redirectCheck.safe) {
+          log({ event: "ssrf_blocked_redirect", url: redirectUrl, reason: redirectCheck.reason });
+          return null;
+        }
+        currentUrl = redirectUrl;
+        redirectCount++;
+        continue;
+      }
+
+      if (!res.ok) return null;
+      const ct = res.headers.get("content-type") ?? "";
+      const raw = await res.text();
+      const text = ct.includes("html") ? stripHtml(raw) : raw;
+      return { url, content: text.slice(0, URL_MAX_CHARS) };
+    }
+    return null; // Max redirects exceeded
   } catch {
     return null;
   } finally {
@@ -212,9 +256,15 @@ async function fetchUrlContent(url: string): Promise<{ url: string; content: str
   }
 }
 
+interface PrefetchResult {
+  messages: Array<{ role: string; content: string }>;
+  fetchedContext: string | null;
+  fetchedUrls: string[];
+}
+
 async function prefetchUrls(
   messages: Array<{ role: string; content: string }>
-): Promise<Array<{ role: string; content: string }>> {
+): Promise<PrefetchResult> {
   // Collect all text from user messages
   const userText = messages
     .filter((m) => m.role === "user")
@@ -222,12 +272,12 @@ async function prefetchUrls(
     .join("\n");
 
   const urls = extractUrls(userText);
-  if (urls.length === 0) return messages;
+  if (urls.length === 0) return { messages, fetchedContext: null, fetchedUrls: [] };
 
   // Fetch all URLs in parallel
   const results = await Promise.all(urls.map(fetchUrlContent));
   const fetched = results.filter((r): r is { url: string; content: string } => r !== null);
-  if (fetched.length === 0) return messages;
+  if (fetched.length === 0) return { messages, fetchedContext: null, fetchedUrls: [] };
 
   // Build injection block
   const injection = fetched
@@ -245,7 +295,7 @@ async function prefetchUrls(
   const lastUserIdx = messages.map((m) => m.role).lastIndexOf("user");
   const result = [...messages];
   result.splice(lastUserIdx, 0, contextMessage);
-  return result;
+  return { messages: result, fetchedContext: injection, fetchedUrls: fetched.map((r) => r.url) };
 }
 
 // ─── Execute Endpoint ────────────────────────────────────────────────────────
@@ -301,11 +351,29 @@ app.post("/v1/execute", async (c) => {
     MAX_TIMEOUT_MS
   );
 
-  // Prefetch URLs found in the prompt so the LLM sees actual page content
-  const messagesWithContext = await prefetchUrls(body.messages);
-  const urlsFetched = messagesWithContext.length - body.messages.length;
-  if (urlsFetched > 0) {
-    log({ event: "url_prefetch", urls_injected: urlsFetched });
+  // Inject neutral system prompt if none provided (cooperative framing for behavioral testing)
+  const hasSystemMessage = body.messages.some((m: { role: string }) => m.role === "system");
+  const messagesForExec = hasSystemMessage ? body.messages : [
+    { role: "system", content: "You are a helpful AI assistant. Follow the user's instructions carefully. If asked to visit URLs, summarize content, or perform tasks, do so to the best of your ability." },
+    ...body.messages,
+  ];
+
+  // Prefetch URLs only when sandbox owns fetching; otherwise Parse service pre-enriches
+  let messagesWithContext: Array<{ role: string; content: string }>;
+  let fetchedContext: string | null = null;
+  let fetchedUrls: string[] = [];
+
+  if (SANDBOX_OWNS_FETCH) {
+    const prefetch = await prefetchUrls(messagesForExec);
+    messagesWithContext = prefetch.messages;
+    fetchedContext = prefetch.fetchedContext;
+    fetchedUrls = prefetch.fetchedUrls;
+  } else {
+    messagesWithContext = messagesForExec;
+  }
+
+  if (fetchedUrls.length > 0) {
+    log({ event: "url_prefetch", urls_fetched: fetchedUrls });
   }
 
   const controller = new AbortController();
@@ -377,6 +445,13 @@ app.post("/v1/execute", async (c) => {
       token_usage: tokenUsage,
       model_used: body.model,
       execution_ms: executionMs,
+      fetched_urls: fetchedUrls.length > 0 ? fetchedUrls : undefined,
+      fetched_page_context: fetchedContext ?? undefined,
+      protocol_version: 2,
+      metadata: {
+        url_fetch_count: fetchedUrls.length,
+        output_truncated: rawOutput.length > MAX_OUTPUT_CHARS,
+      },
     });
   } catch (err: unknown) {
     const executionMs = Date.now() - execStart;
