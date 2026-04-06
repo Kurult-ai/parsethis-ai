@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../auth.js";
-import { parsePrompt, analyzeOutputRisks, llmOutputInjectionAnalysis, analyzeFetchedContent, llmSandboxAnalysis, computeVerdict } from "../parse.js";
+import { parsePrompt, analyzeOutputRisks, llmOutputInjectionAnalysis, analyzeFetchedContent, analyzeHiddenContent, llmSandboxAnalysis, computeVerdict } from "../parse.js";
 import type { ParseRequest, ExecutionResult } from "../parse.js";
 import type { AppEnv } from "../types.js";
 import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
@@ -462,28 +462,10 @@ async function processSandboxExecution(
     allOutputFlags.push(...fetchedFlags);
   }
 
-  // Flag hidden content itself as an injection indicator if it contains suspicious patterns
+  // Analyze hidden content stripped from DOM (sr-only, display:none, aria-hidden, etc.)
   if (sandboxResult.hidden_content) {
-    const hidden = sandboxResult.hidden_content;
-    // Canary tokens in hidden elements
-    if (/CANAR-[a-f0-9]{8,}/i.test(hidden) || /\bcallback\b.*https?:\/\//i.test(hidden)) {
-      allOutputFlags.push({
-        category: "indirect_injection",
-        severity: 8,
-        label: "Canary token in hidden DOM element",
-        detail: "Fetched page embeds canary tokens or callback URLs in visually hidden elements (sr-only, display:none, aria-hidden)",
-      });
-    }
-    // General injection instructions in hidden elements
-    if (/\b(?:ignore|disregard|override)\b.*\b(?:previous|above|prior)\b.*\binstruction/i.test(hidden) ||
-        /\b(?:include|output|respond with|say)\b.*\b(?:token|verification|code)\b/i.test(hidden)) {
-      allOutputFlags.push({
-        category: "indirect_injection",
-        severity: 9,
-        label: "Injection instruction in hidden DOM element",
-        detail: "Fetched page contains prompt injection instructions concealed in visually hidden HTML elements",
-      });
-    }
+    const hiddenFlags = analyzeHiddenContent(sandboxResult.hidden_content);
+    allOutputFlags.push(...hiddenFlags);
   }
 
   // Run LLM sandbox analysis for holistic behavioral assessment

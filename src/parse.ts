@@ -441,6 +441,123 @@ export function analyzeFetchedContent(fetchedContext: string, originalPromptUrls
   });
 }
 
+// === Hidden Content Analysis ===
+// Detects injection payloads in content stripped from hidden DOM elements
+// (sr-only, display:none, aria-hidden, etc.) by the cheerio-based DOM stripper.
+
+export function analyzeHiddenContent(hiddenContent: string): RiskFlag[] {
+  const flags: RiskFlag[] = [];
+  if (!hiddenContent || hiddenContent.length === 0) return flags;
+
+  const normalized = normalizeForDetection(hiddenContent);
+  const raw = hiddenContent;
+
+  // --- Tier 1: Injection instructions (severity 9) ---
+  const injectionPatterns: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /\b(?:ignore|disregard|override|forget|bypass)\b.*\b(?:previous|above|prior|earlier|system|original)\b.*\b(?:instruction|rule|guideline|prompt|directive)/i,
+      label: "Override instruction in hidden content" },
+    { pattern: /\b(?:you (?:must|should|shall|will|are to)|respond with|include in your (?:response|output|answer))\b/i,
+      label: "Direct AI command in hidden content" },
+    { pattern: /\b(?:do not (?:mention|reveal|disclose|tell|say)|pretend|act as if|roleplay as)\b/i,
+      label: "Concealment instruction in hidden content" },
+    { pattern: /\b(?:new|updated|revised|real) (?:instruction|prompt|directive|system prompt)/i,
+      label: "Prompt override claim in hidden content" },
+  ];
+  for (const { pattern, label } of injectionPatterns) {
+    if (pattern.test(normalized) || pattern.test(raw)) {
+      flags.push({
+        category: "indirect_injection",
+        severity: 9,
+        label,
+        detail: "Fetched page contains prompt injection instructions concealed in visually hidden HTML elements",
+      });
+    }
+  }
+
+  // --- Tier 2: Tracking tokens (severity 8) ---
+  const tokenPatterns: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /\b(?:TOKEN|VERIFY|CANAR|CANARY|KEY|CODE|SECRET|PASS|AUTH|TRACK|BEACON|SIGNAL|MARKER|TAG|ID)[-_][a-z0-9]{6,}/i,
+      label: "Labeled tracking token in hidden content" },
+    { pattern: /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+      label: "UUID in hidden content" },
+    { pattern: /(?<![a-z])[0-9a-f]{12,}(?![a-z])/i,
+      label: "Long hex identifier in hidden content" },
+  ];
+  for (const { pattern, label } of tokenPatterns) {
+    if (pattern.test(raw)) {
+      flags.push({
+        category: "indirect_injection",
+        severity: 8,
+        label,
+        detail: "Fetched page embeds a tracking token or identifier in visually hidden elements — likely a canary to detect AI agent processing",
+      });
+    }
+  }
+
+  // --- Tier 3: Exfiltration URLs (severity 8) ---
+  const urlPatterns: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /https?:\/\/[^\s]+\/(?:callback|canary|hook|webhook|ping|report|collect|track|exfil|beacon|verify)(?:\/|$)/i,
+      label: "Callback URL in hidden content" },
+    { pattern: /https?:\/\/[^\s]+\/[a-f0-9]{8,}/i,
+      label: "Tracking URL in hidden content" },
+  ];
+  for (const { pattern, label } of urlPatterns) {
+    if (pattern.test(raw)) {
+      flags.push({
+        category: "indirect_injection",
+        severity: 8,
+        label,
+        detail: "Fetched page embeds a callback or tracking URL in visually hidden elements — likely a data exfiltration or canary endpoint",
+      });
+    }
+  }
+
+  // --- Tier 4: AI-targeting language (severity 7) ---
+  const aiTargetingPatterns: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /\b(?:when (?:processing|reading|analyzing|summarizing|parsing)|(?:AI|LLM|GPT|Claude|language model|machine learning) (?:agent|assistant|model|system))\b/i,
+      label: "AI-targeting language in hidden content" },
+    { pattern: /\b(?:verification token|confirm (?:you|that you)|proof (?:of|that)|demonstrate that)\b/i,
+      label: "Verification request in hidden content" },
+  ];
+  for (const { pattern, label } of aiTargetingPatterns) {
+    if (pattern.test(normalized) || pattern.test(raw)) {
+      flags.push({
+        category: "indirect_injection",
+        severity: 7,
+        label,
+        detail: "Fetched page contains language explicitly targeting AI/LLM processing in visually hidden elements",
+      });
+    }
+  }
+
+  // --- Tier 5: Suspicious length (only if other tiers matched) ---
+  if (flags.length > 0) {
+    if (raw.length > 500) {
+      flags.push({
+        category: "indirect_injection",
+        severity: 7,
+        label: "Large hidden content block",
+        detail: `Fetched page contains ${raw.length} chars of hidden content with suspicious patterns — legitimate a11y labels are typically short`,
+      });
+    } else if (raw.length > 200) {
+      flags.push({
+        category: "indirect_injection",
+        severity: 5,
+        label: "Unusually long hidden content",
+        detail: `Fetched page contains ${raw.length} chars of hidden content with suspicious patterns`,
+      });
+    }
+  }
+
+  // Deduplicate by label
+  const seen = new Set<string>();
+  return flags.filter((f) => {
+    if (seen.has(f.label)) return false;
+    seen.add(f.label);
+    return true;
+  });
+}
+
 // === LLM-generated sandbox analysis narrative ===
 
 export async function llmSandboxAnalysis(
