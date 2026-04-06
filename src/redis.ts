@@ -9,6 +9,15 @@ export function getRedis(): Redis {
     redis = new Redis(REDIS_URL, {
       maxRetriesPerRequest: null, // required by BullMQ
       lazyConnect: true,
+      connectTimeout: 5000,
+      retryStrategy(times) {
+        // Exponential backoff: 500ms, 1s, 2s, 4s, then cap at 5s
+        return Math.min(times * 500, 5000);
+      },
+    });
+    // Prevent unhandled error events from crashing the process
+    redis.on("error", (err) => {
+      console.error("[redis] Connection error:", err.message);
     });
   }
   return redis;

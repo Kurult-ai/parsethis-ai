@@ -101,18 +101,19 @@ publicRoutes.get("/health", async (c) => {
         await redis.ping();
         checks.redis = "ok";
       } else {
-        checks.redis = "error";
+        checks.redis = "degraded";
       }
     } else { checks.redis = "not_configured"; }
-  } catch { checks.redis = "error"; }
+  } catch { checks.redis = "degraded"; }
 
-  const allOk = Object.values(checks).every(v => v === "ok" || v === "not_configured");
+  // Database is critical; Redis is optional (degrades queue features only)
+  const dbOk = checks.database === "ok";
 
   return c.json({
-    status: allOk ? "ok" : "degraded",
+    status: dbOk ? (checks.redis === "ok" || checks.redis === "not_configured" ? "ok" : "degraded") : "error",
     timestamp: new Date().toISOString(),
     version: "1.0.0",
-  }, allOk ? 200 : 503);
+  }, dbOk ? 200 : 503);
 });
 
 // Detailed health — admin only
