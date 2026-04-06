@@ -1,4 +1,5 @@
 import { createHmac, randomUUID } from "node:crypto";
+import * as cheerio from "cheerio";
 import { validateUrl } from "./ssrf-guard.js";
 
 // ─── URL Prefetch (inject real page content before LLM sees prompt) ──────────
@@ -25,23 +26,85 @@ function extractUrls(text: string): string[] {
   return [...new Set(all)].slice(0, URL_MAX_PER_REQUEST);
 }
 
-function stripHtml(html: string): string {
-  return html
-    .replace(/<!--[\s\S]*?-->/g, " ")          // Strip HTML comments (injection vector)
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#x27;/gi, "'")
+// CSS patterns that hide content from users but leave text in DOM for scrapers/LLMs
+const HIDDEN_STYLE_PATTERNS = [
+  /display\s*:\s*none/i,
+  /visibility\s*:\s*hidden/i,
+  /opacity\s*:\s*0(?:[;\s"']|$)/,
+  /font-size\s*:\s*0(?:px|em|rem|%)?(?:[;\s"']|$)/i,
+  /position\s*:\s*(?:absolute|fixed)[^;]*(?:left|top)\s*:\s*-\d{4,}/i,
+  /clip\s*:\s*rect\s*\(\s*0/i,
+  /clip-path\s*:\s*inset\s*\(\s*100/i,
+  /text-indent\s*:\s*-\d{4,}/i,
+  /color\s*:\s*transparent/i,
+  /transform\s*:\s*scale\s*\(\s*0\s*\)/i,
+];
+
+// Screen-reader-only CSS classes used to hide injection payloads
+const HIDDEN_CLASS_SELECTOR = ".sr-only, .visually-hidden, .screen-reader-text, .a11y-hidden, .assistive-text";
+
+/**
+ * DOM-aware HTML stripping that removes hidden elements before extracting text.
+ * Returns both visible text and any hidden content that was removed (for injection analysis).
+ */
+function stripHtml(html: string): { text: string; hiddenContent: string | null } {
+  const $ = cheerio.load(html);
+
+  // Collect hidden content text before removal (for injection detection)
+  const hiddenTexts: string[] = [];
+
+  // 1. Capture data-ai-* attribute values BEFORE any removal (elements may overlap with hidden selectors)
+  $("[data-ai-instruction], [data-ai-prompt], [data-prompt]").each((_, el) => {
+    for (const attr of ["data-ai-instruction", "data-ai-prompt", "data-prompt"]) {
+      const val = $(el).attr(attr);
+      if (val) hiddenTexts.push(val);
+    }
+  });
+
+  // 2. Remove elements hidden by HTML attributes
+  $("[hidden], [aria-hidden='true'], template, noscript").each((_, el) => {
+    const t = $(el).text().trim();
+    if (t.length > 0) hiddenTexts.push(t);
+    $(el).remove();
+  });
+
+  // 3. Remove elements hidden by inline style
+  $("[style]").each((_, el) => {
+    const style = $(el).attr("style") || "";
+    if (HIDDEN_STYLE_PATTERNS.some((p) => p.test(style))) {
+      const t = $(el).text().trim();
+      if (t.length > 0) hiddenTexts.push(t);
+      $(el).remove();
+    }
+  });
+
+  // 4. Remove elements hidden by common screen-reader-only classes
+  $(HIDDEN_CLASS_SELECTOR).each((_, el) => {
+    const t = $(el).text().trim();
+    if (t.length > 0) hiddenTexts.push(t);
+    $(el).remove();
+  });
+
+  // 5. Remove hidden inputs (can carry injection payloads in value attributes)
+  $("input[type='hidden']").each((_, el) => {
+    const val = $(el).attr("value") || "";
+    if (val.length > 0) hiddenTexts.push(val);
+    $(el).remove();
+  });
+
+  // 6. Strip script, style, and HTML comments (standard cleanup)
+  $("script, style").remove();
+
+  // Extract visible text
+  const text = $.text()
     .replace(/\s{2,}/g, " ")
     .trim();
+
+  const hiddenContent = hiddenTexts.length > 0 ? hiddenTexts.join("\n") : null;
+  return { text, hiddenContent };
 }
 
-async function fetchUrlContent(url: string): Promise<{ url: string; content: string } | null> {
+async function fetchUrlContent(url: string): Promise<{ url: string; content: string; hiddenContent: string | null } | null> {
   // SSRF check before any network request
   const ssrfCheck = await validateUrl(url);
   if (!ssrfCheck.safe) {
@@ -80,8 +143,11 @@ async function fetchUrlContent(url: string): Promise<{ url: string; content: str
       if (!res.ok) return null;
       const ct = res.headers.get("content-type") ?? "";
       const raw = await res.text();
-      const text = ct.includes("html") ? stripHtml(raw) : raw;
-      return { url, content: text.slice(0, URL_MAX_CHARS) };
+      if (ct.includes("html")) {
+        const { text, hiddenContent } = stripHtml(raw);
+        return { url, content: text.slice(0, URL_MAX_CHARS), hiddenContent };
+      }
+      return { url, content: raw.slice(0, URL_MAX_CHARS), hiddenContent: null };
     }
     return null; // Max redirects exceeded
   } catch {
@@ -93,22 +159,28 @@ async function fetchUrlContent(url: string): Promise<{ url: string; content: str
 
 async function prefetchUrls(
   messages: Array<{ role: string; content: string }>
-): Promise<{ messages: Array<{ role: string; content: string }>; fetchedContext: string | null; fetchedUrls: string[] }> {
+): Promise<{ messages: Array<{ role: string; content: string }>; fetchedContext: string | null; fetchedUrls: string[]; hiddenContent: string | null }> {
   const userText = messages
     .filter((m) => m.role === "user")
     .map((m) => m.content)
     .join("\n");
 
   const urls = extractUrls(userText);
-  if (urls.length === 0) return { messages, fetchedContext: null, fetchedUrls: [] };
+  if (urls.length === 0) return { messages, fetchedContext: null, fetchedUrls: [], hiddenContent: null };
 
   const results = await Promise.all(urls.map(fetchUrlContent));
-  const fetched = results.filter((r): r is { url: string; content: string } => r !== null);
-  if (fetched.length === 0) return { messages, fetchedContext: null, fetchedUrls: [] };
+  const fetched = results.filter((r): r is { url: string; content: string; hiddenContent: string | null } => r !== null);
+  if (fetched.length === 0) return { messages, fetchedContext: null, fetchedUrls: [], hiddenContent: null };
 
   const injection = fetched
     .map((r) => `--- Content fetched from ${r.url} ---\n${r.content}\n--- End of ${r.url} ---`)
     .join("\n\n");
+
+  // Aggregate hidden content from all fetched pages for injection analysis
+  const allHidden = fetched
+    .filter((r) => r.hiddenContent)
+    .map((r) => `[Hidden from ${r.url}]: ${r.hiddenContent}`)
+    .join("\n");
 
   const contextMessage = {
     role: "user" as const,
@@ -120,7 +192,7 @@ async function prefetchUrls(
   const lastUserIdx = messages.map((m) => m.role).lastIndexOf("user");
   const result = [...messages];
   result.splice(lastUserIdx, 0, contextMessage);
-  return { messages: result, fetchedContext: injection, fetchedUrls: fetched.map((r) => r.url) };
+  return { messages: result, fetchedContext: injection, fetchedUrls: fetched.map((r) => r.url), hiddenContent: allHidden || null };
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -139,6 +211,7 @@ export interface SandboxResult {
   execution_ms: number;
   fetched_page_context?: string; // raw fetched content injected into LLM context
   fetched_urls?: string[];       // which URLs were actually fetched
+  hidden_content?: string;       // content stripped from hidden DOM elements (injection indicator)
 }
 
 export type SandboxOutcome =
@@ -200,7 +273,7 @@ export async function executeInSandbox(
   }
 
   // Prefetch URLs found in user messages so the LLM sees actual page content
-  const { messages: messagesWithContext, fetchedContext, fetchedUrls } = await prefetchUrls(messages);
+  const { messages: messagesWithContext, fetchedContext, fetchedUrls, hiddenContent } = await prefetchUrls(messages);
 
   const requestBody = JSON.stringify({
     messages: messagesWithContext,
@@ -239,6 +312,7 @@ export async function executeInSandbox(
     const result = await res.json() as SandboxResult;
     if (fetchedContext) result.fetched_page_context = fetchedContext;
     if (fetchedUrls.length > 0) result.fetched_urls = fetchedUrls;
+    if (hiddenContent) result.hidden_content = hiddenContent;
     return result;
   } finally {
     clearTimeout(timeout);

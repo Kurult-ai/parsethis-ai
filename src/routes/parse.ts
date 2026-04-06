@@ -452,7 +452,7 @@ async function processSandboxExecution(
 
   // Run LLM-based output injection analysis for deeper semantic detection
   try {
-    const llmFlag = await llmOutputInjectionAnalysis(sanitizedOutput, prompt, sandboxResult.fetched_page_context ?? "");
+    const llmFlag = await llmOutputInjectionAnalysis(sanitizedOutput, prompt, sandboxResult.fetched_page_context ?? "", sandboxResult.hidden_content);
     if (llmFlag) allOutputFlags.push(llmFlag);
   } catch { /* pattern analysis is sufficient fallback */ }
 
@@ -460,6 +460,30 @@ async function processSandboxExecution(
   if (sandboxResult.fetched_page_context) {
     const fetchedFlags = analyzeFetchedContent(sandboxResult.fetched_page_context, sandboxResult.fetched_urls ?? []);
     allOutputFlags.push(...fetchedFlags);
+  }
+
+  // Flag hidden content itself as an injection indicator if it contains suspicious patterns
+  if (sandboxResult.hidden_content) {
+    const hidden = sandboxResult.hidden_content;
+    // Canary tokens in hidden elements
+    if (/CANAR-[a-f0-9]{8,}/i.test(hidden) || /\bcallback\b.*https?:\/\//i.test(hidden)) {
+      allOutputFlags.push({
+        category: "indirect_injection",
+        severity: 8,
+        label: "Canary token in hidden DOM element",
+        detail: "Fetched page embeds canary tokens or callback URLs in visually hidden elements (sr-only, display:none, aria-hidden)",
+      });
+    }
+    // General injection instructions in hidden elements
+    if (/\b(?:ignore|disregard|override)\b.*\b(?:previous|above|prior)\b.*\binstruction/i.test(hidden) ||
+        /\b(?:include|output|respond with|say)\b.*\b(?:token|verification|code)\b/i.test(hidden)) {
+      allOutputFlags.push({
+        category: "indirect_injection",
+        severity: 9,
+        label: "Injection instruction in hidden DOM element",
+        detail: "Fetched page contains prompt injection instructions concealed in visually hidden HTML elements",
+      });
+    }
   }
 
   // Run LLM sandbox analysis for holistic behavioral assessment
