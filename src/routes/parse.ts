@@ -12,18 +12,6 @@ import { prisma } from "../db.js";
 
 export const parseRoutes = new Hono<AppEnv>();
 
-// ─── In-memory execution rate limit fallback (per-process, used when Redis is unavailable) ──
-
-const execMemoryLimits = new Map<string, { count: number; windowStart: number }>();
-
-const execLimitCleanup = setInterval(() => {
-  const now = Date.now();
-  for (const [key, val] of execMemoryLimits) {
-    if (now - val.windowStart > 3_600_000) execMemoryLimits.delete(key);
-  }
-}, 60_000);
-if (execLimitCleanup.unref) execLimitCleanup.unref();
-
 // ─── Execution rate limits & cost caps by tier ─────────────────────────────
 
 const EXEC_LIMITS: Record<string, number> = {
@@ -133,6 +121,15 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
     delete result.score_components;
   }
 
+  // ── Gate detailed flags to paid tiers (prevent free-tier pattern enumeration) ──
+  if (tier === "free" && apiKey.id !== "master" && apiKey.id !== "demo") {
+    const flagCount = result.flags.length;
+    const topCategory = result.categories[0] ?? "none";
+    result.flags = flagCount > 0
+      ? [{ category: topCategory, severity: result.risk_score, label: `${flagCount} risk signal(s) detected`, detail: "" }]
+      : [];
+  }
+
   // ── Attach suggested_action based on risk score ──
   if (result.risk_score <= 2) {
     result.suggested_action = "allow";
@@ -154,6 +151,15 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
   // ── If no execution will run, return immediately ──
   if (!shouldExecute) {
     return c.json(result);
+  }
+
+  // ── Fail closed: execution requires Redis for rate limiting and cost caps ──
+  if (apiKey.id !== "master" && !isRedisAvailable()) {
+    console.warn("[SECURITY] Execution request rejected — Redis unavailable for rate limiting/cost caps");
+    return c.json({
+      ...result,
+      execution_error: "Sandbox execution temporarily unavailable (rate limit service down)",
+    }, 503);
   }
 
   // ── Observe mode: separate, more restrictive rate limit for high-risk prompts ──
@@ -197,21 +203,12 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
         }
       }
     } catch {
-      // Redis unavailable — degrade to per-process in-memory rate limit
-      console.warn("[SECURITY] Redis unavailable — execution rate limit degraded to per-process in-memory. " +
-        "With N instances, effective limit is N * configured_limit.");
-      const memKey = `exec:${apiKey.id}`;
-      const entry = execMemoryLimits.get(memKey);
-      const now = Date.now();
-      const maxExec = EXEC_LIMITS[tier] ?? 5;
-      if (entry && now - entry.windowStart < 3_600_000) {
-        entry.count++;
-        if (entry.count > maxExec) {
-          return c.json({ error: "Execution rate limit exceeded", limit: maxExec, window: "1 hour" }, 429);
-        }
-      } else {
-        execMemoryLimits.set(memKey, { count: 1, windowStart: now });
-      }
+      // Redis connected but operation failed — fail closed
+      console.warn("[SECURITY] Execution rate limit check failed — rejecting request");
+      return c.json({
+        ...result,
+        execution_error: "Sandbox execution temporarily unavailable (rate limit check failed)",
+      }, 503);
     }
   }
 
@@ -238,8 +235,8 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
         };
         await redis.set(`exec:job:${parseId}`, JSON.stringify(execJob), "EX", 600); // 10-min TTL
 
-        // Store the parse result for retrieval
-        await redis.set(`exec:parse:${parseId}`, JSON.stringify(result), "EX", 600);
+        // Store the parse result for retrieval (with ownership tag for IDOR protection)
+        await redis.set(`exec:parse:${parseId}`, JSON.stringify({ ...result, _apiKeyId: apiKey.id }), "EX", 600);
 
         // Execute in background (fire-and-forget)
         executeAsync(parseId, body.prompt, body.test_input, body.agent_config, body.model, tier, apiKey.id).catch((err) => {
@@ -294,6 +291,13 @@ parseRoutes.get("/v1/parse/:id", authMiddleware("evaluate"), async (c) => {
 
   const parseResult = JSON.parse(parseData);
 
+  // Ownership check on parse result itself (prevents IDOR before job data is checked)
+  const pollApiKey = c.get("apiKey") as any;
+  if (parseResult._apiKeyId && pollApiKey && parseResult._apiKeyId !== pollApiKey.id && pollApiKey.id !== "master") {
+    return c.json({ error: "Not authorized to view this result" }, 403);
+  }
+  delete parseResult._apiKeyId;
+
   // Check execution status
   const jobData = await redis.get(`exec:job:${parseId}`);
   if (!jobData) {
@@ -302,9 +306,8 @@ parseRoutes.get("/v1/parse/:id", authMiddleware("evaluate"), async (c) => {
 
   const job = JSON.parse(jobData);
 
-  // Ownership check: only the key that created the job (or master) can view it
-  const apiKey = c.get("apiKey") as any;
-  if (job.apiKeyId && apiKey && job.apiKeyId !== apiKey.id && apiKey.id !== "master") {
+  // Ownership check on job data (defense-in-depth alongside parse result check above)
+  if (job.apiKeyId && pollApiKey && job.apiKeyId !== pollApiKey.id && pollApiKey.id !== "master") {
     return c.json({ error: "Not authorized to view this result" }, 403);
   }
 

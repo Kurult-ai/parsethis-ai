@@ -13,7 +13,7 @@ const CATEGORY_WEIGHTS: Record<string, number> = {
   jailbreak: 0.75,
   data_exfiltration: 0.7,
   system_prompt_leak: 0.65,
-  indirect_injection: 0.6,
+  indirect_injection: 0.85,
   social_engineering: 0.55,
 };
 
@@ -76,7 +76,9 @@ export function calculateRiskScore(input: ScoreInput): ScoreOutput {
   // Monotonic floor at 80% of max pattern severity (softened from 100%).
   // Preserves security property (patterns can't be lowered dramatically)
   // while allowing weighted average to provide up to 20% nuance.
-  const floor = maxPatternSeverity * 0.8;
+  // Graduated floor: 85% for high-severity (>=8), 80% for lower
+  const floorPercent = maxPatternSeverity >= 8 ? 0.85 : 0.8;
+  const floor = maxPatternSeverity * floorPercent;
   const monotonicFloorApplied = combined < floor && floor > 0;
   const riskScore = Math.max(
     0,

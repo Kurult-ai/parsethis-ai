@@ -149,7 +149,12 @@ export type SandboxOutcome =
 // ─── Environment Checks ────────────────────────────────────────────────────
 
 export function canUseSandbox(): boolean {
-  return !!(process.env.SANDBOX_URL && process.env.SANDBOX_HMAC_SECRET);
+  if (!process.env.SANDBOX_URL || !process.env.SANDBOX_HMAC_SECRET) return false;
+  if (process.env.NODE_ENV === "production" && !process.env.SANDBOX_URL.startsWith("https://")) {
+    console.error("[SECURITY] SANDBOX_URL must use HTTPS in production");
+    return false;
+  }
+  return true;
 }
 
 // isFallbackAllowed removed — unisolated execution is never allowed (security hardening)

@@ -32,9 +32,42 @@ const BLOCKED_RANGES = [...BLOCKED_IPV4, ...BLOCKED_IPV6];
 
 const BLOCKED_HOSTNAMES = new Set([
   "localhost",
+  // GCP
   "metadata.google.internal",
   "metadata.goog",
+  // AWS
+  "instance-data",
+  // Azure
+  "metadata.azure.internal",
+  // Kubernetes
+  "kubernetes.default.svc",
+  "kubernetes.default",
 ]);
+
+/**
+ * Canonicalize non-standard IP literals to dotted-quad for blocked-IP checking.
+ * Catches decimal (http://2130706433) and octal (http://0177.0.0.1) encodings.
+ */
+function canonicalizeIp(hostname: string): string | null {
+  // Decimal integer IP (e.g., 2130706433 = 127.0.0.1)
+  if (/^\d{1,10}$/.test(hostname)) {
+    const num = parseInt(hostname, 10);
+    if (num >= 0 && num <= 0xFFFFFFFF) {
+      return [(num >>> 24) & 0xFF, (num >>> 16) & 0xFF, (num >>> 8) & 0xFF, num & 0xFF].join(".");
+    }
+  }
+  // Octal-encoded IP (e.g., 0177.0.0.1)
+  if (/^0[0-7]*\.\d/.test(hostname)) {
+    const parts = hostname.split(".");
+    if (parts.length === 4) {
+      const decimals = parts.map(p => p.startsWith("0") && p.length > 1 ? parseInt(p, 8) : parseInt(p, 10));
+      if (decimals.every(d => d >= 0 && d <= 255)) {
+        return decimals.join(".");
+      }
+    }
+  }
+  return null;
+}
 
 function isBlockedIp(ip: string): boolean {
   return BLOCKED_RANGES.some((r) => r.test(ip));
@@ -56,6 +89,15 @@ export async function validateUrl(
 
   if (BLOCKED_HOSTNAMES.has(parsed.hostname.toLowerCase())) {
     return { safe: false, reason: "Blocked hostname" };
+  }
+
+  // Canonicalize decimal/octal IP encodings before standard checks
+  const canonicalized = canonicalizeIp(parsed.hostname);
+  if (canonicalized) {
+    if (isBlockedIp(canonicalized)) {
+      return { safe: false, reason: `Encoded IP ${parsed.hostname} resolves to private/internal ${canonicalized}` };
+    }
+    return { safe: true, resolvedIp: canonicalized };
   }
 
   // Block IP literals directly (both [::1] bracket-style and 127.0.0.1 dot-style)

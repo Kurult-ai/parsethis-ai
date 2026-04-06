@@ -151,6 +151,10 @@ export const INJECTION_PATTERNS: Array<{
   { pattern: /&#\d{2,5};/i, category: "prompt_injection", severity: 5, label: "HTML decimal entity encoding" },
   { pattern: /%[0-9a-f]{2}%[0-9a-f]{2}%[0-9a-f]{2}/i, category: "prompt_injection", severity: 5, label: "URL encoded sequence" },
 
+  // Encoding + suspicious payload heuristic (pre-encoded payloads invisible to other patterns)
+  { pattern: /(?:rot13|base64|decode|decrypt|deobfuscate|unescape)\b[^.]{0,50}[a-z]{10,}/i, category: "prompt_injection", severity: 6, label: "Encoding with suspicious payload" },
+  { pattern: /(?:hex|0x|\\x)[^.]{0,30}(?:[0-9a-f]{2}[\s,]{0,2}){8,}/i, category: "prompt_injection", severity: 5, label: "Hex-encoded instruction sequence" },
+
   // ── Enhanced system prompt extraction (10 patterns) ───────────────────────
   { pattern: /(?:show|display|print|output|reveal|tell\s+me)\s+(?:your|the)\s+(?:system|initial|original|full)\s+(?:prompt|instructions|message|configuration)/i, category: "system_prompt_leak", severity: 7, label: "System prompt extraction" },
   { pattern: /what\s+(?:were|are)\s+you\s+(?:told|instructed|programmed)\s+to\s+do/i, category: "system_prompt_leak", severity: 6, label: "Instruction query" },

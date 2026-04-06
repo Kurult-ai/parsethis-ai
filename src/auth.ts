@@ -1,5 +1,5 @@
 import { Context, Next } from "hono";
-import { timingSafeEqual } from "node:crypto";
+import { timingSafeEqual, createHash } from "node:crypto";
 import {
   validateApiKey as validateApiKeyFromService,
   createApiKey as createApiKeyFromService,
@@ -66,7 +66,8 @@ async function checkRateLimit(key: string, limit: number): Promise<{ allowed: bo
       const redis = getRedis();
       const connected = await ensureRedisConnected();
       if (connected) {
-        const rateKey = `rate:${key}`;
+        const keyHash = createHash("sha256").update(key).digest("hex").slice(0, 16);
+        const rateKey = `rate:${keyHash}`;
         const multi = redis.multi();
         multi.incr(rateKey);
         multi.pttl(rateKey);

@@ -17,25 +17,21 @@ const UNICODE_WHITESPACE = /[\u00A0\u2000-\u200A\u2028\u2029\u205F\u3000]/g;
 
 // Homoglyph mapping — Cyrillic and Greek characters that look like Latin
 const HOMOGLYPHS: Record<string, string> = {
-  '\u0430': 'a', // Cyrillic а
-  '\u0435': 'e', // Cyrillic е
-  '\u043E': 'o', // Cyrillic о
-  '\u0440': 'p', // Cyrillic р
-  '\u0441': 'c', // Cyrillic с
-  '\u0443': 'y', // Cyrillic у (approximate)
-  '\u0445': 'x', // Cyrillic х
-  '\u0456': 'i', // Cyrillic і
-  '\u0410': 'A', // Cyrillic А
-  '\u0412': 'B', // Cyrillic В
-  '\u0415': 'E', // Cyrillic Е
-  '\u041A': 'K', // Cyrillic К
-  '\u041C': 'M', // Cyrillic М
-  '\u041D': 'H', // Cyrillic Н
-  '\u041E': 'O', // Cyrillic О
-  '\u0420': 'P', // Cyrillic Р
-  '\u0421': 'C', // Cyrillic С
-  '\u0422': 'T', // Cyrillic Т
-  '\u0425': 'X', // Cyrillic Х
+  // Cyrillic lowercase
+  '\u0430': 'a', '\u0435': 'e', '\u043E': 'o', '\u0440': 'p',
+  '\u0441': 'c', '\u0443': 'y', '\u0445': 'x', '\u0456': 'i',
+  // Cyrillic uppercase
+  '\u0410': 'A', '\u0412': 'B', '\u0415': 'E', '\u041A': 'K',
+  '\u041C': 'M', '\u041D': 'H', '\u041E': 'O', '\u0420': 'P',
+  '\u0421': 'C', '\u0422': 'T', '\u0425': 'X',
+  // Greek lowercase (visual confusables not collapsed by NFKD)
+  '\u03B1': 'a', '\u03B5': 'e', '\u03B9': 'i', '\u03BF': 'o',
+  '\u03C1': 'p', '\u03C4': 't', '\u03C5': 'u', '\u03BA': 'k', '\u03BD': 'v',
+  // Greek uppercase
+  '\u0391': 'A', '\u0392': 'B', '\u0395': 'E', '\u0397': 'H',
+  '\u0399': 'I', '\u039A': 'K', '\u039C': 'M', '\u039D': 'N',
+  '\u039F': 'O', '\u03A1': 'P', '\u03A4': 'T', '\u03A5': 'Y',
+  '\u03A7': 'X', '\u0396': 'Z',
 };
 
 // Build a regex that matches any homoglyph character
@@ -71,6 +67,10 @@ export function normalizeForDetection(text: string): string {
 
   // 6. Strip combining diacritical marks
   normalized = normalized.replace(COMBINING_MARKS, "");
+
+  // 7. Fullwidth Latin → ASCII (U+FF21-FF3A → A-Z, U+FF41-FF5A → a-z)
+  normalized = normalized.replace(/[\uFF21-\uFF3A]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFF21 + 0x41));
+  normalized = normalized.replace(/[\uFF41-\uFF5A]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFF41 + 0x61));
 
   return normalized;
 }
