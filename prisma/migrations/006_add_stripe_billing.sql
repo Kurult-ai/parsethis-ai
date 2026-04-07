@@ -1,5 +1,5 @@
 -- Stripe billing: subscriptions and usage tracking
-CREATE TABLE subscriptions (
+CREATE TABLE IF NOT EXISTS subscriptions (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   api_key_id TEXT NOT NULL UNIQUE REFERENCES api_keys(id) ON DELETE CASCADE,
   stripe_customer_id TEXT NOT NULL UNIQUE,
@@ -13,7 +13,7 @@ CREATE TABLE subscriptions (
   updated_at TIMESTAMP NOT NULL DEFAULT now()
 );
 
-CREATE TABLE billing_usage (
+CREATE TABLE IF NOT EXISTS billing_usage (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   api_key_id TEXT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
   period_start TIMESTAMP NOT NULL,
@@ -24,6 +24,6 @@ CREATE TABLE billing_usage (
   created_at TIMESTAMP NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX idx_billing_usage_key_period ON billing_usage(api_key_id, period_start);
-CREATE INDEX idx_subscriptions_stripe_customer ON subscriptions(stripe_customer_id);
-CREATE INDEX idx_subscriptions_status ON subscriptions(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_usage_key_period ON billing_usage(api_key_id, period_start);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer ON subscriptions(stripe_customer_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
