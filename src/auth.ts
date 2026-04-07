@@ -12,6 +12,7 @@ import { getRedis, isRedisAvailable, ensureRedisConnected } from "./redis.js";
 import { getCachedPolicyData, cachePolicyData } from "./result-store.js";
 import type { AppEnv, ScreeningPolicy } from "./types.js";
 import { auditLog } from "./lib/audit-log.js";
+import { incrementUsage } from "./lib/usage-tracker.js";
 
 /** Timing-safe string comparison to prevent timing attacks on key validation */
 function safeCompare(a: string, b: string): boolean {
@@ -295,6 +296,11 @@ export function authMiddleware(requiredScope?: string) {
       rate_limit: apiKeyRecord.rateLimit,
       tier: apiKeyRecord.tier,
     });
+
+    // Track billing usage for paid tiers (fire-and-forget)
+    if (apiKeyRecord.tier !== "free") {
+      incrementUsage(apiKeyRecord.id).catch(() => {});
+    }
 
     // Load screening policy (from Redis cache or DB)
     const cachedPolicy = await getCachedPolicyData(apiKeyRecord.id);

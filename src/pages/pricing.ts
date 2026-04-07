@@ -3,15 +3,149 @@ import { organizationSchema } from "../lib/schema.js";
 
 export function renderPricingPage(baseUrl: string): string {
   const content = `
-<!-- Chunk 1: Overview (Miller's Law: 1 of 5) -->
+<!-- Chunk 1: Hero -->
 <div class="section-chunk animate-in">
   <h1>Pricing</h1>
-  <p class="answer-capsule">Parse is free to start. Generate an API key instantly via POST /v1/keys/generate &mdash; no credit card, no sign-up, 60 requests per minute included. For higher volume or anonymous access, use x402 USDC micropayments on Base L2.</p>
+  <p class="answer-capsule">Free to start. Scale with Pro, Team, or Enterprise.</p>
 </div>
 
-<!-- Chunk 2: x402 payment (Miller's Law: 2 of 5) -->
+<!-- Chunk 2: Tier cards -->
 <div class="section-chunk">
-  <h2 style="margin-top:0;display:flex;align-items:center;gap:12px;">How does x402 payment work? <span class="badge badge-accent">Recommended</span></h2>
+  <h2 style="margin-top:0;">Plans</h2>
+
+  <div class="card-grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));">
+
+    <!-- Free -->
+    <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Free</div>
+        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$0</div>
+        <div style="font-size:13px;color:var(--text-dim);">forever</div>
+      </div>
+      <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">10 req/min</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">30-day key expiry</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Self-service</li>
+        <li style="padding:6px 0;">5 sandbox/hr</li>
+      </ul>
+      <a href="/v1/keys/generate" class="btn btn-outline" style="width:100%;text-align:center;">Generate Free Key</a>
+    </div>
+
+    <!-- Pro -->
+    <div class="card" style="display:flex;flex-direction:column;gap:12px;border-color:var(--accent);position:relative;">
+      <span class="badge badge-accent" style="position:absolute;top:-10px;right:16px;">Most Popular</span>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Pro</div>
+        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$49<span style="font-size:14px;font-weight:400;color:var(--text-dim);">/mo</span></div>
+        <div style="font-size:13px;color:var(--text-dim);">10K requests included</div>
+      </div>
+      <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">60 req/min</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">$0.003/overage request</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">50 sandbox/hr</li>
+        <li style="padding:6px 0;">Self-serve checkout</li>
+      </ul>
+      <a href="/v1/billing/checkout" class="btn btn-primary" style="width:100%;text-align:center;" onclick="event.preventDefault();fetch('/v1/billing/checkout',{method:'POST',headers:{'Authorization':'Bearer '+(localStorage.getItem('pfa_key')||''),'Content-Type':'application/json'},body:JSON.stringify({tier:'pro'})}).then(r=>r.json()).then(d=>{if(d.url)window.location=d.url;else if(d.error)alert(d.error);}).catch(()=>window.location='mailto:hello@parsethis.ai?subject=Pro%20Plan')">Start Pro</a>
+    </div>
+
+    <!-- Team -->
+    <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Team</div>
+        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$199<span style="font-size:14px;font-weight:400;color:var(--text-dim);">/mo</span></div>
+        <div style="font-size:13px;color:var(--text-dim);">50K requests included</div>
+      </div>
+      <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">200 req/min</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">$0.002/overage request</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">200 sandbox/hr</li>
+        <li style="padding:6px 0;">Priority support</li>
+      </ul>
+      <a href="mailto:hello@parsethis.ai?subject=Team%20Plan" class="btn btn-outline" style="width:100%;text-align:center;">Contact Sales</a>
+    </div>
+
+    <!-- Enterprise -->
+    <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Enterprise</div>
+        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">Custom</div>
+        <div style="font-size:13px;color:var(--text-dim);">volume pricing</div>
+      </div>
+      <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">1,000 req/min</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Custom SLAs</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">1,000 sandbox/hr</li>
+        <li style="padding:6px 0;">Dedicated support</li>
+      </ul>
+      <a href="mailto:hello@parsethis.ai?subject=Enterprise%20Plan" class="btn btn-outline" style="width:100%;text-align:center;">Contact Sales</a>
+    </div>
+
+  </div>
+</div>
+
+<!-- Chunk 3: Cost calculator -->
+<div class="section-chunk">
+  <h2 style="margin-top:0;">Cost Calculator</h2>
+  <p class="answer-capsule">Estimate your monthly cost across plans. Drag the slider to set your expected request volume.</p>
+
+  <div class="card" style="padding:24px;">
+    <label for="calc-slider" style="font-size:14px;font-weight:600;display:block;margin-bottom:8px;">
+      Monthly requests: <span id="calc-value" style="color:var(--accent2);">10,000</span>
+    </label>
+    <input type="range" id="calc-slider" min="0" max="200000" step="1000" value="10000"
+      style="width:100%;accent-color:var(--accent);cursor:pointer;" aria-label="Monthly request volume">
+
+    <div class="card-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-top:20px;gap:12px;" id="calc-results">
+      <div class="card" style="text-align:center;padding:16px;">
+        <div style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">Free</div>
+        <div id="calc-free" style="font-size:20px;font-weight:700;">$0</div>
+      </div>
+      <div class="card" style="text-align:center;padding:16px;border-color:var(--accent);">
+        <div style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">Pro</div>
+        <div id="calc-pro" style="font-size:20px;font-weight:700;">$49</div>
+      </div>
+      <div class="card" style="text-align:center;padding:16px;">
+        <div style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">Team</div>
+        <div id="calc-team" style="font-size:20px;font-weight:700;">$199</div>
+      </div>
+      <div class="card" style="text-align:center;padding:16px;">
+        <div style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">x402</div>
+        <div id="calc-x402" style="font-size:20px;font-weight:700;">$50</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    var slider = document.getElementById('calc-slider');
+    var valDisplay = document.getElementById('calc-value');
+    var elFree = document.getElementById('calc-free');
+    var elPro = document.getElementById('calc-pro');
+    var elTeam = document.getElementById('calc-team');
+    var elX402 = document.getElementById('calc-x402');
+
+    function fmt(n) {
+      return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    }
+
+    function update() {
+      var reqs = parseInt(slider.value, 10);
+      valDisplay.textContent = reqs.toLocaleString();
+      elFree.textContent = '$0';
+      elPro.textContent = fmt(49 + Math.max(0, reqs - 10000) * 0.003);
+      elTeam.textContent = fmt(199 + Math.max(0, reqs - 50000) * 0.002);
+      elX402.textContent = fmt(reqs * 0.005);
+    }
+
+    slider.addEventListener('input', update);
+    update();
+  })();
+  </script>
+</div>
+
+<!-- Chunk 4: x402 micropayments -->
+<div class="section-chunk">
+  <h2 style="margin-top:0;">How does x402 payment work?</h2>
 
   <p class="answer-capsule">x402 uses the HTTP 402 Payment Required standard. Send USDC on Base L2 &mdash; no API key, no account, no credit card. Include an <code>X-PAYMENT</code> header with a signed USDC transfer on every request. A facilitator verifies the payment on-chain before the request is processed.</p>
 
@@ -60,77 +194,7 @@ res = session.post("https://parsethis.ai/v1/parse", json={"prompt": "..."})</cod
   <pre><code>npx @x402/purl POST https://parsethis.ai/v1/parse -d '{"prompt":"..."}'</code></pre>
 </div>
 
-<!-- Chunk 3: Tier comparison (Miller's Law: 3 of 5) -->
-<div class="section-chunk">
-  <h2 style="margin-top:0;">Is there a free tier?</h2>
-
-  <p class="answer-capsule">Yes. Generate a free API key instantly via <code>POST /v1/keys/generate</code> &mdash; no credit card, no sign-up. Free keys include rate limits and a daily cost cap. Upgrade to Pro, Team, or Enterprise for higher limits and SLAs.</p>
-
-  <div class="table-wrapper">
-    <table>
-      <thead>
-        <tr>
-          <th></th>
-          <th>Free</th>
-          <th>Pro</th>
-          <th>Team</th>
-          <th>Enterprise</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>Rate limit</strong></td>
-          <td>60/min</td>
-          <td>60/min</td>
-          <td>200/min</td>
-          <td>1,000/min</td>
-        </tr>
-        <tr>
-          <td><strong>Sandbox executions</strong></td>
-          <td>5/hour</td>
-          <td>50/hour</td>
-          <td>200/hour</td>
-          <td>1,000/hour</td>
-        </tr>
-        <tr>
-          <td><strong>Daily cost cap</strong></td>
-          <td>$0.50</td>
-          <td>$10</td>
-          <td>$50</td>
-          <td>$500</td>
-        </tr>
-        <tr>
-          <td><strong>Max auto-block threshold<sup><a href="#fn-threshold">*</a></sup></strong></td>
-          <td>5</td>
-          <td>7</td>
-          <td>9</td>
-          <td>10</td>
-        </tr>
-        <tr>
-          <td><strong>Key expiry</strong></td>
-          <td>30 days</td>
-          <td>30 days</td>
-          <td>30 days</td>
-          <td>Custom</td>
-        </tr>
-        <tr>
-          <td><strong>API key generation</strong></td>
-          <td>Self-service</td>
-          <td><a href="mailto:hello@parsethis.ai">Contact</a></td>
-          <td><a href="mailto:hello@parsethis.ai">Contact</a></td>
-          <td><a href="mailto:hello@parsethis.ai">Contact</a></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <p id="fn-threshold" style="font-size:13px;color:var(--text-dim);margin-top:8px;">* <strong>Auto-block threshold</strong> is the maximum risk score you can set via <code>PUT /v1/policy</code>. Higher tiers allow finer-grained blocking. Free tier caps at 5, meaning prompts scored 5+ are auto-blocked.</p>
-
-  <p style="font-size:13px;color:var(--text-dim);">For Pro, Team, or Enterprise plans, contact <a href="mailto:hello@parsethis.ai">hello@parsethis.ai</a>.</p>
-
-</div>
-
-<!-- Chunk 4: Decision guide (Miller's Law: 4 of 5) -->
+<!-- Chunk 5: Decision guide -->
 <div class="section-chunk">
   <h2 style="margin-top:0;">Should I use x402 or an API key?</h2>
 
@@ -169,7 +233,7 @@ res = session.post("https://parsethis.ai/v1/parse", json={"prompt": "..."})</cod
   </div>
 </div>
 
-<!-- Chunk 5: Free endpoints (Miller's Law: 5 of 5) -->
+<!-- Chunk 6: Free endpoints -->
 <div class="section-chunk">
   <h2 style="margin-top:0;">What endpoints are free?</h2>
 
@@ -185,9 +249,9 @@ res = session.post("https://parsethis.ai/v1/parse", json={"prompt": "..."})</cod
 `;
 
   return renderPage({
-    title: "Pricing — Free Tier & Pay-per-Request",
+    title: "Pricing — Free Tier, Pro $49/mo, Team $199/mo",
     description:
-      "Parse pricing: free tier with 60 req/min, no credit card needed. Optional pay-per-request with x402 USDC micropayments.",
+      "Parse pricing: free tier with 10 req/min. Pro $49/mo with 10K requests included. Team $199/mo with 50K included. x402 USDC micropayments available.",
     path: "/pricing",
     content,
     baseUrl,
@@ -196,6 +260,6 @@ res = session.post("https://parsethis.ai/v1/parse", json={"prompt": "..."})</cod
       { name: "Home", href: "/" },
       { name: "Pricing", href: "/pricing" },
     ],
-    lastUpdated: "2026-03-22",
+    lastUpdated: "2026-04-06",
   });
 }

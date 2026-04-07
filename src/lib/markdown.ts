@@ -150,3 +150,66 @@ export function listContent(
     return [];
   }
 }
+
+/**
+ * List all blog posts across all categories in content/blog/{category}/.
+ * Returns ContentFile[] with category added to frontmatter, sorted by date descending.
+ */
+export function listBlogPosts(): ContentFile[] {
+  const blogDir = join(CONTENT_DIR, "blog");
+  if (!existsSync(blogDir)) return [];
+
+  try {
+    const categories = readdirSync(blogDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name !== "configs");
+
+    const posts: ContentFile[] = [];
+    for (const catDir of categories) {
+      const category = catDir.name.toLowerCase().replace(/\s+/g, "-");
+      const catPath = join(blogDir, catDir.name);
+      const files = readdirSync(catPath).filter((f) => f.endsWith(".md"));
+
+      for (const filename of files) {
+        const filePath = join(catPath, filename);
+        const file = loadMarkdownFile(filePath);
+        if (!file || !file.frontmatter.title || !file.frontmatter.date) continue;
+        file.frontmatter.category = category;
+        posts.push(file);
+      }
+    }
+
+    posts.sort((a, b) => {
+      const da = a.frontmatter.date || "";
+      const db = b.frontmatter.date || "";
+      return new Date(db).getTime() - new Date(da).getTime();
+    });
+
+    return posts;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Load a single blog post by category and slug (matched against frontmatter slug field).
+ */
+export function loadBlogPost(category: string, slug: string): ContentFile | null {
+  const catPath = join(CONTENT_DIR, "blog", category);
+  if (!existsSync(catPath)) return null;
+
+  try {
+    const files = readdirSync(catPath).filter((f) => f.endsWith(".md"));
+    for (const filename of files) {
+      const filePath = join(catPath, filename);
+      const file = loadMarkdownFile(filePath);
+      if (!file) continue;
+      if (file.frontmatter.slug === slug) {
+        file.frontmatter.category = category;
+        return file;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

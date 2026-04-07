@@ -100,6 +100,7 @@ export function renderPage(options: PageOptions): string {
     { href: "/docs", label: "Docs" },
     { href: "/pricing", label: "Pricing" },
     { href: "/playground", label: "Playground" },
+    { href: "/blog", label: "Blog" },
     { href: "/faq", label: "FAQ" },
   ];
   const navLinksHtml = navLinks
@@ -578,7 +579,7 @@ export function renderPage(options: PageOptions): string {
       <div class="nav-links" id="nav-links">
       ${navLinksHtml}
       <a href="${GITHUB_URL}" class="external" target="_blank" rel="noopener noreferrer">GitHub<span class="sr-only"> (opens in new tab)</span></a>
-      <a href="/docs/quickstart" class="nav-cta">Quick Start</a>
+      <a href="/docs/quickstart" class="nav-cta">Get Started Free</a>
       </div>
     </nav>
   </header>
@@ -601,11 +602,13 @@ export function renderPage(options: PageOptions): string {
         <div class="footer-links">
           <a href="/docs">Docs</a>
           <a href="/docs/api">API</a>
+          <a href="/blog">Blog</a>
           <a href="/skill">Skill</a>
           <a href="/llms.txt">llms.txt</a>
           <a href="/openapi.json">OpenAPI</a>
           <a href="${GITHUB_URL}" target="_blank" rel="noopener noreferrer">GitHub<span class="sr-only"> (opens in new tab)</span></a>
           <a href="/pricing">Pricing</a>
+          <a href="/status">Status</a>
           <a href="/privacy">Privacy</a>
         </div>
       </nav>

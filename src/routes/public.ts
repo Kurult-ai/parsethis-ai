@@ -20,8 +20,10 @@ import { renderPricingPage } from "../pages/pricing.js";
 import { getFaviconSvg } from "../pages/favicon.js";
 import { getOgImageSvg } from "../pages/og-image.js";
 import { renderScreeningDashboardPage } from "../pages/screening-dashboard.js";
+import { renderBillingDashboardPage } from "../pages/billing.js";
 import { renderPromptGuardLandingPage } from "../pages/prompt-guard-landing.js";
 import { renderPromptGuardPlaygroundPage } from "../pages/prompt-guard-playground.js";
+import { renderBlogListingPage, renderBlogPostPage } from "../pages/blog.js";
 
 export const publicRoutes = new Hono();
 
@@ -166,6 +168,14 @@ publicRoutes.get("/dashboard", (c) => {
 publicRoutes.get("/dashboard/screening", async (c) => {
   const baseUrl = getBaseUrl(c);
   const html = await renderScreeningDashboardPage(baseUrl);
+  return c.html(html);
+});
+
+// Billing dashboard
+publicRoutes.get("/dashboard/billing", authMiddleware("evaluate"), async (c) => {
+  const baseUrl = getBaseUrl(c);
+  const apiKey = c.get("apiKey");
+  const html = await renderBillingDashboardPage(baseUrl, apiKey.id);
   return c.html(html);
 });
 
@@ -366,6 +376,24 @@ publicRoutes.get("/guides/:slug", (c) => {
 publicRoutes.get("/compare/:slug", (c) => {
   const wantsMarkdown = (c.req.header("Accept") || "").includes("text/markdown");
   const result = renderComparePage(c.req.param("slug"), getBaseUrl(c), wantsMarkdown);
+  if (!result) return c.json({ error: "Not found" }, 404);
+  if ("markdown" in result) {
+    c.header("Content-Type", "text/markdown; charset=utf-8");
+    c.header("Vary", "Accept");
+    return c.text(result.markdown);
+  }
+  return c.html(result.html);
+});
+
+// Blog listing
+publicRoutes.get("/blog", (c) => {
+  return c.html(renderBlogListingPage(getBaseUrl(c)));
+});
+
+// Blog post (supports Accept: text/markdown)
+publicRoutes.get("/blog/:category/:slug", (c) => {
+  const wantsMarkdown = (c.req.header("Accept") || "").includes("text/markdown");
+  const result = renderBlogPostPage(c.req.param("category"), c.req.param("slug"), getBaseUrl(c), wantsMarkdown);
   if (!result) return c.json({ error: "Not found" }, 404);
   if ("markdown" in result) {
     c.header("Content-Type", "text/markdown; charset=utf-8");
@@ -579,6 +607,9 @@ publicRoutes.get("/privacy", (c) => {
     lastUpdated: "2026-03-23",
   }));
 });
+
+// Status page redirect
+publicRoutes.get("/status", (c) => c.redirect("/health"));
 
 // Skill install script (bash, pipe-able)
 publicRoutes.get("/skill/install.sh", (c) => {

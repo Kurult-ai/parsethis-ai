@@ -138,6 +138,24 @@ export async function countSelfServiceKeys(): Promise<number> {
   });
 }
 
+export async function upgradeApiKeyTier(id: string, tier: string): Promise<void> {
+  const rateLimit = TIER_RATE_LIMITS[tier] ?? TIER_RATE_LIMITS.free;
+  const key = await prisma.apiKey.update({
+    where: { id },
+    data: { tier, rateLimit, expiresAt: null },
+  });
+  await invalidateApiKeyCache(key.keyPrefix);
+}
+
+export async function downgradeApiKeyTier(id: string): Promise<void> {
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const key = await prisma.apiKey.update({
+    where: { id },
+    data: { tier: "free", rateLimit: 10, expiresAt },
+  });
+  await invalidateApiKeyCache(key.keyPrefix);
+}
+
 function toApiKeyRecord(row: {
   id: string;
   userId: string;

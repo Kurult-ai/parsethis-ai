@@ -26,6 +26,8 @@ model ApiKey {
   usageRecords     UsageRecord[]
   screeningPolicy  ScreeningPolicy?
   screeningEvents  ScreeningEvent[]
+  subscription     Subscription?
+  billingUsage     BillingUsage[]
 
   @@map("api_keys")
 }
@@ -144,4 +146,39 @@ model PaymentRecord {
   @@index([payer], name: "idx_payments_payer")
   @@index([timestamp(sort: Desc)], name: "idx_payments_timestamp")
   @@map("payment_records")
+}
+
+model Subscription {
+  id                    String   @id @default(cuid())
+  apiKeyId              String   @unique @map("api_key_id")
+  stripeCustomerId      String   @unique @map("stripe_customer_id")
+  stripeSubscriptionId  String   @unique @map("stripe_subscription_id")
+  stripePriceId         String   @map("stripe_price_id")
+  status                String   @default("active")
+  currentPeriodStart    DateTime @map("current_period_start")
+  currentPeriodEnd      DateTime @map("current_period_end")
+  cancelAtPeriodEnd     Boolean  @default(false) @map("cancel_at_period_end")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@index([status], name: "idx_subscriptions_status")
+  @@map("subscriptions")
+}
+
+model BillingUsage {
+  id              String   @id @default(cuid())
+  apiKeyId        String   @map("api_key_id")
+  periodStart     DateTime @map("period_start")
+  periodEnd       DateTime @map("period_end")
+  requestCount    Int      @default(0) @map("request_count")
+  overageCount    Int      @default(0) @map("overage_count")
+  reportedToStripe Boolean @default(false) @map("reported_to_stripe")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@unique([apiKeyId, periodStart], name: "idx_billing_usage_key_period")
+  @@map("billing_usage")
 }

@@ -13,6 +13,7 @@ import { screenOutputRoutes } from "./routes/screen-output.js";
 import { agentTrustRoutes } from "./routes/agent-trust.js";
 import { discoveryRoutes } from "./routes/discovery.js";
 import { screeningMetricsRoutes } from "./routes/screening-metrics.js";
+import { billingRoutes, billingWebhookRoute } from "./routes/billing.js";
 import { contentNegotiation } from "./lib/content-negotiation.js";
 
 export const app = new Hono();
@@ -53,7 +54,7 @@ app.use("/*", async (c, next) => {
   c.header("Referrer-Policy", "strict-origin-when-cross-origin");
   c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   c.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-  c.header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'");
+  c.header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://img.shields.io; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com");
 });
 
 // Global llms.txt Link header for AI agent discovery
@@ -65,6 +66,9 @@ app.use("/*", async (c, next) => {
 
 // Content negotiation (markdown vs HTML)
 app.use("/*", contentNegotiation());
+
+// Stripe webhook needs raw body — mount before bodyLimit
+app.route("/", billingWebhookRoute);
 
 // Request body size limit (1MB)
 app.use("/*", bodyLimit({ maxSize: 1024 * 1024 }));
@@ -102,3 +106,4 @@ app.route("/", policyRoutes);
 app.route("/", screenOutputRoutes);
 app.route("/", agentTrustRoutes);
 app.route("/", screeningMetricsRoutes);
+app.route("/", billingRoutes);

@@ -4,13 +4,25 @@ import {
   webApplicationSchema,
 } from "../lib/schema.js";
 import { GITHUB_URL } from "../lib/constants.js";
+import { listBlogPosts } from "../lib/markdown.js";
 
 export function renderLandingPage(baseUrl: string): string {
   const mcpConfig = JSON.stringify({ mcpServers: { "prompt-guard": { command: "npx", args: ["-y", "@parsethis/mcp-prompt-guard"], env: { PARSETHIS_API_KEY: "your-key-here" } } } }, null, 2);
 
+  const blogPosts = listBlogPosts().slice(0, 3);
+  const blogCardsHtml = blogPosts.map(post => {
+    const fm = post.frontmatter;
+    return `<a href="/blog/${fm.category}/${fm.slug}" class="card" style="text-decoration:none;color:inherit;">
+      <div style="font-weight:600;margin-bottom:6px;">${fm.title}</div>
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:8px;">${fm.description || ""}</div>
+      <div style="font-size:12px;color:var(--text-dim);">${fm.date} · ${fm.reading_time || post.readingTime + " min read"}</div>
+    </a>`;
+  }).join("\n    ");
+
   const content = `
 <!-- Chunk 1: Hero — value prop + CTAs (Miller's Law: 1 of 7) -->
 <div class="section-chunk animate-in">
+  <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:var(--accent2);margin-bottom:12px;">Independent Prompt Security</div>
   <h1>Stop Prompt Injection Before It Reaches Your Agent</h1>
 
   <p class="answer-capsule" style="max-width:720px;margin:0 auto 28px;">Every AI agent that accepts user input, tool output, or messages from other agents is vulnerable to prompt injection &mdash; attacks that hijack your agent into leaking data, ignoring safety guardrails, or executing unauthorized actions. Parse catches these attacks before your agent acts on them.</p>
@@ -39,6 +51,29 @@ export function renderLandingPage(baseUrl: string): string {
       <div style="font-weight:600;margin-bottom:4px;">Block threats</div>
       <div style="font-size:13px;color:var(--text-dim);">Refuse if risk_score &ge; 7<br>Log if 4&ndash;6, allow if &le; 3</div>
     </div>
+  </div>
+</div>
+
+<!-- Why Parse? — Independence narrative -->
+<div class="section-chunk">
+  <h2 style="margin-top:0;">Why Parse?</h2>
+  <p class="answer-capsule" style="max-width:720px;">The AI security market is consolidating fast. When prompt security tools get acquired by LLM providers, their APIs get sunset, detection models get optimized for one vendor, and your multi-model stack loses coverage. Parse stays independent so your security layer doesn't depend on any single vendor's roadmap.</p>
+  <p style="font-size:14px;"><a href="/blog/thought-leadership/why-we-built-independent-prompt-security-api">Read: Why we built an independent prompt security API &rarr;</a></p>
+</div>
+
+<!-- Built for — social proof -->
+<div class="section-chunk">
+  <h2 style="margin-top:0;">Built for the agent ecosystem</h2>
+  <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:center;padding:16px 0;">
+    <span class="badge badge-default" style="font-size:14px;padding:8px 16px;">LangChain</span>
+    <span class="badge badge-default" style="font-size:14px;padding:8px 16px;">CrewAI</span>
+    <span class="badge badge-default" style="font-size:14px;padding:8px 16px;">Claude Code</span>
+    <span class="badge badge-default" style="font-size:14px;padding:8px 16px;">Cursor</span>
+    <span class="badge badge-default" style="font-size:14px;padding:8px 16px;">OpenAI Agents</span>
+  </div>
+  <div style="display:flex;gap:12px;justify-content:center;align-items:center;margin-top:8px;">
+    <img src="https://img.shields.io/github/stars/nicobailon/parse-for-agents?style=flat&color=6366f1" alt="GitHub stars" height="20">
+    <span class="badge badge-green">Open Source</span>
   </div>
 </div>
 
@@ -127,51 +162,21 @@ function copyPrompt(btn) {
 <!-- Chunk 5: Detection pipeline (Miller's Law: 5 of 7) -->
 <div class="section-chunk">
   <h2 style="margin-top:0;">How does detection work?</h2>
-  <p class="answer-capsule">Parse uses a three-layer detection pipeline: pattern matching scans for 50+ known injection signatures, LLM-powered deep analysis catches novel attacks by evaluating semantic intent, and optional sandbox execution runs suspicious prompts in an isolated environment. Each layer contributes to a 0&ndash;10 composite risk score across 8 categories.</p>
+  <p class="answer-capsule">Parse uses a three-layer detection pipeline: 100+ regex patterns scan for known injection signatures across 9 risk categories, LLM-powered deep analysis catches novel attacks by evaluating semantic intent, and optional sandbox execution runs suspicious prompts in an isolated environment. Each layer contributes to a 0&ndash;10 composite risk score.</p>
 
-  <div class="table-wrapper">
-    <table>
-      <caption class="sr-only">Prompt screening approach comparison</caption>
-      <thead>
-        <tr>
-          <th>Approach</th>
-          <th>Detection Rate</th>
-          <th>Latency</th>
-          <th>False Positives</th>
-          <th>Sandbox</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Pattern matching only</td>
-          <td>~70%</td>
-          <td>&lt;5ms</td>
-          <td>High</td>
-          <td>No</td>
-        </tr>
-        <tr>
-          <td>LLM analysis only</td>
-          <td>~85%</td>
-          <td>200&ndash;500ms</td>
-          <td>Medium</td>
-          <td>No</td>
-        </tr>
-        <tr style="background:var(--accent-dim);">
-          <td><strong>Parse (combined)</strong></td>
-          <td><strong>Multi-layer</strong></td>
-          <td><strong>&lt;200ms</strong></td>
-          <td><strong>Low</strong></td>
-          <td><strong>Yes</strong></td>
-        </tr>
-        <tr>
-          <td>No screening</td>
-          <td>0%</td>
-          <td>0ms</td>
-          <td>N/A</td>
-          <td>No</td>
-        </tr>
-      </tbody>
-    </table>
+  <div class="card-grid" style="max-width:800px;margin:0 auto;">
+    <div class="card" style="text-align:center;">
+      <div style="font-size:28px;font-weight:700;color:var(--accent2);margin-bottom:4px;">100+</div>
+      <div style="font-size:13px;color:var(--text-dim);">Regex patterns across 9 risk categories</div>
+    </div>
+    <div class="card" style="text-align:center;">
+      <div style="font-size:28px;font-weight:700;color:var(--accent2);margin-bottom:4px;">&lt;200ms</div>
+      <div style="font-size:13px;color:var(--text-dim);">End-to-end screening latency</div>
+    </div>
+    <div class="card" style="text-align:center;">
+      <div style="font-size:28px;font-weight:700;color:var(--accent2);margin-bottom:4px;">3-layer</div>
+      <div style="font-size:13px;color:var(--text-dim);">ML classifier + LLM escalation + sandbox</div>
+    </div>
   </div>
 
   <aside style="border-left:3px solid var(--accent);">
@@ -203,6 +208,15 @@ function copyPrompt(btn) {
       <p style="font-size:13px;color:var(--text-dim);margin:0;">Any HTTP client can call the REST API; OpenAPI 3.1 spec at <code>/openapi.json</code></p>
     </div>
   </div>
+</div>
+
+<!-- Latest from the blog -->
+<div class="section-chunk">
+  <h2 style="margin-top:0;">Latest from the blog</h2>
+  <div class="card-grid" style="max-width:800px;margin:0 auto;">
+    ${blogCardsHtml}
+  </div>
+  <p style="text-align:center;margin-top:16px;"><a href="/blog" style="font-size:14px;">View all posts &rarr;</a></p>
 </div>
 
 <!-- Chunk 7: Standards alignment — 4 items (Miller's Law: 7 of 7) -->
