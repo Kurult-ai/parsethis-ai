@@ -1,6 +1,7 @@
 import { paymentMiddleware, x402ResourceServer } from "@x402/hono";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
+import { createFacilitatorConfig } from "@coinbase/x402";
 import type { Context, Next } from "hono";
 import { createHash } from "node:crypto";
 import { recordPayment } from "./payment-ledger.js";
@@ -9,7 +10,10 @@ import type { AppEnv } from "./types.js";
 const X402_ENABLED = process.env.X402_ENABLED === "true";
 const WALLET = process.env.X402_PAY_TO_ADDRESS || "";
 const NETWORK = process.env.X402_NETWORK as `${string}:${string}` | undefined;
-const FACILITATOR_URL = process.env.X402_FACILITATOR_URL || "https://x402.org/facilitator";
+const FACILITATOR_URL_OVERRIDE = process.env.X402_FACILITATOR_URL;
+const CDP_API_KEY_ID = process.env.CDP_API_KEY_ID;
+const CDP_API_KEY_SECRET = process.env.CDP_API_KEY_SECRET;
+const COINBASE_CDP_FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402";
 
 // Pricing table (USDC on Base mainnet, eip155:8453)
 export const PRICING = {
@@ -70,7 +74,23 @@ async function initX402(): Promise<void> {
   const INIT_TIMEOUT_MS = 10_000;
 
   const initPromise = (async () => {
-    const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
+    let facilitatorConfig: { url: string; createAuthHeaders?: () => Promise<{ verify: Record<string, string>; settle: Record<string, string>; supported: Record<string, string> }> };
+    let facilitatorLabel: string;
+    if (CDP_API_KEY_ID && CDP_API_KEY_SECRET) {
+      facilitatorConfig = createFacilitatorConfig(CDP_API_KEY_ID, CDP_API_KEY_SECRET) as typeof facilitatorConfig;
+      facilitatorLabel = `Coinbase CDP (${COINBASE_CDP_FACILITATOR_URL})`;
+    } else if (FACILITATOR_URL_OVERRIDE) {
+      facilitatorConfig = { url: FACILITATOR_URL_OVERRIDE };
+      facilitatorLabel = `override (${FACILITATOR_URL_OVERRIDE})`;
+    } else {
+      throw new Error(
+        `[x402] No mainnet-capable facilitator configured. Set CDP_API_KEY_ID + CDP_API_KEY_SECRET ` +
+          `(Coinbase CDP facilitator, recommended for Base mainnet) or X402_FACILITATOR_URL to a ` +
+          `mainnet-capable facilitator. Testnet facilitators (x402.org) do not support eip155:8453.`,
+      );
+    }
+
+    const facilitatorClient = new HTTPFacilitatorClient(facilitatorConfig);
     const resourceServer = new x402ResourceServer(facilitatorClient);
 
     // Register the network/scheme - this triggers async initialization
@@ -244,7 +264,7 @@ async function initX402(): Promise<void> {
     );
 
     x402Ready = true;
-    console.log(`[x402] Payment middleware enabled — wallet: ${WALLET.slice(0, 6)}...${WALLET.slice(-4)}, network: ${NETWORK}`);
+    console.log(`[x402] Payment middleware enabled — wallet: ${WALLET.slice(0, 6)}...${WALLET.slice(-4)}, network: ${NETWORK}, facilitator: ${facilitatorLabel}`);
   })();
 
   const timeoutPromise = new Promise<never>((_, reject) =>
@@ -305,12 +325,16 @@ export function isX402Enabled(): boolean {
 
 export function getPricingInfo() {
   const baseUrl = process.env.PUBLIC_BASE_URL || "https://www.parsethis.ai";
+  const facilitatorUrl =
+    CDP_API_KEY_ID && CDP_API_KEY_SECRET
+      ? COINBASE_CDP_FACILITATOR_URL
+      : FACILITATOR_URL_OVERRIDE || "not_configured";
   return {
     enabled: isX402Enabled(),
     currency: "USDC",
     network: NETWORK,
     payTo: WALLET || "not_configured",
-    facilitator: FACILITATOR_URL,
+    facilitator: facilitatorUrl,
     // URL of the MCP tool manifest — Parse publishes tool definitions here for MCP-aware agents.
     mcp_endpoint: `${baseUrl}/mcp.json`,
     endpoints: {
