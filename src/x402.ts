@@ -186,12 +186,15 @@ export function isX402Enabled(): boolean {
 }
 
 export function getPricingInfo() {
+  const baseUrl = process.env.PUBLIC_BASE_URL || "https://www.parsethis.ai";
   return {
     enabled: isX402Enabled(),
     currency: "USDC",
     network: NETWORK,
     payTo: WALLET || "not_configured",
     facilitator: FACILITATOR_URL,
+    // URL of the MCP tool manifest — Parse publishes tool definitions here for MCP-aware agents.
+    mcp_endpoint: `${baseUrl}/mcp.json`,
     endpoints: {
       "POST /v1/parse": PRICING.parse,
       "POST /v1/analyze": PRICING.analyze,
