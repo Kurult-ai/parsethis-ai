@@ -2,6 +2,7 @@ import { paymentMiddleware, x402ResourceServer } from "@x402/hono";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import type { Context, Next } from "hono";
+import { createHash } from "node:crypto";
 import { recordPayment } from "./payment-ledger.js";
 import type { AppEnv } from "./types.js";
 
@@ -10,7 +11,7 @@ const WALLET = process.env.X402_PAY_TO_ADDRESS || "";
 const NETWORK = process.env.X402_NETWORK as `${string}:${string}` | undefined;
 const FACILITATOR_URL = process.env.X402_FACILITATOR_URL || "https://x402.org/facilitator";
 
-// Pricing table (USDC on Base Sepolia testnet)
+// Pricing table (USDC on Base mainnet, eip155:8453)
 export const PRICING = {
   parse: "$0.005",
   analyze: { quick: "$0.01", standard: "$0.05", deep: "$0.15" },
@@ -37,6 +38,31 @@ async function initX402(): Promise<void> {
   if (!NETWORK || NETWORK !== "eip155:8453") {
     throw new Error(
       `[x402] X402_NETWORK must be "eip155:8453" (Base mainnet). Got: ${NETWORK ?? "<unset>"}`,
+    );
+  }
+
+  const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+  if (!ADDRESS_RE.test(WALLET)) {
+    throw new Error(
+      `[x402] X402_PAY_TO_ADDRESS is not a valid 0x-prefixed 40-hex address. ` +
+        `Got: ${WALLET.slice(0, 6)}...${WALLET.slice(-4)}`,
+    );
+  }
+
+  const expectedFingerprint = process.env.X402_PAY_TO_ADDRESS_FINGERPRINT;
+  if (!expectedFingerprint) {
+    throw new Error(
+      `[x402] X402_PAY_TO_ADDRESS_FINGERPRINT is unset. ` +
+        `Set it to the sha256 (hex) of the lowercased wallet address in Railway env.`,
+    );
+  }
+  const actualFingerprint = createHash("sha256")
+    .update(WALLET.toLowerCase())
+    .digest("hex");
+  if (actualFingerprint !== expectedFingerprint.toLowerCase()) {
+    throw new Error(
+      `[x402] Wallet address fingerprint mismatch. ` +
+        `Expected ${expectedFingerprint.slice(0, 12)}..., got ${actualFingerprint.slice(0, 12)}...`,
     );
   }
 
