@@ -71,12 +71,22 @@ billingWebhookRoute.post("/v1/billing/webhook", async (c) => {
         const periodStart = item?.current_period_start ?? Math.floor(Date.now() / 1000);
         const periodEnd = item?.current_period_end ?? Math.floor(Date.now() / 1000) + 30 * 86400;
 
-        await prisma.subscription.create({
-          data: {
+        // Idempotent: Stripe retries on 5xx, so this handler may fire twice
+        // for the same event. Upsert on the stripeSubscriptionId unique index
+        // so a replay updates in place instead of throwing a unique-constraint
+        // violation and looping forever at 500.
+        await prisma.subscription.upsert({
+          where: { stripeSubscriptionId },
+          create: {
             apiKeyId,
             stripeCustomerId,
             stripeSubscriptionId,
             stripePriceId: item?.price?.id ?? "",
+            status: "active",
+            currentPeriodStart: new Date(periodStart * 1000),
+            currentPeriodEnd: new Date(periodEnd * 1000),
+          },
+          update: {
             status: "active",
             currentPeriodStart: new Date(periodStart * 1000),
             currentPeriodEnd: new Date(periodEnd * 1000),
