@@ -14,6 +14,7 @@ import type { AppEnv, ScreeningPolicy } from "./types.js";
 import { auditLog } from "./lib/audit-log.js";
 import { incrementUsage, getUsage } from "./lib/usage-tracker.js";
 import { TIER_CONFIG, type PaidTier } from "./stripe.js";
+import { problem, ErrorCode } from "./lib/problem-response.js";
 
 function secondsUntilStartOfNextUTCMonth(): number {
   const now = new Date();
@@ -320,17 +321,18 @@ export function authMiddleware(requiredScope?: string) {
         );
         c.header("X-Upgrade-URL", "/pricing");
         c.header("Retry-After", String(retryAfter));
-        return c.json(
-          {
-            error: "Monthly request cap exceeded",
-            limit: softCap,
-            usage,
-            tier: apiKeyRecord.tier,
-            retry_after_seconds: retryAfter,
-            upgrade_url: "/pricing",
-          },
-          429,
-        );
+        return problem(c, {
+          status: 429,
+          title: "Monthly request cap exceeded",
+          detail: `Paid-tier monthly soft cap reached (${usage}/${softCap}). Usage resets at start of next UTC month.`,
+          code: ErrorCode.USAGE_CAP,
+          retryable: false,
+          upgradeUrl: "/pricing",
+          limit: softCap,
+          usage,
+          tier: apiKeyRecord.tier,
+          retry_after_seconds: retryAfter,
+        });
       }
     }
 
