@@ -7,7 +7,7 @@ import type { AppEnv } from "./types.js";
 
 const X402_ENABLED = process.env.X402_ENABLED === "true";
 const WALLET = process.env.X402_PAY_TO_ADDRESS || "";
-const NETWORK = (process.env.X402_NETWORK || "eip155:84532") as `${string}:${string}`;
+const NETWORK = process.env.X402_NETWORK as `${string}:${string}` | undefined;
 const FACILITATOR_URL = process.env.X402_FACILITATOR_URL || "https://x402.org/facilitator";
 
 // Pricing table (USDC on Base Sepolia testnet)
@@ -32,6 +32,12 @@ async function initX402(): Promise<void> {
       console.warn("[x402] X402_ENABLED=true but X402_PAY_TO_ADDRESS not set — payments disabled");
     }
     return;
+  }
+
+  if (!NETWORK || NETWORK !== "eip155:8453") {
+    throw new Error(
+      `[x402] X402_NETWORK must be "eip155:8453" (Base mainnet). Got: ${NETWORK ?? "<unset>"}`,
+    );
   }
 
   const INIT_TIMEOUT_MS = 10_000;
@@ -112,9 +118,12 @@ async function initX402(): Promise<void> {
   }
 }
 
-// Initialize async — does not block server startup
+// Initialize async — fail-closed when x402 is enabled so misconfig exits the process
 initX402().catch((err) => {
-  console.error(`[x402] Unhandled init error: ${err.message}`);
+  console.error(`[x402] Fatal init error: ${(err as Error).message}`);
+  if (X402_ENABLED) {
+    process.exit(1);
+  }
 });
 
 /**
