@@ -45,7 +45,7 @@ export function renderPricingPage(baseUrl: string): string {
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">50 sandbox/hr</li>
         <li style="padding:6px 0;">Self-serve checkout</li>
       </ul>
-      <a href="/v1/billing/checkout" class="btn btn-primary" style="width:100%;text-align:center;" onclick="event.preventDefault();fetch('/v1/billing/checkout',{method:'POST',headers:{'Authorization':'Bearer '+(localStorage.getItem('pfa_key')||''),'Content-Type':'application/json'},body:JSON.stringify({tier:'pro'})}).then(r=>r.json()).then(d=>{if(d.url)window.location=d.url;else if(d.error)alert(d.error);}).catch(()=>window.location='mailto:hello@parsethis.ai?subject=Pro%20Plan')">Start Pro</a>
+      <a href="/v1/billing/checkout" class="btn btn-primary" style="width:100%;text-align:center;" onclick="event.preventDefault();(async()=>{try{const k=localStorage.getItem('pfa_key');if(k){const r=await fetch('/v1/billing/checkout',{method:'POST',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'},body:JSON.stringify({tier:'pro'})});if(r.ok){const d=await r.json();if(d.url){window.location=d.url;return;}}}const r2=await fetch('/v1/billing/signup-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier:'pro'})});if(!r2.ok){const err=await r2.json().catch(()=>({}));alert(err.error||'Signup failed');return;}const d2=await r2.json();if(d2.key)localStorage.setItem('pfa_key',d2.key);if(d2.checkout_url){window.location=d2.checkout_url;}else{window.location='mailto:hello@parsethis.ai?subject=Pro%20Plan';}}catch{window.location='mailto:hello@parsethis.ai?subject=Pro%20Plan';}})();">Start Pro</a>
     </div>
 
     <!-- Team -->

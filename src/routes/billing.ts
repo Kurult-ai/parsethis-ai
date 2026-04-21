@@ -8,10 +8,15 @@ import {
   TIER_CONFIG,
   type PaidTier,
 } from "../stripe.js";
-import { authMiddleware } from "../auth.js";
-import { upgradeApiKeyTier, downgradeApiKeyTier } from "../api-key-service.js";
+import { authMiddleware, createApiKey } from "../auth.js";
+import {
+  upgradeApiKeyTier,
+  downgradeApiKeyTier,
+  countSelfServiceKeys,
+} from "../api-key-service.js";
 import { getUsage } from "../lib/usage-tracker.js";
 import { getBaseUrl } from "../lib/route-utils.js";
+import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
 import { prisma } from "../db.js";
 import type { AppEnv } from "../types.js";
 
@@ -157,6 +162,83 @@ billingWebhookRoute.post("/v1/billing/webhook", async (c) => {
 // ── Auth-protected billing routes ──
 
 export const billingRoutes = new Hono<AppEnv>();
+
+// Atomic signup + checkout for cold visitors (no API key yet).
+// Generates a 30-day self-service key AND a Stripe checkout session in one call,
+// so the pricing page "Start Pro" button works for unauthenticated browsers
+// without the mailto fallback.
+billingRoutes.post("/v1/billing/signup-checkout", async (c) => {
+  if (!isStripeEnabled()) {
+    return c.json({ error: "Billing not configured" }, 503);
+  }
+  if (process.env.KEY_GENERATION_ENABLED === "false") {
+    return c.json({ error: "Key generation is disabled by the operator" }, 403);
+  }
+
+  const body = await c.req
+    .json<{ tier?: string; name?: string }>()
+    .catch(() => ({} as { tier?: string; name?: string }));
+  const tier = body.tier;
+  if (!tier || !(tier in TIER_CONFIG)) {
+    return c.json({ error: "Invalid tier. Must be 'pro' or 'team'" }, 400);
+  }
+
+  const ip = c.req.header("x-forwarded-for") || c.req.header("x-real-ip") || "unknown";
+
+  // Fail-closed per-IP rate limit (5/min). Redis unreachable → 503.
+  if (!isRedisAvailable()) {
+    return c.json({ error: "Rate limiting service unavailable. Try again later." }, 503);
+  }
+  try {
+    const connected = await ensureRedisConnected();
+    if (!connected) {
+      return c.json({ error: "Rate limiting service unavailable. Try again later." }, 503);
+    }
+    const redis = getRedis();
+    const rateKey = `signup-checkout:rate:${ip}`;
+    const count = await redis.incr(rateKey);
+    if (count === 1) await redis.expire(rateKey, 60);
+    if (count > 5) {
+      return c.json({ error: "Rate limit: max 5 signups per minute" }, 429);
+    }
+  } catch {
+    return c.json({ error: "Rate limiting service unavailable. Try again later." }, 503);
+  }
+
+  try {
+    const totalKeys = await countSelfServiceKeys();
+    if (totalKeys >= 100) {
+      return c.json({ error: "Maximum number of self-service keys reached" }, 429);
+    }
+  } catch {
+    return c.json({ error: "Key validation service unavailable. Try again later." }, 503);
+  }
+
+  const name =
+    body.name && typeof body.name === "string" && body.name.length <= 100
+      ? body.name
+      : "Signup Key " + new Date().toISOString().slice(0, 10);
+
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const apiKey = await createApiKey(name, ["analyze", "evaluate", "chat"], expiresAt);
+
+  const baseUrl = getBaseUrl(c);
+  try {
+    const checkoutUrl = await createCheckoutSession(apiKey.id, tier as PaidTier, baseUrl);
+    return c.json(
+      {
+        key: apiKey.key,
+        id: apiKey.id,
+        expires_at: expiresAt.toISOString(),
+        checkout_url: checkoutUrl,
+      },
+      201,
+    );
+  } catch (err) {
+    console.error("[billing] signup-checkout error:", (err as Error).message);
+    return c.json({ error: "Failed to create checkout session" }, 500);
+  }
+});
 
 billingRoutes.post("/v1/billing/checkout", authMiddleware("evaluate"), async (c) => {
   if (!isStripeEnabled()) {
