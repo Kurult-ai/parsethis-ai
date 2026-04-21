@@ -12,7 +12,16 @@ import { getRedis, isRedisAvailable, ensureRedisConnected } from "./redis.js";
 import { getCachedPolicyData, cachePolicyData } from "./result-store.js";
 import type { AppEnv, ScreeningPolicy } from "./types.js";
 import { auditLog } from "./lib/audit-log.js";
-import { incrementUsage } from "./lib/usage-tracker.js";
+import { incrementUsage, getUsage } from "./lib/usage-tracker.js";
+import { TIER_CONFIG, type PaidTier } from "./stripe.js";
+
+function secondsUntilStartOfNextUTCMonth(): number {
+  const now = new Date();
+  const nextMonth = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0),
+  );
+  return Math.max(1, Math.floor((nextMonth.getTime() - now.getTime()) / 1000));
+}
 
 /** Timing-safe string comparison to prevent timing attacks on key validation */
 function safeCompare(a: string, b: string): boolean {
@@ -297,9 +306,32 @@ export function authMiddleware(requiredScope?: string) {
       tier: apiKeyRecord.tier,
     });
 
-    // Track billing usage for paid tiers (fire-and-forget)
+    // Track billing usage for paid tiers and enforce monthly soft cap (2× included)
     if (apiKeyRecord.tier !== "free") {
       incrementUsage(apiKeyRecord.id).catch(() => {});
+      const usage = await getUsage(apiKeyRecord.id).catch(() => 0);
+      const tierConfig = TIER_CONFIG[apiKeyRecord.tier as PaidTier];
+      const softCap = tierConfig ? tierConfig.includedRequests * 2 : Infinity;
+      if (usage > softCap) {
+        const retryAfter = secondsUntilStartOfNextUTCMonth();
+        console.warn(
+          `[usage-cap] apiKey=${apiKeyRecord.id} tier=${apiKeyRecord.tier} ` +
+            `usage=${usage} cap=${softCap} — returning 429`,
+        );
+        c.header("X-Upgrade-URL", "/pricing");
+        c.header("Retry-After", String(retryAfter));
+        return c.json(
+          {
+            error: "Monthly request cap exceeded",
+            limit: softCap,
+            usage,
+            tier: apiKeyRecord.tier,
+            retry_after_seconds: retryAfter,
+            upgrade_url: "/pricing",
+          },
+          429,
+        );
+      }
     }
 
     // Load screening policy (from Redis cache or DB)
