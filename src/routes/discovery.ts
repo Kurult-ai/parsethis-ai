@@ -273,7 +273,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
           operationId: "screenPrompt",
           summary: "Screen a prompt for safety risks",
           description:
-            "Analyze an untrusted prompt for injection attacks, jailbreaks, and adversarial patterns. Returns a 0-10 risk score with typed flags. When execute is true, runs the prompt in an isolated sandbox and returns a poll URL for the async result.\n\n**Payment flow (x402):** If the request is sent without an `x-payment` header and without a bearer API key, the server returns 402 with an `accepts[]` body describing the required USDC payment on Base mainnet. The agent's wallet signs a USDC payment to the advertised `payTo` for the advertised amount, then retries the request with the `x-payment` header carrying the signed voucher. The server settles the payment and returns the 200/202 screening result.",
+            "Analyze an untrusted prompt for injection attacks, jailbreaks, and adversarial patterns. Returns a 0-10 risk score with typed flags. When execute is true, runs the prompt in an isolated sandbox and returns a poll URL for the async result.\n\n**Payment flow (x402):** If the request is sent without a `payment-signature` or legacy `x-payment` header and without a bearer API key, the server returns 402 with payment requirements for USDC on Base mainnet. The agent's wallet signs a USDC payment to the advertised `payTo` for the advertised amount, then retries the request with the `payment-signature` header carrying the signed voucher. The server settles the payment and returns the 200/202 screening result.",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -347,9 +347,9 @@ discoveryRoutes.get("/openapi.json", (c) => {
               },
             },
             "402": {
-              description: "Payment required — pay in USDC on Base mainnet and retry with x-payment header.",
+              description: "Payment required — pay in USDC on Base mainnet and retry with the payment-signature header.",
               headers: {
-                "X-Payment-Required": {
+                "Payment-Required": {
                   schema: { type: "string" },
                   description: "Indicates that this response carries an x402 payment requirement.",
                 },
@@ -836,7 +836,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
           operationId: "screenOutput",
           summary: "Screen LLM output for risks",
           description:
-            "Screen the output of an LLM call for prompt injection leakage, data exfiltration, harmful content, and other risks. Use this to verify an LLM's response is safe before presenting it to the user or passing it to another agent.\n\n**Payment flow (x402):** same as /v1/parse — without an `x-payment` header or bearer API key, this endpoint returns 402 with USDC payment requirements on Base mainnet.",
+            "Screen the output of an LLM call for prompt injection leakage, data exfiltration, harmful content, and other risks. Use this to verify an LLM's response is safe before presenting it to the user or passing it to another agent.\n\n**Payment flow (x402):** same as /v1/parse — without a `payment-signature` or legacy `x-payment` header or bearer API key, this endpoint returns 402 with USDC payment requirements on Base mainnet.",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: true,
@@ -915,7 +915,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
               },
             },
             "402": {
-              description: "Payment required — pay in USDC on Base mainnet and retry with x-payment header.",
+              description: "Payment required — pay in USDC on Base mainnet and retry with the payment-signature header.",
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/PaymentRequired402" },
@@ -1264,7 +1264,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
         },
         PaymentRequired402: {
           type: "object",
-          description: "x402 payment-requirement body returned when no x-payment header is supplied.",
+          description: "x402 payment requirement returned when no payment-signature or legacy x-payment header is supplied.",
           properties: {
             accepts: {
               type: "array",

@@ -292,7 +292,7 @@ initX402().catch((err) => {
 
 /**
  * Middleware that intercepts x402 payment headers on POST routes.
- *  - x-payment present → verifies via x402 SDK → sets x402Paid flag → proceeds.
+ *  - payment-signature/x-payment present → verifies via x402 SDK → sets x402Paid flag → proceeds.
  *  - Authorization present (API key path) → falls through to authMiddleware.
  *  - Neither present → routes through x402MW so the agent gets a 402 with accepts[].
  *    This satisfies the Bazaar/agent-discovery contract: unauth probe → 402 manifest.
@@ -305,7 +305,7 @@ export function x402Guard() {
       return;
     }
 
-    const hasPayment = c.req.header("x-payment");
+    const hasPayment = c.req.header("payment-signature") || c.req.header("x-payment");
     const hasAuthHeader = c.req.header("authorization");
 
     if (hasPayment) {
