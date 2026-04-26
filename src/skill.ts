@@ -108,9 +108,9 @@ Read your current policy: \`GET ${baseUrl}/v1/policy\`
 
 ## Other Endpoints
 
-- **POST ${baseUrl}/v1/analyze** — Full media credibility analysis for URLs (beta — contract alignment in progress, may return 403)
-- **POST ${baseUrl}/v1/chat** — Chat with Parse AI about media analysis (beta — contract alignment in progress, may return 403)
-- **POST ${baseUrl}/v1/evaluate** — Evaluate prompt quality, safety, and cost (beta — contract alignment in progress, may return 403)
+- **POST ${baseUrl}/v1/analyze** — Full media credibility analysis for URLs
+- **POST ${baseUrl}/v1/chat** — Chat with Parse AI about media analysis
+- **POST ${baseUrl}/v1/evaluate** — Evaluate prompt quality, safety, and cost
 - **GET ${baseUrl}/v1/models** — List available LLM models
 - **POST ${baseUrl}/v1/keys/generate** — Generate a new API key (no auth needed)
 

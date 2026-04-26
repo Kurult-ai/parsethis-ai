@@ -4,6 +4,7 @@ import { authMiddleware } from "../auth.js";
 import { startAnalysis, getAnalysis, listAnalyses } from "../analyzer.js";
 import { validateUrl } from "../lib/ssrf-guard.js";
 import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
+import { problem, ErrorCode } from "../lib/problem-response.js";
 import type { AnalyzeRequest } from "../types.js";
 
 export const analyzeRoutes = new Hono();
@@ -12,11 +13,11 @@ analyzeRoutes.post("/v1/analyze", authMiddleware("analyze"), billableUsageMiddle
   const body = await c.req.json<AnalyzeRequest>();
 
   if (!body.url || typeof body.url !== "string") {
-    return c.json({ error: "url is required and must be a string" }, 400);
+    return problem(c, { status: 400, title: "Invalid input", detail: "url is required and must be a string", code: ErrorCode.VALIDATION_INVALID_INPUT, retryable: false });
   }
 
   if (body.url.length > 2048) {
-    return c.json({ error: "url must be less than 2048 characters" }, 400);
+    return problem(c, { status: 400, title: "Invalid input", detail: "url must be less than 2048 characters", code: ErrorCode.VALIDATION_INVALID_INPUT, retryable: false });
   }
 
   // URL validation - must be http(s)
@@ -24,35 +25,35 @@ analyzeRoutes.post("/v1/analyze", authMiddleware("analyze"), billableUsageMiddle
   try {
     parsedUrl = new URL(body.url);
   } catch {
-    return c.json({ error: "Invalid URL format" }, 400);
+    return problem(c, { status: 400, title: "Invalid input", detail: "Invalid URL format", code: ErrorCode.VALIDATION_INVALID_INPUT, retryable: false });
   }
 
   if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-    return c.json({ error: "URL must use http or https protocol" }, 400);
+    return problem(c, { status: 400, title: "Invalid input", detail: "URL must use http or https protocol", code: ErrorCode.VALIDATION_INVALID_INPUT, retryable: false });
   }
 
   // SSRF protection — block internal/private IPs
   const ssrfCheck = await validateUrl(body.url);
   if (!ssrfCheck.safe) {
-    return c.json({ error: "URL blocked by security policy", reason: ssrfCheck.reason }, 400);
+    return problem(c, { status: 400, title: "Invalid input", detail: "URL blocked by security policy", code: ErrorCode.VALIDATION_INVALID_INPUT, retryable: false, reason: ssrfCheck.reason });
   }
 
   const depth = body.depth || "standard";
   if (!["quick", "standard", "deep"].includes(depth)) {
-    return c.json({ error: "depth must be quick, standard, or deep" }, 400);
+    return problem(c, { status: 400, title: "Invalid input", detail: "depth must be quick, standard, or deep", code: ErrorCode.VALIDATION_INVALID_INPUT, retryable: false });
   }
 
   if (body.webhook_url) {
     if (typeof body.webhook_url !== "string" || body.webhook_url.length > 2048) {
-      return c.json({ error: "webhook_url must be a valid string under 2048 characters" }, 400);
+      return problem(c, { status: 400, title: "Invalid input", detail: "webhook_url must be a valid string under 2048 characters", code: ErrorCode.VALIDATION_INVALID_INPUT, retryable: false });
     }
     try {
       const wh = new URL(body.webhook_url);
       if (!["http:", "https:"].includes(wh.protocol)) {
-        return c.json({ error: "webhook_url must use http or https protocol" }, 400);
+        return problem(c, { status: 400, title: "Invalid input", detail: "webhook_url must use http or https protocol", code: ErrorCode.VALIDATION_INVALID_INPUT, retryable: false });
       }
     } catch {
-      return c.json({ error: "Invalid webhook_url format" }, 400);
+      return problem(c, { status: 400, title: "Invalid input", detail: "Invalid webhook_url format", code: ErrorCode.VALIDATION_INVALID_INPUT, retryable: false });
     }
   }
 
@@ -73,7 +74,7 @@ analyzeRoutes.get("/v1/analyze/:id", authMiddleware("analyze"), (c) => {
   const id = c.req.param("id")!;
   const result = getAnalysis(id);
   if (!result) {
-    return c.json({ error: "Analysis not found" }, 404);
+    return problem(c, { status: 404, title: "Not found", detail: "Analysis not found", code: ErrorCode.RESOURCE_NOT_FOUND, retryable: false });
   }
   return c.json(result);
 });
@@ -88,7 +89,7 @@ analyzeRoutes.get("/v1/analyze/:id/stream", authMiddleware("analyze"), async (c)
   const result = getAnalysis(id);
 
   if (!result) {
-    return c.json({ error: "Analysis not found" }, 404);
+    return problem(c, { status: 404, title: "Not found", detail: "Analysis not found", code: ErrorCode.RESOURCE_NOT_FOUND, retryable: false });
   }
 
   // If already completed, return final result

@@ -16,7 +16,6 @@ import {
   revokeApiKey,
 } from "../api-key-service.js";
 import { getUsage } from "../lib/usage-tracker.js";
-import { getBaseUrl } from "../lib/route-utils.js";
 import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
 import { prisma } from "../db.js";
 import type { AppEnv } from "../types.js";
@@ -194,7 +193,10 @@ billingRoutes.post("/v1/billing/signup-checkout", async (c) => {
     return c.json({ error: "Invalid tier. Must be 'pro' or 'team'" }, 400);
   }
 
-  const ip = c.req.header("x-forwarded-for") || c.req.header("x-real-ip") || "unknown";
+  const ip =
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
+    c.req.header("x-real-ip") ||
+    "unknown";
 
   // Fail-closed per-IP rate limit (5/min). Redis unreachable → 503.
   if (!isRedisAvailable()) {
@@ -291,7 +293,7 @@ billingRoutes.post("/v1/billing/portal", authMiddleware("evaluate"), async (c) =
     return c.json({ error: "No active subscription found" }, 404);
   }
 
-  const baseUrl = getBaseUrl(c);
+  const baseUrl = process.env.PUBLIC_BASE_URL || "https://www.parsethis.ai";
 
   try {
     const url = await createPortalSession(subscription.stripeCustomerId, baseUrl);

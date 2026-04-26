@@ -150,12 +150,12 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   }
 
   const apiKey = c.get("apiKey");
-  if (body.execute === true && apiKey.id.startsWith("x402:")) {
+  if ((body.execute === true || body.execute === "auto") && apiKey.id.startsWith("x402:")) {
     return problem(c, {
       status: 400,
       title: "Async execution not supported for x402 callers",
       detail:
-        "Async execution requires a stable API key for poll authorization. Either omit execute:true for synchronous execution, or use Bearer key authentication.",
+        "Async execution (execute: true | \"auto\") requires a stable API key for poll authorization. Either omit execute (or set execute:false) for synchronous execution, or use Bearer key authentication.",
       code: ErrorCode.X402_ASYNC_UNSUPPORTED,
       retryable: false,
     });
