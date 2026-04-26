@@ -13,7 +13,7 @@ export function organizationSchema(baseUrl: string): object {
     description:
       "Prompt security API that screens LLM prompts for injection attacks, jailbreaks, and adversarial patterns. AI agents use Parse to detect prompt injections (OWASP LLM01:2025), data exfiltration attempts, and jailbreak patterns before execution with real-time multi-layer analysis.",
     foundingDate: "2025",
-    sameAs: ["https://github.com/nicobailon/parse-for-agents"],
+    sameAs: ["https://github.com/Danservfinn/parse-for-agents"],
   };
 }
 

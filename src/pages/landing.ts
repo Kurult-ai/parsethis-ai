@@ -203,7 +203,7 @@ Report the files you changed, the test command, the funded wallet address, and a
     <span class="badge badge-default" style="font-size:14px;padding:8px 16px;">OpenAI Agents</span>
   </div>
   <div style="display:flex;gap:12px;justify-content:center;align-items:center;margin-top:8px;">
-    <img src="https://img.shields.io/github/stars/nicobailon/parse-for-agents?style=flat&color=6366f1" alt="GitHub stars" height="20">
+    <img src="https://img.shields.io/github/stars/Danservfinn/parse-for-agents?style=flat&color=6366f1" alt="GitHub stars" height="20">
     <span class="badge badge-green">Open Source</span>
   </div>
 </div>

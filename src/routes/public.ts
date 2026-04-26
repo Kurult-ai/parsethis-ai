@@ -304,7 +304,7 @@ const res = await x402Fetch("https://parsethis.ai/v1/parse", {
   <li><a href="/faq">FAQ</a> — 20+ common questions</li>
   <li><a href="/pricing">Pricing</a> — x402 USDC payments and tier information</li>
   <li><a href="/playground">Playground</a> — Test the API interactively</li>
-  <li><a href="https://github.com/nicobailon/parse-for-agents" target="_blank" rel="noopener">GitHub</a> — Source code and issues</li>
+  <li><a href="https://github.com/Danservfinn/parse-for-agents" target="_blank" rel="noopener">GitHub</a> — Source code and issues</li>
 </ul>
 `;
   return c.html(renderPage({
@@ -593,7 +593,7 @@ publicRoutes.get("/privacy", (c) => {
 
 <ul>
   <li><strong>Email:</strong> privacy@parsethis.ai</li>
-  <li><strong>GitHub:</strong> <a href="https://github.com/nicobailon/parse-for-agents" target="_blank" rel="noopener">https://github.com/nicobailon/parse-for-agents</a></li>
+  <li><strong>GitHub:</strong> <a href="https://github.com/Danservfinn/parse-for-agents" target="_blank" rel="noopener">https://github.com/Danservfinn/parse-for-agents</a></li>
   <li><strong>Website:</strong> <a href="https://parsethis.ai">https://parsethis.ai</a></li>
 </ul>
 `;
