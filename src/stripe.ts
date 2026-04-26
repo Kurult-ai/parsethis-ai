@@ -31,6 +31,7 @@ export async function createCheckoutSession(apiKeyId: string, tier: PaidTier, ba
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
+    branding_settings: { display_name: "Parse" },
     line_items: [{ price: priceId, quantity: 1 }],
     client_reference_id: apiKeyId,
     metadata: { apiKeyId, tier },

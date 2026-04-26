@@ -7,11 +7,11 @@ function periodKey(apiKeyId: string): string {
   return `billing:usage:${apiKeyId}:${month}`;
 }
 
-export async function incrementUsage(apiKeyId: string): Promise<void> {
-  if (!isRedisAvailable()) return;
+export async function incrementUsage(apiKeyId: string): Promise<number | null> {
+  if (!isRedisAvailable()) return null;
   try {
     const connected = await ensureRedisConnected();
-    if (!connected) return;
+    if (!connected) return null;
     const redis = getRedis();
     const key = periodKey(apiKeyId);
     const count = await redis.incr(key);
@@ -19,8 +19,9 @@ export async function incrementUsage(apiKeyId: string): Promise<void> {
     if (count === 1) {
       await redis.expire(key, 35 * 24 * 60 * 60);
     }
+    return count;
   } catch {
-    // Graceful degradation — usage tracking is non-critical
+    return null;
   }
 }
 

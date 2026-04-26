@@ -5,6 +5,8 @@ import { runSpecEvaluators } from "../evaluators.js";
 import { executePrompt } from "../executor.js";
 import { getAvailableModels } from "../model-client.js";
 import { interpolatePrompt } from "../lib/prompt-utils.js";
+import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
+import { problem, ErrorCode } from "../lib/problem-response.js";
 import { EvaluateRequestSchema } from "../schemas.js";
 import type { EvaluationResult, TestCaseResult, EvalSummary } from "../types.js";
 import type { ValidatedEvaluateRequest } from "../schemas.js";
@@ -62,35 +64,33 @@ evaluateRoutes.get("/v1/evaluators", (c) =>
 
 // --- Evaluation ---
 
-evaluateRoutes.post("/v1/evaluate", authMiddleware("evaluate"), async (c) => {
+evaluateRoutes.post("/v1/evaluate", authMiddleware("evaluate"), billableUsageMiddleware(), async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body) {
-    return c.json({ error: { code: "invalid_request", message: "Invalid JSON body" } }, 400);
+    return problem(c, { status: 400, title: "Invalid input", detail: "Invalid JSON body", code: ErrorCode.VALIDATION_INVALID_INPUT, retryable: false });
   }
 
   const parsed = EvaluateRequestSchema.safeParse(body);
   if (!parsed.success) {
     const firstIssue = parsed.error.issues[0];
     const pathStr = (firstIssue.path ?? []).map(String).join(".");
-    return c.json(
-      {
-        error: {
-          code: "invalid_request",
-          message: `${pathStr}: ${firstIssue.message}`,
-          details: parsed.error.issues.map((e) => ({
-            path: (e.path ?? []).map(String).join("."),
-            message: e.message,
-          })),
-        },
-      },
-      400
-    );
+    return problem(c, {
+      status: 400,
+      title: "Invalid input",
+      detail: `${pathStr}: ${firstIssue.message}`,
+      code: ErrorCode.VALIDATION_INVALID_INPUT,
+      retryable: false,
+      details: parsed.error.issues.map((e) => ({
+        path: (e.path ?? []).map(String).join("."),
+        message: e.message,
+      })),
+    });
   }
 
   const req = parsed.data;
 
   if (req.model && !ALLOWED_MODELS.has(req.model)) {
-    return c.json({ error: { code: "invalid_request", message: "Model not in allowlist", available_models: [...ALLOWED_MODELS] } }, 400);
+    return problem(c, { status: 400, title: "Invalid input", detail: "Model not in allowlist", code: ErrorCode.VALIDATION_INVALID_INPUT, retryable: false, available_models: [...ALLOWED_MODELS] });
   }
 
   const id = `eval_${uuidv4().replace(/-/g, "")}`;
@@ -132,7 +132,7 @@ evaluateRoutes.get("/v1/evaluate/:id", authMiddleware("evaluate"), (c) => {
   const id = c.req.param("id")!;
   const result = evalResults.get(id);
   if (!result) {
-    return c.json({ error: { code: "evaluation_not_found", message: "Evaluation not found" } }, 404);
+    return problem(c, { status: 404, title: "Not found", detail: "Evaluation not found", code: ErrorCode.RESOURCE_NOT_FOUND, retryable: false });
   }
   return c.json(result);
 });

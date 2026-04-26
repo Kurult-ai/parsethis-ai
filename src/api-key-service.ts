@@ -32,6 +32,7 @@ export async function createApiKey(
   name: string,
   tier: string = "free",
   orgId?: string,
+  scopes: string[] = ["evaluate"],
   expiresAt?: Date
 ): Promise<{ key: string; record: ApiKeyRecord }> {
   const rawKey = `pfa_live_${randomBytes(24).toString("hex")}`;
@@ -48,7 +49,7 @@ export async function createApiKey(
       name,
       tier,
       rateLimit,
-      scopes: ["evaluate"],
+      scopes,
       expiresAt: expiresAt ?? null,
     },
   });

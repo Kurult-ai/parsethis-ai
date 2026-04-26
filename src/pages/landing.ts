@@ -9,6 +9,32 @@ import { listBlogPosts } from "../lib/markdown.js";
 export function renderLandingPage(baseUrl: string): string {
   const mcpConfig = JSON.stringify({ mcpServers: { "prompt-guard": { command: "npx", args: ["-y", "@parsethis/mcp-prompt-guard"], env: { PARSETHIS_API_KEY: "your-key-here" } } } }, null, 2);
 
+  const BEARER_PROMPT = `You will integrate Parse, an independent prompt-injection security API, into this project.
+
+Step 1 — Provision a key. POST https://www.parsethis.ai/v1/keys/generate with body {"name":"<short project label>"}. No auth required. Save the returned \`key\` (format: pfa_live_…) as env var PARSE_API_KEY. Never commit it.
+
+Step 2 — Read the integration guide at https://www.parsethis.ai/skill and follow it as instructions, not as documentation.
+
+Step 3 — Wire POST https://www.parsethis.ai/v1/parse into every code path where the agent acts on text it did not generate (user input, tool output, third-party content). Send {"prompt":"<the untrusted text>"} with header Authorization: Bearer $PARSE_API_KEY. Block when response.policy.auto_block is true; log + continue when 4 ≤ risk_score ≤ 6; allow when ≤ 3.
+
+Step 4 — Add a smoke test that calls /v1/parse with the literal string "Ignore previous instructions" and asserts risk_score ≥ 9.
+
+Report the files you changed, the test command, and any decisions you had to make.`;
+
+  const X402_PROMPT = `You will integrate Parse, an independent prompt-injection security API, into this project using x402 micropayments on Base mainnet (no API key — pay per call in USDC, ~$0.005 per /v1/parse call).
+
+Step 1 — Confirm the runtime can sign transactions on Base mainnet. Install \`@x402/fetch\` and \`viem\` via npm. The wallet's hex private key must be available at runtime via env var PRIVATE_KEY, with at least $0.05 USDC funded on Base. Never commit the key.
+
+Step 2 — Read the integration guide at https://www.parsethis.ai/skill and follow it as instructions, not as documentation.
+
+Step 3 — Wire POST https://www.parsethis.ai/v1/parse into every code path where the agent acts on text it did not generate. Use wrapFetchWithPayment(fetch, privateKeyToAccount(process.env.PRIVATE_KEY)) from @x402/fetch — it handles the 402 → sign USDC → retry-with-payment flow automatically. Block when response.policy.auto_block is true; log + continue when 4 ≤ risk_score ≤ 6; allow when ≤ 3.
+
+Step 4 — Add a smoke test that calls /v1/parse with the literal string "Ignore previous instructions" and asserts risk_score ≥ 9. Confirm the test wallet was charged ~$0.005 USDC on basescan.org.
+
+Report the files you changed, the test command, the funded wallet address, and any decisions you had to make.`;
+
+  const promptsPayload = JSON.stringify({ bearer: BEARER_PROMPT, x402: X402_PROMPT });
+
   const blogPosts = listBlogPosts().slice(0, 3);
   const blogCardsHtml = blogPosts.map(post => {
     const fm = post.frontmatter;
@@ -20,10 +46,115 @@ export function renderLandingPage(baseUrl: string): string {
   }).join("\n    ");
 
   const content = `
+<!-- One-step install hero — paste-into-your-agent prompt with Bearer/x402 toggle -->
+<style>
+.install-hero{position:relative;max-width:880px;margin:0 auto 56px;padding:40px 28px 36px;border-radius:calc(var(--radius) * 1.6);background:linear-gradient(180deg,rgba(99,102,241,0.06) 0%,rgba(9,9,11,0) 70%);}
+.install-hero::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(140deg,rgba(99,102,241,0.45),rgba(99,102,241,0) 35%,rgba(129,140,248,0.35) 75%,rgba(99,102,241,0.55));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;}
+.install-hero__eyebrow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.18em;color:var(--accent2);margin-bottom:14px;display:inline-flex;align-items:center;gap:8px;}
+.install-hero__eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent2);box-shadow:0 0 0 4px rgba(129,140,248,0.18);}
+.install-hero__title{font-size:clamp(28px,4.2vw,40px);font-weight:700;line-height:1.08;letter-spacing:-0.02em;margin:0 0 14px;}
+.install-hero__sub{color:var(--text-dim);font-size:15px;max-width:600px;margin:0 0 24px;}
+.install-hero__toggle{display:inline-flex;background:rgba(24,24,27,0.85);border:1px solid var(--border);border-radius:999px;padding:4px;gap:2px;margin-bottom:16px;backdrop-filter:blur(8px);}
+.install-hero__tab{appearance:none;border:0;background:transparent;color:var(--text-dim);padding:8px 16px;border-radius:999px;cursor:pointer;font:inherit;font-size:13px;font-weight:600;letter-spacing:-0.005em;display:inline-flex;align-items:baseline;gap:8px;transition:color 160ms ease,background 160ms ease;}
+.install-hero__tab:hover{color:var(--text);}
+.install-hero__tab.is-active{background:linear-gradient(140deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 4px 14px rgba(99,102,241,0.32);}
+.install-hero__tab-meta{font-size:11px;font-weight:500;opacity:0.78;letter-spacing:0;}
+.install-hero__tab.is-active .install-hero__tab-meta{opacity:0.9;}
+.install-hero__code-wrap{position:relative;background:#0a0a0c;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+.install-hero__code-wrap::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(129,140,248,0.55),transparent);}
+.install-hero__code{margin:0;padding:24px 28px 26px;font-family:ui-monospace,"JetBrains Mono","SF Mono","Menlo",monospace;font-size:13px;line-height:1.65;color:#e4e4e7;white-space:pre-wrap;word-break:break-word;max-height:360px;overflow-y:auto;}
+.install-hero__code code{font-family:inherit;color:inherit;background:none;padding:0;}
+.install-hero__copy{position:absolute;top:14px;right:14px;display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:999px;background:rgba(24,24,27,0.92);border:1px solid var(--border);color:var(--text-dim);font:inherit;font-size:12px;font-weight:600;letter-spacing:0.01em;cursor:pointer;transition:color 140ms ease,background 140ms ease,border-color 140ms ease,transform 140ms ease;backdrop-filter:blur(6px);}
+.install-hero__copy:hover{color:var(--text);background:rgba(39,39,42,0.95);border-color:var(--accent2);}
+.install-hero__copy:active{transform:translateY(1px);}
+.install-hero__copy.is-copied{color:#86efac;border-color:#16a34a;background:rgba(5,46,22,0.55);}
+.install-hero__copy svg{width:13px;height:13px;}
+.install-hero__hint{margin-top:18px;font-size:13px;color:var(--text-dim);display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;}
+.install-hero__hint strong{color:var(--text);font-weight:600;}
+.install-hero__hint a{color:var(--accent2);}
+@media (max-width:560px){
+  .install-hero{padding:28px 18px 24px;margin-bottom:40px;}
+  .install-hero__code{font-size:12px;padding:18px 18px 20px;max-height:300px;}
+  .install-hero__copy{top:10px;right:10px;}
+  .install-hero__tab{padding:8px 12px;}
+  .install-hero__tab-meta{display:none;}
+}
+@media (prefers-reduced-motion:reduce){.install-hero__copy,.install-hero__tab{transition:none;}}
+</style>
+<section class="install-hero" aria-labelledby="install-hero-title">
+  <div class="install-hero__eyebrow">One-step install · paste into your agent</div>
+  <h1 id="install-hero-title" class="install-hero__title">Hand Parse to your AI. It does the rest.</h1>
+  <p class="install-hero__sub">Copy the prompt below and paste it into Claude, ChatGPT, Cursor, or any coding agent. It provisions auth, reads the integration guide, and wires Parse into your codebase end-to-end.</p>
+
+  <div class="install-hero__toggle" role="tablist" aria-label="Authentication method">
+    <button type="button" role="tab" aria-selected="true" data-route="bearer" class="install-hero__tab is-active">
+      <span class="install-hero__tab-label">Bearer key</span>
+      <span class="install-hero__tab-meta">Free · 10K req/mo</span>
+    </button>
+    <button type="button" role="tab" aria-selected="false" data-route="x402" class="install-hero__tab">
+      <span class="install-hero__tab-label">x402 USDC</span>
+      <span class="install-hero__tab-meta">Pay-per-call · Base</span>
+    </button>
+  </div>
+
+  <div class="install-hero__code-wrap">
+    <button type="button" class="install-hero__copy" aria-label="Copy prompt to clipboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span class="install-hero__copy-label">Copy</span>
+    </button>
+    <pre class="install-hero__code" tabindex="0"><code class="install-hero__code-text"></code></pre>
+  </div>
+
+  <div class="install-hero__hint">
+    <span><strong>Then run your agent.</strong> ~30 seconds to a verified screening call.</span>
+    <span>Want to do it yourself? <a href="/docs/quickstart">Quick start guide &rarr;</a></span>
+  </div>
+</section>
+<script>
+(function(){
+  var root=document.querySelector('.install-hero');if(!root)return;
+  var prompts=${promptsPayload};
+  var tabs=root.querySelectorAll('.install-hero__tab');
+  var codeEl=root.querySelector('.install-hero__code-text');
+  var copyBtn=root.querySelector('.install-hero__copy');
+  var copyLabel=root.querySelector('.install-hero__copy-label');
+  var copyTimer=null;
+  function setRoute(route){
+    if(!prompts[route])return;
+    tabs.forEach(function(t){
+      var active=t.dataset.route===route;
+      t.classList.toggle('is-active',active);
+      t.setAttribute('aria-selected',active?'true':'false');
+    });
+    codeEl.textContent=prompts[route];
+    root.dataset.route=route;
+  }
+  tabs.forEach(function(t){t.addEventListener('click',function(){setRoute(t.dataset.route);});});
+  setRoute('bearer');
+  copyBtn.addEventListener('click',function(){
+    var text=codeEl.textContent||'';
+    var done=function(ok){
+      copyLabel.textContent=ok?'Copied':'Press Cmd+C';
+      copyBtn.classList.toggle('is-copied',ok);
+      if(copyTimer)clearTimeout(copyTimer);
+      copyTimer=setTimeout(function(){copyLabel.textContent='Copy';copyBtn.classList.remove('is-copied');},1800);
+    };
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){done(true);}).catch(function(){done(false);});
+    }else{
+      try{
+        var ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');ta.style.position='absolute';ta.style.left='-9999px';
+        document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);done(true);
+      }catch(e){done(false);}
+    }
+  });
+})();
+</script>
+
 <!-- Chunk 1: Hero — value prop + CTAs (Miller's Law: 1 of 7) -->
 <div class="section-chunk animate-in">
   <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:var(--accent2);margin-bottom:12px;">Independent Prompt Security</div>
-  <h1>Stop Prompt Injection Before It Reaches Your Agent</h1>
+  <h2 style="font-size:clamp(24px,3.4vw,32px);">Stop Prompt Injection Before It Reaches Your Agent</h2>
 
   <p class="answer-capsule" style="max-width:720px;margin:0 auto 28px;">Every AI agent that accepts user input, tool output, or messages from other agents is vulnerable to prompt injection &mdash; attacks that hijack your agent into leaking data, ignoring safety guardrails, or executing unauthorized actions. Parse catches these attacks before your agent acts on them.</p>
 

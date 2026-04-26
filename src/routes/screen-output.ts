@@ -3,6 +3,8 @@ import { authMiddleware } from "../auth.js";
 import { analyzeOutputRisks } from "../parse.js";
 import type { AppEnv } from "../types.js";
 import { auditLog } from "../lib/audit-log.js";
+import { problem, ErrorCode } from "../lib/problem-response.js";
+import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 
 export const screenOutputRoutes = new Hono<AppEnv>();
 
@@ -14,15 +16,27 @@ export const screenOutputRoutes = new Hono<AppEnv>();
  * verify that an LLM's response is safe before presenting it to the user
  * or passing it to another agent.
  */
-screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), async (c) => {
+screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billableUsageMiddleware(), async (c) => {
   const body = await c.req.json<{ output: string; context?: string }>();
 
   if (!body.output || typeof body.output !== "string") {
-    return c.json({ error: "output is required and must be a string" }, 400);
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "output is required and must be a string",
+      code: ErrorCode.VALIDATION_REQUIRED,
+      retryable: false,
+    });
   }
 
   if (body.output.length > 50_000) {
-    return c.json({ error: "output must be less than 50,000 characters" }, 400);
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "output must be less than 50,000 characters",
+      code: ErrorCode.VALIDATION_TOO_LARGE,
+      retryable: false,
+    });
   }
 
   const context = body.context || "";

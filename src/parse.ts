@@ -279,6 +279,7 @@ export interface ParseResponse {
   analyzed_at: string;
   prompt_length: number;
   analysis_method: "pattern" | "pattern+llm";
+  latency_ms: number;
 }
 
 export function computeVerdict(score: number): ParseResponse["verdict"] {
@@ -290,6 +291,7 @@ export function computeVerdict(score: number): ParseResponse["verdict"] {
 }
 
 export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
+  const startedAt = performance.now();
   const { prompt, model, execute, test_input } = req;
 
   // Validate model against allowlist; fall back to default if invalid
@@ -385,6 +387,7 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
     analyzed_at: new Date().toISOString(),
     prompt_length: prompt.length,
     analysis_method: analysisMethod,
+    latency_ms: Math.round(performance.now() - startedAt),
   };
 
   if (modelNote) {

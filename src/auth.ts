@@ -12,7 +12,7 @@ import { getRedis, isRedisAvailable, ensureRedisConnected } from "./redis.js";
 import { getCachedPolicyData, cachePolicyData } from "./result-store.js";
 import type { AppEnv, ScreeningPolicy } from "./types.js";
 import { auditLog } from "./lib/audit-log.js";
-import { incrementUsage } from "./lib/usage-tracker.js";
+import { problem, ErrorCode } from "./lib/problem-response.js";
 
 /** Timing-safe string comparison to prevent timing attacks on key validation */
 function safeCompare(a: string, b: string): boolean {
@@ -136,12 +136,13 @@ export function authMiddleware(requiredScope?: string) {
     // Check for deprecated query parameter auth
     const queryKey = c.req.query("api_key");
     if (queryKey) {
-      return c.json(
-        {
-          error: "Query parameter authentication is deprecated. Use Authorization: Bearer header.",
-        },
-        401
-      );
+      return problem(c, {
+        status: 401,
+        title: "Authentication required",
+        detail: "Query parameter authentication is deprecated. Use Authorization: Bearer header.",
+        code: ErrorCode.AUTH_REQUIRED,
+        retryable: false,
+      });
     }
 
     // Extract API key from Authorization header
@@ -156,32 +157,38 @@ export function authMiddleware(requiredScope?: string) {
       const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
       auditLog({ action: "auth_failure", detail: "No API key provided", ip });
       const baseUrl = `${c.req.header("x-forwarded-proto") || "https"}://${new URL(c.req.url).host}`;
-      return c.json(
-        {
-          error: "Authentication required",
-          detail: "Provide API key via Authorization: Bearer <key> header",
-          _help: {
-            generate_key: {
-              method: "POST",
-              url: `${baseUrl}/v1/keys/generate`,
-              auth_required: false,
-              body: { name: "string (optional)" },
-              note: "Returns API key valid for 30 days. No auth needed."
-            },
-            docs: `${baseUrl}/llms.txt`,
-            skill_prompt: `${baseUrl}/skill`,
-            max_retry_attempts: 1
-          }
+      return problem(c, {
+        status: 401,
+        title: "Authentication required",
+        detail: "Provide a Bearer token in the Authorization header.",
+        code: ErrorCode.AUTH_REQUIRED,
+        retryable: false,
+        _help: {
+          generate_key: {
+            method: "POST",
+            url: `${baseUrl}/v1/keys/generate`,
+            auth_required: false,
+            body: { name: "string (optional)" },
+            note: "Returns API key valid for 30 days. No auth needed.",
+          },
+          docs: `${baseUrl}/llms.txt`,
+          skill_prompt: `${baseUrl}/skill`,
+          max_retry_attempts: 1,
         },
-        401
-      );
+      });
     }
 
     // Reject obviously malformed keys early
     if (keyStr.length > 256) {
       const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
       auditLog({ action: "auth_failure", detail: "Malformed API key (too long)", ip });
-      return c.json({ error: "Invalid API key" }, 401);
+      return problem(c, {
+        status: 401,
+        title: "Invalid API key",
+        detail: "The provided API key is malformed.",
+        code: ErrorCode.AUTH_INVALID_KEY,
+        retryable: false,
+      });
     }
 
     // Fast-path: master key bypass (timing-safe comparison)
@@ -209,24 +216,30 @@ export function authMiddleware(requiredScope?: string) {
       c.header("X-RateLimit-Reset", String(Math.ceil(rateCheck.resetMs / 1000)));
 
       if (!rateCheck.allowed) {
-        c.header("Retry-After", String(Math.ceil(rateCheck.resetMs / 1000)));
-        return c.json(
-          {
-            error: "Rate limit exceeded",
-            retry_after_seconds: Math.ceil(rateCheck.resetMs / 1000),
-            limit: 30,
-          },
-          429
-        );
+        const retryAfter = Math.ceil(rateCheck.resetMs / 1000);
+        c.header("Retry-After", String(retryAfter));
+        return problem(c, {
+          status: 429,
+          title: "Rate limit exceeded",
+          detail: `Rate limit exceeded. Retry after ${retryAfter} seconds.`,
+          code: ErrorCode.RATE_LIMIT,
+          retryable: true,
+          retry_after_seconds: retryAfter,
+          limit: 30,
+        });
       }
 
       // Check scope for demo key
       const demoScopes = ["analyze", "evaluate", "chat"];
       if (requiredScope && !demoScopes.includes(requiredScope)) {
-        return c.json(
-          { error: "Insufficient permissions", required_scope: requiredScope },
-          403
-        );
+        return problem(c, {
+          status: 403,
+          title: "Insufficient permissions",
+          detail: `API key is missing required scope: ${requiredScope}`,
+          code: ErrorCode.AUTH_INSUFFICIENT_SCOPE,
+          retryable: false,
+          required_scope: requiredScope,
+        });
       }
 
       c.set("apiKey", {
@@ -246,28 +259,50 @@ export function authMiddleware(requiredScope?: string) {
       apiKeyRecord = await validateApiKeyFromService(keyStr);
     } catch (err) {
       console.error("[auth] Key validation error:", (err as Error).message);
-      return c.json({ error: "Authentication service unavailable" }, 503);
+      return problem(c, {
+        status: 503,
+        title: "Authentication service unavailable",
+        detail: "API key validation is temporarily unavailable.",
+        code: ErrorCode.SERVICE_UNAVAILABLE,
+        retryable: true,
+      });
     }
 
     if (!apiKeyRecord) {
       const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
       auditLog({ action: "auth_failure", detail: "Invalid API key", ip });
-      return c.json({ error: "Invalid API key" }, 401);
+      return problem(c, {
+        status: 401,
+        title: "Invalid API key",
+        detail: "The provided API key is invalid.",
+        code: ErrorCode.AUTH_INVALID_KEY,
+        retryable: false,
+      });
     }
 
     // Check expiry
     if (apiKeyRecord.expiresAt && new Date(apiKeyRecord.expiresAt) < new Date()) {
       const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
       auditLog({ action: "auth_failure", apiKeyId: apiKeyRecord.id, detail: "Expired API key", ip });
-      return c.json({ error: "API key has expired" }, 401);
+      return problem(c, {
+        status: 401,
+        title: "Invalid API key",
+        detail: "The provided API key has expired.",
+        code: ErrorCode.AUTH_INVALID_KEY,
+        retryable: false,
+      });
     }
 
     // Check scope
     if (requiredScope && !apiKeyRecord.scopes.includes(requiredScope) && !apiKeyRecord.scopes.includes("admin")) {
-      return c.json(
-        { error: "Insufficient permissions", required_scope: requiredScope },
-        403
-      );
+      return problem(c, {
+        status: 403,
+        title: "Insufficient permissions",
+        detail: `API key is missing required scope: ${requiredScope}`,
+        code: ErrorCode.AUTH_INSUFFICIENT_SCOPE,
+        retryable: false,
+        required_scope: requiredScope,
+      });
     }
 
     // Check rate limit
@@ -277,15 +312,17 @@ export function authMiddleware(requiredScope?: string) {
     c.header("X-RateLimit-Reset", String(Math.ceil(rateCheck.resetMs / 1000)));
 
     if (!rateCheck.allowed) {
-      c.header("Retry-After", String(Math.ceil(rateCheck.resetMs / 1000)));
-      return c.json(
-        {
-          error: "Rate limit exceeded",
-          retry_after_seconds: Math.ceil(rateCheck.resetMs / 1000),
-          limit: apiKeyRecord.rateLimit,
-        },
-        429
-      );
+      const retryAfter = Math.ceil(rateCheck.resetMs / 1000);
+      c.header("Retry-After", String(retryAfter));
+      return problem(c, {
+        status: 429,
+        title: "Rate limit exceeded",
+        detail: `Rate limit exceeded. Retry after ${retryAfter} seconds.`,
+        code: ErrorCode.RATE_LIMIT,
+        retryable: true,
+        retry_after_seconds: retryAfter,
+        limit: apiKeyRecord.rateLimit,
+      });
     }
 
     // Attach key info to context
@@ -296,11 +333,6 @@ export function authMiddleware(requiredScope?: string) {
       rate_limit: apiKeyRecord.rateLimit,
       tier: apiKeyRecord.tier,
     });
-
-    // Track billing usage for paid tiers (fire-and-forget)
-    if (apiKeyRecord.tier !== "free") {
-      incrementUsage(apiKeyRecord.id).catch(() => {});
-    }
 
     // Load screening policy (from Redis cache or DB)
     const cachedPolicy = await getCachedPolicyData(apiKeyRecord.id);
@@ -340,7 +372,7 @@ export async function createApiKey(
   scopes: string[],
   expiresAt?: Date
 ): Promise<{ id: string; key: string; name: string; scopes: string[]; created_at: string }> {
-  const result = await createApiKeyFromService("self-service", name, "free", undefined, expiresAt);
+  const result = await createApiKeyFromService("self-service", name, "free", undefined, scopes, expiresAt);
   return {
     id: result.record.id,
     key: result.key,

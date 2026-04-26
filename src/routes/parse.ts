@@ -5,9 +5,11 @@ import type { ParseRequest, ExecutionResult } from "../parse.js";
 import type { AppEnv } from "../types.js";
 import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
 import { canUseSandbox, executeInSandbox } from "../lib/sandbox-client.js";
+import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 
 import { getBaseUrl } from "../lib/route-utils.js";
 import { auditLog } from "../lib/audit-log.js";
+import { problem, ErrorCode } from "../lib/problem-response.js";
 import { prisma } from "../db.js";
 
 export const parseRoutes = new Hono<AppEnv>();
@@ -30,49 +32,133 @@ const DAILY_COST_CAPS: Record<string, number> = {
 
 // ─── POST /v1/parse ────────────────────────────────────────────────────────
 
-parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
+parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddleware(), async (c) => {
   const body = await c.req.json<ParseRequest>();
 
   // ── Input validation ──
   if (!body.prompt || typeof body.prompt !== "string") {
-    return c.json({ error: "prompt is required and must be a string" }, 400);
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "prompt is required and must be a string",
+      code: ErrorCode.VALIDATION_REQUIRED,
+      retryable: false,
+    });
   }
   if (body.prompt.length > 50_000) {
-    return c.json({ error: "prompt must be less than 50,000 characters" }, 400);
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "prompt must be less than 50,000 characters",
+      code: ErrorCode.VALIDATION_TOO_LARGE,
+      retryable: false,
+    });
   }
   if (body.model !== undefined && typeof body.model !== "string") {
-    return c.json({ error: "model must be a string" }, 400);
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "model must be a string",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
   }
   if (body.execute !== undefined && body.execute !== "auto" && typeof body.execute !== "boolean") {
-    return c.json({ error: "execute must be a boolean or \"auto\"" }, 400);
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "execute must be a boolean or \"auto\"",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
   }
   if (body.test_input !== undefined && typeof body.test_input !== "string") {
-    return c.json({ error: "test_input must be a string" }, 400);
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "test_input must be a string",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
   }
   if (body.test_input && body.test_input.length > 10_000) {
-    return c.json({ error: "test_input must be less than 10,000 characters" }, 400);
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "test_input must be less than 10,000 characters",
+      code: ErrorCode.VALIDATION_TOO_LARGE,
+      retryable: false,
+    });
   }
   if (body.mode !== undefined && !["full", "pattern-only"].includes(body.mode)) {
-    return c.json({ error: "mode must be 'full' or 'pattern-only'" }, 400);
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "mode must be 'full' or 'pattern-only'",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
   }
   if (body.metadata !== undefined && typeof body.metadata !== "object") {
-    return c.json({ error: "metadata must be an object" }, 400);
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "metadata must be an object",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
   }
   if (body.agent_config !== undefined) {
     if (typeof body.agent_config !== "object") {
-      return c.json({ error: "agent_config must be an object" }, 400);
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "agent_config must be an object",
+        code: ErrorCode.VALIDATION_INVALID_TYPE,
+        retryable: false,
+      });
     }
     if (!body.agent_config.model || typeof body.agent_config.model !== "string") {
-      return c.json({ error: "agent_config.model is required and must be a string" }, 400);
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "agent_config.model is required and must be a string",
+        code: ErrorCode.VALIDATION_REQUIRED,
+        retryable: false,
+      });
     }
     if (body.agent_config.agent_role !== undefined) {
       if (typeof body.agent_config.agent_role !== "string") {
-        return c.json({ error: "agent_config.agent_role must be a string" }, 400);
+        return problem(c, {
+          status: 400,
+          title: "Validation failure",
+          detail: "agent_config.agent_role must be a string",
+          code: ErrorCode.VALIDATION_INVALID_TYPE,
+          retryable: false,
+        });
       }
       if (body.agent_config.agent_role.length > 200) {
-        return c.json({ error: "agent_config.agent_role must be 200 characters or less" }, 400);
+        return problem(c, {
+          status: 400,
+          title: "Validation failure",
+          detail: "agent_config.agent_role must be 200 characters or less",
+          code: ErrorCode.VALIDATION_TOO_LARGE,
+          retryable: false,
+        });
       }
     }
+  }
+
+  const apiKey = c.get("apiKey");
+  if ((body.execute === true || body.execute === "auto") && apiKey.id.startsWith("x402:")) {
+    return problem(c, {
+      status: 400,
+      title: "Async execution not supported for x402 callers",
+      detail:
+        "Async execution (execute: true | \"auto\") requires a stable API key for poll authorization. Either omit execute (or set execute:false) for synchronous execution, or use Bearer key authentication.",
+      code: ErrorCode.X402_ASYNC_UNSUPPORTED,
+      retryable: false,
+    });
   }
 
   // ── Run risk analysis (synchronous — pattern + LLM) ──
@@ -108,7 +194,6 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
 
   // ── Attach policy recommendation ──
   const policy = c.get("policy");
-  const apiKey = c.get("apiKey");
   const tier = apiKey?.tier ?? "free";
   result.policy = {
     auto_block: result.risk_score >= (policy?.autoBlockThreshold ?? 7),
@@ -156,10 +241,13 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
   // ── Fail closed: execution requires Redis for rate limiting and cost caps ──
   if (apiKey.id !== "master" && !isRedisAvailable()) {
     console.warn("[SECURITY] Execution request rejected — Redis unavailable for rate limiting/cost caps");
-    return c.json({
-      ...result,
-      execution_error: "Sandbox execution temporarily unavailable (rate limit service down)",
-    }, 503);
+    return problem(c, {
+      status: 503,
+      title: "Sandbox unavailable",
+      detail: "Sandbox execution temporarily unavailable (rate limit service down)",
+      code: ErrorCode.SANDBOX_UNAVAILABLE,
+      retryable: true,
+    });
   }
 
   // ── Observe mode: separate, more restrictive rate limit for high-risk prompts ──
@@ -174,7 +262,16 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
         if (obsCount === 1) await redis.expire(obsKey, 3600);
         const maxObs = OBSERVE_LIMITS[tier] ?? 2;
         if (obsCount > maxObs) {
-          return c.json({ error: "Observe mode rate limit exceeded", limit: maxObs, window: "1 hour" }, 429);
+          c.header("Retry-After", "3600");
+          return problem(c, {
+            status: 429,
+            title: "Rate limit exceeded",
+            detail: "Observe mode rate limit exceeded",
+            code: ErrorCode.RATE_LIMIT,
+            retryable: true,
+            limit: maxObs,
+            window: "1 hour",
+          });
         }
       }
     } catch { /* fall through to standard rate limit */ }
@@ -191,7 +288,16 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
         if (execCount === 1) await redis.expire(execRateKey, 3600);
         const maxExec = EXEC_LIMITS[tier] ?? 5;
         if (execCount > maxExec) {
-          return c.json({ error: "Execution rate limit exceeded", limit: maxExec, window: "1 hour" }, 429);
+          c.header("Retry-After", "3600");
+          return problem(c, {
+            status: 429,
+            title: "Rate limit exceeded",
+            detail: "Execution rate limit exceeded",
+            code: ErrorCode.RATE_LIMIT,
+            retryable: true,
+            limit: maxExec,
+            window: "1 hour",
+          });
         }
 
         // Daily cost cap check
@@ -199,16 +305,28 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
         const dailyCost = parseFloat(await redis.get(dailyCostKey) || "0");
         const maxCost = DAILY_COST_CAPS[tier] ?? 0.50;
         if (dailyCost >= maxCost) {
-          return c.json({ error: "Daily execution cost cap reached", cap_usd: maxCost }, 429);
+          c.header("Retry-After", "3600");
+          c.header("X-Upgrade-URL", "/pricing");
+          return problem(c, {
+            status: 429,
+            title: "Usage cap reached",
+            detail: "Daily execution cost cap reached",
+            code: ErrorCode.USAGE_CAP,
+            retryable: false,
+            cap_usd: maxCost,
+          });
         }
       }
     } catch {
       // Redis connected but operation failed — fail closed
       console.warn("[SECURITY] Execution rate limit check failed — rejecting request");
-      return c.json({
-        ...result,
-        execution_error: "Sandbox execution temporarily unavailable (rate limit check failed)",
-      }, 503);
+      return problem(c, {
+        status: 503,
+        title: "Sandbox unavailable",
+        detail: "Sandbox execution temporarily unavailable (rate limit check failed)",
+        code: ErrorCode.SANDBOX_UNAVAILABLE,
+        retryable: true,
+      });
     }
   }
 

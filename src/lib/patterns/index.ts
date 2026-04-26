@@ -182,6 +182,11 @@ export const HARMFUL_OUTPUT_PATTERNS: Array<{
   severity: number;
   label: string;
 }> = [
+  { pattern: /\b(?:here(?:'s|\s+is)|this\s+is)\s+(?:the\s+)?(?:system\s+prompt|system\s+message|developer\s+instructions?|instructions?)\s+(?:I\s+was\s+given|I\s+received|that\s+I\s+was\s+given)\b/i, category: "system_prompt_leak", severity: 8, label: "System prompt reflection" },
+  { pattern: /\bmy\s+(?:system\s+prompt|system\s+message|developer\s+instructions?|instructions?)\s+(?:are|were|say|said|state)\b/i, category: "system_prompt_leak", severity: 8, label: "System instructions reflection" },
+  { pattern: /\bI\s+(?:am|was)\s+instructed\s+to\b.{0,160}\b(?:never|always|must|do\s+not|don't|avoid|refuse|reveal|assistant)\b/i, category: "system_prompt_leak", severity: 7, label: "Instruction reflection" },
+  { pattern: /\b(?:here\s+is|here's)\s+my\s+(?:prompt|system\s+message|instructions?)\b/i, category: "system_prompt_leak", severity: 8, label: "Prompt reflection" },
+  { pattern: /\b(?:estas\s+son|este\s+es)\s+mis\s+(?:instrucciones|mensaje|prompt)\s+(?:del\s+sistema|de\s+sistema)\b/i, category: "system_prompt_leak", severity: 8, label: "System prompt reflection (Spanish)" },
   { pattern: /how\s+to\s+(make|build|create)\s+(a\s+)?(bomb|weapon|explosive)/i, category: "harmful_content", severity: 10, label: "Weapons/explosives in output" },
   { pattern: /step.by.step.*(hack|exploit|attack)/i, category: "harmful_content", severity: 8, label: "Hacking instructions in output" },
   { pattern: /credit\s*card\s*number/i, category: "harmful_content", severity: 9, label: "Credit card data in output" },
