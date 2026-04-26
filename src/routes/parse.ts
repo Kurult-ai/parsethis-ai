@@ -9,7 +9,7 @@ import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 
 import { getBaseUrl } from "../lib/route-utils.js";
 import { auditLog } from "../lib/audit-log.js";
-import { problem, ErrorCode } from "../lib/problem-response.js";
+import { problem, ErrorCode, jsonContentTypeProblem } from "../lib/problem-response.js";
 import { prisma } from "../db.js";
 
 export const parseRoutes = new Hono<AppEnv>();
@@ -33,6 +33,9 @@ const DAILY_COST_CAPS: Record<string, number> = {
 // ─── POST /v1/parse ────────────────────────────────────────────────────────
 
 parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddleware(), async (c) => {
+  const contentTypeProblem = jsonContentTypeProblem(c);
+  if (contentTypeProblem) return contentTypeProblem;
+
   const body = await c.req.json<ParseRequest>();
 
   // ── Input validation ──

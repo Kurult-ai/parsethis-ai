@@ -79,7 +79,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "What is x402 payment?",
     answer:
-      "x402 is a pay-per-request payment protocol using USDC stablecoin on the Base L2 blockchain. Attach an X-PAYMENT header with a signed USDC transfer to any Parse endpoint \u2014 no API key needed. Pricing details at GET /v1/pricing. This enables anonymous, per-request access ideal for one-off agent calls where key management is impractical.",
+      "x402 is a pay-per-request payment protocol using USDC stablecoin on the Base L2 blockchain. Attach a payment-signature (legacy: x-payment) header with a signed USDC transfer to any Parse endpoint \u2014 no API key needed. Pricing details at GET /v1/pricing. This enables anonymous, per-request access ideal for one-off agent calls where key management is impractical.",
   },
   {
     question: "What are the rate limits?",

@@ -147,7 +147,7 @@ export function renderPricingPage(baseUrl: string): string {
 <div class="section-chunk">
   <h2 style="margin-top:0;">How does x402 payment work?</h2>
 
-  <p class="answer-capsule">x402 uses the HTTP 402 Payment Required standard. Send USDC on Base L2 &mdash; no API key, no account, no credit card. Include an <code>X-PAYMENT</code> header with a signed USDC transfer on every request. A facilitator verifies the payment on-chain before the request is processed.</p>
+  <p class="answer-capsule">x402 uses the HTTP 402 Payment Required standard. Send USDC on Base L2 &mdash; no API key, no account, no credit card. Include a <code>payment-signature</code> (legacy: <code>x-payment</code>) header with a signed USDC transfer on every request. A facilitator verifies the payment on-chain before the request is processed.</p>
 
   <h3>Per-request pricing</h3>
 

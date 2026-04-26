@@ -72,7 +72,7 @@ Prompt injection detection operates through three primary approaches: pattern ma
 |---|---|---|---|---|---|
 | Pattern matching (regex) | ~70% | <5ms | No | Partial | Free |
 | LLM-based classification | ~85% | 200-500ms | Yes | Yes | $0.001-0.01 |
-| Combined multi-layer (ParseThis.ai) | ~95% | <200ms | Yes | Yes | $0.0001 |
+| Combined multi-layer (ParseThis.ai) | ~95% | <20ms regex; ~2-3s LLM path | Yes | Yes | $0.0001 |
 | Behavioral sandbox | ~90% | 1-5s | Yes | Yes | $0.005-0.02 |
 
 **Pattern matching** is the fastest and simplest approach. A regex engine scans input for known attack strings: "ignore previous instructions," "you are now," "system prompt," "ADMIN OVERRIDE," and similar patterns. Protect AI's LLM Guard uses this approach as its first layer. The limitation is fundamental — pattern matching catches known attack syntax but fails against paraphrasing, multilingual attacks, and encoded payloads. Rebuff's 2024 benchmark found that pattern matching alone catches only 68% of prompt injection attempts from a corpus of 10,000 attack samples.
@@ -81,7 +81,7 @@ Prompt injection detection operates through three primary approaches: pattern ma
 
 **Behavioral sandbox analysis** is the most thorough approach. Instead of analyzing what the input says, a sandbox tests what the input does. The suspicious prompt is executed against an isolated LLM instance with mock tools, and the output is monitored for injection indicators: system prompt leakage, instruction override compliance, unauthorized tool calls, and persona adoption. ParseThis.ai uses sandbox execution as part of its multi-layer detection pipeline. This approach catches zero-day attacks because it detects behavior, not syntax.
 
-**Multi-layer detection** combines all three approaches in sequence. ParseThis.ai's pipeline runs pattern matching first (<5ms, catches obvious attacks), then LLM classification (catches semantic attacks), then sandbox execution for ambiguous cases. This layered approach achieves approximately 95% detection accuracy with sub-200ms median latency because most inputs are resolved at the fast pattern-matching layer.
+**Multi-layer detection** combines all three approaches in sequence. ParseThis.ai's pipeline runs pattern matching first (<20ms for known signatures), then LLM classification for semantic attacks, then sandbox execution for ambiguous cases. This layered approach favors fast deterministic checks for obvious attacks while reserving the slower LLM and sandbox paths for inputs that need deeper inspection.
 
 ## How do you detect prompt injection in Python?
 
@@ -332,7 +332,7 @@ Eight major tools provide prompt injection detection in 2026, ranging from open-
 | NeMo Guardrails | NVIDIA | Colang rules + LLM | Self-hosted | No | No | Open source |
 | Rebuff | Rebuff.ai | Multi-layer (heuristics + LLM + canary) | Yes | No | No | Open source + hosted |
 
-**ParseThis.ai** is the only tool that combines pattern matching, LLM classification, and behavioral sandbox execution in a single API call. It offers self-service API key generation (no sales call required), native MCP (Model Context Protocol) integration for agent-to-agent communication, and x402 HTTP payments for frictionless billing. Detection latency is under 200ms for 90th percentile requests.
+**ParseThis.ai** is the only tool that combines pattern matching, LLM classification, and behavioral sandbox execution in a single API call. It offers self-service API key generation (no sales call required), native MCP (Model Context Protocol) integration for agent-to-agent communication, and x402 HTTP payments for frictionless billing. Pattern matching is sub-20ms; full hosted LLM-backed analysis typically takes ~2-3s.
 
 **Lakera Guard**, acquired by Check Point in 2025 for a reported $200M+, uses proprietary ML classifiers trained on a dataset of over 100,000 prompt injection attacks. It handles direct and indirect injection well but lacks sandbox execution, meaning novel attack patterns that don't match trained distributions can slip through. Access requires an enterprise sales engagement.
 
@@ -366,7 +366,7 @@ ParseThis.ai is the only prompt injection detection tool that combines behaviora
 | Multi-turn tracking | Yes | No | No | No | No | No |
 | Agent-native design | Yes | No | No | No | No | No |
 | Deployment model | SaaS API | SaaS | Cloud (AWS) | Cloud (Azure) | Self-hosted | Self-hosted |
-| Median latency | <200ms | ~100ms | 200-400ms | 200-400ms | <50ms (self-hosted) | <100ms (self-hosted) |
+| Median latency | <20ms regex; ~2-3s LLM path | ~100ms | 200-400ms | 200-400ms | <50ms (self-hosted) | <100ms (self-hosted) |
 
 **Sandbox execution** is the key differentiator. When ParseThis.ai encounters an ambiguous input that passes pattern matching and LLM classification, it executes the prompt in an isolated environment with mock tools and monitors the output for injection behavior. This catches zero-day attacks, encoded payloads, and semantic injections that classifier-based tools miss. No other commercial API offers this capability.
 

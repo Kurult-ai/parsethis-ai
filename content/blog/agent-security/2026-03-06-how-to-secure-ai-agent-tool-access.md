@@ -154,7 +154,7 @@ The combined risk score determines the verdict: `safe`, `low_risk`, `medium_risk
 
 4. **Restrict by IP.** If your agent runs on known infrastructure, whitelist those IPs. This eliminates entire classes of credential theft attacks.
 
-5. **Scan prompts before tool execution.** Run every user-facing prompt through injection detection before the agent acts on it. Parse returns a risk score in under 200ms — fast enough to gate real-time tool calls.
+5. **Scan prompts before tool execution.** Run every user-facing prompt through injection detection before the agent acts on it. Parse handles known patterns quickly and can run deeper LLM analysis when the extra latency is worth it.
 
 6. **Monitor for escalation patterns.** Watch your agent logs for privilege escalation attempts: keywords like `bypass`, `disable`, `--no-verify`, `sudo`, `admin access`. These are signals that someone is probing your agent's tool boundaries.
 

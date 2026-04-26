@@ -51,7 +51,7 @@ export function renderPromptGuardPlaygroundPage(
       onblur="this.style.borderColor='var(--border)'"
       aria-describedby="pg-hint"
     ></textarea>
-    <p id="pg-hint" style="font-size:12px;color:var(--text-dim);margin:4px 0 12px;">POST /v1/parse &bull; Results in &lt;200ms &bull; Fail-closed by default</p>
+    <p id="pg-hint" style="font-size:12px;color:var(--text-dim);margin:4px 0 12px;">POST /v1/parse &bull; Fast pattern checks; LLM analysis on demand &bull; Fail-closed by default</p>
 
     <button id="pg-btn" onclick="pgAnalyze()" class="btn btn-primary" aria-live="polite">Analyze</button>
   </div>
