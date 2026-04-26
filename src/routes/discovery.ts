@@ -1032,7 +1032,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
               type: "boolean",
               default: false,
               description:
-                "Run the prompt in an isolated sandbox after screening. Note: execute:true requires Bearer key authentication; it is not supported for x402 payment callers and returns 400 x402.async_unsupported.",
+                "Run the prompt in an isolated sandbox after screening. Note: execute:true and execute:\"auto\" require Bearer key authentication; they are not supported for x402 payment callers and return 400 x402.async_unsupported.",
             },
             test_input: {
               type: "string",
