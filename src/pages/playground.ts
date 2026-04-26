@@ -293,17 +293,23 @@ function promptTester() {
       if (score <= 6) return { color: '#d97706' };
       return { color: 'var(--destructive)' };
     },
-    // Decision label/style. Prefers the new policy.auto_block contract (PR #5),
-    // falls back to legacy result.suggested_action for any path that still emits it.
+    // Decision label/style. Prefers the new policy.auto_block contract (PR #5)
+    // and the server-reported policy.threshold; falls back to legacy
+    // result.suggested_action and threshold=7 only when no policy is present.
     decisionLabel() {
       if (!this.result || this.result.execution_pending) return 'Running in sandbox…';
-      if (this.result.policy && this.result.policy.auto_block === true) return 'BLOCK — auto_block triggered';
-      if (this.result.policy && this.result.policy.auto_block === false) {
-        if (this.result.risk_score <= 3) return 'SAFE — proceed';
-        if (this.result.risk_score <= 6) return 'CAUTION — log + continue';
-        return 'BLOCK — risk ≥ 7 (above default threshold)';
+      if (this.result.policy && this.result.policy.auto_block === true) {
+        return this.result.policy.threshold !== undefined
+          ? 'BLOCK — at/above your threshold of ' + this.result.policy.threshold
+          : 'BLOCK — auto_block triggered';
       }
-      // Legacy suggested_action fallback
+      if (this.result.policy && this.result.policy.auto_block === false) {
+        var threshold = typeof this.result.policy.threshold === 'number' ? this.result.policy.threshold : 7;
+        var safeBand = Math.min(4, threshold);
+        if (this.result.risk_score < safeBand) return 'SAFE — proceed';
+        return 'CAUTION — log + continue (below your threshold of ' + threshold + ')';
+      }
+      // Legacy suggested_action fallback (no policy block in response)
       var sa = this.result.suggested_action;
       if (sa === 'allow') return 'Safe to execute';
       if (sa === 'sandbox') return 'Verify in sandbox';
@@ -312,9 +318,15 @@ function promptTester() {
     },
     decisionStyle() {
       if (!this.result || this.result.execution_pending) return 'color:var(--text-dim)';
-      var blocked = (this.result.policy && this.result.policy.auto_block === true) ||
-                    (!this.result.policy && this.result.suggested_action === 'block') ||
-                    this.result.risk_score >= 7;
+      // When the server reports policy, trust auto_block; never re-derive from a hardcoded 7.
+      if (this.result.policy) {
+        if (this.result.policy.auto_block === true) return 'color:var(--destructive)';
+        var threshold = typeof this.result.policy.threshold === 'number' ? this.result.policy.threshold : 7;
+        var safeBand = Math.min(4, threshold);
+        return this.result.risk_score < safeBand ? 'color:var(--green)' : 'color:#d97706';
+      }
+      // Legacy fallback (no policy block)
+      var blocked = this.result.suggested_action === 'block' || this.result.risk_score >= 7;
       if (blocked) return 'color:var(--destructive)';
       if (this.result.risk_score >= 4) return 'color:#d97706';
       return 'color:var(--green)';
