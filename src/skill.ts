@@ -46,6 +46,8 @@ Content-Type: application/json
 NOTE: You do NOT need to send your system prompt.
 \`agent_role\` is an optional description of your function.
 
+Latency: synchronous screening calls take ~2-4 seconds when the LLM analysis layer fires; pattern-only matches return in <100ms. If your agent's request timeout is under 5 seconds, set \`execute: false\` to return after screening without waiting on sandbox execution, or use the async flow below.
+
 ## Async Execution Flow
 
 When \`execute: true\`, screening returns immediately and execution runs in the background:
@@ -55,7 +57,7 @@ When \`execute: true\`, screening returns immediately and execution runs in the 
   "risk_score": 3,
   "verdict": "low_risk",
   "flags": [],
-  "policy": { "autoBlockThreshold": 5, "screenAllPrompts": true },
+  "policy": { "auto_block": false, "threshold": 7 },
   "execution_pending": true,
   "poll_url": "/v1/parse/:id"
 }
@@ -81,10 +83,10 @@ Authorization: Bearer ${keyPlaceholder}
 ## Acting on Results (Policy-Aware)
 
 \`\`\`
-if (response.risk_score >= response.policy.autoBlockThreshold) → BLOCK
-if (response.risk_score <= 3)   → SAFE, proceed
-if (response.risk_score <= 6)   → CAUTION, log flags
-if (response.risk_score >= 7)   → BLOCK, report to user
+if (response.policy?.auto_block) → BLOCK
+else if (response.risk_score >= 7) → BLOCK, report to user
+else if (response.risk_score >= 4) → CAUTION, log flags, continue
+else → SAFE, proceed
 \`\`\`
 
 Your policy is returned with every parse response. To update it:
@@ -106,9 +108,9 @@ Read your current policy: \`GET ${baseUrl}/v1/policy\`
 
 ## Other Endpoints
 
-- **POST ${baseUrl}/v1/analyze** — Full media credibility analysis for URLs
-- **POST ${baseUrl}/v1/chat** — Chat with Parse AI about media analysis
-- **POST ${baseUrl}/v1/evaluate** — Evaluate prompt quality, safety, and cost
+- **POST ${baseUrl}/v1/analyze** — Full media credibility analysis for URLs (beta — contract alignment in progress, may return 403)
+- **POST ${baseUrl}/v1/chat** — Chat with Parse AI about media analysis (beta — contract alignment in progress, may return 403)
+- **POST ${baseUrl}/v1/evaluate** — Evaluate prompt quality, safety, and cost (beta — contract alignment in progress, may return 403)
 - **GET ${baseUrl}/v1/models** — List available LLM models
 - **POST ${baseUrl}/v1/keys/generate** — Generate a new API key (no auth needed)
 

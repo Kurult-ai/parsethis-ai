@@ -13,6 +13,7 @@ import {
   upgradeApiKeyTier,
   downgradeApiKeyTier,
   countSelfServiceKeys,
+  revokeApiKey,
 } from "../api-key-service.js";
 import { getUsage } from "../lib/usage-tracker.js";
 import { getBaseUrl } from "../lib/route-utils.js";
@@ -189,7 +190,7 @@ billingRoutes.post("/v1/billing/signup-checkout", async (c) => {
     .json<{ tier?: string; name?: string }>()
     .catch(() => ({} as { tier?: string; name?: string }));
   const tier = body.tier;
-  if (!tier || !(tier in TIER_CONFIG)) {
+  if (!tier || !Object.prototype.hasOwnProperty.call(TIER_CONFIG, tier)) {
     return c.json({ error: "Invalid tier. Must be 'pro' or 'team'" }, 400);
   }
 
@@ -205,7 +206,7 @@ billingRoutes.post("/v1/billing/signup-checkout", async (c) => {
       return c.json({ error: "Rate limiting service unavailable. Try again later." }, 503);
     }
     const redis = getRedis();
-    const rateKey = `signup-checkout:rate:${ip}`;
+    const rateKey = `keygen:rate:${ip}`;
     const count = await redis.incr(rateKey);
     if (count === 1) await redis.expire(rateKey, 60);
     if (count > 5) {
@@ -246,6 +247,7 @@ billingRoutes.post("/v1/billing/signup-checkout", async (c) => {
     );
   } catch (err) {
     console.error("[billing] signup-checkout error:", (err as Error).message);
+    await revokeApiKey(apiKey.id).catch(() => {});
     return c.json({ error: "Failed to create checkout session" }, 500);
   }
 });
@@ -258,7 +260,7 @@ billingRoutes.post("/v1/billing/checkout", authMiddleware("evaluate"), async (c)
   const body = await c.req.json<{ tier?: string }>();
   const tier = body.tier;
 
-  if (!tier || !(tier in TIER_CONFIG)) {
+  if (!tier || !Object.prototype.hasOwnProperty.call(TIER_CONFIG, tier)) {
     return c.json({ error: "Invalid tier. Must be 'pro' or 'team'" }, 400);
   }
 

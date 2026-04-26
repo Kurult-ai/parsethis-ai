@@ -250,6 +250,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
         if (obsCount === 1) await redis.expire(obsKey, 3600);
         const maxObs = OBSERVE_LIMITS[tier] ?? 2;
         if (obsCount > maxObs) {
+          c.header("Retry-After", "3600");
           return problem(c, {
             status: 429,
             title: "Rate limit exceeded",
@@ -275,6 +276,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
         if (execCount === 1) await redis.expire(execRateKey, 3600);
         const maxExec = EXEC_LIMITS[tier] ?? 5;
         if (execCount > maxExec) {
+          c.header("Retry-After", "3600");
           return problem(c, {
             status: 429,
             title: "Rate limit exceeded",
@@ -291,12 +293,14 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
         const dailyCost = parseFloat(await redis.get(dailyCostKey) || "0");
         const maxCost = DAILY_COST_CAPS[tier] ?? 0.50;
         if (dailyCost >= maxCost) {
+          c.header("Retry-After", "3600");
+          c.header("X-Upgrade-URL", "/pricing");
           return problem(c, {
             status: 429,
             title: "Usage cap reached",
             detail: "Daily execution cost cap reached",
             code: ErrorCode.USAGE_CAP,
-            retryable: true,
+            retryable: false,
             cap_usd: maxCost,
           });
         }

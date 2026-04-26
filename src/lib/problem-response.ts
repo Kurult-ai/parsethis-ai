@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 export const ErrorCode = {
   VALIDATION_REQUIRED: "validation.required",
@@ -11,6 +12,7 @@ export const ErrorCode = {
   RATE_LIMIT: "rate_limit.exceeded",
   USAGE_CAP: "usage_cap.exceeded",
   PAYMENT_REQUIRED: "payment.required",
+  SERVICE_UNAVAILABLE: "service.unavailable",
   UPSTREAM_UNAVAILABLE: "upstream.unavailable",
   SANDBOX_UNAVAILABLE: "sandbox.unavailable",
   INTERNAL_ERROR: "internal.error",
@@ -51,8 +53,7 @@ export function problem(c: Context, opts: ProblemOptions): Response {
     ...rest,
   };
   if (upgradeUrl) body.upgradeUrl = upgradeUrl;
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/problem+json" },
+  return c.body(JSON.stringify(body), status as ContentfulStatusCode, {
+    "Content-Type": "application/problem+json",
   });
 }

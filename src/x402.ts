@@ -279,6 +279,7 @@ async function initX402(): Promise<void> {
     console.error("[x402] Server will continue without x402 payments — fix facilitator connectivity and redeploy");
     x402MW = null;
     x402Ready = false;
+    if (X402_ENABLED) throw err;
   }
 }
 

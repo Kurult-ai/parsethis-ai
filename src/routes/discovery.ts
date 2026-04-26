@@ -300,13 +300,13 @@ discoveryRoutes.get("/openapi.json", (c) => {
                     verdict: "high_risk",
                     flags: [
                       {
-                        type: "prompt_injection",
-                        severity: "high",
-                        description: "Instruction override attempt",
-                        evidence: "Ignore previous instructions",
+                        category: "prompt_injection",
+                        severity: 8,
+                        label: "Instruction override attempt",
+                        detail: "Ignore previous instructions",
                       },
                     ],
-                    categories: { prompt_injection: 8.5, jailbreak: 6.0 },
+                    categories: ["prompt_injection"],
                     latency_ms: 42,
                   },
                 },
@@ -808,7 +808,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
                       enabled: { type: "boolean" },
                       network: { type: "string", example: "eip155:8453" },
                       facilitator: { type: "string" },
-                      pay_to: { type: "string" },
+                      payTo: { type: "string" },
                       mcp_endpoint: {
                         type: "string",
                         description: "URL of the MCP tool manifest agents can fetch.",
@@ -886,10 +886,10 @@ discoveryRoutes.get("/openapi.json", (c) => {
                     verdict: "critical",
                     flags: [
                       {
-                        type: "system_prompt_leak",
-                        severity: "critical",
-                        description: "Output appears to reveal the system prompt",
-                        evidence: "here's the system prompt",
+                        category: "system_prompt_leak",
+                        severity: 9,
+                        label: "Output appears to reveal the system prompt",
+                        detail: "here's the system prompt",
                       },
                     ],
                     categories: ["system_prompt_leak"],
@@ -1095,10 +1095,10 @@ discoveryRoutes.get("/openapi.json", (c) => {
               description: "Detected risk flags",
             },
             categories: {
-              type: "object",
-              description:
-                "Risk scores per OWASP-aligned category (0-10 each)",
-              additionalProperties: { type: "number" },
+              type: "array",
+              items: { type: "string" },
+              example: ["prompt_injection"],
+              description: "Detected OWASP-aligned risk categories",
             },
             latency_ms: {
               type: "number",
@@ -1118,7 +1118,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
               description: "Which layers contributed to the score (e.g. patterns, llm, sandbox).",
             },
             policy: {
-              $ref: "#/components/schemas/ScreeningPolicy",
+              $ref: "#/components/schemas/ParseResponsePolicy",
             },
             execution_pending: {
               type: "boolean",
@@ -1133,23 +1133,18 @@ discoveryRoutes.get("/openapi.json", (c) => {
         RiskFlag: {
           type: "object",
           properties: {
-            type: {
-              type: "string",
-              description:
-                "Flag category: prompt_injection, jailbreak, data_exfiltration, privilege_escalation, etc.",
-            },
-            severity: {
-              type: "string",
-              enum: ["low", "medium", "high", "critical"],
-            },
-            description: {
-              type: "string",
-              description: "Human-readable explanation",
-            },
-            evidence: {
-              type: "string",
-              description: "The specific text that triggered this flag",
-            },
+            category: { type: "string" },
+            severity: { type: "number", minimum: 1, maximum: 10 },
+            label: { type: "string" },
+            detail: { type: "string" },
+          },
+        },
+        ParseResponsePolicy: {
+          type: "object",
+          properties: {
+            auto_block: { type: "boolean" },
+            threshold: { type: "integer", minimum: 1, maximum: 10 },
+            tier: { type: "string" },
           },
         },
         ScreeningPolicy: {
@@ -1253,6 +1248,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
                 "rate_limit.exceeded",
                 "usage_cap.exceeded",
                 "payment.required",
+                "service.unavailable",
                 "upstream.unavailable",
                 "sandbox.unavailable",
                 "internal.error",

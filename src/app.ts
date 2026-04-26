@@ -91,7 +91,6 @@ app.use("/v1/analyze", x402Guard());
 app.use("/v1/evaluate", x402Guard());
 app.use("/v1/chat", x402Guard());
 app.use("/v1/parse", x402Guard());
-app.use("/v1/agent/trust/verify", x402Guard());
 app.use("/v1/screen-output", x402Guard());
 
 // Mount routes

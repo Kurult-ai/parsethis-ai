@@ -12,7 +12,7 @@ import { getRedis, isRedisAvailable, ensureRedisConnected } from "./redis.js";
 import { getCachedPolicyData, cachePolicyData } from "./result-store.js";
 import type { AppEnv, ScreeningPolicy } from "./types.js";
 import { auditLog } from "./lib/audit-log.js";
-import { incrementUsage, getUsage } from "./lib/usage-tracker.js";
+import { incrementUsage } from "./lib/usage-tracker.js";
 import { TIER_CONFIG, type PaidTier } from "./stripe.js";
 import { problem, ErrorCode } from "./lib/problem-response.js";
 
@@ -309,8 +309,16 @@ export function authMiddleware(requiredScope?: string) {
 
     // Track billing usage for paid tiers and enforce monthly soft cap (2× included)
     if (apiKeyRecord.tier !== "free") {
-      incrementUsage(apiKeyRecord.id).catch(() => {});
-      const usage = await getUsage(apiKeyRecord.id).catch(() => 0);
+      const usage = await incrementUsage(apiKeyRecord.id);
+      if (usage === null) {
+        return problem(c, {
+          status: 503,
+          title: "Usage tracking unavailable",
+          detail: "Cannot enforce usage caps with tracking offline",
+          code: ErrorCode.SERVICE_UNAVAILABLE,
+          retryable: true,
+        });
+      }
       const tierConfig = TIER_CONFIG[apiKeyRecord.tier as PaidTier];
       const softCap = tierConfig ? tierConfig.includedRequests * 2 : Infinity;
       if (usage > softCap) {
@@ -374,7 +382,7 @@ export async function createApiKey(
   scopes: string[],
   expiresAt?: Date
 ): Promise<{ id: string; key: string; name: string; scopes: string[]; created_at: string }> {
-  const result = await createApiKeyFromService("self-service", name, "free", undefined, expiresAt);
+  const result = await createApiKeyFromService("self-service", name, "free", undefined, scopes, expiresAt);
   return {
     id: result.record.id,
     key: result.key,
