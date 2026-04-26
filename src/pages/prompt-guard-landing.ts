@@ -90,7 +90,7 @@ if result.risk_score &gt;= 7:
     <div class="card">
       <div style="font-size:32px;font-weight:800;color:var(--accent2);margin-bottom:12px;line-height:1;">2</div>
       <div style="font-weight:700;font-size:16px;margin-bottom:8px;">Screen</div>
-      <p style="font-size:13px;color:var(--text-dim);margin:0;">Every incoming prompt is scored 0&ndash;10 across 8 threat categories in under 200ms before your agent executes it.</p>
+      <p style="font-size:13px;color:var(--text-dim);margin:0;">Every incoming prompt is scored 0&ndash;10 across 8 threat categories, with fast pattern checks before your agent executes it.</p>
     </div>
     <div class="card">
       <div style="font-size:32px;font-weight:800;color:var(--accent2);margin-bottom:12px;line-height:1;">3</div>
@@ -143,7 +143,7 @@ if result.risk_score &gt;= 7:
 <div class="section-chunk" style="text-align:center;">
   <div class="card" style="padding:40px 32px;">
     <h2 style="margin-top:0;margin-bottom:12px;">See it in action</h2>
-    <p style="color:var(--text-dim);font-size:15px;margin-bottom:24px;">Paste any prompt and get a real risk score in under 200ms. No sign-up required.</p>
+    <p style="color:var(--text-dim);font-size:15px;margin-bottom:24px;">Paste any prompt and get a real risk score. No sign-up required.</p>
     <a href="/prompt-guard/playground" class="btn btn-primary" style="padding:12px 32px;font-size:15px;">Open Playground &rarr;</a>
   </div>
 </div>

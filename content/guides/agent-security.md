@@ -118,7 +118,7 @@ According to NIST SP 800-53 control SI-10 (Information Input Validation), system
 
 Palo Alto Networks Unit 42's 2025 analysis of 47 agent compromise incidents found that 38 (81%) would have been prevented by screening at the tool-output trigger point. The remaining 9 involved direct user injection (which the user-input trigger catches) and supply chain attacks (which require additional controls beyond prompt screening). Zero incidents in the dataset bypassed all four structural triggers.
 
-The key insight is that screening at every boundary is computationally cheap. ParseThis.ai's pattern-matching layer resolves 85% of inputs in under 5ms. Only ambiguous cases escalate to LLM classification (200ms) or sandbox execution (1-2s). For a typical agent processing 100 tool calls per task, the total screening overhead is under 500ms — negligible compared to the LLM inference time of 5-30 seconds per step.
+The key insight is that screening at every boundary is computationally cheap when most inputs resolve at the deterministic layer. ParseThis.ai's pattern-matching layer resolves common signatures in under 20ms. Ambiguous cases can escalate to hosted LLM analysis (~2-3s) or sandbox execution (1-5s), so production agents should use the full path where deeper inspection is worth the extra latency.
 
 ## How do you implement agent security with ParseThis.ai?
 
@@ -383,7 +383,7 @@ Pattern matching does not flag this — the Base64 string is not a known attack 
 
 According to NVIDIA's Garak team, sandbox-based detection catches 23% more attacks than classifier-only approaches in their 2025 adversarial benchmark. The accuracy advantage is concentrated in three categories: encoded injection (+31% detection rate), multi-turn injection (+18%), and tool-calling injection (+26%). These are precisely the attack categories that target autonomous agents.
 
-The latency trade-off is real. Sandbox execution takes 1-5 seconds per evaluation, compared to <5ms for pattern matching and 200-500ms for LLM classification. ParseThis.ai addresses this through its multi-layer architecture: pattern matching resolves 85% of inputs instantly, LLM classification resolves another 12%, and only the remaining 3% of ambiguous inputs escalate to the sandbox. The median end-to-end latency is under 200ms because the sandbox is invoked rarely.
+The latency trade-off is real. Sandbox execution takes 1-5 seconds per evaluation, compared to under 20ms for pattern matching and roughly 2-3 seconds for hosted LLM-backed analysis. ParseThis.ai addresses this through its multi-layer architecture: pattern matching resolves known signatures quickly, while ambiguous or novel inputs can spend more time on the full analysis path.
 
 NIST SP 800-115 (Technical Guide to Information Security Testing and Assessment) recommends "execution-based testing" alongside static analysis for security evaluation. The sandbox applies this principle to prompt injection — static analysis (pattern matching) catches known attacks; execution-based testing (sandbox) catches unknown attacks.
 

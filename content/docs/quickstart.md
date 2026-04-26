@@ -13,7 +13,7 @@ author: "ParseThis.ai"
 
 ParseThis.ai is a prompt security API that detects prompt injections, jailbreaks, data exfiltration, and adversarial attacks before your AI agent executes them. It evaluates prompts across 8 risk categories aligned to the OWASP LLM Top 10 (LLM01:2025), returning a 0–10 risk score with categorized flags and an actionable verdict.
 
-ParseThis.ai combines three detection layers — pattern matching (50+ signatures, <5ms), LLM deep analysis (DeepSeek or GPT-4o, <200ms), and optional sandbox execution (isolated Railway container) — to achieve ~95% detection rates with low false positives.
+ParseThis.ai combines three detection layers — pattern matching (50+ signatures, <20ms), LLM deep analysis (DeepSeek or GPT-4o, typically ~2-3s on the hosted path), and optional sandbox execution (isolated Railway container) — to achieve high detection coverage with low false positives.
 
 ## How do I install the skill?
 

@@ -262,7 +262,7 @@ function copyPrompt(btn) {
 <!-- Chunk 4: Threat categories (Miller's Law: 4 of 7, 4 items within) -->
 <div class="section-chunk">
   <h2 style="margin-top:0;">What threats does Prompt Guard detect?</h2>
-  <p class="answer-capsule">Prompt Guard screens for OWASP LLM01:2025 threats across 8 risk categories, scoring each prompt 0&ndash;10 in under 200ms.</p>
+  <p class="answer-capsule">Prompt Guard screens for OWASP LLM01:2025 threats across 8 risk categories. The regex layer resolves known patterns in under 20ms; full LLM-backed analysis runs on demand.</p>
 
   <div class="card-grid">
     <div class="card" style="border-top:3px solid var(--destructive);">
@@ -301,8 +301,8 @@ function copyPrompt(btn) {
       <div style="font-size:13px;color:var(--text-dim);">Regex patterns across 9 risk categories</div>
     </div>
     <div class="card" style="text-align:center;">
-      <div style="font-size:28px;font-weight:700;color:var(--accent2);margin-bottom:4px;">&lt;200ms</div>
-      <div style="font-size:13px;color:var(--text-dim);">End-to-end screening latency</div>
+      <div style="font-size:28px;font-weight:700;color:var(--accent2);margin-bottom:4px;">&lt;20ms</div>
+      <div style="font-size:13px;color:var(--text-dim);">Regex layer; LLM path ~2&ndash;3s</div>
     </div>
     <div class="card" style="text-align:center;">
       <div style="font-size:28px;font-weight:700;color:var(--accent2);margin-bottom:4px;">3-layer</div>
