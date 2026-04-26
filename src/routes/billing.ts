@@ -193,7 +193,10 @@ billingRoutes.post("/v1/billing/signup-checkout", async (c) => {
     return c.json({ error: "Invalid tier. Must be 'pro' or 'team'" }, 400);
   }
 
-  const ip = c.req.header("x-forwarded-for") || c.req.header("x-real-ip") || "unknown";
+  const ip =
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
+    c.req.header("x-real-ip") ||
+    "unknown";
 
   // Fail-closed per-IP rate limit (5/min). Redis unreachable → 503.
   if (!isRedisAvailable()) {

@@ -630,7 +630,10 @@ publicRoutes.post("/v1/keys/generate", async (c) => {
     return c.json({ error: "Key generation is disabled by the operator" }, 403);
   }
 
-  const ip = c.req.header("x-forwarded-for") || c.req.header("x-real-ip") || "unknown";
+  const ip =
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
+    c.req.header("x-real-ip") ||
+    "unknown";
 
   // Redis-backed rate limiting (survives restarts). Fail-closed: if Redis is
   // unreachable, refuse the request rather than letting attackers burn the
