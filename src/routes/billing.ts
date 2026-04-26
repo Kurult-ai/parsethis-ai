@@ -16,7 +16,6 @@ import {
   revokeApiKey,
 } from "../api-key-service.js";
 import { getUsage } from "../lib/usage-tracker.js";
-import { getBaseUrl } from "../lib/route-utils.js";
 import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
 import { prisma } from "../db.js";
 import type { AppEnv } from "../types.js";
@@ -291,7 +290,7 @@ billingRoutes.post("/v1/billing/portal", authMiddleware("evaluate"), async (c) =
     return c.json({ error: "No active subscription found" }, 404);
   }
 
-  const baseUrl = getBaseUrl(c);
+  const baseUrl = process.env.PUBLIC_BASE_URL || "https://www.parsethis.ai";
 
   try {
     const url = await createPortalSession(subscription.stripeCustomerId, baseUrl);
