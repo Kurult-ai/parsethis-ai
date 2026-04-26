@@ -292,29 +292,38 @@ initX402().catch((err) => {
 
 /**
  * Middleware that intercepts x402 payment headers on POST routes.
- * If payment header present → verifies via x402 SDK → sets x402Paid flag → proceeds.
- * If no payment header → passes through to normal API key auth.
+ *  - x-payment present → verifies via x402 SDK → sets x402Paid flag → proceeds.
+ *  - Authorization present (API key path) → falls through to authMiddleware.
+ *  - Neither present → routes through x402MW so the agent gets a 402 with accepts[].
+ *    This satisfies the Bazaar/agent-discovery contract: unauth probe → 402 manifest.
  */
 export function x402Guard() {
   return async (c: Context<AppEnv>, next: Next) => {
-    // Only handle POST requests with payment headers when x402 is active
+    // Only handle POST requests when x402 is active
     if (c.req.method !== "POST" || !x402MW) {
       await next();
       return;
     }
 
-    // Check for x402 payment header (protocol uses "x-payment")
     const hasPayment = c.req.header("x-payment");
+    const hasAuthHeader = c.req.header("authorization");
+
     if (hasPayment) {
-      // Route through x402 middleware for verification + settlement
       return x402MW(c, async () => {
-        // Payment verified — mark context so auth middleware skips API key check
         c.set("x402Paid", true);
         await next();
       });
     }
 
-    // No payment header — fall through to API key auth
+    if (!hasAuthHeader) {
+      // Unauthenticated probe — let the x402 middleware emit 402 with accepts[].
+      // Inner next() runs only if x402MW unexpectedly lets the request through.
+      return x402MW(c, async () => {
+        await next();
+      });
+    }
+
+    // Has Authorization but no payment — fall through to API key auth
     await next();
   };
 }
