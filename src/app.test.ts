@@ -86,6 +86,13 @@ describe("Security Headers", () => {
     assert.equal(res.headers.get("x-content-type-options"), "nosniff");
     assert.equal(res.headers.get("x-frame-options"), "DENY");
   });
+
+  it("allows Google Fonts in the content security policy", async () => {
+    const res = await req("/health");
+    const csp = res.headers.get("content-security-policy") || "";
+    assert.ok(csp.includes("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com"));
+    assert.ok(csp.includes("font-src 'self' https://fonts.gstatic.com"));
+  });
 });
 
 // ========================
