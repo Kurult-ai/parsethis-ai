@@ -102,11 +102,11 @@ The right rate limit is the lowest one that still allows your agent to function.
 
 The gold standard for agent permissions is zero standing privilege: the agent holds no persistent credentials at all. Instead, each request is independently authorized and paid for.
 
-This is the model behind the x402 payment protocol. Instead of an API key that grants ongoing access, the agent pays per request with a cryptographic payment proof:
+This is the model behind the x402 payment protocol. Instead of an API key that grants ongoing access, the agent pays per request with a cryptographic payment proof in the payment-signature (legacy: x-payment) header:
 
 ```
 POST /v1/analyze
-X-PAYMENT: {base64-encoded USDC payment proof}
+payment-signature: {base64-encoded USDC payment proof}
 ```
 
 No key to steal. No scope to escalate. No credential to rotate. Each request is self-contained, and the cost ($0.01-$0.15 per analysis) creates an economic ceiling on abuse — an attacker who compromises the agent can only spend what the agent's wallet holds, not extract unlimited data.
