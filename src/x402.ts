@@ -224,7 +224,7 @@ async function initX402(): Promise<void> {
                   risk_score: 9.2,
                   verdict: "critical",
                   flags: [
-                    { type: "system_prompt_leak", severity: "critical", description: "Output appears to reveal the system prompt", evidence: "here's the system prompt" },
+                    { category: "system_prompt_leak", severity: 9, label: "Output appears to reveal the system prompt", detail: "here's the system prompt" },
                   ],
                   categories: ["system_prompt_leak"],
                   output_length: 62,
@@ -236,7 +236,7 @@ async function initX402(): Promise<void> {
                   properties: {
                     risk_score: { type: "number", minimum: 0, maximum: 10 },
                     verdict: { type: "string", enum: ["safe", "low_risk", "medium_risk", "high_risk", "critical"] },
-                    flags: { type: "array" },
+                    flags: { type: "array", items: { $ref: "#/components/schemas/RiskFlag" } },
                     categories: { type: "array", items: { type: "string" } },
                     output_length: { type: "integer" },
                     analyzed_at: { type: "string", format: "date-time" },
@@ -342,7 +342,7 @@ export function getPricingInfo() {
   return {
     enabled: isX402Enabled(),
     currency: "USDC",
-    network: NETWORK,
+    network: NETWORK ?? "not_configured",
     payTo: WALLET || "not_configured",
     facilitator: facilitatorUrl,
     // URL of the MCP tool manifest — Parse publishes tool definitions here for MCP-aware agents.

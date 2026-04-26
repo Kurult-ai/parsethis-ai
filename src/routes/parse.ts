@@ -5,6 +5,7 @@ import type { ParseRequest, ExecutionResult } from "../parse.js";
 import type { AppEnv } from "../types.js";
 import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
 import { canUseSandbox, executeInSandbox } from "../lib/sandbox-client.js";
+import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 
 import { getBaseUrl } from "../lib/route-utils.js";
 import { auditLog } from "../lib/audit-log.js";
@@ -31,7 +32,7 @@ const DAILY_COST_CAPS: Record<string, number> = {
 
 // ─── POST /v1/parse ────────────────────────────────────────────────────────
 
-parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
+parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddleware(), async (c) => {
   const body = await c.req.json<ParseRequest>();
 
   // ── Input validation ──
@@ -148,6 +149,18 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
     }
   }
 
+  const apiKey = c.get("apiKey");
+  if (body.execute === true && apiKey.id.startsWith("x402:")) {
+    return problem(c, {
+      status: 400,
+      title: "Async execution not supported for x402 callers",
+      detail:
+        "Async execution requires a stable API key for poll authorization. Either omit execute:true for synchronous execution, or use Bearer key authentication.",
+      code: ErrorCode.X402_ASYNC_UNSUPPORTED,
+      retryable: false,
+    });
+  }
+
   // ── Run risk analysis (synchronous — pattern + LLM) ──
   const parseStart = Date.now();
   const result = await parsePrompt(body);
@@ -181,7 +194,6 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), async (c) => {
 
   // ── Attach policy recommendation ──
   const policy = c.get("policy");
-  const apiKey = c.get("apiKey");
   const tier = apiKey?.tier ?? "free";
   result.policy = {
     auto_block: result.risk_score >= (policy?.autoBlockThreshold ?? 7),

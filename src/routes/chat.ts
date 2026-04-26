@@ -3,13 +3,14 @@ import { stream } from "hono/streaming";
 import { authMiddleware } from "../auth.js";
 import { handleChat, handleChatStream } from "../chat.js";
 import { getAvailableModels } from "../model-client.js";
+import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 import type { ChatRequest } from "../types.js";
 
 const ALLOWED_MODELS = new Set(getAvailableModels().map((m) => m.id));
 
 export const chatRoutes = new Hono();
 
-chatRoutes.post("/v1/chat", authMiddleware("chat"), async (c) => {
+chatRoutes.post("/v1/chat", authMiddleware("chat"), billableUsageMiddleware(), async (c) => {
   const body = await c.req.json<ChatRequest>();
 
   if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {

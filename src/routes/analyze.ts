@@ -3,11 +3,12 @@ import { stream } from "hono/streaming";
 import { authMiddleware } from "../auth.js";
 import { startAnalysis, getAnalysis, listAnalyses } from "../analyzer.js";
 import { validateUrl } from "../lib/ssrf-guard.js";
+import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 import type { AnalyzeRequest } from "../types.js";
 
 export const analyzeRoutes = new Hono();
 
-analyzeRoutes.post("/v1/analyze", authMiddleware("analyze"), async (c) => {
+analyzeRoutes.post("/v1/analyze", authMiddleware("analyze"), billableUsageMiddleware(), async (c) => {
   const body = await c.req.json<AnalyzeRequest>();
 
   if (!body.url || typeof body.url !== "string") {

@@ -3,6 +3,8 @@ import { authMiddleware } from "../auth.js";
 import { verifyTrust } from "../lib/trust-verification/orchestrator.js";
 import type { AppEnv } from "../types.js";
 import { auditLog } from "../lib/audit-log.js";
+import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
+import { problem, ErrorCode } from "../lib/problem-response.js";
 
 export const agentTrustRoutes = new Hono<AppEnv>();
 
@@ -13,7 +15,7 @@ export const agentTrustRoutes = new Hono<AppEnv>();
  * social engineering, spoofing, sensitive data leakage, and malicious
  * intent. Returns a 0-10 risk score with actionable flags.
  */
-agentTrustRoutes.post("/v1/agent/trust/verify", authMiddleware("evaluate"), async (c) => {
+agentTrustRoutes.post("/v1/agent/trust/verify", authMiddleware("evaluate"), billableUsageMiddleware(), async (c) => {
   const body = await c.req.json<{
     source_agent: string;
     message: string;
@@ -21,15 +23,33 @@ agentTrustRoutes.post("/v1/agent/trust/verify", authMiddleware("evaluate"), asyn
   }>();
 
   if (!body.source_agent || typeof body.source_agent !== "string") {
-    return c.json({ error: "source_agent is required and must be a string" }, 400);
+    return problem(c, {
+      status: 400,
+      title: "Invalid input",
+      detail: "source_agent is required and must be a string",
+      code: ErrorCode.VALIDATION_INVALID_INPUT,
+      retryable: false,
+    });
   }
 
   if (!body.message || typeof body.message !== "string") {
-    return c.json({ error: "message is required and must be a string" }, 400);
+    return problem(c, {
+      status: 400,
+      title: "Invalid input",
+      detail: "message is required and must be a string",
+      code: ErrorCode.VALIDATION_INVALID_INPUT,
+      retryable: false,
+    });
   }
 
   if (body.message.length > 50_000) {
-    return c.json({ error: "message must be less than 50,000 characters" }, 400);
+    return problem(c, {
+      status: 400,
+      title: "Invalid input",
+      detail: "message must be less than 50,000 characters",
+      code: ErrorCode.VALIDATION_INVALID_INPUT,
+      retryable: false,
+    });
   }
 
   // Map public API shape to internal orchestrator request

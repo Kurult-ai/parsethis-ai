@@ -5,6 +5,7 @@ import { runSpecEvaluators } from "../evaluators.js";
 import { executePrompt } from "../executor.js";
 import { getAvailableModels } from "../model-client.js";
 import { interpolatePrompt } from "../lib/prompt-utils.js";
+import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 import { EvaluateRequestSchema } from "../schemas.js";
 import type { EvaluationResult, TestCaseResult, EvalSummary } from "../types.js";
 import type { ValidatedEvaluateRequest } from "../schemas.js";
@@ -62,7 +63,7 @@ evaluateRoutes.get("/v1/evaluators", (c) =>
 
 // --- Evaluation ---
 
-evaluateRoutes.post("/v1/evaluate", authMiddleware("evaluate"), async (c) => {
+evaluateRoutes.post("/v1/evaluate", authMiddleware("evaluate"), billableUsageMiddleware(), async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body) {
     return c.json({ error: { code: "invalid_request", message: "Invalid JSON body" } }, 400);

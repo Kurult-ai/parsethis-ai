@@ -178,7 +178,7 @@ discoveryRoutes.get("/.well-known/ai-plugin.json", (c) => {
       "Screen untrusted prompts for injection attacks, jailbreaks, and adversarial patterns before your AI agent executes them. Returns 0-10 risk score with typed flags across 8 categories.",
     logo_url: `${baseUrl}/logo.png`,
     contact_email: "hello@parsethis.ai",
-    legal_info_url: `${baseUrl}/legal`,
+    legal_info_url: `${baseUrl}/privacy`,
     auth: {
       type: "bearer",
       instructions:
@@ -1032,7 +1032,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
               type: "boolean",
               default: false,
               description:
-                "Run the prompt in an isolated sandbox after screening",
+                "Run the prompt in an isolated sandbox after screening. Note: execute:true requires Bearer key authentication; it is not supported for x402 payment callers and returns 400 x402.async_unsupported.",
             },
             test_input: {
               type: "string",
@@ -1139,6 +1139,16 @@ discoveryRoutes.get("/openapi.json", (c) => {
             detail: { type: "string" },
           },
         },
+        AgentTrustFlag: {
+          type: "object",
+          required: ["type", "severity", "description", "evidence"],
+          properties: {
+            type: { type: "string" },
+            severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
+            description: { type: "string" },
+            evidence: { type: "string" },
+          },
+        },
         ParseResponsePolicy: {
           type: "object",
           properties: {
@@ -1188,7 +1198,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
             risk_score: { type: "number", minimum: 0, maximum: 10 },
             flags: {
               type: "array",
-              items: { $ref: "#/components/schemas/RiskFlag" },
+              items: { $ref: "#/components/schemas/AgentTrustFlag" },
             },
             recommendation: { type: "string" },
           },
@@ -1241,8 +1251,11 @@ discoveryRoutes.get("/openapi.json", (c) => {
                 "validation.required",
                 "validation.too_large",
                 "validation.invalid_type",
+                "validation.invalid_input",
                 "auth.missing",
+                "auth.required",
                 "auth.invalid",
+                "auth.invalid_key",
                 "auth.expired",
                 "auth.insufficient_scope",
                 "rate_limit.exceeded",
@@ -1251,6 +1264,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
                 "service.unavailable",
                 "upstream.unavailable",
                 "sandbox.unavailable",
+                "x402.async_unsupported",
                 "internal.error",
               ],
             },

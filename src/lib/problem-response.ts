@@ -5,8 +5,11 @@ export const ErrorCode = {
   VALIDATION_REQUIRED: "validation.required",
   VALIDATION_TOO_LARGE: "validation.too_large",
   VALIDATION_INVALID_TYPE: "validation.invalid_type",
+  VALIDATION_INVALID_INPUT: "validation.invalid_input",
   AUTH_MISSING: "auth.missing",
+  AUTH_REQUIRED: "auth.required",
   AUTH_INVALID: "auth.invalid",
+  AUTH_INVALID_KEY: "auth.invalid_key",
   AUTH_EXPIRED: "auth.expired",
   AUTH_INSUFFICIENT_SCOPE: "auth.insufficient_scope",
   RATE_LIMIT: "rate_limit.exceeded",
@@ -15,6 +18,7 @@ export const ErrorCode = {
   SERVICE_UNAVAILABLE: "service.unavailable",
   UPSTREAM_UNAVAILABLE: "upstream.unavailable",
   SANDBOX_UNAVAILABLE: "sandbox.unavailable",
+  X402_ASYNC_UNSUPPORTED: "x402.async_unsupported",
   INTERNAL_ERROR: "internal.error",
 } as const;
 

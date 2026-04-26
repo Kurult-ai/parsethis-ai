@@ -233,7 +233,7 @@ billingRoutes.post("/v1/billing/signup-checkout", async (c) => {
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   const apiKey = await createApiKey(name, ["analyze", "evaluate", "chat"], expiresAt);
 
-  const baseUrl = getBaseUrl(c);
+  const baseUrl = process.env.PUBLIC_BASE_URL || "https://www.parsethis.ai";
   try {
     const checkoutUrl = await createCheckoutSession(apiKey.id, tier as PaidTier, baseUrl);
     return c.json(
@@ -265,7 +265,7 @@ billingRoutes.post("/v1/billing/checkout", authMiddleware("evaluate"), async (c)
   }
 
   const apiKey = c.get("apiKey");
-  const baseUrl = getBaseUrl(c);
+  const baseUrl = process.env.PUBLIC_BASE_URL || "https://www.parsethis.ai";
 
   try {
     const url = await createCheckoutSession(apiKey.id, tier as PaidTier, baseUrl);

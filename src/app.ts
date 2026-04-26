@@ -15,16 +15,29 @@ import { discoveryRoutes } from "./routes/discovery.js";
 import { screeningMetricsRoutes } from "./routes/screening-metrics.js";
 import { billingRoutes, billingWebhookRoute } from "./routes/billing.js";
 import { contentNegotiation } from "./lib/content-negotiation.js";
+import { problem, ErrorCode } from "./lib/problem-response.js";
 
 export const app = new Hono();
 
 // Global error handler
 app.onError((err, c) => {
   if (err instanceof SyntaxError) {
-    return c.json({ error: "Invalid JSON in request body" }, 400);
+    return problem(c, {
+      status: 400,
+      title: "Invalid input",
+      detail: "Invalid JSON in request body",
+      code: ErrorCode.VALIDATION_INVALID_INPUT,
+      retryable: false,
+    });
   }
   console.error(`[ERROR] ${c.req.method} ${c.req.path}:`, err.message);
-  return c.json({ error: "Internal server error" }, 500);
+  return problem(c, {
+    status: 500,
+    title: "Internal server error",
+    detail: "Internal server error",
+    code: ErrorCode.INTERNAL_ERROR,
+    retryable: false,
+  });
 });
 
 // 404 handler
