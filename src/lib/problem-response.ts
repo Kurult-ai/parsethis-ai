@@ -19,6 +19,7 @@ export const ErrorCode = {
   UPSTREAM_UNAVAILABLE: "upstream.unavailable",
   SANDBOX_UNAVAILABLE: "sandbox.unavailable",
   X402_ASYNC_UNSUPPORTED: "x402.async_unsupported",
+  RESOURCE_NOT_FOUND: "resource.not_found",
   INTERNAL_ERROR: "internal.error",
 } as const;
 

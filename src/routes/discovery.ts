@@ -1265,6 +1265,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
                 "upstream.unavailable",
                 "sandbox.unavailable",
                 "x402.async_unsupported",
+                "resource.not_found",
                 "internal.error",
               ],
             },
