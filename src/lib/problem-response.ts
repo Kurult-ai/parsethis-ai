@@ -62,3 +62,18 @@ export function problem(c: Context, opts: ProblemOptions): Response {
     "Content-Type": "application/problem+json",
   });
 }
+
+export function jsonContentTypeProblem(c: Context): Response | null {
+  const contentType = c.req.header("content-type") ?? "";
+  if (!contentType || contentType.toLowerCase().includes("application/json")) {
+    return null;
+  }
+
+  return problem(c, {
+    status: 400,
+    title: "Validation failure",
+    detail: "Content-Type must be application/json",
+    code: ErrorCode.VALIDATION_INVALID_TYPE,
+    retryable: false,
+  });
+}

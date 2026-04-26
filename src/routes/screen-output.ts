@@ -3,7 +3,7 @@ import { authMiddleware } from "../auth.js";
 import { analyzeOutputRisks } from "../parse.js";
 import type { AppEnv } from "../types.js";
 import { auditLog } from "../lib/audit-log.js";
-import { problem, ErrorCode } from "../lib/problem-response.js";
+import { problem, ErrorCode, jsonContentTypeProblem } from "../lib/problem-response.js";
 import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 
 export const screenOutputRoutes = new Hono<AppEnv>();
@@ -17,6 +17,9 @@ export const screenOutputRoutes = new Hono<AppEnv>();
  * or passing it to another agent.
  */
 screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billableUsageMiddleware(), async (c) => {
+  const contentTypeProblem = jsonContentTypeProblem(c);
+  if (contentTypeProblem) return contentTypeProblem;
+
   const body = await c.req.json<{ output: string; context?: string }>();
 
   if (!body.output || typeof body.output !== "string") {
