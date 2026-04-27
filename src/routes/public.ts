@@ -23,6 +23,7 @@ import { renderScreeningDashboardPage } from "../pages/screening-dashboard.js";
 import { renderBillingDashboardPage } from "../pages/billing.js";
 import { renderPromptGuardLandingPage } from "../pages/prompt-guard-landing.js";
 import { renderPromptGuardPlaygroundPage } from "../pages/prompt-guard-playground.js";
+import { problem, ErrorCode } from "../lib/problem-response.js";
 import { renderBlogListingPage, renderBlogPostPage } from "../pages/blog.js";
 
 export const publicRoutes = new Hono();
@@ -662,9 +663,25 @@ publicRoutes.post("/v1/keys/generate", async (c) => {
   }
 
   const body = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }));
-  const name = (body.name && typeof body.name === "string" && body.name.length <= 100)
-    ? body.name
-    : "Agent Key " + new Date().toISOString().slice(0, 10);
+  if (!body.name || typeof body.name !== "string" || body.name.trim() === "") {
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "name is required and must be a non-empty string",
+      code: ErrorCode.VALIDATION_REQUIRED,
+      retryable: false,
+    });
+  }
+  if (body.name.length > 100) {
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "name must be less than 100 characters",
+      code: ErrorCode.VALIDATION_TOO_LARGE,
+      retryable: false,
+    });
+  }
+  const name = body.name.trim();
 
   // Create key with 30-day expiry
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);

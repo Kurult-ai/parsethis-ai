@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { authMiddleware, createApiKey, listApiKeys, deleteApiKey } from "../auth.js";
+import { problem, ErrorCode } from "../lib/problem-response.js";
 
 export const keysRoutes = new Hono();
 
@@ -32,6 +33,21 @@ keysRoutes.post("/v1/keys", authMiddleware("admin"), async (c) => {
 
   const key = await createApiKey(body.name, body.scopes || ["analyze", "evaluate", "chat"]);
   return c.json(key, 201);
+});
+
+keysRoutes.delete("/v1/keys/self", authMiddleware(), async (c) => {
+  const apiKey = c.get("apiKey");
+  const deleted = await deleteApiKey(apiKey.id);
+  if (!deleted) {
+    return problem(c, {
+      status: 404,
+      title: "Not found",
+      detail: "Key not found or cannot be revoked",
+      code: ErrorCode.RESOURCE_NOT_FOUND,
+      retryable: false,
+    });
+  }
+  return c.json({ revoked: true, id: apiKey.id });
 });
 
 keysRoutes.delete("/v1/keys/:id", authMiddleware("admin"), async (c) => {
