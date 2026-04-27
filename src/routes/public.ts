@@ -667,7 +667,7 @@ publicRoutes.post("/v1/keys/generate", async (c) => {
     return problem(c, {
       status: 400,
       title: "Validation failure",
-      detail: "name is required and must be a non-empty string",
+      detail: "name is required and must be a non-empty string. Use a descriptive label like 'my-app-prod' or '<project>-<env>' so you can identify and revoke this key later.",
       code: ErrorCode.VALIDATION_REQUIRED,
       retryable: false,
     });

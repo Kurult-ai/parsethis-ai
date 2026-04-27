@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { authMiddleware, createApiKey, listApiKeys, deleteApiKey } from "../auth.js";
 import { problem, ErrorCode } from "../lib/problem-response.js";
+import { auditLog } from "../lib/audit-log.js";
 
 export const keysRoutes = new Hono();
 
@@ -37,8 +38,33 @@ keysRoutes.post("/v1/keys", authMiddleware("admin"), async (c) => {
 
 keysRoutes.delete("/v1/keys/self", authMiddleware(), async (c) => {
   const apiKey = c.get("apiKey");
+  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+
+  // Reject synthetic identities that don't map to a revocable DB row.
+  // Master key: use DELETE /v1/keys/:id with admin scope instead.
+  // x402-paid: ephemeral per-request id, nothing to revoke.
+  if (apiKey.id === "master") {
+    return problem(c, {
+      status: 400,
+      title: "Cannot self-revoke master key",
+      detail: "The master admin key cannot be revoked via /v1/keys/self. Rotate MASTER_API_KEY in the operator's secret store instead.",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
+  }
+  if (typeof apiKey.id === "string" && apiKey.id.startsWith("x402:")) {
+    return problem(c, {
+      status: 400,
+      title: "Cannot self-revoke x402 caller",
+      detail: "x402-paid requests have no persistent key to revoke. Stop sending payment-signature headers to stop being charged.",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
+  }
+
   const deleted = await deleteApiKey(apiKey.id);
   if (!deleted) {
+    auditLog({ action: "self_revoke_failed", apiKeyId: apiKey.id, detail: "Key not found or already revoked", ip });
     return problem(c, {
       status: 404,
       title: "Not found",
@@ -47,6 +73,7 @@ keysRoutes.delete("/v1/keys/self", authMiddleware(), async (c) => {
       retryable: false,
     });
   }
+  auditLog({ action: "self_revoke", apiKeyId: apiKey.id, ip });
   return c.json({ revoked: true, id: apiKey.id });
 });
 
