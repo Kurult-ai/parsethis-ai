@@ -176,13 +176,7 @@ export function renderPricingPage(baseUrl: string): string {
   </div>
 
   <h3>TypeScript</h3>
-  <pre><code>// npm install @x402/fetch
-import { wrapFetch } from "@x402/fetch";
-const x402Fetch = wrapFetch(fetch, walletClient);
-const res = await x402Fetch("https://parsethis.ai/v1/parse", {
-  method: "POST",
-  body: JSON.stringify({ prompt: "..." }),
-});</code></pre>
+  <p class="answer-capsule">Use the current TypeScript x402 recipe at <a href="/skill#x402-node">/skill#x402-node</a>. It registers the required scheme before wrapping fetch.</p>
 
   <h3>Python</h3>
   <pre><code># pip install x402

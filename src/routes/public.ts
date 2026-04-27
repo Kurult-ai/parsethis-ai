@@ -249,13 +249,7 @@ publicRoutes.get("/docs", (c) => {
 
 <p class="answer-capsule">Attach an <code>X-PAYMENT</code> header with a signed USDC transfer on Base L2. No API key needed. Pay only for what you use.</p>
 
-<pre><code>npm install @x402/fetch
-import { wrapFetch } from "@x402/fetch";
-const x402Fetch = wrapFetch(fetch, walletClient);
-const res = await x402Fetch("https://parsethis.ai/v1/parse", {
-  method: "POST",
-  body: JSON.stringify({ prompt: "..." }),
-});</code></pre>
+<p>For the current TypeScript client recipe, use <a href="/skill#x402-node">/skill#x402-node</a>. It registers the required x402 scheme before wrapping fetch.</p>
 
 <h2>Response Format</h2>
 

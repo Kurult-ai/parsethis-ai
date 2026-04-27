@@ -106,6 +106,37 @@ Content-Type: application/json
 
 Read your current policy: \`GET ${baseUrl}/v1/policy\`
 
+<a id="x402-node"></a>
+## x402 Node Recipe
+
+\`\`\`ts
+import { wrapFetchWithPayment, x402Client } from "@x402/fetch";
+import { ExactEvmScheme } from "@x402/evm";
+import { privateKeyToAccount } from "viem/accounts";
+
+const PRIVATE_KEY = process.env.PRIVATE_KEY;
+if (!PRIVATE_KEY?.startsWith("0x")) {
+  throw new Error("PRIVATE_KEY must be a 0x-prefixed hex string");
+}
+const account = privateKeyToAccount(PRIVATE_KEY);
+const client = new x402Client().register(
+  "eip155:8453",
+  new ExactEvmScheme(account)
+);
+const payFetch = wrapFetchWithPayment(fetch, client);
+
+// Use payFetch instead of fetch for /v1/parse:
+const res = await payFetch("${baseUrl}/v1/parse", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ prompt: "untrusted text here" }),
+});
+\`\`\`
+
+## x402 Python / Go / Rust
+
+Python, Go, and Rust: see the x402 ecosystem docs for the canonical client in that language.
+
 ## Other Endpoints
 
 - **POST ${baseUrl}/v1/analyze** — Full media credibility analysis for URLs
