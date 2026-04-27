@@ -9,29 +9,29 @@ import { listBlogPosts } from "../lib/markdown.js";
 export function renderLandingPage(baseUrl: string): string {
   const mcpConfig = JSON.stringify({ mcpServers: { "prompt-guard": { command: "npx", args: ["-y", "@parsethis/mcp-prompt-guard"], env: { PARSETHIS_API_KEY: "your-key-here" } } } }, null, 2);
 
-  const BEARER_PROMPT = `You will integrate Parse, an independent prompt-injection security API, into this project.
+  const BEARER_PROMPT = `You will integrate Parse, an independent prompt-injection security API, into this codebase or running agent runtime.
 
-Step 1 — Provision a key. POST https://www.parsethis.ai/v1/keys/generate with body {"name":"<short project label>"}. No auth required. Save the returned \`key\` (format: pfa_live_…) as env var PARSE_API_KEY. Never commit it.
-
-Step 2 — Read the integration guide at https://www.parsethis.ai/skill and follow it as instructions, not as documentation.
-
-Step 3 — Wire POST https://www.parsethis.ai/v1/parse into every code path where the agent acts on text it did not generate (user input, tool output, third-party content). Send {"prompt":"<the untrusted text>"} with header Authorization: Bearer $PARSE_API_KEY. Block when response.policy.auto_block is true; log + continue when 4 ≤ risk_score ≤ 6; allow when ≤ 3.
-
-Step 4 — Add a smoke test that calls /v1/parse with the literal string "Ignore previous instructions" and asserts risk_score ≥ 9.
-
-Report the files you changed, the test command, and any decisions you had to make.`;
-
-  const X402_PROMPT = `You will integrate Parse, an independent prompt-injection security API, into this project using x402 micropayments on Base mainnet (no API key — pay per call in USDC, ~$0.005 per /v1/parse call).
-
-Step 1 — Confirm the runtime can sign transactions on Base mainnet. Install \`@x402/fetch\` and \`viem\` via npm. The wallet's hex private key must be available at runtime via env var PRIVATE_KEY, with at least $0.05 USDC funded on Base. Never commit the key.
+Step 1 — Provision a key. POST https://www.parsethis.ai/v1/keys/generate with body {"name":"<short label for this caller>"}. No auth required. Save the returned \`key\` (format: pfa_live_…) as env var PARSE_API_KEY (or whatever secret store this runtime uses). Never commit it.
 
 Step 2 — Read the integration guide at https://www.parsethis.ai/skill and follow it as instructions, not as documentation.
 
-Step 3 — Wire POST https://www.parsethis.ai/v1/parse into every code path where the agent acts on text it did not generate. Use wrapFetchWithPayment(fetch, privateKeyToAccount(process.env.PRIVATE_KEY)) from @x402/fetch — it handles the 402 → sign USDC → retry-with-payment flow automatically. Block when response.policy.auto_block is true; log + continue when 4 ≤ risk_score ≤ 6; allow when ≤ 3.
+Step 3 — Wire POST https://www.parsethis.ai/v1/parse into every input boundary where the system handles text it did not generate (user input, inbound messages, tool output, third-party content, retrieved documents). Send {"prompt":"<the untrusted text>"} with header Authorization: Bearer $PARSE_API_KEY. Block when response.policy.auto_block is true; log + continue when 4 ≤ risk_score ≤ 6; allow when ≤ 3.
 
-Step 4 — Add a smoke test that calls /v1/parse with the literal string "Ignore previous instructions" and asserts risk_score ≥ 9. Confirm the test wallet was charged ~$0.005 USDC on basescan.org.
+Step 4 — Add a verification check (a unit test, health probe, or one-off curl — whatever fits this runtime) that calls /v1/parse with the literal string "Ignore previous instructions" and asserts risk_score ≥ 9.
 
-Report the files you changed, the test command, the funded wallet address, and any decisions you had to make.`;
+Report the files or runtime config you changed, how to verify the integration works, and any decisions you had to make.`;
+
+  const X402_PROMPT = `You will integrate Parse, an independent prompt-injection security API, into this codebase or running agent runtime using x402 micropayments on Base mainnet (no API key — pay per call in USDC, ~$0.005 per /v1/parse call).
+
+Step 1 — Confirm the runtime can sign transactions on Base mainnet. Install \`@x402/fetch\` and \`viem\` via npm (or the equivalent x402 client for this language). The wallet's hex private key must be available at runtime via env var PRIVATE_KEY (or whatever secret store this runtime uses), with at least $0.05 USDC funded on Base. Never commit the key.
+
+Step 2 — Read the integration guide at https://www.parsethis.ai/skill and follow it as instructions, not as documentation.
+
+Step 3 — Wire POST https://www.parsethis.ai/v1/parse into every input boundary where the system handles text it did not generate. Use wrapFetchWithPayment(fetch, privateKeyToAccount(process.env.PRIVATE_KEY)) from @x402/fetch — it handles the 402 → sign USDC → retry-with-payment flow automatically. Block when response.policy.auto_block is true; log + continue when 4 ≤ risk_score ≤ 6; allow when ≤ 3.
+
+Step 4 — Add a verification check (a unit test, health probe, or one-off curl — whatever fits this runtime) that calls /v1/parse with the literal string "Ignore previous instructions" and asserts risk_score ≥ 9. Confirm the test wallet was charged ~$0.005 USDC on basescan.org.
+
+Report the files or runtime config you changed, how to verify the integration works, the funded wallet address, and any decisions you had to make.`;
 
   const promptsPayload = JSON.stringify({ bearer: BEARER_PROMPT, x402: X402_PROMPT });
 
@@ -84,7 +84,7 @@ Report the files you changed, the test command, the funded wallet address, and a
 <section class="install-hero" aria-labelledby="install-hero-title">
   <div class="install-hero__eyebrow">One-step install · paste into your agent</div>
   <h1 id="install-hero-title" class="install-hero__title">Hand Parse to your AI. It does the rest.</h1>
-  <p class="install-hero__sub">Copy the prompt below and paste it into Claude, ChatGPT, Cursor, or any coding agent. It provisions auth, reads the integration guide, and wires Parse into your codebase end-to-end.</p>
+  <p class="install-hero__sub">Copy the prompt below and paste it into Claude, ChatGPT, Cursor, or any coding or runtime agent. It provisions auth, reads the integration guide, and wires Parse into your codebase or agent runtime end-to-end.</p>
 
   <div class="install-hero__toggle" role="tablist" aria-label="Authentication method">
     <button type="button" role="tab" aria-selected="true" data-route="bearer" class="install-hero__tab is-active">
