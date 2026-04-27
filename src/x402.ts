@@ -360,7 +360,7 @@ export function getPricingInfo() {
       url: "/v1/keys/generate",
     },
     agent_integration: {
-      typescript: 'npm install @x402/fetch — then use wrapFetch(fetch, walletClient)',
+      typescript: "Use /skill#x402-node for the current TypeScript x402 client recipe",
       python: 'pip install x402 — then use wrap_requests(session, wallet)',
       cli: 'npm install -g @x402/purl — then use purl POST <url>',
     },

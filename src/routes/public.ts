@@ -23,6 +23,7 @@ import { renderScreeningDashboardPage } from "../pages/screening-dashboard.js";
 import { renderBillingDashboardPage } from "../pages/billing.js";
 import { renderPromptGuardLandingPage } from "../pages/prompt-guard-landing.js";
 import { renderPromptGuardPlaygroundPage } from "../pages/prompt-guard-playground.js";
+import { problem, ErrorCode } from "../lib/problem-response.js";
 import { renderBlogListingPage, renderBlogPostPage } from "../pages/blog.js";
 
 export const publicRoutes = new Hono();
@@ -249,13 +250,7 @@ publicRoutes.get("/docs", (c) => {
 
 <p class="answer-capsule">Attach an <code>X-PAYMENT</code> header with a signed USDC transfer on Base L2. No API key needed. Pay only for what you use.</p>
 
-<pre><code>npm install @x402/fetch
-import { wrapFetch } from "@x402/fetch";
-const x402Fetch = wrapFetch(fetch, walletClient);
-const res = await x402Fetch("https://parsethis.ai/v1/parse", {
-  method: "POST",
-  body: JSON.stringify({ prompt: "..." }),
-});</code></pre>
+<p>For the current TypeScript client recipe, use <a href="/skill#x402-node">/skill#x402-node</a>. It registers the required x402 scheme before wrapping fetch.</p>
 
 <h2>Response Format</h2>
 
@@ -668,9 +663,25 @@ publicRoutes.post("/v1/keys/generate", async (c) => {
   }
 
   const body = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }));
-  const name = (body.name && typeof body.name === "string" && body.name.length <= 100)
-    ? body.name
-    : "Agent Key " + new Date().toISOString().slice(0, 10);
+  if (!body.name || typeof body.name !== "string" || body.name.trim() === "") {
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "name is required and must be a non-empty string. Use a descriptive label like 'my-app-prod' or '<project>-<env>' so you can identify and revoke this key later.",
+      code: ErrorCode.VALIDATION_REQUIRED,
+      retryable: false,
+    });
+  }
+  if (body.name.length > 100) {
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "name must be less than 100 characters",
+      code: ErrorCode.VALIDATION_TOO_LARGE,
+      retryable: false,
+    });
+  }
+  const name = body.name.trim();
 
   // Create key with 30-day expiry
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);

@@ -624,6 +624,44 @@ discoveryRoutes.get("/openapi.json", (c) => {
           },
         },
       },
+      "/v1/keys/self": {
+        delete: {
+          operationId: "revokeCurrentApiKey",
+          summary: "Revoke the current API key",
+          description:
+            "Revokes the bearer API key used on this request. No admin scope is required; possession of the key is sufficient authorization.",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            "200": {
+              description: "Current API key revoked",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["revoked", "id"],
+                    properties: {
+                      revoked: { type: "boolean" },
+                      id: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+            "401": {
+              description: "Missing or invalid API key",
+              content: {
+                "application/problem+json": { schema: { $ref: "#/components/schemas/Problem" } },
+              },
+            },
+            "404": {
+              description: "API key not found or cannot be revoked",
+              content: {
+                "application/problem+json": { schema: { $ref: "#/components/schemas/Problem" } },
+              },
+            },
+          },
+        },
+      },
       "/v1/analyze": {
         post: {
           operationId: "analyzeMedia",
@@ -1205,9 +1243,11 @@ discoveryRoutes.get("/openapi.json", (c) => {
         },
         KeyGenerateRequest: {
           type: "object",
+          required: ["name"],
           properties: {
             name: {
               type: "string",
+              minLength: 1,
               maxLength: 100,
               description: "Descriptive name for the key",
             },
