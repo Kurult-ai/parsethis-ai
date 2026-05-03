@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { PLAN_LIMITS } from "./lib/product-facts.js";
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 
@@ -17,8 +18,8 @@ export function isStripeEnabled(): boolean {
 }
 
 export const TIER_CONFIG = {
-  pro: { priceEnvVar: "STRIPE_PRO_PRICE_ID", includedRequests: 10_000, overageRate: 0.003, rateLimit: 60 },
-  team: { priceEnvVar: "STRIPE_TEAM_PRICE_ID", includedRequests: 50_000, overageRate: 0.002, rateLimit: 200 },
+  pro: { priceEnvVar: "STRIPE_PRO_PRICE_ID", includedRequests: 10_000, overageRate: 0.003, rateLimit: PLAN_LIMITS.pro.requestsPerMinute },
+  team: { priceEnvVar: "STRIPE_TEAM_PRICE_ID", includedRequests: 50_000, overageRate: 0.002, rateLimit: PLAN_LIMITS.team.requestsPerMinute },
 } as const;
 
 export type PaidTier = keyof typeof TIER_CONFIG;

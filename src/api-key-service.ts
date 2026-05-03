@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import bcrypt from "bcrypt";
 import { prisma } from "./db.js";
 import { cacheApiKey, getCachedApiKey, invalidateApiKeyCache } from "./result-store.js";
+import { PLAN_LIMITS } from "./lib/product-facts.js";
 
 const BCRYPT_ROUNDS = 12;
 
@@ -21,10 +22,10 @@ export interface ApiKeyRecord {
 }
 
 const TIER_RATE_LIMITS: Record<string, number> = {
-  free: 10,
-  pro: 60,
-  team: 200,
-  enterprise: 1000,
+  free: PLAN_LIMITS.free.requestsPerMinute,
+  pro: PLAN_LIMITS.pro.requestsPerMinute,
+  team: PLAN_LIMITS.team.requestsPerMinute,
+  enterprise: PLAN_LIMITS.enterprise.requestsPerMinute,
 };
 
 export async function createApiKey(

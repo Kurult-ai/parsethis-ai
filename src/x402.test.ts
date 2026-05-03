@@ -26,6 +26,8 @@ describe("x402 Payment Flow", () => {
       assert.ok(body.payTo, "Should have payTo wallet address");
       assert.ok(body.facilitator, "Should have facilitator URL");
       assert.ok(body.endpoints, "Should have endpoint pricing");
+      assert.ok(body.mcp_remote_endpoint, "Should expose hosted MCP endpoint");
+      assert.ok(body.openapi_url, "Should expose OpenAPI URL");
 
       // Verify pricing tiers
       assert.ok(body.endpoints["POST /v1/analyze"], "Should have analyze pricing");
@@ -101,7 +103,7 @@ describe("x402 Payment Flow", () => {
       // Demo key doesn't have admin scope
       assert.equal(res.status, 403);
       const body = await res.json();
-      assert.equal(body.error, "Insufficient permissions");
+      assert.equal(body.title || body.error, "Insufficient permissions");
     });
 
     it("Payment stats endpoint structure is correct", async () => {
@@ -121,50 +123,42 @@ describe("x402 Payment Flow", () => {
       assert.equal(res.status, 200);
       const body = await res.json();
 
-      // Verify pricing format (should be $X.XX strings)
+      // Verify pricing format (endpoint entries are structured for agents)
       const pricePattern = /^\$\d+\.\d{2,}$/;
 
       if (body.endpoints["POST /v1/analyze"]) {
-        const analyzePrice = body.endpoints["POST /v1/analyze"];
-        assert.ok(pricePattern.test(analyzePrice) || typeof analyzePrice === "object",
-          `Analyze price should be valid: ${analyzePrice}`);
-        if (typeof analyzePrice === "object") {
-          // Deep pricing structure
-          assert.ok(analyzePrice.quick || analyzePrice.standard || analyzePrice.deep,
-            "Should have depth-based pricing");
-        }
+        const analyze = body.endpoints["POST /v1/analyze"];
+        assert.ok(pricePattern.test(analyze.price), `Analyze price should be valid: ${analyze.price}`);
+        assert.ok(analyze.price_by_depth?.quick || analyze.price_by_depth?.standard || analyze.price_by_depth?.deep,
+          "Should have depth-based pricing");
       }
 
       if (body.endpoints["POST /v1/evaluate"]) {
-        const evalPrice = body.endpoints["POST /v1/evaluate"];
-        assert.ok(pricePattern.test(evalPrice),
-          `Evaluate price should be valid format: ${evalPrice}`);
+        const evalPrice = body.endpoints["POST /v1/evaluate"].price;
+        assert.ok(pricePattern.test(evalPrice), `Evaluate price should be valid format: ${evalPrice}`);
       }
 
       if (body.endpoints["POST /v1/chat"]) {
-        const chatPrice = body.endpoints["POST /v1/chat"];
-        assert.ok(pricePattern.test(chatPrice),
-          `Chat price should be valid format: ${chatPrice}`);
+        const chatPrice = body.endpoints["POST /v1/chat"].price;
+        assert.ok(pricePattern.test(chatPrice), `Chat price should be valid format: ${chatPrice}`);
       }
 
       if (body.endpoints["POST /v1/parse"]) {
-        const parsePrice = body.endpoints["POST /v1/parse"];
-        assert.ok(pricePattern.test(parsePrice),
-          `Parse price should be valid format: ${parsePrice}`);
+        const parsePrice = body.endpoints["POST /v1/parse"].price;
+        assert.ok(pricePattern.test(parsePrice), `Parse price should be valid format: ${parsePrice}`);
       }
 
       console.log("[x402] Pricing tiers verified");
     });
 
-    it("Network configuration matches expected testnet", async () => {
+    it("Network configuration matches Base mainnet", async () => {
       const res = await app.request("/v1/pricing");
       const body = await res.json();
 
-      // Should be Base Sepolia testnet (eip155:84532)
       if (body.network) {
         assert.ok(
-          body.network === "eip155:84532" || body.network.includes("84532"),
-          `Expected Base Sepolia (eip155:84532), got ${body.network}`
+          body.network === "eip155:8453",
+          `Expected Base mainnet (eip155:8453), got ${body.network}`
         );
         console.log(`[x402] Network: ${body.network} ✓`);
       }

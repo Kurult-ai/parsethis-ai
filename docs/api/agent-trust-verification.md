@@ -137,14 +137,15 @@ Authorization: Bearer {api_key}
 
 ## Rate Limits
 
-- **Default**: 60 requests per minute per API key
+- **Free default**: 10 requests per minute per API key
+- **Paid tiers**: higher limits by plan
 - **Burst**: Up to 10 requests per second
 
 Rate limit headers are included in responses:
 
 ```
-X-RateLimit-Limit: 60
-X-RateLimit-Remaining: 45
+X-RateLimit-Limit: 10
+X-RateLimit-Remaining: 9
 X-RateLimit-Reset: 30
 ```
 

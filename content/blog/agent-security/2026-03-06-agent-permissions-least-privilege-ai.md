@@ -45,7 +45,7 @@ const key = await createApiKey({
   name: "url-analyzer-agent",
   scopes: ["analyze"],       // Cannot evaluate, chat, or admin
   tier: "pro",
-  rateLimit: 60              // 60 requests/minute ceiling
+  rateLimit: 10              // 10 requests/minute ceiling
 });
 ```
 

@@ -1,7 +1,15 @@
 import { renderPage } from "../lib/html-template.js";
 import { organizationSchema } from "../lib/schema.js";
+import { PLAN_LIMITS, PRODUCT, X402_ENDPOINTS, X402_PAYMENT, x402EndpointList } from "../lib/product-facts.js";
 
 export function renderPricingPage(baseUrl: string): string {
+  const x402Rows = x402EndpointList().map((endpoint) => `
+        <tr>
+          <td><code>${endpoint.method} ${endpoint.path}</code></td>
+          <td>${endpoint.price}</td>
+          <td>${endpoint.description}</td>
+        </tr>`).join("");
+
   const content = `
 <!-- Chunk 1: Hero -->
 <div class="section-chunk animate-in">
@@ -23,10 +31,10 @@ export function renderPricingPage(baseUrl: string): string {
         <div style="font-size:13px;color:var(--text-dim);">forever</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">10 req/min</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.free.requestsPerMinute} req/min</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">30-day key expiry</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Self-service</li>
-        <li style="padding:6px 0;">5 sandbox/hr</li>
+        <li style="padding:6px 0;">${PLAN_LIMITS.free.sandboxExecutionsPerHour} sandbox/hr</li>
       </ul>
       <a href="/v1/keys/generate" class="btn btn-outline" style="width:100%;text-align:center;">Generate Free Key</a>
     </div>
@@ -40,9 +48,9 @@ export function renderPricingPage(baseUrl: string): string {
         <div style="font-size:13px;color:var(--text-dim);">10K requests included</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">60 req/min</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.pro.requestsPerMinute} req/min</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">$0.003/overage request</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">50 sandbox/hr</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.pro.sandboxExecutionsPerHour} sandbox/hr</li>
         <li style="padding:6px 0;">Self-serve checkout</li>
       </ul>
       <a href="/v1/billing/checkout" class="btn btn-primary" style="width:100%;text-align:center;" onclick="event.preventDefault();(async()=>{try{const k=localStorage.getItem('pfa_key');if(k){const r=await fetch('/v1/billing/checkout',{method:'POST',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'},body:JSON.stringify({tier:'pro'})});if(r.ok){const d=await r.json();if(d.url){window.location=d.url;return;}}}const r2=await fetch('/v1/billing/signup-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier:'pro'})});if(!r2.ok){const err=await r2.json().catch(()=>({}));alert(err.error||'Signup failed');return;}const d2=await r2.json();if(d2.key)localStorage.setItem('pfa_key',d2.key);if(d2.checkout_url){window.location=d2.checkout_url;}else{window.location='mailto:hello@parsethis.ai?subject=Pro%20Plan';}}catch{window.location='mailto:hello@parsethis.ai?subject=Pro%20Plan';}})();">Start Pro</a>
@@ -56,9 +64,9 @@ export function renderPricingPage(baseUrl: string): string {
         <div style="font-size:13px;color:var(--text-dim);">50K requests included</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">200 req/min</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.team.requestsPerMinute} req/min</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">$0.002/overage request</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">200 sandbox/hr</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.team.sandboxExecutionsPerHour} sandbox/hr</li>
         <li style="padding:6px 0;">Priority support</li>
       </ul>
       <a href="mailto:hello@parsethis.ai?subject=Team%20Plan" class="btn btn-outline" style="width:100%;text-align:center;">Contact Sales</a>
@@ -72,9 +80,9 @@ export function renderPricingPage(baseUrl: string): string {
         <div style="font-size:13px;color:var(--text-dim);">volume pricing</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">1,000 req/min</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.enterprise.requestsPerMinute.toLocaleString()} req/min</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Custom SLAs</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">1,000 sandbox/hr</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.enterprise.sandboxExecutionsPerHour.toLocaleString()} sandbox/hr</li>
         <li style="padding:6px 0;">Dedicated support</li>
       </ul>
       <a href="mailto:hello@parsethis.ai?subject=Enterprise%20Plan" class="btn btn-outline" style="width:100%;text-align:center;">Contact Sales</a>
@@ -134,7 +142,7 @@ export function renderPricingPage(baseUrl: string): string {
       elFree.textContent = '$0';
       elPro.textContent = fmt(49 + Math.max(0, reqs - 10000) * 0.003);
       elTeam.textContent = fmt(199 + Math.max(0, reqs - 50000) * 0.002);
-      elX402.textContent = fmt(reqs * 0.005);
+      elX402.textContent = fmt(reqs * ${Number(X402_ENDPOINTS.parse.price.replace("$", ""))});
     }
 
     slider.addEventListener('input', update);
@@ -147,7 +155,7 @@ export function renderPricingPage(baseUrl: string): string {
 <div class="section-chunk">
   <h2 style="margin-top:0;">How does x402 payment work?</h2>
 
-  <p class="answer-capsule">x402 uses the HTTP 402 Payment Required standard. Send USDC on Base L2 &mdash; no API key, no account, no credit card. Include a <code>payment-signature</code> (legacy: <code>x-payment</code>) header with a signed USDC transfer on every request. A facilitator verifies the payment on-chain before the request is processed.</p>
+  <p class="answer-capsule">x402 uses the HTTP 402 Payment Required standard. Send ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName} &mdash; no API key, no account, no credit card. Include a <code>${X402_PAYMENT.header}</code> (legacy: <code>${X402_PAYMENT.legacyHeader}</code>) header with a signed payment on the retry request. A facilitator verifies the payment before the request is processed.</p>
 
   <h3>Per-request pricing</h3>
 
@@ -161,16 +169,7 @@ export function renderPricingPage(baseUrl: string): string {
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td><code>POST /v1/parse</code></td>
-          <td>$0.005</td>
-          <td>Screen a prompt for injection risks</td>
-        </tr>
-        <tr>
-          <td><code>POST /v1/evaluate</code></td>
-          <td>$0.01</td>
-          <td>Evaluate prompt quality + safety</td>
-        </tr>
+${x402Rows}
       </tbody>
     </table>
   </div>
@@ -203,9 +202,9 @@ res = session.post("https://parsethis.ai/v1/parse", json={"prompt": "..."})</cod
       </thead>
       <tbody>
         <tr>
-          <td>AI agent (automated)</td>
+          <td>Autonomous first call or marketplace agent</td>
           <td><strong>x402</strong></td>
-          <td>No key management, pay per use</td>
+          <td>No signup, pay per use</td>
         </tr>
         <tr>
           <td>Development/testing</td>
@@ -215,7 +214,7 @@ res = session.post("https://parsethis.ai/v1/parse", json={"prompt": "..."})</cod
         <tr>
           <td>Production volume</td>
           <td><strong>Pro/Team key</strong></td>
-          <td>Predictable rate limits</td>
+          <td>Predictable rate limits and lower operational friction</td>
         </tr>
         <tr>
           <td>Enterprise</td>
@@ -245,7 +244,7 @@ res = session.post("https://parsethis.ai/v1/parse", json={"prompt": "..."})</cod
   return renderPage({
     title: "Pricing — Free Tier, Pro $49/mo, Team $199/mo",
     description:
-      "Parse pricing: free tier with 10 req/min. Pro $49/mo with 10K requests included. Team $199/mo with 50K included. x402 USDC micropayments available.",
+      `${PRODUCT.name} pricing: free tier with ${PLAN_LIMITS.free.requestsPerMinute} req/min. Pro $49/mo with 10K requests included. Team $199/mo with 50K included. x402 ${X402_PAYMENT.currency} micropayments available.`,
     path: "/pricing",
     content,
     baseUrl,

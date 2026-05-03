@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "parse-agents": {
+      "type": "http",
+      "url": "https://www.parsethis.ai/mcp",
+      "headers": {
+        "Authorization": "Bearer ${PARSE_API_KEY}"
+      }
+    }
+  }
+}

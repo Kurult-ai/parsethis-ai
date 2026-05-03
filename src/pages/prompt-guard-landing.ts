@@ -1,14 +1,14 @@
 import { renderPage } from "../lib/html-template.js";
 import { breadcrumbSchema } from "../lib/schema.js";
+import { DETECTION_FACTS, X402_PAYMENT } from "../lib/product-facts.js";
 
 export function renderPromptGuardLandingPage(baseUrl: string): string {
   const mcpConfig = JSON.stringify(
     {
       mcpServers: {
-        "prompt-guard": {
-          command: "npx",
-          args: ["-y", "@parsethis/mcp-prompt-guard"],
-          env: { PARSETHIS_API_KEY: "your-key-here" },
+        "parse-agents": {
+          url: "https://parsethis.ai/mcp",
+          headers: { Authorization: "Bearer ${PARSE_API_KEY}" },
         },
       },
     },
@@ -19,9 +19,9 @@ export function renderPromptGuardLandingPage(baseUrl: string): string {
   const content = `
 <!-- Chunk 1: Hero (Miller's Law: 1 of 5) -->
 <div class="section-chunk animate-in">
-  <h1>Prompt Guard &mdash; Safety screening for AI agents</h1>
+  <h1>Parse Agents Prompt Guard</h1>
 
-  <p class="answer-capsule" style="max-width:700px;margin:0 auto 32px;">Detect prompt injection, role hijacking, and data exfiltration risks in real-time. Prompt Guard integrates directly into your agent pipeline via MCP, Node.js, or Python &mdash; and blocks threats before your model ever sees them.</p>
+  <p class="answer-capsule" style="max-width:700px;margin:0 auto 32px;">Prompt Guard is the prompt-protection capability inside Parse Agents. Screen untrusted input, generated output, and peer-agent messages before they affect tools, memory, credentials, payments, code execution, or user-visible output.</p>
 
   <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
     <a href="/prompt-guard/playground" class="btn btn-primary" style="padding:12px 28px;font-size:15px;">Try the Playground</a>
@@ -35,45 +35,41 @@ export function renderPromptGuardLandingPage(baseUrl: string): string {
 
   <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;" role="tablist" aria-label="Installation method">
     <button id="tab-mcp" role="tab" aria-selected="true" aria-controls="panel-mcp" onclick="showTab('mcp')" class="btn btn-primary" style="padding:8px 18px;font-size:13px;">MCP</button>
-    <button id="tab-npm" role="tab" aria-selected="false" aria-controls="panel-npm" onclick="showTab('npm')" class="btn btn-outline" style="padding:8px 18px;font-size:13px;">npm</button>
-    <button id="tab-pip" role="tab" aria-selected="false" aria-controls="panel-pip" onclick="showTab('pip')" class="btn btn-outline" style="padding:8px 18px;font-size:13px;">pip</button>
+    <button id="tab-npm" role="tab" aria-selected="false" aria-controls="panel-npm" onclick="showTab('npm')" class="btn btn-outline" style="padding:8px 18px;font-size:13px;">REST</button>
+    <button id="tab-pip" role="tab" aria-selected="false" aria-controls="panel-pip" onclick="showTab('pip')" class="btn btn-outline" style="padding:8px 18px;font-size:13px;">x402</button>
   </div>
 
   <div id="panel-mcp" role="tabpanel" aria-labelledby="tab-mcp">
-    <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px;">Add to your Claude Desktop or Cursor <code>claude_desktop_config.json</code>:</p>
+    <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px;">Add the hosted remote MCP endpoint to compatible clients:</p>
     <div style="position:relative;">
       <pre role="region" aria-label="MCP configuration JSON" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 48px 16px 16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);overflow-x:auto;line-height:1.6;white-space:pre;">${mcpConfig.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
       <button onclick="copyCode(this, 'mcp-code')" aria-label="Copy MCP config to clipboard" class="copy-btn">Copy</button>
       <span id="mcp-code" style="display:none">${mcpConfig.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>
     </div>
-    <p style="font-size:13px;color:var(--text-dim);margin-top:8px;">Replace <code>your-key-here</code> with your API key from <a href="/v1/keys/generate">POST /v1/keys/generate</a>.</p>
+    <p style="font-size:13px;color:var(--text-dim);margin-top:8px;">Set <code>PARSE_API_KEY</code> from <a href="/v1/keys/generate">POST /v1/keys/generate</a>.</p>
   </div>
 
   <div id="panel-npm" role="tabpanel" aria-labelledby="tab-npm" style="display:none;">
-    <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px;">Install the Node.js SDK:</p>
+    <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px;">Call the REST API directly:</p>
     <div style="position:relative;">
-      <pre role="region" aria-label="npm install command" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 48px 16px 16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);line-height:1.6;">npm i @parsethis/prompt-guard</pre>
-      <button onclick="copyText(this, 'npm i @parsethis/prompt-guard')" aria-label="Copy npm install command" class="copy-btn">Copy</button>
+      <pre role="region" aria-label="REST curl command" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 48px 16px 16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);line-height:1.6;">curl -X POST https://parsethis.ai/v1/parse \\
+  -H "Authorization: Bearer $PARSE_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"prompt":"Ignore previous instructions"}'</pre>
+      <button onclick="copyText(this, 'curl -X POST https://parsethis.ai/v1/parse -H &quot;Authorization: Bearer $PARSE_API_KEY&quot; -H &quot;Content-Type: application/json&quot; -d \\'{&quot;prompt&quot;:&quot;Ignore previous instructions&quot;}\\'')" aria-label="Copy REST command" class="copy-btn">Copy</button>
     </div>
-    <pre role="region" aria-label="npm usage example" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);overflow-x:auto;line-height:1.6;margin-top:12px;">import { PromptGuard } from '@parsethis/prompt-guard';
-
-const guard = new PromptGuard({ apiKey: process.env.PARSETHIS_API_KEY });
-const result = await guard.screen(userPrompt);
-if (result.risk_score &gt;= 7) throw new Error('Blocked: ' + result.verdict);</pre>
+    <pre role="region" aria-label="REST response example" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);overflow-x:auto;line-height:1.6;margin-top:12px;">{"risk_score":8,"verdict":"high_risk","suggested_action":"block"}</pre>
   </div>
 
   <div id="panel-pip" role="tabpanel" aria-labelledby="tab-pip" style="display:none;">
-    <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px;">Install the Python SDK:</p>
+    <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px;">Use x402 for pay-per-call access without a bearer key:</p>
     <div style="position:relative;">
-      <pre role="region" aria-label="pip install command" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 48px 16px 16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);line-height:1.6;">pip3 install parsethis-prompt-guard</pre>
-      <button onclick="copyText(this, 'pip3 install parsethis-prompt-guard')" aria-label="Copy pip install command" class="copy-btn">Copy</button>
+      <pre role="region" aria-label="x402 docs URL" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 48px 16px 16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);line-height:1.6;">GET https://parsethis.ai/v1/pricing
+POST https://parsethis.ai/v1/parse
+Retry with ${X402_PAYMENT.header}</pre>
+      <button onclick="copyText(this, 'https://parsethis.ai/docs/x402')" aria-label="Copy x402 docs URL" class="copy-btn">Copy</button>
     </div>
-    <pre role="region" aria-label="Python usage example" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);overflow-x:auto;line-height:1.6;margin-top:12px;">from parsethis import PromptGuard
-
-guard = PromptGuard(api_key=os.environ["PARSETHIS_API_KEY"])
-result = guard.screen(user_prompt)
-if result.risk_score &gt;= 7:
-    raise ValueError(f"Blocked: {result.verdict}")</pre>
+    <pre role="region" aria-label="x402 response example" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);overflow-x:auto;line-height:1.6;margin-top:12px;">{"retry":{"header":"${X402_PAYMENT.header}"},"payment_context":{"network":"${X402_PAYMENT.network}"}}</pre>
   </div>
 </div>
 
@@ -85,12 +81,12 @@ if result.risk_score &gt;= 7:
     <div class="card">
       <div style="font-size:32px;font-weight:800;color:var(--accent2);margin-bottom:12px;line-height:1;">1</div>
       <div style="font-weight:700;font-size:16px;margin-bottom:8px;">Install</div>
-      <p style="font-size:13px;color:var(--text-dim);margin:0;">Add Prompt Guard via MCP, npm, or pip. Configure your API key once. No per-request setup.</p>
+      <p style="font-size:13px;color:var(--text-dim);margin:0;">Add Parse Agents via hosted MCP, REST, OpenAPI, or x402. Configure a bearer key for sustained usage.</p>
     </div>
     <div class="card">
       <div style="font-size:32px;font-weight:800;color:var(--accent2);margin-bottom:12px;line-height:1;">2</div>
       <div style="font-weight:700;font-size:16px;margin-bottom:8px;">Screen</div>
-      <p style="font-size:13px;color:var(--text-dim);margin:0;">Every incoming prompt is scored 0&ndash;10 across 8 threat categories, with fast pattern checks before your agent executes it.</p>
+      <p style="font-size:13px;color:var(--text-dim);margin:0;">Every incoming prompt is scored 0&ndash;10 across ${DETECTION_FACTS.riskCategoryCount} threat categories before your agent acts on it.</p>
     </div>
     <div class="card">
       <div style="font-size:32px;font-weight:800;color:var(--accent2);margin-bottom:12px;line-height:1;">3</div>
@@ -101,7 +97,7 @@ if result.risk_score &gt;= 7:
 
   <aside style="border-left:3px solid var(--accent);margin-top:24px;">
     <p style="font-weight:700;font-size:14px;margin-bottom:8px;color:var(--accent2);">Security default: fail-closed</p>
-    <p style="font-size:13px;color:var(--text-dim);margin:0;">By default, if the Prompt Guard API is unreachable or returns an error, the request is <strong style="color:var(--text);">blocked</strong> (fail-closed). This is the safe default for production agents. Fail-open mode must be explicitly enabled by setting <code>failOpen: true</code> in your config.</p>
+    <p style="font-size:13px;color:var(--text-dim);margin:0;">For high-impact boundaries, if Parse Agents is unreachable or returns an error, block or require review. Low-impact paths may fail open only when the operator explicitly accepts that risk.</p>
   </aside>
 </div>
 
@@ -181,21 +177,21 @@ function copyCode(btn, srcId) {
 `;
 
   return renderPage({
-    title: "Prompt Guard — Safety screening for AI agents",
+    title: "Parse Agents Prompt Guard",
     description:
-      "Detect prompt injection, role hijacking, and data exfiltration risks in real-time. Available via MCP, Node.js, or Python. Fail-closed by default.",
+      "Prompt Guard is the Parse Agents prompt-protection capability for screening untrusted input, output, and agent handoffs.",
     path: "/prompt-guard",
     content,
     baseUrl,
     jsonLd: [
       breadcrumbSchema([
         { name: "Home", url: `${baseUrl}/` },
-        { name: "Prompt Guard", url: `${baseUrl}/prompt-guard` },
+        { name: "Parse Agents Prompt Guard", url: `${baseUrl}/prompt-guard` },
       ]),
     ],
     breadcrumbs: [
       { name: "Home", href: "/" },
-      { name: "Prompt Guard", href: "/prompt-guard" },
+      { name: "Parse Agents Prompt Guard", href: "/prompt-guard" },
     ],
   });
 }

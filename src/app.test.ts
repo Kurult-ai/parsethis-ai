@@ -31,7 +31,7 @@ describe("Public Routes", () => {
     const res = await req("/", { headers: { Accept: "application/json" } });
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.equal(body.service, "Parse for Agents");
+    assert.equal(body.service, "Parse Agents");
     assert.ok(body.endpoints);
   });
 

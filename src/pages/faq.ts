@@ -4,6 +4,7 @@ import {
   organizationSchema,
   breadcrumbSchema,
 } from "../lib/schema.js";
+import { DETECTION_FACTS, PLAN_LIMITS, PRODUCT, X402_PAYMENT, riskCategoryList } from "../lib/product-facts.js";
 
 interface FaqItem {
   question: string;
@@ -13,9 +14,9 @@ interface FaqItem {
 const FAQ_ITEMS: FaqItem[] = [
   // --- Getting Started (5 items) ---
   {
-    question: "What is Parse?",
+    question: "What is Parse Agents?",
     answer:
-      "Parse is a prompt security API that screens untrusted prompts for injection attacks, jailbreaks, data exfiltration, and adversarial patterns before your AI agent executes them. It evaluates prompts across 8 risk categories aligned to the OWASP LLM Top 10 (2025 edition, LLM01), returning a 0\u201310 risk score with categorized flags and an auto-block policy.",
+      `${PRODUCT.description} It evaluates prompts across ${DETECTION_FACTS.riskCategoryCount} risk categories, returning a 0-10 risk score with categorized flags and an auto-block policy.`,
   },
   {
     question: "How do I get an API key?",
@@ -35,7 +36,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Is there a free tier?",
     answer:
-      "Yes. Self-service API keys have a free tier with 60 requests per minute rate limit and 5 sandbox executions per hour. No credit card is required. For higher limits, use x402 USDC payments on Base L2 for pay-per-request access, or contact Parse for enterprise plans with custom rate limits and SLAs.",
+      `Yes. Self-service API keys have a free tier with ${PLAN_LIMITS.free.requestsPerMinute} requests per minute and ${PLAN_LIMITS.free.sandboxExecutionsPerHour} sandbox executions per hour. No credit card is required. For higher limits, use Pro, Team, or Enterprise keys; use x402 ${X402_PAYMENT.currency} payments on ${X402_PAYMENT.networkName} for first-call or autonomous pay-per-request access.`,
   },
 
   // --- Prompt Safety (5 items) ---
@@ -47,12 +48,12 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "How does Parse detect prompt injections?",
     answer:
-      "Parse uses three detection layers: (1) pattern matching scans against 50+ known injection signatures including instruction overrides, role-play exploits, and encoding tricks; (2) LLM deep analysis evaluates semantic intent using DeepSeek or GPT-4o to catch novel attacks; (3) structural risk signals detect suspicious patterns like base64 payloads, nested delimiters, and token-boundary manipulation.",
+      `Parse Agents uses deterministic pattern matching with ${DETECTION_FACTS.patternRuleCount} rules, structural risk analysis for encoded and hidden payloads, optional LLM semantic analysis when configured, and optional sandbox execution for suspicious prompts. Do not treat it as guaranteed protection; combine it with least-privilege tools and output validation.`,
   },
   {
     question: "What risk categories does Parse check?",
     answer:
-      "Parse evaluates prompts across 8 risk categories: prompt_injection (instruction override), jailbreak (safety bypass), data_exfiltration (unauthorized data access), harmful_content (violence, abuse, illegal activity), system_prompt_leak (system prompt extraction), privilege_escalation (unauthorized capability access), social_engineering (manipulation, deception), and code_execution (arbitrary code running).",
+      `Parse Agents evaluates prompts across ${DETECTION_FACTS.riskCategoryCount} risk categories: ${riskCategoryList()}.`,
   },
   {
     question: "What is sandbox execution?",
@@ -62,29 +63,29 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "How fast is prompt screening?",
     answer:
-      "Pattern matching alone completes in under 5 milliseconds. Full analysis including LLM-based deep analysis via DeepSeek or GPT-4o typically completes in under 200 milliseconds end-to-end. Sandbox execution adds 2\u20135 seconds depending on prompt complexity. The API returns a 202 Accepted with a poll_url for async sandbox results so agents are not blocked.",
+      "Pattern matching is the fastest path and usually completes in milliseconds. Full hosted analysis may add LLM latency when semantic analysis is configured. Sandbox execution is asynchronous and can add a few seconds depending on prompt complexity. Agents should set explicit timeouts and choose fail-open or fail-closed behavior by trust boundary.",
   },
 
   // --- Integration (5 items) ---
   {
     question: "How do I integrate with Claude Code?",
     answer:
-      "Run curl -s parsethis.ai/skill > ~/.claude/skills/parse.md to install the skill file. Claude Code reads this file and learns when to call POST /v1/parse \u2014 before executing user prompts, tool outputs, or forwarded messages. The agent auto-generates an API key on first use via POST /v1/keys/generate and stores it in localStorage.",
+      "Run curl -s parsethis.ai/skill > ~/.claude/skills/parse.md to install the skill file. Claude Code reads this file and learns when to call POST /v1/parse before executing user prompts, tool outputs, or forwarded messages. The agent should store generated keys in its normal secret store, not in source control.",
   },
   {
     question: "Does Parse support MCP?",
     answer:
-      "Yes. Parse publishes MCP (Model Context Protocol) tool definitions at /mcp.json. MCP-compatible agents like Claude Desktop, Cursor, and Windsurf can discover and call Parse tools (parse, trust_verify, policy) without manual configuration. The MCP endpoint describes input schemas, authentication requirements, and response formats.",
+      "Yes. Parse Agents publishes MCP tool definitions at /mcp.json and a hosted remote MCP JSON-RPC endpoint at /mcp. The minimum tools are screen_prompt, screen_output, verify_agent_trust, and get_pricing.",
   },
   {
     question: "What is x402 payment?",
     answer:
-      "x402 is a pay-per-request payment protocol using USDC stablecoin on the Base L2 blockchain. Attach a payment-signature (legacy: x-payment) header with a signed USDC transfer to any Parse endpoint \u2014 no API key needed. Pricing details at GET /v1/pricing. This enables anonymous, per-request access ideal for one-off agent calls where key management is impractical.",
+      `x402 is a pay-per-request payment protocol using ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}. Call a billable REST endpoint without Authorization, read the 402 payment requirements, sign the payment, and retry with ${X402_PAYMENT.header} (legacy: ${X402_PAYMENT.legacyHeader}). Pricing details are at GET /v1/pricing.`,
   },
   {
     question: "What are the rate limits?",
     answer:
-      "Free tier: 60 requests per minute for /v1/parse, 5 sandbox executions per hour. Key generation: 5 keys per minute per IP, 100 total self-service keys globally. x402 payments: 120 requests per minute. Enterprise plans offer custom rate limits. Rate limit headers (X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset) are included in every response.",
+      `Free tier: ${PLAN_LIMITS.free.requestsPerMinute} requests per minute and ${PLAN_LIMITS.free.sandboxExecutionsPerHour} sandbox executions per hour. Pro: ${PLAN_LIMITS.pro.requestsPerMinute} requests per minute. Team: ${PLAN_LIMITS.team.requestsPerMinute} requests per minute. Enterprise: custom or ${PLAN_LIMITS.enterprise.requestsPerMinute} requests per minute by default. Key generation is limited separately to prevent abuse.`,
   },
   {
     question: "How do I configure screening policy?",
@@ -97,7 +98,7 @@ const FAQ_ITEMS: FaqItem[] = [
     question:
       "What\u2019s the difference between Parse and Lakera Guard?",
     answer:
-      "Parse is developer-focused with an open REST API, self-service API keys, sandbox execution, and x402 crypto payments. Lakera Guard (acquired by Check Point in 2025) targets enterprise security teams with dashboard-centric workflows and SOC integration. Parse also offers agent-to-agent trust verification (POST /v1/agent/trust/verify) and MCP tool definitions, which Lakera does not.",
+      "Parse Agents is agent-first: REST API, hosted MCP endpoint, self-service API keys, output screening, agent trust verification, optional sandbox execution, and x402 pay-per-call access. Lakera Guard is a mature enterprise guardrail product. Choose based on deployment model, procurement path, data policy, and agent autonomy requirements.",
   },
   {
     question: "How does async execution work?",
@@ -149,7 +150,7 @@ export function renderFaqPage(baseUrl: string): string {
   return renderPage({
     title: "FAQ \u2014 Prompt Injection Detection",
     description:
-      "Answers to common questions about prompt injection detection, AI agent security, and the Parse API.",
+      `Answers to common questions about prompt injection detection, AI agent security, and ${PRODUCT.name}.`,
     path: "/faq",
     content,
     baseUrl,

@@ -1,0 +1,21 @@
+{
+  "name": "parse-agents-gold-integration",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Gold TypeScript integration for Parse Agents prompt protection with bearer auth, x402 fallback, REST, and MCP.",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@x402/evm": "^2.5.0",
+    "@x402/fetch": "^2.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "viem": "^2.39.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3"
+  }
+}

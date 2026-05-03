@@ -15,8 +15,9 @@ import { organizationSchema } from "../lib/schema.js";
 import { renderLandingPage } from "../pages/landing.js";
 import { renderPlaygroundPage } from "../pages/playground.js";
 import { renderFaqPage } from "../pages/faq.js";
-import { renderDocsPage, renderGuidePage, renderComparePage } from "../pages/docs.js";
+import { renderDocsPage, renderGuidePage, renderComparePage, renderSecurityPage } from "../pages/docs.js";
 import { renderPricingPage } from "../pages/pricing.js";
+import { renderGeoPage } from "../pages/geo.js";
 import { getFaviconSvg } from "../pages/favicon.js";
 import { getOgImageSvg } from "../pages/og-image.js";
 import { renderScreeningDashboardPage } from "../pages/screening-dashboard.js";
@@ -25,6 +26,8 @@ import { renderPromptGuardLandingPage } from "../pages/prompt-guard-landing.js";
 import { renderPromptGuardPlaygroundPage } from "../pages/prompt-guard-playground.js";
 import { problem, ErrorCode } from "../lib/problem-response.js";
 import { renderBlogListingPage, renderBlogPostPage } from "../pages/blog.js";
+import { PRODUCT, PLAN_LIMITS, DETECTION_FACTS, X402_PAYMENT } from "../lib/product-facts.js";
+import { recordGeoSurfaceHit } from "../lib/geo-analytics.js";
 
 export const publicRoutes = new Hono();
 
@@ -54,9 +57,9 @@ publicRoutes.get("/", (c) => {
   // Return JSON for agents/tools that explicitly prefer it
   if (accept.includes("application/json") && !accept.includes("text/html")) {
     return c.json({
-      service: "Parse for Agents",
+      service: PRODUCT.name,
       version: "1.0.0",
-      description: "Agent-optimized prompt safety screening & isolated execution API",
+      description: PRODUCT.description,
       docs: "/docs",
       dashboard: "/dashboard",
       setup: {
@@ -65,7 +68,10 @@ publicRoutes.get("/", (c) => {
       },
       endpoints: {
         parse: "POST /v1/parse",
+        screen_output: "POST /v1/screen-output",
         agent_trust_verify: "POST /v1/agent/trust/verify",
+        mcp_remote: "POST /mcp",
+        mcp_manifest: "GET /mcp.json",
         generate_key: "POST /v1/keys/generate",
         analyze: "POST /v1/analyze",
         analyze_result: "GET /v1/analyze/:id",
@@ -78,9 +84,15 @@ publicRoutes.get("/", (c) => {
         policy: "GET/PUT/DELETE /v1/policy",
       },
       auth: "Bearer token via Authorization header",
+      public_facts: {
+        category: PRODUCT.category,
+        free_rate_limit: `${PLAN_LIMITS.free.requestsPerMinute} req/min`,
+        risk_categories: DETECTION_FACTS.riskCategoryCount,
+        pattern_rules: DETECTION_FACTS.patternRuleCount,
+      },
       x402_payments: isX402Enabled()
-        ? { enabled: true, pricing: "/v1/pricing", detail: "Pay per request with USDC on Base L2" }
-        : { enabled: false, detail: "x402 payments not configured" },
+        ? { enabled: true, pricing: "/v1/pricing", network: X402_PAYMENT.network, detail: `Pay per request with ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}` }
+        : { enabled: false, pricing: "/v1/pricing", detail: "x402 payments not configured" },
     });
   }
   const baseUrl = getBaseUrl(c);
@@ -183,17 +195,19 @@ publicRoutes.get("/dashboard/billing", authMiddleware("evaluate"), async (c) => 
 // Docs hub page (HTML index to all documentation)
 publicRoutes.get("/docs", (c) => {
   const baseUrl = getBaseUrl(c);
+  recordGeoSurfaceHit(c, "docs.index");
   const content = `
 <h1>Documentation</h1>
 
-<p class="answer-capsule">Parse is a prompt security API that screens LLM prompts for injection attacks, jailbreaks, and adversarial patterns. Get started in under 5 minutes.</p>
+<p class="answer-capsule">${PRODUCT.description} Get started in under 5 minutes.</p>
 
 <h2>Quick Start</h2>
 
 <ol>
   <li><strong>Generate an API key:</strong> <code>POST /v1/keys/generate</code> (no auth required). Keys expire in 30 days.</li>
-  <li><strong>Screen a prompt:</strong> Call <code>POST /v1/parse</code> with your API key as <code>Authorization: Bearer &lt;key&gt;</code>.</li>
-  <li><strong>Interpret results:</strong> Risk score 0-3 = safe, 4-6 = caution, 7-10 = block. Flags show detected threats.</li>
+  <li><strong>Screen untrusted input:</strong> Call <code>POST /v1/parse</code> before user input, RAG content, browser output, or tool results can affect tools or memory.</li>
+  <li><strong>Screen generated output:</strong> Call <code>POST /v1/screen-output</code> before forwarding model output to users, tools, memory, or other agents.</li>
+  <li><strong>Interpret results:</strong> Follow <code>suggested_action</code> or <code>recommended_action</code>; risk score 7+ should be blocked by default.</li>
 </ol>
 
 <h2>Core Endpoints</h2>
@@ -209,11 +223,19 @@ publicRoutes.get("/docs", (c) => {
     <tbody>
       <tr>
         <td><code>POST /v1/parse</code></td>
-        <td>Screen a prompt for injection attacks. Returns 0-10 risk score with categorized flags.</td>
+        <td>Screen untrusted input before an agent acts. Returns 0-10 risk score, verdict, categories, flags, and recommended action.</td>
+      </tr>
+      <tr>
+        <td><code>POST /v1/screen-output</code></td>
+        <td>Screen LLM output before forwarding it to users, tools, memory stores, or other agents.</td>
       </tr>
       <tr>
         <td><code>POST /v1/agent/trust/verify</code></td>
-        <td>Verify agent-to-agent communication for malicious intent.</td>
+        <td>Verify agent-to-agent communication for injection, spoofing, social engineering, and malicious intent.</td>
+      </tr>
+      <tr>
+        <td><code>POST /mcp</code></td>
+        <td>Hosted MCP JSON-RPC endpoint with screen_prompt, screen_output, verify_agent_trust, and get_pricing tools.</td>
       </tr>
       <tr>
         <td><code>POST /v1/keys/generate</code></td>
@@ -248,9 +270,9 @@ publicRoutes.get("/docs", (c) => {
 
 <h3>x402 USDC Payment</h3>
 
-<p class="answer-capsule">Attach an <code>X-PAYMENT</code> header with a signed USDC transfer on Base L2. No API key needed. Pay only for what you use.</p>
+<p class="answer-capsule">Call a billable endpoint without Authorization, read the 402 payment requirements, sign USDC on ${X402_PAYMENT.networkName}, and retry with <code>${X402_PAYMENT.header}</code>. Legacy clients may still send <code>${X402_PAYMENT.legacyHeader}</code>.</p>
 
-<p>For the current TypeScript client recipe, use <a href="/skill#x402-node">/skill#x402-node</a>. It registers the required x402 scheme before wrapping fetch.</p>
+<p>For the current TypeScript client recipe, use <a href="/skill#x402-node">/skill#x402-node</a>. For payment details, use <a href="/docs/x402">/docs/x402</a> or <a href="/v1/pricing">/v1/pricing</a>.</p>
 
 <h2>Response Format</h2>
 
@@ -279,9 +301,15 @@ publicRoutes.get("/docs", (c) => {
 <ul>
   <li><a href="/docs/quickstart">Quick Start Guide</a> — Get started in 5 minutes</li>
   <li><a href="/docs/api">Full API Reference</a> — Complete REST API documentation</li>
+  <li><a href="/docs/x402">x402 Guide</a> — Pay-per-call prompt protection for autonomous agents</li>
+  <li><a href="/docs/risk-categories">Risk Categories</a> — Canonical threat taxonomy</li>
+  <li><a href="/docs/openapi-gpt-actions-prompt-screening">OpenAPI / GPT Actions Guide</a> — Tool-calling setup</li>
   <li><a href="/guides/prompt-injection-detection">Prompt Injection Detection Guide</a> — Comprehensive detection methods</li>
   <li><a href="/guides/agent-security">Securing AI Agents</a> — Best practices for agent security</li>
-  <li><a href="/compare/prompt-injection-tools">Tool Comparison</a> — Independent benchmark</li>
+  <li><a href="/guides/screen-tool-results">Screen Tool Results</a> — Defend tool and browser boundaries</li>
+  <li><a href="/guides/rag-prompt-injection-screening">RAG Prompt Injection Screening</a> — Screen retrieved documents</li>
+  <li><a href="/security/limitations">Limitations</a> — What Parse Agents does and does not guarantee</li>
+  <li><a href="/compare/prompt-injection-tools">Tool Comparison</a> — Sourced tradeoff comparison</li>
 </ul>
 
 <h2>Agent Integration</h2>
@@ -290,7 +318,19 @@ publicRoutes.get("/docs", (c) => {
   <li><a href="/skill">Skill Prompt</a> — Claude Code integration (one-line install)</li>
   <li><a href="/openapi.json">OpenAPI Spec</a> — Machine-readable API contract</li>
   <li><a href="/mcp.json">MCP Tools</a> — Model Context Protocol definitions</li>
+  <li><a href="/mcp">Hosted MCP endpoint</a> — Remote MCP JSON-RPC service</li>
   <li><a href="/.well-known/agent-card.json">Agent Card</a> — A2A protocol manifest</li>
+</ul>
+
+<h2>High-intent task pages</h2>
+
+<ul>
+  <li><a href="/prompt-injection-protection-api">Prompt Injection Protection API</a></li>
+  <li><a href="/prompt-firewall-api">Prompt Firewall API</a></li>
+  <li><a href="/llm-output-screening-api">LLM Output Screening API</a></li>
+  <li><a href="/agent-trust-verification-api">Agent Trust Verification API</a></li>
+  <li><a href="/x402-prompt-protection-api">x402 Prompt Protection API</a></li>
+  <li><a href="/mcp-prompt-protection-server">MCP Prompt Protection Server</a></li>
 </ul>
 
 <h2>Resources</h2>
@@ -304,7 +344,7 @@ publicRoutes.get("/docs", (c) => {
 `;
   return c.html(renderPage({
     title: "Documentation",
-    description: "Parse API documentation for prompt security screening, injection detection, and AI agent safety.",
+    description: "Parse Agents documentation for prompt protection, output screening, agent trust verification, MCP, and x402.",
     path: "/docs",
     content,
     baseUrl,
@@ -314,6 +354,23 @@ publicRoutes.get("/docs", (c) => {
 });
 
 // --- Phase 2: GEO-optimized pages ---
+const geoPageSlugs = [
+  "prompt-injection-protection-api",
+  "prompt-firewall-api",
+  "llm-output-screening-api",
+  "agent-trust-verification-api",
+  "x402-prompt-protection-api",
+  "mcp-prompt-protection-server",
+];
+
+for (const slug of geoPageSlugs) {
+  publicRoutes.get(`/${slug}`, (c) => {
+    recordGeoSurfaceHit(c, `geo.${slug}`);
+    const html = renderGeoPage(slug, getBaseUrl(c));
+    if (!html) return c.json({ error: "Not found" }, 404);
+    return c.html(html);
+  });
+}
 
 // Playground
 publicRoutes.get("/playground", (c) => {
@@ -344,6 +401,7 @@ publicRoutes.get("/pricing", (c) => c.html(renderPricingPage(getBaseUrl(c))));
 // Docs pages (markdown content, supports Accept: text/markdown)
 publicRoutes.get("/docs/:slug", (c) => {
   const wantsMarkdown = (c.req.header("Accept") || "").includes("text/markdown");
+  recordGeoSurfaceHit(c, `docs.${c.req.param("slug")}`);
   const result = renderDocsPage(c.req.param("slug"), getBaseUrl(c), wantsMarkdown);
   if (!result) return c.json({ error: "Not found" }, 404);
   if ("markdown" in result) {
@@ -357,6 +415,7 @@ publicRoutes.get("/docs/:slug", (c) => {
 // Guides pages (markdown content, supports Accept: text/markdown)
 publicRoutes.get("/guides/:slug", (c) => {
   const wantsMarkdown = (c.req.header("Accept") || "").includes("text/markdown");
+  recordGeoSurfaceHit(c, `guides.${c.req.param("slug")}`);
   const result = renderGuidePage(c.req.param("slug"), getBaseUrl(c), wantsMarkdown);
   if (!result) return c.json({ error: "Not found" }, 404);
   if ("markdown" in result) {
@@ -370,7 +429,22 @@ publicRoutes.get("/guides/:slug", (c) => {
 // Compare pages (markdown content, supports Accept: text/markdown)
 publicRoutes.get("/compare/:slug", (c) => {
   const wantsMarkdown = (c.req.header("Accept") || "").includes("text/markdown");
+  recordGeoSurfaceHit(c, `compare.${c.req.param("slug")}`);
   const result = renderComparePage(c.req.param("slug"), getBaseUrl(c), wantsMarkdown);
+  if (!result) return c.json({ error: "Not found" }, 404);
+  if ("markdown" in result) {
+    c.header("Content-Type", "text/markdown; charset=utf-8");
+    c.header("Vary", "Accept");
+    return c.text(result.markdown);
+  }
+  return c.html(result.html);
+});
+
+// Security pages (markdown content, supports Accept: text/markdown)
+publicRoutes.get("/security/:slug", (c) => {
+  const wantsMarkdown = (c.req.header("Accept") || "").includes("text/markdown");
+  recordGeoSurfaceHit(c, `security.${c.req.param("slug")}`);
+  const result = renderSecurityPage(c.req.param("slug"), getBaseUrl(c), wantsMarkdown);
   if (!result) return c.json({ error: "Not found" }, 404);
   if ("markdown" in result) {
     c.header("Content-Type", "text/markdown; charset=utf-8");
@@ -616,7 +690,10 @@ publicRoutes.get("/skill/install.sh", (c) => {
 publicRoutes.get("/v1/models", (c) => c.json({ models: getAvailableModels() }));
 
 // x402 pricing info (public)
-publicRoutes.get("/v1/pricing", (c) => c.json(getPricingInfo()));
+publicRoutes.get("/v1/pricing", (c) => {
+  recordGeoSurfaceHit(c, "v1.pricing");
+  return c.json(getPricingInfo());
+});
 
 // Public API key generation (Phase 1: Redis rate limiting, global cap, expiry, env toggle)
 publicRoutes.post("/v1/keys/generate", async (c) => {
