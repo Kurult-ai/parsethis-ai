@@ -1,7 +1,7 @@
 {
   "name": "parse-for-agents",
   "version": "1.0.0",
-  "description": "Parse for Agents - Agent-optimized media credibility analysis API",
+  "description": "Parse Agents - prompt protection API for AI agents with MCP and x402",
   "type": "module",
   "workspaces": [
     "packages/prompt-guard",
@@ -18,6 +18,10 @@
   },
   "keywords": [
     "agents",
+    "prompt-protection",
+    "prompt-injection",
+    "mcp",
+    "x402",
     "media-analysis",
     "credibility",
     "ai"

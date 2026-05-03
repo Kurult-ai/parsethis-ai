@@ -102,3 +102,11 @@ export function renderComparePage(
 ): { html: string; contentType: "text/html" } | { markdown: string; contentType: "text/markdown" } | null {
   return renderContentPage("compare", slug, baseUrl, "Compare", "compare", wantsMarkdown);
 }
+
+export function renderSecurityPage(
+  slug: string,
+  baseUrl: string,
+  wantsMarkdown?: boolean
+): { html: string; contentType: "text/html" } | { markdown: string; contentType: "text/markdown" } | null {
+  return renderContentPage("security", slug, baseUrl, "Security", "security", wantsMarkdown);
+}

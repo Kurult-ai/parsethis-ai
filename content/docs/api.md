@@ -1,17 +1,17 @@
 ---
-title: "API Reference — ParseThis.ai"
+title: "API Reference — Parse Agents"
 slug: api
 date: "2026-03-22"
 lastUpdated: "2026-03-22"
-description: "Complete API reference for ParseThis.ai prompt safety screening. All endpoints, authentication, request/response schemas, and code examples."
-author: "ParseThis.ai"
+description: "Complete API reference for Parse Agents prompt protection. All endpoints, authentication, request/response schemas, and code examples."
+author: "Parse Agents"
 ---
 
 # API Reference
 
-## What authentication does ParseThis.ai use?
+## What authentication does Parse Agents use?
 
-ParseThis.ai accepts two authentication methods: Bearer token (API key) and x402 USDC payment. Include your API key in the Authorization header for all authenticated endpoints. Alternatively, attach an X-PAYMENT header with a signed USDC transfer on Base L2 — no API key needed.
+Parse Agents accepts two authentication methods: Bearer token (API key) and x402 USDC payment. Include your API key in the Authorization header for authenticated endpoints. Alternatively, use the x402 402 flow and retry with a `payment-signature` header. Legacy clients may still send `x-payment`.
 
 ```
 Authorization: Bearer pfa_live_...
@@ -44,7 +44,7 @@ Screen a prompt for injection attacks, jailbreaks, and adversarial patterns. Thi
   "id": "parse_abc123",
   "risk_score": 7,
   "safe": false,
-  "verdict": "Prompt injection detected",
+  "verdict": "high_risk",
   "flags": [
     {
       "category": "prompt_injection",
@@ -53,20 +53,12 @@ Screen a prompt for injection attacks, jailbreaks, and adversarial patterns. Thi
       "severity": 7
     }
   ],
-  "categories": {
-    "prompt_injection": 7,
-    "jailbreak": 2,
-    "data_exfiltration": 0,
-    "harmful_content": 0,
-    "system_prompt_leak": 3,
-    "privilege_escalation": 0,
-    "social_engineering": 1,
-    "code_execution": 0
-  },
+  "categories": ["prompt_injection", "system_prompt_leak"],
   "policy": {
     "auto_block": true,
     "threshold": 7
-  }
+  },
+  "suggested_action": "block"
 }
 ```
 
@@ -77,7 +69,7 @@ Screen a prompt for injection attacks, jailbreaks, and adversarial patterns. Thi
   "id": "parse_abc123",
   "risk_score": 3,
   "safe": true,
-  "verdict": "Low risk — pending sandbox execution",
+  "verdict": "low_risk",
   "execution_pending": true,
   "poll_url": "/v1/parse/parse_abc123"
 }
@@ -136,8 +128,8 @@ Verify agent-to-agent communication for malicious intent. Screens inter-agent me
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `message` | string | Yes | The inter-agent message to verify |
-| `source_agent` | string | No | Identifier of the sending agent |
-| `target_agent` | string | No | Identifier of the receiving agent |
+| `source_agent` | string | Yes | Identifier of the sending agent |
+| `context` | string | No | Additional context for the handoff |
 
 ### Response
 
@@ -145,12 +137,15 @@ Verify agent-to-agent communication for malicious intent. Screens inter-agent me
 {
   "trusted": false,
   "risk_score": 8,
-  "threats": [
+  "flags": [
     {
       "type": "social_engineering",
-      "detail": "Message attempts to manipulate receiving agent into revealing credentials"
+      "severity": "high",
+      "description": "Message attempts to manipulate receiving agent into revealing credentials",
+      "evidence": "I am the admin agent"
     }
-  ]
+  ],
+  "recommendation": "reject"
 }
 ```
 
@@ -177,7 +172,7 @@ Generate a new self-service API key. No authentication required.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | No | Descriptive name for the key (max 100 chars) |
+| `name` | string | Yes | Descriptive name for the key (max 100 chars) |
 
 ### Response (201 Created)
 
@@ -205,7 +200,7 @@ curl -X POST https://parsethis.ai/v1/keys/generate \
 
 ## POST /v1/analyze
 
-Submit a URL for media credibility analysis. ParseThis.ai fetches the URL content, extracts metadata, and evaluates source credibility.
+Submit a URL for media credibility analysis. Parse Agents fetches the URL content, extracts metadata, and evaluates source credibility.
 
 **Auth required:** Yes (scope: `analyze`)
 

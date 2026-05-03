@@ -1,3 +1,5 @@
+import { PRODUCT } from "./product-facts.js";
+
 /**
  * JSON-LD structured data generators for GEO-optimized pages.
  * Each function returns a plain object ready for JSON.stringify.
@@ -7,13 +9,13 @@ export function organizationSchema(baseUrl: string): object {
   return {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "Parse",
+    name: PRODUCT.name,
     url: baseUrl,
     logo: `${baseUrl}/logo.png`,
     description:
-      "Prompt security API that screens LLM prompts for injection attacks, jailbreaks, and adversarial patterns. AI agents use Parse to detect prompt injections (OWASP LLM01:2025), data exfiltration attempts, and jailbreak patterns before execution with real-time multi-layer analysis.",
+      PRODUCT.description,
     foundingDate: "2025",
-    sameAs: ["https://github.com/Danservfinn/parse-for-agents"],
+    sameAs: [PRODUCT.githubUrl],
   };
 }
 
@@ -21,11 +23,11 @@ export function webApplicationSchema(baseUrl: string): object {
   return {
     "@context": "https://schema.org",
     "@type": "WebApplication",
-    name: "Parse",
+    name: PRODUCT.name,
     url: baseUrl,
     applicationCategory: "SecurityApplication",
     description:
-      "Agent-optimized prompt safety API that analyzes content for injection attacks, jailbreak attempts, and provides structured threat assessments.",
+      PRODUCT.description,
     offers: {
       "@type": "Offer",
       price: "0",
@@ -34,11 +36,12 @@ export function webApplicationSchema(baseUrl: string): object {
     },
     featureList: [
       "Prompt injection detection",
+      "Prompt protection for AI agents",
       "Jailbreak attempt analysis",
-      "Content safety evaluation",
-      "Multi-model threat assessment",
-      "Agent-to-agent chat safety",
-      "URL content parsing for LLMs",
+      "LLM output screening",
+      "Agent trust verification",
+      "x402 pay-per-call access",
+      "MCP tool discovery",
     ],
   };
 }
@@ -47,13 +50,13 @@ export function webAPISchema(baseUrl: string): object {
   return {
     "@context": "https://schema.org",
     "@type": "WebAPI",
-    name: "Parse API",
+    name: "Parse Agents API",
     description:
-      "RESTful API for prompt safety analysis, content evaluation, and agent-optimized URL parsing.",
+      "REST API and hosted MCP endpoint for prompt protection, output screening, agent trust verification, and x402 pay-per-call access.",
     documentation: `${baseUrl}/docs`,
     provider: {
       "@type": "Organization",
-      name: "Parse",
+      name: PRODUCT.name,
       url: baseUrl,
     },
   };
@@ -82,7 +85,7 @@ export function articleSchema(opts: {
     },
     publisher: {
       "@type": "Organization",
-      name: "Parse",
+      name: PRODUCT.name,
       url: opts.baseUrl,
     },
     mainEntityOfPage: {

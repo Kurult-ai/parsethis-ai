@@ -22,6 +22,8 @@ credentials.json
 
 # Build artifacts
 *.tsbuildinfo
+__pycache__/
+*.pyc
 
 # Prisma generated
 /src/generated/prisma

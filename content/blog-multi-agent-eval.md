@@ -76,4 +76,4 @@ This architecture isn't bolted on. It's a consequence of building for multi-agen
 
 **The eval tools we have were built for a world where one model answers one question. That world is ending.** Multi-agent systems are becoming the default architecture for anything more complex than a chatbot. The eval frameworks need to catch up -- or teams building multi-agent products need to build evaluation into their workflow architecture, not bolt it on after.
 
-Parse is a bet that workflow-native evaluation is the right default. If you're building with multiple agents, [try Parse for Agents](https://parseforagents.dev) and see what eval looks like when it's designed for the system you're actually running.
+Parse is a bet that workflow-native evaluation is the right default. If you're building with multiple agents, [try Parse Agents](https://parsethis.ai) and see what eval looks like when it's designed for the system you're actually running.

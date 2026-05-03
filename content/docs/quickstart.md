@@ -1,23 +1,23 @@
 ---
-title: "Quickstart — ParseThis.ai Prompt Safety API"
+title: "Quickstart — Parse Agents Prompt Protection API"
 slug: quickstart
 date: "2026-03-22"
 lastUpdated: "2026-03-22"
-description: "Get started with ParseThis.ai in under 5 minutes. Install the skill, generate an API key, screen your first prompt, and act on the results."
-author: "ParseThis.ai"
+description: "Get started with Parse Agents in under 5 minutes. Install the skill, generate an API key, screen your first prompt, and act on the results."
+author: "Parse Agents"
 ---
 
 # Quickstart
 
-## What is ParseThis.ai?
+## What is Parse Agents?
 
-ParseThis.ai is a prompt security API that detects prompt injections, jailbreaks, data exfiltration, and adversarial attacks before your AI agent executes them. It evaluates prompts across 8 risk categories aligned to the OWASP LLM Top 10 (LLM01:2025), returning a 0–10 risk score with categorized flags and an actionable verdict.
+Parse Agents is a prompt protection API that detects prompt injections, jailbreaks, data exfiltration, and adversarial attacks before your AI agent acts on untrusted text. It evaluates prompts across 9 risk categories aligned to OWASP LLM risks, returning a 0-10 risk score with categorized flags and an actionable verdict.
 
-ParseThis.ai combines three detection layers — pattern matching (50+ signatures, <20ms), LLM deep analysis (DeepSeek or GPT-4o, typically ~2-3s on the hosted path), and optional sandbox execution (isolated Railway container) — to achieve high detection coverage with low false positives.
+Parse Agents combines deterministic pattern matching, structural risk analysis, optional LLM semantic analysis, and optional sandbox execution. It reduces prompt-injection risk, but it does not guarantee protection or replace least-privilege tool design.
 
 ## How do I install the skill?
 
-For Claude Code agents, install the ParseThis.ai skill with a single command:
+For Claude Code agents, install the Parse Agents skill with a single command:
 
 ```bash
 curl -s parsethis.ai/skill > ~/.claude/skills/parse.md
@@ -75,34 +75,25 @@ Response:
   "id": "parse_xyz789",
   "risk_score": 9,
   "safe": false,
-  "verdict": "High-risk prompt injection detected",
+  "verdict": "high_risk",
   "flags": [
     { "category": "prompt_injection", "label": "Instruction Override", "detail": "Attempts to override system instructions", "severity": 9 },
     { "category": "system_prompt_leak", "label": "System Prompt Extraction", "detail": "Requests disclosure of system prompt", "severity": 8 }
   ],
-  "categories": {
-    "prompt_injection": 9,
-    "system_prompt_leak": 8,
-    "jailbreak": 3,
-    "data_exfiltration": 0,
-    "harmful_content": 0,
-    "privilege_escalation": 2,
-    "social_engineering": 1,
-    "code_execution": 0
-  },
-  "policy": { "auto_block": true, "threshold": 7 }
+  "categories": ["prompt_injection", "system_prompt_leak"],
+  "policy": { "auto_block": true, "threshold": 7 },
+  "suggested_action": "block"
 }
 ```
 
 ## How do I act on results?
 
-Use the `risk_score` and `safe` fields to decide whether to execute the prompt. Here is a recommended action mapping:
+Use `suggested_action`, `risk_score`, and `safe` to decide whether to execute the prompt. Here is a default action mapping:
 
 | Risk Score | safe | Recommended Action |
 |-----------|------|--------------------|
 | 0–2 | true | Execute normally |
-| 3–4 | true | Execute with logging |
-| 5–6 | false | Ask user to confirm |
+| 3–6 | varies | Sandbox, isolate, or continue only with logging |
 | 7–8 | false | Block and notify user |
 | 9–10 | false | Block silently, log for review |
 
@@ -139,6 +130,9 @@ Sandbox output is treated as untrusted — full risk analysis is applied to the 
 
 ## Next steps
 
+- [Gold Integration Example](https://github.com/Danservfinn/parse-for-agents/tree/main/examples/agent-protection-gold) — TypeScript, Python, MCP, bearer auth, and x402 fallback
 - [API Reference](/docs/api) — full endpoint documentation with request/response schemas
 - [Playground](/playground) — test prompts interactively in your browser
-- [FAQ](/faq) — answers to 20 common questions about prompt safety and ParseThis.ai
+- [x402 Guide](/docs/x402) — pay per call without an API key
+- [Risk Categories](/docs/risk-categories) — canonical taxonomy
+- [FAQ](/faq) — answers to common questions about prompt safety and Parse Agents

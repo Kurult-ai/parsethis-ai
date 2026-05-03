@@ -136,7 +136,7 @@ This is where runtime detection matters. Parse's prompt analysis engine scans fo
 
 The `parsePrompt` function layers three detection methods:
 
-1. **Pattern matching** — Instant regex scans against 30+ known injection patterns across 8 risk categories: prompt injection, jailbreak, data exfiltration, harmful content, system prompt leak, privilege escalation, social engineering, and code execution.
+1. **Pattern matching** — Fast deterministic scans against known injection patterns across the Parse Agents risk taxonomy.
 
 2. **Structural analysis** — Detects obfuscation techniques: unusually long prompts (padding attacks), mixed-script content, base64-encoded payloads, excessive URLs (exfiltration vectors), and embedded HTML/script tags.
 

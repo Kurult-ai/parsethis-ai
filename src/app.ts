@@ -12,8 +12,10 @@ import { policyRoutes } from "./routes/policy.js";
 import { screenOutputRoutes } from "./routes/screen-output.js";
 import { agentTrustRoutes } from "./routes/agent-trust.js";
 import { discoveryRoutes } from "./routes/discovery.js";
+import { mcpRoutes } from "./routes/mcp.js";
 import { screeningMetricsRoutes } from "./routes/screening-metrics.js";
 import { billingRoutes, billingWebhookRoute } from "./routes/billing.js";
+import { adminRoutes } from "./routes/admin.js";
 import { contentNegotiation } from "./lib/content-negotiation.js";
 import { problem, ErrorCode } from "./lib/problem-response.js";
 
@@ -108,6 +110,7 @@ app.use("/v1/screen-output", x402Guard());
 
 // Mount routes
 app.route("/", discoveryRoutes);
+app.route("/", mcpRoutes);
 app.route("/", publicRoutes);
 app.route("/", analyzeRoutes);
 app.route("/", evaluateRoutes);
@@ -119,3 +122,4 @@ app.route("/", screenOutputRoutes);
 app.route("/", agentTrustRoutes);
 app.route("/", screeningMetricsRoutes);
 app.route("/", billingRoutes);
+app.route("/", adminRoutes);

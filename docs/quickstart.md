@@ -2,7 +2,7 @@
 
 Parse for Agents is a REST API that gives your AI agent structured media credibility analysis. Submit a URL, get back a JSON object with credibility scores, bias assessment, claims verification, and deception indicators -- ready for your agent to reason over.
 
-**Base URL:** `https://parseforagents.dev`
+**Base URL:** `https://parsethis.ai`
 
 ---
 
@@ -11,7 +11,7 @@ Parse for Agents is a REST API that gives your AI agent structured media credibi
 No account needed. Generate a key with a single POST:
 
 ```bash
-curl -X POST https://parseforagents.dev/v1/keys/generate \
+curl -X POST https://parsethis.ai/v1/keys/generate \
   -H "Content-Type: application/json" \
   -d '{"name": "my-agent"}'
 ```
@@ -37,7 +37,7 @@ Save the `key` value. Use it as a Bearer token for all subsequent requests.
 Send any article URL. Choose a `depth` -- `quick` (3 agents, fastest), `standard` (7 agents), or `deep` (10 agents, most thorough):
 
 ```bash
-curl -X POST https://parseforagents.dev/v1/analyze \
+curl -X POST https://parsethis.ai/v1/analyze \
   -H "Authorization: Bearer pfa_8f3a1b2c4d5e6f..." \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/article", "depth": "standard"}'
@@ -61,7 +61,7 @@ Response (HTTP 202 -- analysis is running):
 Analysis takes 10-30 seconds depending on depth. Poll the `poll_url` until `status` is `completed`:
 
 ```bash
-curl https://parseforagents.dev/v1/analyze/e7f8a9b0-... \
+curl https://parsethis.ai/v1/analyze/e7f8a9b0-... \
   -H "Authorization: Bearer pfa_8f3a1b2c4d5e6f..."
 ```
 
@@ -146,16 +146,21 @@ Your agent now has machine-readable credibility intelligence: a 0-100 score, a v
 | `/v1/analyze/:id` | GET | Yes | Get analysis results |
 | `/v1/analyze/:id/stream` | GET | Yes | Stream progress (SSE) |
 | `/v1/evaluate` | POST | Yes | Evaluate a prompt |
+| `/v1/parse` | POST | Yes/x402 | Screen untrusted input before agent action |
+| `/v1/screen-output` | POST | Yes/x402 | Screen generated output before forwarding |
+| `/mcp` | POST | Bearer for screening tools | Hosted MCP JSON-RPC endpoint |
 | `/v1/chat` | POST | Yes | Chat about media analysis |
 | `/v1/models` | GET | No | List available models |
 
-**Auth:** Pass your key as `Authorization: Bearer <key>` or `?api_key=<key>`.
+**Auth:** Pass your key as `Authorization: Bearer <key>`.
 
 **Depth options:**
 - `quick` -- 3 agents (extraction, credibility, takeaways). Fastest.
 - `standard` -- 7 agents. Adds deception, fallacy, evidence, and bias analysis.
 - `deep` -- 10 agents. Adds fact-checking, steel-manning, and persuasion analysis.
 
-**Rate limits:** 60 requests/minute per key. Headers `X-RateLimit-Remaining` and `X-RateLimit-Reset` are included in every response.
+**Rate limits:** Free keys default to 10 requests/minute. Paid tiers increase limits. Headers `X-RateLimit-Remaining` and `X-RateLimit-Reset` are included in authenticated responses.
 
-**x402 Payments:** Optionally pay per request with USDC on Base L2 instead of using an API key. See `/v1/pricing` for details.
+**x402 Payments:** Optionally pay per request with USDC on Base mainnet instead of using an API key. Retry with `payment-signature` after the 402 response. See `/v1/pricing` for details.
+
+**Gold Integration Example:** Copy the TypeScript, Python, and MCP starter from `examples/agent-protection-gold/`. It shows the default agent boundary: screen untrusted input before tool use, screen generated output before forwarding, verify peer-agent messages before delegation, use bearer auth first, then fall back to x402 pay-per-call.

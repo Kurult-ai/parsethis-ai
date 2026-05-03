@@ -1,4 +1,5 @@
 import { GITHUB_URL } from "./constants.js";
+import { PRODUCT } from "./product-facts.js";
 
 export interface PageOptions {
   title: string;
@@ -115,7 +116,7 @@ export function renderPage(options: PageOptions): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${safeTitle} | Parse</title>
+  <title>${safeTitle} | ${PRODUCT.name}</title>
   <meta name="description" content="${safeDesc}">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
   <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
@@ -123,7 +124,7 @@ export function renderPage(options: PageOptions): string {
   <meta property="og:description" content="${safeDesc}">
   <meta property="og:type" content="website">
   <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
-  <meta property="og:site_name" content="Parse">
+  <meta property="og:site_name" content="${PRODUCT.name}">
   <meta property="og:image" content="${escapeHtml(ogImg)}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${safeTitle}">
@@ -574,7 +575,7 @@ export function renderPage(options: PageOptions): string {
   <a href="#main-content" class="sr-only">Skip to main content</a>
   <header class="site-header">
     <nav aria-label="Site">
-      <a href="/" class="logo">Parse</a>
+      <a href="/" class="logo">${PRODUCT.name}</a>
       <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links" onclick="const n=document.getElementById('nav-links');const open=n.classList.toggle('open');this.setAttribute('aria-expanded',open);this.textContent=open?'\u2715':'\u2630';">\u2630</button>
       <div class="nav-links" id="nav-links">
       ${navLinksHtml}
@@ -595,7 +596,7 @@ export function renderPage(options: PageOptions): string {
   <footer class="site-footer">
     <div class="footer-inner">
       <div>
-        <div class="footer-brand">Parse</div>
+        <div class="footer-brand">${PRODUCT.name}</div>
         <div>Prompt security for AI agents</div>
       </div>
       <nav aria-label="Footer">
