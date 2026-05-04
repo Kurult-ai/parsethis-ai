@@ -1,5 +1,5 @@
 /**
- * Parse Agents - Priority 1 Implementation
+ * Parse - Priority 1 Implementation
  *
  * Export all agent implementations and types
  */

@@ -6,6 +6,10 @@ export interface ScreeningPolicy {
   screenAllPrompts: boolean;
   autoBlockThreshold: number;
   executeInSandbox: boolean;
+  approvalRequiredForPersonalData?: boolean;
+  approvalRequiredForLocation?: boolean;
+  approvalRequiredForFuturePlans?: boolean;
+  approvalDefaultAction?: "deny";
 }
 
 export interface ApiKeyContext {

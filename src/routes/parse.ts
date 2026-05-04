@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../auth.js";
-import { parsePrompt, analyzeOutputRisks, llmOutputInjectionAnalysis, analyzeFetchedContent, analyzeHiddenContent, llmSandboxAnalysis, computeVerdict } from "../parse.js";
+import { parsePrompt, analyzeOutputRisks, llmOutputInjectionAnalysis, analyzeFetchedContent, analyzeHiddenContent, llmSandboxAnalysis, computeVerdict, computeSuggestedAction } from "../parse.js";
 import type { ParseRequest, ExecutionResult } from "../parse.js";
 import type { AppEnv } from "../types.js";
 import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
@@ -102,6 +102,15 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
       retryable: false,
     });
   }
+  if (body.policy_mode !== undefined && !["strict", "balanced", "low_fp"].includes(body.policy_mode)) {
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "policy_mode must be 'strict', 'balanced', or 'low_fp'",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
+  }
   if (body.metadata !== undefined && typeof body.metadata !== "object") {
     return problem(c, {
       status: 400,
@@ -110,6 +119,53 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
       code: ErrorCode.VALIDATION_INVALID_TYPE,
       retryable: false,
     });
+  }
+  if (body.metadata && !Array.isArray(body.metadata)) {
+    if (body.metadata.source_kind !== undefined && !["user", "email", "retrieved_doc", "web_page", "tool_output", "memory", "agent_handoff"].includes(body.metadata.source_kind)) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "metadata.source_kind must be one of user, email, retrieved_doc, web_page, tool_output, memory, or agent_handoff",
+        code: ErrorCode.VALIDATION_INVALID_TYPE,
+        retryable: false,
+      });
+    }
+    if (body.metadata.trust_level !== undefined && !["trusted", "untrusted", "external"].includes(body.metadata.trust_level)) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "metadata.trust_level must be trusted, untrusted, or external",
+        code: ErrorCode.VALIDATION_INVALID_TYPE,
+        retryable: false,
+      });
+    }
+    if (body.metadata.intended_action !== undefined && !["summarize", "execute", "route", "reply", "extract"].includes(body.metadata.intended_action)) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "metadata.intended_action must be summarize, execute, route, reply, or extract",
+        code: ErrorCode.VALIDATION_INVALID_TYPE,
+        retryable: false,
+      });
+    }
+    if (body.metadata.tool_permissions !== undefined && (!Array.isArray(body.metadata.tool_permissions) || !body.metadata.tool_permissions.every((item) => typeof item === "string"))) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "metadata.tool_permissions must be an array of strings",
+        code: ErrorCode.VALIDATION_INVALID_TYPE,
+        retryable: false,
+      });
+    }
+    if (body.metadata.data_classification !== undefined && (!Array.isArray(body.metadata.data_classification) || !body.metadata.data_classification.every((item) => typeof item === "string"))) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "metadata.data_classification must be an array of strings",
+        code: ErrorCode.VALIDATION_INVALID_TYPE,
+        retryable: false,
+      });
+    }
   }
   if (body.agent_config !== undefined) {
     if (typeof body.agent_config !== "object") {
@@ -202,6 +258,10 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     auto_block: result.risk_score >= (policy?.autoBlockThreshold ?? 7),
     threshold: policy?.autoBlockThreshold ?? 7,
     tier,
+    approval_required_for_personal_data: policy?.approvalRequiredForPersonalData ?? true,
+    approval_required_for_location: policy?.approvalRequiredForLocation ?? true,
+    approval_required_for_future_plans: policy?.approvalRequiredForFuturePlans ?? true,
+    approval_default_action: policy?.approvalDefaultAction ?? "deny",
   };
 
   // ── Gate score_components to team+ tier (prevents free-tier scoring oracle) ──
@@ -218,14 +278,9 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
       : [];
   }
 
-  // ── Attach suggested_action based on risk score ──
-  if (result.risk_score <= 2) {
-    result.suggested_action = "allow";
-  } else if (result.risk_score <= 6) {
-    result.suggested_action = "sandbox";
-  } else {
-    result.suggested_action = "block";
-  }
+  // ── Attach suggested_action based on risk score and approval context ──
+  result.suggested_action = computeSuggestedAction(result.risk_score, result.approval_request);
+  result.recommended_action = result.recommended_action ?? result.suggested_action;
 
   // ── Resolve effective execution intent ──
   // execute: "auto"  → run for scores 3-6 (standard), 7+ (observe mode — no URL fetching)

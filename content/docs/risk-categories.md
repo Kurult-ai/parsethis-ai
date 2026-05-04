@@ -1,15 +1,15 @@
 ---
-title: "Parse Agents Risk Categories"
+title: "Parse Risk Categories"
 slug: risk-categories
 date: "2026-05-03"
-lastUpdated: "2026-05-03"
-description: "The canonical Parse Agents risk taxonomy for prompt protection and agent trust verification."
-author: "Parse Agents"
+lastUpdated: "2026-05-04"
+description: "The canonical Parse risk taxonomy for prompt protection and agent trust verification."
+author: "Parse"
 ---
 
-# Parse Agents Risk Categories
+# Parse Risk Categories
 
-Parse Agents reports a 0-10 `risk_score`, a `verdict`, typed `flags`, and `categories`. The canonical hosted detector currently uses nine public categories.
+Parse reports a 0-10 `risk_score`, a `verdict`, typed `flags`, and `categories`. The canonical hosted detector currently uses nine public categories.
 
 | Category | Meaning |
 |---|---|
@@ -33,6 +33,8 @@ Parse Agents reports a 0-10 `risk_score`, a `verdict`, typed `flags`, and `categ
 
 Use the returned policy fields and `suggested_action` when present. Do not hard-code a security decision if the tenant has configured a stricter policy.
 
+`request_owner_approval` is an action, not a new public risk category. Parse uses existing categories such as `data_exfiltration` and `social_engineering` plus an `approval_request` object when an unknown or untrusted requester asks for private owner/person details that may be shareable only after explicit owner consent.
+
 ## Limitations
 
-These categories are detection signals, not guarantees. Pair Parse Agents with least-privilege tools, scoped credentials, output validation, logging, and operator review for high-impact actions.
+These categories are detection signals, not guarantees. Pair Parse with least-privilege tools, scoped credentials, output validation, logging, and operator review for high-impact actions.

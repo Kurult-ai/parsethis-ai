@@ -15,7 +15,7 @@ if (process.env.REDIS_URL) {
   console.log(`Redis configured: ${process.env.REDIS_URL.replace(/\/\/.*@/, "//***@")}`);
 }
 
-console.log(`Parse for Agents API starting on port ${port}`);
+console.log(`Parse API starting on port ${port}`);
 
 const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`Server running at http://localhost:${info.port}`);

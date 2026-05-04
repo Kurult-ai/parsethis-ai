@@ -15,6 +15,10 @@ export const DEFAULT_POLICY: ScreeningPolicy = {
   screenAllPrompts: false,
   autoBlockThreshold: 7,
   executeInSandbox: true,
+  approvalRequiredForPersonalData: true,
+  approvalRequiredForLocation: true,
+  approvalRequiredForFuturePlans: true,
+  approvalDefaultAction: "deny",
 };
 
 // Tier-enforced maximum autoBlockThreshold
@@ -34,6 +38,10 @@ function formatPolicyResponse(policy: ScreeningPolicy, tier: string) {
     screenAllPrompts: policy.screenAllPrompts,
     autoBlockThreshold: policy.autoBlockThreshold,
     executeInSandbox: policy.executeInSandbox,
+    approvalRequiredForPersonalData: policy.approvalRequiredForPersonalData ?? true,
+    approvalRequiredForLocation: policy.approvalRequiredForLocation ?? true,
+    approvalRequiredForFuturePlans: policy.approvalRequiredForFuturePlans ?? true,
+    approvalDefaultAction: policy.approvalDefaultAction ?? "deny",
     tier,
     max_threshold: MAX_THRESHOLD_BY_TIER[tier] ?? MAX_THRESHOLD_BY_TIER.free,
   };
@@ -64,6 +72,10 @@ policyRoutes.get("/v1/policy", authMiddleware("evaluate"), async (c) => {
           screenAllPrompts: dbPolicy.screenAllPrompts,
           autoBlockThreshold: dbPolicy.autoBlockThreshold,
           executeInSandbox: dbPolicy.executeInSandbox,
+          approvalRequiredForPersonalData: true,
+          approvalRequiredForLocation: true,
+          approvalRequiredForFuturePlans: true,
+          approvalDefaultAction: "deny",
         }
       : DEFAULT_POLICY;
 
@@ -135,6 +147,10 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
       screenAllPrompts: upserted.screenAllPrompts,
       autoBlockThreshold: upserted.autoBlockThreshold,
       executeInSandbox: upserted.executeInSandbox,
+      approvalRequiredForPersonalData: true,
+      approvalRequiredForLocation: true,
+      approvalRequiredForFuturePlans: true,
+      approvalDefaultAction: "deny",
     };
 
     // Invalidate old cache, set new

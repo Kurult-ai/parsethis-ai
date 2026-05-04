@@ -14,7 +14,7 @@ interface FaqItem {
 const FAQ_ITEMS: FaqItem[] = [
   // --- Getting Started (5 items) ---
   {
-    question: "What is Parse Agents?",
+    question: "What is Parse?",
     answer:
       `${PRODUCT.description} It evaluates prompts across ${DETECTION_FACTS.riskCategoryCount} risk categories, returning a 0-10 risk score with categorized flags and an auto-block policy.`,
   },
@@ -48,12 +48,12 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "How does Parse detect prompt injections?",
     answer:
-      `Parse Agents uses deterministic pattern matching with ${DETECTION_FACTS.patternRuleCount} rules, structural risk analysis for encoded and hidden payloads, optional LLM semantic analysis when configured, and optional sandbox execution for suspicious prompts. Do not treat it as guaranteed protection; combine it with least-privilege tools and output validation.`,
+      `Parse uses deterministic pattern matching with ${DETECTION_FACTS.patternRuleCount} rules, structural risk analysis for encoded and hidden payloads, optional LLM semantic analysis when configured, and optional sandbox execution for suspicious prompts. Do not treat it as guaranteed protection; combine it with least-privilege tools and output validation.`,
   },
   {
     question: "What risk categories does Parse check?",
     answer:
-      `Parse Agents evaluates prompts across ${DETECTION_FACTS.riskCategoryCount} risk categories: ${riskCategoryList()}.`,
+      `Parse evaluates prompts across ${DETECTION_FACTS.riskCategoryCount} risk categories: ${riskCategoryList()}.`,
   },
   {
     question: "What is sandbox execution?",
@@ -75,7 +75,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Does Parse support MCP?",
     answer:
-      "Yes. Parse Agents publishes MCP tool definitions at /mcp.json and a hosted remote MCP JSON-RPC endpoint at /mcp. The minimum tools are screen_prompt, screen_output, verify_agent_trust, and get_pricing.",
+      "Yes. Parse publishes MCP tool definitions at /mcp.json and a hosted remote MCP JSON-RPC endpoint at /mcp. The minimum tools are screen_prompt, screen_output, verify_agent_trust, and get_pricing.",
   },
   {
     question: "What is x402 payment?",
@@ -98,7 +98,7 @@ const FAQ_ITEMS: FaqItem[] = [
     question:
       "What\u2019s the difference between Parse and Lakera Guard?",
     answer:
-      "Parse Agents is agent-first: REST API, hosted MCP endpoint, self-service API keys, output screening, agent trust verification, optional sandbox execution, and x402 pay-per-call access. Lakera Guard is a mature enterprise guardrail product. Choose based on deployment model, procurement path, data policy, and agent autonomy requirements.",
+      "Parse is agent-first: REST API, hosted MCP endpoint, self-service API keys, output screening, agent trust verification, optional sandbox execution, and x402 pay-per-call access. Lakera Guard is a mature enterprise guardrail product. Choose based on deployment model, procurement path, data policy, and agent autonomy requirements.",
   },
   {
     question: "How does async execution work?",

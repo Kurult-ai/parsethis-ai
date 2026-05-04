@@ -1,17 +1,17 @@
 ---
-title: "Parse Agents vs OpenAI Moderation"
+title: "Parse vs OpenAI Moderation"
 slug: openai-moderation
 date: "2026-05-03"
 lastUpdated: "2026-05-03"
-description: "Compare Parse Agents prompt protection with OpenAI moderation-style safety checks."
-author: "Parse Agents"
+description: "Compare Parse prompt protection with OpenAI moderation-style safety checks."
+author: "Parse"
 ---
 
-# Parse Agents vs OpenAI Moderation
+# Parse vs OpenAI Moderation
 
-Moderation APIs and prompt-protection APIs solve overlapping but different problems. Moderation focuses on content policy categories. Parse Agents focuses on whether text is trying to steer an agent across a trust boundary.
+Moderation APIs and prompt-protection APIs solve overlapping but different problems. Moderation focuses on content policy categories. Parse focuses on whether text is trying to steer an agent across a trust boundary.
 
-| Dimension | Parse Agents | OpenAI Moderation-style API |
+| Dimension | Parse | OpenAI Moderation-style API |
 |---|---|---|
 | Primary question | “Can this text safely influence my agent?” | “Does this content violate a content policy?” |
 | Prompt injection | First-class category | May require separate handling |
@@ -20,11 +20,11 @@ Moderation APIs and prompt-protection APIs solve overlapping but different probl
 | Payment | API keys or x402 | Provider account billing |
 | Discovery | OpenAPI, `/llms.txt`, MCP, hosted `/mcp` | Provider docs |
 
-Use both when needed: moderation for content policy and Parse Agents for prompt-injection, tool-output, and agent-handoff risk.
+Use both when needed: moderation for content policy and Parse for prompt-injection, tool-output, and agent-handoff risk.
 
 ## References
 
 - [OpenAI Moderation guide](https://platform.openai.com/docs/guides/moderation)
 - [OpenAI Moderations API reference](https://platform.openai.com/docs/api-reference/moderations)
-- [Parse Agents OpenAPI](https://parsethis.ai/openapi.json)
-- [Parse Agents MCP manifest](https://parsethis.ai/mcp.json)
+- [Parse OpenAPI](https://parsethis.ai/openapi.json)
+- [Parse MCP manifest](https://parsethis.ai/mcp.json)

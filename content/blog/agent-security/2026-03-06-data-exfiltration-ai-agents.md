@@ -187,7 +187,7 @@ No single defense stops all five vectors. Effective protection requires layers:
 
 Scan all content entering the agent pipeline — user prompts, fetched web pages, uploaded documents — for exfiltration instructions. Pattern matching catches direct attempts; structural analysis catches encoded or hidden variants.
 
-Parse Agents applies deterministic rules, structural analysis, optional LLM analysis, and optional sandbox execution across its public risk taxonomy, scoring each input on a 0-10 risk scale. Inputs above the configured threshold are blocked before reaching the agent.
+Parse applies deterministic rules, structural analysis, optional LLM analysis, and optional sandbox execution across its public risk taxonomy, scoring each input on a 0-10 risk scale. Inputs above the configured threshold are blocked before reaching the agent.
 
 ### Layer 2: Network Controls
 

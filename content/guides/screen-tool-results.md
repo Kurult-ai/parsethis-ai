@@ -3,8 +3,8 @@ title: "Screen Tool Results Before Your Agent Acts"
 slug: screen-tool-results
 date: "2026-05-03"
 lastUpdated: "2026-05-03"
-description: "How to use Parse Agents to screen browser, email, API, file, and tool output before it can steer an AI agent."
-author: "Parse Agents"
+description: "How to use Parse to screen browser, email, API, file, and tool output before it can steer an AI agent."
+author: "Parse"
 ---
 
 # Screen Tool Results Before Your Agent Acts
@@ -31,7 +31,7 @@ const screen = await fetch("https://parsethis.ai/v1/parse", {
 
 const decision = await screen.json();
 if (decision.suggested_action === "block") {
-  throw new Error("Tool output blocked by Parse Agents");
+  throw new Error("Tool output blocked by Parse");
 }
 ```
 

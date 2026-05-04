@@ -3,8 +3,8 @@ title: "Screen RAG Documents for Prompt Injection"
 slug: rag-prompt-injection-screening
 date: "2026-05-03"
 lastUpdated: "2026-05-03"
-description: "Use Parse Agents to screen retrieved documents and chunks before they enter an agent prompt."
-author: "Parse Agents"
+description: "Use Parse to screen retrieved documents and chunks before they enter an agent prompt."
+author: "Parse"
 ---
 
 # Screen RAG Documents for Prompt Injection
@@ -43,4 +43,4 @@ const usableChunks = chunks.filter((_, index) => screened[index].suggested_actio
 
 ## Policy notes
 
-Do not use Parse Agents as the only RAG control. Keep retrieval scoped, preserve document provenance, redact sensitive content where possible, and log blocked chunks for review.
+Do not use Parse as the only RAG control. Keep retrieval scoped, preserve document provenance, redact sensitive content where possible, and log blocked chunks for review.

@@ -98,11 +98,10 @@ export function renderPage(options: PageOptions): string {
 
   // Build nav links with aria-current for active page
   const navLinks = [
+    { href: "/playground", label: "Playground" },
     { href: "/docs", label: "Docs" },
     { href: "/pricing", label: "Pricing" },
-    { href: "/playground", label: "Playground" },
     { href: "/blog", label: "Blog" },
-    { href: "/faq", label: "FAQ" },
   ];
   const navLinksHtml = navLinks
     .map(
@@ -130,7 +129,7 @@ export function renderPage(options: PageOptions): string {
   <meta name="twitter:title" content="${safeTitle}">
   <meta name="twitter:description" content="${safeDesc}">
   <meta name="twitter:image" content="${escapeHtml(ogImg)}">
-  <meta name="theme-color" content="#09090b">
+  <meta name="theme-color" content="#f7f8fa">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -141,24 +140,27 @@ export function renderPage(options: PageOptions): string {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
-      --bg: #09090b;
-      --surface: #18181b;
-      --surface2: #27272a;
-      --border: #27272a;
-      --input: #27272a;
-      --text: #fafafa;
-      --text-dim: #a1a1aa;
-      --accent: #6366f1;
-      --accent2: #818cf8;
-      --accent-dim: rgba(99,102,241,0.12);
-      --green: #22c55e;
-      --green-dim: #052e16;
-      --yellow: #eab308;
-      --yellow-dim: #422006;
-      --destructive: #ef4444;
-      --destructive-dim: #450a0a;
-      --ring: #6366f1;
-      --radius: 0.625rem;
+      --bg: #f7f8fa;
+      --surface: #ffffff;
+      --surface2: #eef2f5;
+      --surface3: #e4e9ee;
+      --border: #d8e0e7;
+      --input: #ffffff;
+      --text: #171b21;
+      --text-dim: #5f6c7a;
+      --text-soft: #8190a0;
+      --accent: #006fee;
+      --accent2: #004fba;
+      --accent-dim: rgba(0,111,238,0.1);
+      --green: #11845b;
+      --green-dim: #e6f7ef;
+      --yellow: #b7791f;
+      --yellow-dim: #fff4d6;
+      --destructive: #c73535;
+      --destructive-dim: #ffe8e6;
+      --ring: #006fee;
+      --radius: 8px;
+      --shadow: 0 18px 45px rgba(24, 36, 50, 0.08);
     }
     body {
       font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -170,58 +172,63 @@ export function renderPage(options: PageOptions): string {
       -moz-osx-font-smoothing: grayscale;
     }
     a { color: var(--accent2); text-decoration: none; }
-    a:hover { color: var(--text); }
+    a:hover { color: var(--accent); }
     a:focus-visible, button:focus-visible, summary:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-visible {
       outline: 2px solid var(--ring);
       outline-offset: 2px;
     }
 
     /* Layout */
-    .container { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+    .container { max-width: 1180px; margin: 0 auto; padding: 32px 24px; }
 
     /* Header nav */
     .site-header {
       position: sticky;
       top: 0;
       z-index: 100;
-      background: rgba(9, 9, 11, 0.85);
+      background: rgba(247, 248, 250, 0.86);
       backdrop-filter: blur(16px) saturate(180%);
       -webkit-backdrop-filter: blur(16px) saturate(180%);
       border-bottom: 1px solid var(--border);
     }
     .site-header nav {
-      max-width: 960px;
+      max-width: 1180px;
       margin: 0 auto;
-      padding: 16px 24px;
+      padding: 14px 24px;
       display: flex;
       align-items: center;
-      gap: 28px;
+      gap: 24px;
     }
     .site-header .logo {
-      font-size: 17px;
+      font-size: 22px;
       font-weight: 700;
-      letter-spacing: -0.02em;
+      letter-spacing: -0.045em;
       color: var(--text);
       text-decoration: none;
       margin-right: auto;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 9px;
+      line-height: 1;
     }
     .site-header .logo::before {
       content: '';
       display: inline-block;
-      width: 22px;
-      height: 22px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      width: 24px;
+      height: 24px;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 42%),
+        var(--text);
       border-radius: 5px;
       flex-shrink: 0;
     }
+    .logo-lockup { display:flex; align-items:center; gap:7px; }
+    .logo-primary { color:var(--text); }
     .site-header .logo:hover { color: var(--text); text-decoration: none; }
     .site-header nav a {
       color: var(--text-dim);
-      font-size: 14px;
-      font-weight: 500;
+      font-size: 13px;
+      font-weight: 650;
       text-decoration: none;
       transition: color 0.2s;
       position: relative;
@@ -236,7 +243,7 @@ export function renderPage(options: PageOptions): string {
     .site-header nav a[aria-current="page"]::after {
       content: '';
       position: absolute;
-      bottom: -6px;
+      bottom: -8px;
       left: 0;
       right: 0;
       height: 2px;
@@ -254,9 +261,9 @@ export function renderPage(options: PageOptions): string {
     .site-header .nav-cta {
       background: var(--accent);
       color: white !important;
-      padding: 7px 18px;
+      padding: 8px 16px;
       border-radius: var(--radius);
-      font-weight: 600;
+      font-weight: 700;
       font-size: 13px;
       text-decoration: none;
       transition: all 0.2s;
@@ -315,9 +322,10 @@ export function renderPage(options: PageOptions): string {
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 24px;
+      box-shadow: 0 1px 0 rgba(24,36,50,0.02);
       transition: border-color 0.2s;
     }
-    .card:hover { border-color: #3f3f46; }
+    .card:hover { border-color: #b8c4cf; }
     .card-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -360,10 +368,10 @@ export function renderPage(options: PageOptions): string {
       transition: all 0.2s;
       white-space: nowrap;
     }
-    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary { background: var(--accent); color: white; box-shadow: 0 8px 18px rgba(0,111,238,0.18); }
     .btn-primary:hover { background: var(--accent2); color: white; }
     .btn-outline { background: transparent; color: var(--accent2); border: 1px solid var(--border); }
-    .btn-outline:hover { background: var(--surface2); color: var(--text); border-color: #3f3f46; }
+    .btn-outline:hover { background: var(--surface2); color: var(--text); border-color: #b8c4cf; }
     .btn-ghost { background: transparent; color: var(--text-dim); }
     .btn-ghost:hover { background: var(--surface2); color: var(--text); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -399,18 +407,18 @@ export function renderPage(options: PageOptions): string {
     }
     tr:last-child td { border-bottom: none; }
     tbody tr { transition: background 0.15s; }
-    tbody tr:hover { background: var(--surface); }
+    tbody tr:hover { background: var(--surface2); }
 
     /* Terminal code block */
     .terminal {
       position: relative;
-      background: var(--surface);
+      background: #10141a;
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 16px 48px 16px 16px;
       font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
       font-size: 13px;
-      color: var(--green);
+      color: #b7f0ce;
       white-space: pre-wrap;
       word-break: break-all;
       line-height: 1.6;
@@ -451,11 +459,11 @@ export function renderPage(options: PageOptions): string {
     nav.breadcrumb li::after {
       content: '/';
       margin: 0 8px;
-      color: #3f3f46;
+      color: var(--text-soft);
     }
     nav.breadcrumb li:last-child::after { content: ''; margin: 0; }
     nav.breadcrumb a { color: var(--text-dim); }
-    nav.breadcrumb a:hover { color: var(--text); }
+    nav.breadcrumb a:hover { color: var(--accent); }
     nav.breadcrumb li:last-child { color: var(--text); }
 
     /* Last updated */
@@ -489,7 +497,7 @@ export function renderPage(options: PageOptions): string {
       margin-top: 64px;
     }
     .site-footer .footer-inner {
-      max-width: 960px;
+      max-width: 1180px;
       margin: 0 auto;
       display: flex;
       justify-content: space-between;
@@ -531,7 +539,7 @@ export function renderPage(options: PageOptions): string {
       cursor: pointer;
       transition: all 0.15s;
     }
-    .copy-btn:hover { color: var(--text); border-color: #3f3f46; }
+    .copy-btn:hover { color: var(--text); border-color: #b8c4cf; }
     .copy-btn.copied { background: var(--green-dim); color: var(--green); border-color: var(--green); }
 
     /* Screen reader only (a11y) */
@@ -558,6 +566,8 @@ export function renderPage(options: PageOptions): string {
       h1 { font-size: 1.75em; }
       .nav-toggle { display:block; }
       .site-header nav { padding: 12px 16px; gap: 12px; flex-wrap: wrap; }
+      .site-header .logo { font-size: 20px; }
+      .logo-lockup { align-items:center; }
       .site-header .nav-links { display:none;width:100%;flex-direction:column;gap:12px;padding-top:8px; }
       .site-header .nav-links.open { display:flex; }
       .site-header .nav-cta { text-align:center; }
@@ -575,12 +585,12 @@ export function renderPage(options: PageOptions): string {
   <a href="#main-content" class="sr-only">Skip to main content</a>
   <header class="site-header">
     <nav aria-label="Site">
-      <a href="/" class="logo">${PRODUCT.name}</a>
+      <a href="/" class="logo" aria-label="Parse home"><span class="logo-lockup"><span class="logo-primary">Parse</span></span></a>
       <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links" onclick="const n=document.getElementById('nav-links');const open=n.classList.toggle('open');this.setAttribute('aria-expanded',open);this.textContent=open?'\u2715':'\u2630';">\u2630</button>
       <div class="nav-links" id="nav-links">
       ${navLinksHtml}
       <a href="${GITHUB_URL}" class="external" target="_blank" rel="noopener noreferrer">GitHub<span class="sr-only"> (opens in new tab)</span></a>
-      <a href="/docs/quickstart" class="nav-cta">Get Started Free</a>
+      <a href="/docs/quickstart" class="nav-cta">Get API key</a>
       </div>
     </nav>
   </header>
@@ -596,7 +606,7 @@ export function renderPage(options: PageOptions): string {
   <footer class="site-footer">
     <div class="footer-inner">
       <div>
-        <div class="footer-brand">${PRODUCT.name}</div>
+        <div class="footer-brand">Parse</div>
         <div>Prompt security for AI agents</div>
       </div>
       <nav aria-label="Footer">

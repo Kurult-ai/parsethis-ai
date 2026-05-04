@@ -3,7 +3,7 @@ title: "Prompt Injection Detection Tools Compared"
 slug: prompt-injection-tools
 date: "2026-05-03"
 lastUpdated: "2026-05-03"
-author: "Parse Agents"
+author: "Parse"
 category: "compare"
 tags: ["comparison", "prompt injection", "tools", "agent security"]
 description: "A factual comparison of prompt injection detection and prompt protection tools for AI agents."
@@ -13,7 +13,7 @@ reading_time: 6
 
 # Prompt Injection Detection Tools Compared
 
-Prompt injection tools fall into several categories: hosted APIs, cloud-provider guardrails, self-hosted classifiers, testing frameworks, and runtime agent-protection layers. Parse Agents is in the last group: a hosted prompt protection API and MCP endpoint designed for autonomous AI agents.
+Prompt injection tools fall into several categories: hosted APIs, cloud-provider guardrails, self-hosted classifiers, testing frameworks, and runtime agent-protection layers. Parse is in the last group: a hosted prompt protection API and MCP endpoint designed for autonomous AI agents.
 
 This page is a product-fit comparison, not a benchmark. Do not infer accuracy or latency numbers from it. Before production use, test every option against your own prompts, retrieved documents, tool outputs, and agent handoffs.
 
@@ -21,7 +21,7 @@ This page is a product-fit comparison, not a benchmark. Do not infer accuracy or
 
 | Need | Strong fit |
 |---|---|
-| Agent can discover and call a tool without human procurement | Parse Agents |
+| Agent can discover and call a tool without human procurement | Parse |
 | Azure-native prompt shield inside Microsoft Foundry / Azure AI workflows | Azure AI Prompt Shields |
 | AWS-native guardrails inside Bedrock workflows | AWS Bedrock Guardrails |
 | Enterprise prompt-injection vendor workflow | Lakera Guard |
@@ -29,9 +29,9 @@ This page is a product-fit comparison, not a benchmark. Do not infer accuracy or
 | Pre-deployment red-team tests and prompt regression testing | Promptfoo |
 | Content policy moderation | Moderation APIs |
 
-## Parse Agents
+## Parse
 
-Parse Agents is optimized for agents that need a clear machine-callable decision before acting. It provides:
+Parse is optimized for agents that need a clear machine-callable decision before acting. It provides:
 
 - `POST /v1/parse` for untrusted input before tool use
 - `POST /v1/screen-output` for generated output before forwarding
@@ -40,7 +40,7 @@ Parse Agents is optimized for agents that need a clear machine-callable decision
 - `/mcp.json` and hosted `/mcp` for MCP-compatible clients
 - `/llms.txt` and `/llms-full.txt` for model-facing discovery
 
-Choose Parse Agents when MCP, x402, self-service keys, output screening, and agent-to-agent trust verification matter.
+Choose Parse when MCP, x402, self-service keys, output screening, and agent-to-agent trust verification matter.
 
 ## Cloud-native guardrails
 
@@ -64,7 +64,7 @@ Choose self-hosted tools when data residency and local control matter more than 
 
 Promptfoo and similar testing frameworks help you build red-team suites and regression tests. They are complementary to runtime protection.
 
-Use testing frameworks before deployment, then use a runtime control such as Parse Agents when the live agent needs a decision before taking action.
+Use testing frameworks before deployment, then use a runtime control such as Parse when the live agent needs a decision before taking action.
 
 ## References
 

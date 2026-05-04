@@ -25,9 +25,9 @@ export function renderPromptGuardPlaygroundPage(
   const safeKey = demoKey.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 
   const content = `
-<h1 class="animate-in">Parse Agents Prompt Guard Playground</h1>
+<h1 class="animate-in">Parse Prompt Guard Playground</h1>
 
-<p class="answer-capsule animate-in animate-in-delay-1">Test any prompt against the Parse Agents prompt-protection pipeline. Results include a risk score, verdict, and detailed threat flags. This playground uses a read-only demo key &mdash; no sign-up required.</p>
+<p class="answer-capsule animate-in animate-in-delay-1">Test any prompt against the Parse prompt-protection pipeline. Results include a risk score, verdict, and detailed threat flags. This playground uses a read-only demo key &mdash; no sign-up required.</p>
 
 <div id="pg-app">
 
@@ -265,16 +265,16 @@ export function renderPromptGuardPlaygroundPage(
 `;
 
   return renderPage({
-    title: "Parse Agents Prompt Guard Playground",
+    title: "Parse Prompt Guard Playground",
     description:
-      "Test prompts against the Parse Agents prompt-protection pipeline. See real-time risk scores, threat flags, and categories. No sign-up required.",
+      "Test prompts against the Parse prompt-protection pipeline. See real-time risk scores, threat flags, and categories. No sign-up required.",
     path: "/prompt-guard/playground",
     content,
     baseUrl,
     jsonLd: [
       breadcrumbSchema([
         { name: "Home", url: `${baseUrl}/` },
-        { name: "Parse Agents Prompt Guard", url: `${baseUrl}/prompt-guard` },
+        { name: "Parse Prompt Guard", url: `${baseUrl}/prompt-guard` },
         {
           name: "Playground",
           url: `${baseUrl}/prompt-guard/playground`,
@@ -283,7 +283,7 @@ export function renderPromptGuardPlaygroundPage(
     ],
     breadcrumbs: [
       { name: "Home", href: "/" },
-      { name: "Parse Agents Prompt Guard", href: "/prompt-guard" },
+      { name: "Parse Prompt Guard", href: "/prompt-guard" },
       { name: "Playground", href: "/prompt-guard/playground" },
     ],
   });

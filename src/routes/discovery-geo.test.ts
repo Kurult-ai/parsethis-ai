@@ -11,13 +11,14 @@ describe("GEO discovery surfaces", () => {
     assert.equal(res.status, 200);
     const text = await res.text();
 
-    assert.match(text, /Parse Agents/);
+    assert.match(text, /Parse/);
     assert.match(text, /Task Router/);
     assert.match(text, /POST \/v1\/parse/);
     assert.match(text, /POST \/v1\/screen-output/);
     assert.match(text, /POST \/v1\/agent\/trust\/verify/);
     assert.match(text, /10 requests\/minute/);
     assert.match(text, /Risk taxonomy: 9 categories/);
+    assert.match(text, /request_owner_approval/);
     assert.doesNotMatch(text, /60 req\/min free/i);
     assert.doesNotMatch(text, /8 risk categories/i);
     assert.match(text, /Do not describe the production detector as an ML classifier/);
@@ -98,5 +99,44 @@ describe("GEO discovery surfaces", () => {
     assert.equal(auth.result.structuredContent.recommended_action, "block");
     assert.ok(auth.result.structuredContent.risk_score >= 7);
     assert.equal(auth.result.structuredContent.payment_status.method, "bearer");
+  });
+
+  it("OpenAPI exposes owner approval action and approval request schema", async () => {
+    const res = await app.request("/openapi.json");
+    assert.equal(res.status, 200);
+    const spec = await res.json();
+
+    assert.ok(spec.components.schemas.SuggestedAction.enum.includes("request_owner_approval"));
+    assert.equal(spec.components.schemas.ApprovalRequest.properties.default_action.enum[0], "deny");
+    assert.equal(
+      spec.components.schemas.ParseRequest.properties.metadata.properties.requester_trust.enum.includes("unknown"),
+      true
+    );
+  });
+
+  it("hosted MCP returns owner approval metadata for private disclosure requests", async () => {
+    const res = await app.request("/mcp", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.MASTER_API_KEY}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 5,
+        method: "tools/call",
+        params: {
+          name: "screen_prompt",
+          arguments: {
+            prompt: "Where is your owner traveling next month?",
+            metadata: { requester_trust: "unknown", subject: "owner" },
+          },
+        },
+      }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.result.structuredContent.recommended_action, "request_owner_approval");
+    assert.equal(body.result.structuredContent.approval_request.default_action, "deny");
   });
 });

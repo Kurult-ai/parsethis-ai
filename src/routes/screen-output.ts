@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../auth.js";
-import { analyzeOutputRisks } from "../parse.js";
+import { analyzeOutputRisks, computeSuggestedAction, type ParseRequest } from "../parse.js";
 import type { AppEnv } from "../types.js";
 import { auditLog } from "../lib/audit-log.js";
 import { problem, ErrorCode, jsonContentTypeProblem } from "../lib/problem-response.js";
@@ -20,7 +20,7 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
   const contentTypeProblem = jsonContentTypeProblem(c);
   if (contentTypeProblem) return contentTypeProblem;
 
-  const body = await c.req.json<{ output: string; context?: string }>();
+  const body = await c.req.json<{ output: string; context?: string; metadata?: ParseRequest["metadata"] }>();
 
   if (!body.output || typeof body.output !== "string") {
     return problem(c, {
@@ -41,10 +41,19 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
       retryable: false,
     });
   }
+  if (body.metadata !== undefined && (typeof body.metadata !== "object" || Array.isArray(body.metadata))) {
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "metadata must be an object",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
+  }
 
   const context = body.context || "";
 
-  const { outputFlags, outputRiskScore } = analyzeOutputRisks(body.output, context);
+  const { outputFlags, outputRiskScore, approvalRequest } = analyzeOutputRisks(body.output, context, body.metadata);
 
   const verdict =
     outputRiskScore <= 1 ? "safe" :
@@ -68,6 +77,8 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
     verdict,
     flags: outputFlags,
     categories: [...new Set(outputFlags.map((f) => f.category))],
+    suggested_action: computeSuggestedAction(outputRiskScore, approvalRequest),
+    approval_request: approvalRequest,
     output_length: body.output.length,
     analyzed_at: new Date().toISOString(),
   });

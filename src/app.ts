@@ -16,6 +16,7 @@ import { mcpRoutes } from "./routes/mcp.js";
 import { screeningMetricsRoutes } from "./routes/screening-metrics.js";
 import { billingRoutes, billingWebhookRoute } from "./routes/billing.js";
 import { adminRoutes } from "./routes/admin.js";
+import { playgroundRoutes } from "./routes/playground.js";
 import { contentNegotiation } from "./lib/content-negotiation.js";
 import { problem, ErrorCode } from "./lib/problem-response.js";
 
@@ -123,3 +124,4 @@ app.route("/", agentTrustRoutes);
 app.route("/", screeningMetricsRoutes);
 app.route("/", billingRoutes);
 app.route("/", adminRoutes);
+app.route("/", playgroundRoutes);

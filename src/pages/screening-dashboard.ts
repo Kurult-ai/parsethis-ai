@@ -147,7 +147,7 @@ export async function renderScreeningDashboardPage(baseUrl: string): Promise<str
 
   return renderPage({
     title: "Screening Dashboard",
-    description: "Parse Agents prompt-protection analytics and risk distribution",
+    description: "Parse prompt-protection analytics and risk distribution",
     path: "/dashboard/screening",
     content,
     baseUrl,

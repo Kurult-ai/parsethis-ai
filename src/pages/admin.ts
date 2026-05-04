@@ -10,7 +10,7 @@ export function renderAdminDashboardPage(baseUrl: string): string {
     <div class="admin-shell">
       <section class="admin-hero">
         <div>
-          <p class="admin-kicker">Parse Agents</p>
+          <p class="admin-kicker">Parse</p>
           <h1>Admin Console</h1>
         </div>
         <div class="admin-auth">
@@ -459,7 +459,7 @@ export function renderAdminDashboardPage(baseUrl: string): string {
 
   return renderPage({
     title: "Admin Console",
-    description: "Parse Agents operator console.",
+    description: "Parse operator console.",
     path: "/admin",
     content,
     baseUrl,

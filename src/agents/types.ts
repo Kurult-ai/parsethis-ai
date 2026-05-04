@@ -1,5 +1,5 @@
 /**
- * Type definitions for Parse Agents
+ * Type definitions for Parse
  */
 
 // ============================================

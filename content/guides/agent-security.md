@@ -1,17 +1,17 @@
 ---
-title: "Securing AI Agents with Parse Agents"
+title: "Securing AI Agents with Parse"
 slug: agent-security
 date: "2026-05-03"
 lastUpdated: "2026-05-03"
-description: "A practical guide to securing AI agent trust boundaries with Parse Agents prompt protection."
-author: "Parse Agents"
+description: "A practical guide to securing AI agent trust boundaries with Parse prompt protection."
+author: "Parse"
 ---
 
-# Securing AI Agents with Parse Agents
+# Securing AI Agents with Parse
 
 AI agents are risky because they convert text into action. A prompt, document, browser page, API response, or peer-agent message can become a tool call, memory write, payment, code execution, or user-visible answer.
 
-Parse Agents gives agents a machine-readable screening decision at those trust boundaries.
+Parse gives agents a machine-readable screening decision at those trust boundaries.
 
 ## Core rule
 
@@ -48,12 +48,12 @@ async function guardedToolBoundary(text: string, source: string) {
 
   if (!res.ok) {
     // High-impact paths should fail closed.
-    throw new Error(`Parse Agents unavailable: ${res.status}`);
+    throw new Error(`Parse unavailable: ${res.status}`);
   }
 
   const decision = await res.json();
   if (decision.suggested_action === "block" || decision.risk_score >= 7) {
-    throw new Error("Blocked by Parse Agents");
+    throw new Error("Blocked by Parse");
   }
   return decision;
 }
@@ -98,7 +98,7 @@ Use x402 for autonomous first calls and metered workflows. Use bearer keys for s
 
 ## Operational checklist
 
-- Keep one Parse Agents key per environment.
+- Keep one Parse key per environment.
 - Do not commit keys or wallet private keys.
 - Scope HTTP auth headers to `parsethis.ai`.
 - Log screening decisions without storing unnecessary prompt content.
@@ -108,4 +108,4 @@ Use x402 for autonomous first calls and metered workflows. Use bearer keys for s
 
 ## Limitations
 
-Parse Agents reduces risk but does not guarantee protection. It is not a substitute for scoped credentials, allowlisted tools, output validation, human review for high-impact actions, or incident response.
+Parse reduces risk but does not guarantee protection. It is not a substitute for scoped credentials, allowlisted tools, output validation, human review for high-impact actions, or incident response.

@@ -19,7 +19,7 @@ Pattern matching will never catch this. You need to watch what the agent *does*.
 
 ## The Detection Gap
 
-Deterministic pattern matching — scanning inputs for known injection signatures — is fast and cheap. It catches the obvious attacks: `ignore previous instructions`, hidden HTML divs with `display:none`, base64-encoded payloads, coercive `YOU MUST EXECUTE` patterns. Parse Agents combines deterministic rules, structural analysis, optional LLM analysis, and optional sandbox execution across its current public risk taxonomy.
+Deterministic pattern matching — scanning inputs for known injection signatures — is fast and cheap. It catches the obvious attacks: `ignore previous instructions`, hidden HTML divs with `display:none`, base64-encoded payloads, coercive `YOU MUST EXECUTE` patterns. Parse combines deterministic rules, structural analysis, optional LLM analysis, and optional sandbox execution across its current public risk taxonomy.
 
 But attackers don't use known patterns. The [OWASP Top 10 for LLM Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) lists indirect prompt injection as the #1 risk precisely because the attack surface is the entire space of natural language. A [2025 Unit 42 study](https://unit42.paloaltonetworks.com/) demonstrated that encoding bypass alone — base64, ROT13, Unicode substitution — defeats most static filters. And that's just one evasion technique among dozens.
 
@@ -101,7 +101,7 @@ No input pattern predicts this. The injection might be as innocent as "Repeat th
 
 ### 2. Output-Side Injection Patterns
 
-An injection payload can survive processing and appear in the agent's output, becoming a second-stage attack against downstream agents or the user's browser. Parse Agents screens sandbox output before returning it:
+An injection payload can survive processing and appear in the agent's output, becoming a second-stage attack against downstream agents or the user's browser. Parse screens sandbox output before returning it:
 
 - Hidden HTML instructions (`display:none` divs with behavioral commands)
 - C2 registration attempts ("register with the command server")

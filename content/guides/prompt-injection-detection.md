@@ -3,15 +3,15 @@ title: "Prompt Injection Detection for AI Agents"
 slug: prompt-injection-detection
 date: "2026-05-03"
 lastUpdated: "2026-05-03"
-description: "How to detect prompt injection in AI agents with Parse Agents, OpenAPI, MCP, and x402."
-author: "Parse Agents"
+description: "How to detect prompt injection in AI agents with Parse, OpenAPI, MCP, and x402."
+author: "Parse"
 ---
 
 # Prompt Injection Detection for AI Agents
 
 Prompt injection is not only a chat-input problem. Agents read browser pages, email, documents, API responses, RAG chunks, command output, and messages from other agents. Every one of those surfaces can contain text that tries to override the agent's real task.
 
-Parse Agents is a prompt protection API for these boundaries. It returns structured JSON so agents can decide whether to allow, isolate, or block untrusted text before acting.
+Parse is a prompt protection API for these boundaries. It returns structured JSON so agents can decide whether to allow, isolate, or block untrusted text before acting.
 
 ## What to screen
 
@@ -31,7 +31,7 @@ Use `POST /v1/parse` for untrusted input. Use `POST /v1/screen-output` for gener
 
 ## Detection model
 
-Parse Agents uses a layered detector:
+Parse uses a layered detector:
 
 1. Deterministic pattern matching with normalization.
 2. Structural risk analysis for encoded, hidden, or boundary-breaking payloads.
@@ -61,7 +61,13 @@ type ParseDecision = {
   verdict: "safe" | "low_risk" | "medium_risk" | "high_risk" | "critical";
   categories: string[];
   flags: Array<{ category: string; severity: number; label: string; detail: string }>;
-  suggested_action?: "allow" | "sandbox" | "block";
+  suggested_action?: "allow" | "sandbox" | "block" | "request_owner_approval";
+  approval_request?: {
+    type: "privacy_disclosure";
+    owner_prompt: string;
+    default_action: "deny";
+    expires_in_seconds: 900;
+  };
 };
 
 export async function screenUntrustedText(text: string, source: string): Promise<ParseDecision> {
@@ -78,7 +84,7 @@ export async function screenUntrustedText(text: string, source: string): Promise
   });
 
   if (!res.ok) {
-    throw new Error(`Parse Agents screening failed: ${res.status}`);
+    throw new Error(`Parse screening failed: ${res.status}`);
   }
 
   return res.json() as Promise<ParseDecision>;
@@ -110,6 +116,7 @@ Prefer `suggested_action` when present.
 |---|---|
 | `suggested_action = "allow"` | Continue |
 | `suggested_action = "sandbox"` | Isolate, log, or require review |
+| `suggested_action = "request_owner_approval"` | Ask the owner privately with `approval_request.owner_prompt`; deny if approval expires |
 | `suggested_action = "block"` | Block by default |
 | `risk_score >= 7` | Block by default if no action field exists |
 | Parse unavailable on high-impact path | Fail closed |
@@ -117,7 +124,7 @@ Prefer `suggested_action` when present.
 
 ## Agent-native discovery
 
-Parse Agents publishes:
+Parse publishes:
 
 - `/llms.txt` for short model-facing routing instructions
 - `/llms-full.txt` for full agent context

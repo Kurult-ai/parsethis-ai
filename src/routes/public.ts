@@ -13,7 +13,6 @@ import { getBaseUrl } from "../lib/route-utils.js";
 import { renderPage } from "../lib/html-template.js";
 import { organizationSchema } from "../lib/schema.js";
 import { renderLandingPage } from "../pages/landing.js";
-import { renderPlaygroundPage } from "../pages/playground.js";
 import { renderFaqPage } from "../pages/faq.js";
 import { renderDocsPage, renderGuidePage, renderComparePage, renderSecurityPage } from "../pages/docs.js";
 import { renderPricingPage } from "../pages/pricing.js";
@@ -304,11 +303,12 @@ publicRoutes.get("/docs", (c) => {
   <li><a href="/docs/x402">x402 Guide</a> — Pay-per-call prompt protection for autonomous agents</li>
   <li><a href="/docs/risk-categories">Risk Categories</a> — Canonical threat taxonomy</li>
   <li><a href="/docs/openapi-gpt-actions-prompt-screening">OpenAPI / GPT Actions Guide</a> — Tool-calling setup</li>
+  <li><a href="/guides/owner-approval-private-disclosures">Owner Approval for Private Disclosures</a> — Pause before sharing owner details</li>
   <li><a href="/guides/prompt-injection-detection">Prompt Injection Detection Guide</a> — Comprehensive detection methods</li>
   <li><a href="/guides/agent-security">Securing AI Agents</a> — Best practices for agent security</li>
   <li><a href="/guides/screen-tool-results">Screen Tool Results</a> — Defend tool and browser boundaries</li>
   <li><a href="/guides/rag-prompt-injection-screening">RAG Prompt Injection Screening</a> — Screen retrieved documents</li>
-  <li><a href="/security/limitations">Limitations</a> — What Parse Agents does and does not guarantee</li>
+  <li><a href="/security/limitations">Limitations</a> — What Parse does and does not guarantee</li>
   <li><a href="/compare/prompt-injection-tools">Tool Comparison</a> — Sourced tradeoff comparison</li>
 </ul>
 
@@ -344,7 +344,7 @@ publicRoutes.get("/docs", (c) => {
 `;
   return c.html(renderPage({
     title: "Documentation",
-    description: "Parse Agents documentation for prompt protection, output screening, agent trust verification, MCP, and x402.",
+    description: "Parse documentation for prompt protection, output screening, agent trust verification, MCP, and x402.",
     path: "/docs",
     content,
     baseUrl,
@@ -371,11 +371,6 @@ for (const slug of geoPageSlugs) {
     return c.html(html);
   });
 }
-
-// Playground
-publicRoutes.get("/playground", (c) => {
-  return c.html(renderPlaygroundPage(getBaseUrl(c)));
-});
 
 // Prompt Guard landing
 publicRoutes.get("/prompt-guard", (c) => {

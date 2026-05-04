@@ -28,6 +28,10 @@ const DEFAULT_POLICY: ScreeningPolicy = {
   screenAllPrompts: false,
   autoBlockThreshold: 7,
   executeInSandbox: true,
+  approvalRequiredForPersonalData: true,
+  approvalRequiredForLocation: true,
+  approvalRequiredForFuturePlans: true,
+  approvalDefaultAction: "deny",
 };
 
 // In-memory rate limit fallback (used when Redis is unavailable)
@@ -343,7 +347,7 @@ export function authMiddleware(requiredScope?: string) {
         const dbPolicy = await prisma.screeningPolicy.findUnique({
           where: { apiKeyId: apiKeyRecord.id },
         });
-        const policy = dbPolicy
+        const policy: ScreeningPolicy = dbPolicy
           ? {
               screenUserInput: dbPolicy.screenUserInput,
               screenToolOutputs: dbPolicy.screenToolOutputs,
@@ -351,6 +355,10 @@ export function authMiddleware(requiredScope?: string) {
               screenAllPrompts: dbPolicy.screenAllPrompts,
               autoBlockThreshold: dbPolicy.autoBlockThreshold,
               executeInSandbox: dbPolicy.executeInSandbox,
+              approvalRequiredForPersonalData: true,
+              approvalRequiredForLocation: true,
+              approvalRequiredForFuturePlans: true,
+              approvalDefaultAction: "deny",
             }
           : DEFAULT_POLICY;
         c.set("policy", policy);

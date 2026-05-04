@@ -752,7 +752,7 @@ Do not write generic “future of AI safety” posts. They will not move agent s
 | Parse vs AWS Bedrock Guardrails | `/compare/parse-vs-bedrock-guardrails` | Cloud-native substitute | Cloud lock-in, runtime checks, agent workflows. |
 | Build a Safe AI Agent with Parse and TypeScript | `/docs/examples/typescript-agent-prompt-protection` | Coding assistant/codegen | Full repo-style example. |
 | Build a Safe AI Agent with Parse and Python | `/docs/examples/python-agent-prompt-protection` | Coding assistant/codegen | Full repo-style example. |
-| Prompt Injection Test Cases for Agent Builders | `/research/prompt-injection-test-cases` | Security/dev credibility | Red-team examples, methodology, no inflated benchmark. |
+| Prompt Safety Cases for Agent Builders | `/research/prompt-safety-cases` | Security/dev credibility | Red-team examples, methodology, no inflated benchmark. |
 
 ## Content style rules
 

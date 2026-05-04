@@ -513,8 +513,8 @@ function buildAdminManifest(baseUrl: string) {
   ];
 
   return {
-    service: "Parse Agents Admin",
-    entity: "Parse Agents",
+    service: "Parse Admin",
+    entity: "Parse",
     version: "2026-05-02",
     base_url: baseUrl,
     dashboard_url: `${baseUrl}/admin`,
@@ -1565,8 +1565,8 @@ async function dashboardSnapshotData(params: ListParams) {
 adminRoutes.get("/.well-known/parse-admin.json", (c) => {
   const baseUrl = getBaseUrl(c);
   return c.json({
-    service: "Parse Agents Admin",
-    entity: "Parse Agents",
+    service: "Parse Admin",
+    entity: "Parse",
     dashboard_url: `${baseUrl}/admin`,
     manifest_url: `${baseUrl}/v1/admin/manifest`,
     action_endpoint: `${baseUrl}/v1/admin/actions`,

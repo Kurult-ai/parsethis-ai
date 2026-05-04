@@ -2,10 +2,16 @@ import { Buffer } from "node:buffer";
 import type { RiskCategory } from "./index.js";
 
 export interface ContextualRiskFlag {
+  id?: string;
   category: RiskCategory;
   severity: number;
   label: string;
   detail: string;
+  confidence?: "low" | "medium" | "high";
+  attack_family?: string;
+  action_floor?: "allow" | "allow_log" | "sandbox" | "block";
+  evidence?: string;
+  source?: string;
 }
 
 const URL_PATTERN = /https?:\/\/[^\s"'<>\])}]+/gi;
@@ -74,6 +80,11 @@ function hasDataExfilToUrl(text: string): boolean {
 }
 
 function addFlag(flags: ContextualRiskFlag[], flag: ContextualRiskFlag): void {
+  flag.id ??= `contextual.${flag.label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
+  flag.confidence ??= flag.severity >= 8 ? "high" : "medium";
+  flag.attack_family ??= flag.category;
+  flag.action_floor ??= flag.severity >= 8 ? "block" : "sandbox";
+  flag.source ??= "contextual";
   if (!flags.some((existing) => existing.label === flag.label && existing.category === flag.category)) {
     flags.push(flag);
   }

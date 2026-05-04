@@ -1,23 +1,23 @@
 ---
-title: "Quickstart — Parse Agents Prompt Protection API"
+title: "Quickstart — Parse Prompt Protection API"
 slug: quickstart
 date: "2026-03-22"
-lastUpdated: "2026-03-22"
-description: "Get started with Parse Agents in under 5 minutes. Install the skill, generate an API key, screen your first prompt, and act on the results."
-author: "Parse Agents"
+lastUpdated: "2026-05-04"
+description: "Get started with Parse in under 5 minutes. Install the skill, generate an API key, screen your first prompt, and act on the results."
+author: "Parse"
 ---
 
 # Quickstart
 
-## What is Parse Agents?
+## What is Parse?
 
-Parse Agents is a prompt protection API that detects prompt injections, jailbreaks, data exfiltration, and adversarial attacks before your AI agent acts on untrusted text. It evaluates prompts across 9 risk categories aligned to OWASP LLM risks, returning a 0-10 risk score with categorized flags and an actionable verdict.
+Parse is a prompt protection API that detects prompt injections, jailbreaks, data exfiltration, private-disclosure requests, and adversarial attacks before your AI agent acts on untrusted text. It evaluates prompts across 9 risk categories aligned to OWASP LLM risks, returning a 0-10 risk score with categorized flags and an actionable verdict.
 
-Parse Agents combines deterministic pattern matching, structural risk analysis, optional LLM semantic analysis, and optional sandbox execution. It reduces prompt-injection risk, but it does not guarantee protection or replace least-privilege tool design.
+Parse combines deterministic pattern matching, structural risk analysis, optional LLM semantic analysis, and optional sandbox execution. It reduces prompt-injection risk, but it does not guarantee protection or replace least-privilege tool design.
 
 ## How do I install the skill?
 
-For Claude Code agents, install the Parse Agents skill with a single command:
+For Claude Code agents, install the Parse skill with a single command:
 
 ```bash
 curl -s parsethis.ai/skill > ~/.claude/skills/parse.md
@@ -90,12 +90,15 @@ Response:
 
 Use `suggested_action`, `risk_score`, and `safe` to decide whether to execute the prompt. Here is a default action mapping:
 
-| Risk Score | safe | Recommended Action |
+| Signal | safe | Recommended Action |
 |-----------|------|--------------------|
-| 0–2 | true | Execute normally |
-| 3–6 | varies | Sandbox, isolate, or continue only with logging |
-| 7–8 | false | Block and notify user |
-| 9–10 | false | Block silently, log for review |
+| Risk score 0–2 | true | Execute normally |
+| Risk score 3–6 | varies | Sandbox, isolate, or continue only with logging |
+| `request_owner_approval` | false | Ask the owner privately; deny if approval expires |
+| Risk score 7–8 | false | Block and notify user |
+| Risk score 9–10 | false | Block silently, log for review |
+
+If the response includes `suggested_action: "request_owner_approval"`, use `approval_request.owner_prompt` in your own trusted owner channel. Parse does not notify the owner or store the approval in v1. Screen the final answer with `/v1/screen-output` before forwarding it.
 
 For automated agents, configure a screening policy with `PUT /v1/policy`:
 
@@ -135,4 +138,4 @@ Sandbox output is treated as untrusted — full risk analysis is applied to the 
 - [Playground](/playground) — test prompts interactively in your browser
 - [x402 Guide](/docs/x402) — pay per call without an API key
 - [Risk Categories](/docs/risk-categories) — canonical taxonomy
-- [FAQ](/faq) — answers to common questions about prompt safety and Parse Agents
+- [FAQ](/faq) — answers to common questions about prompt safety and Parse

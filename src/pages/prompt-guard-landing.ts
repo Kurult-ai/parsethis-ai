@@ -19,9 +19,9 @@ export function renderPromptGuardLandingPage(baseUrl: string): string {
   const content = `
 <!-- Chunk 1: Hero (Miller's Law: 1 of 5) -->
 <div class="section-chunk animate-in">
-  <h1>Parse Agents Prompt Guard</h1>
+  <h1>Parse Prompt Guard</h1>
 
-  <p class="answer-capsule" style="max-width:700px;margin:0 auto 32px;">Prompt Guard is the prompt-protection capability inside Parse Agents. Screen untrusted input, generated output, and peer-agent messages before they affect tools, memory, credentials, payments, code execution, or user-visible output.</p>
+  <p class="answer-capsule" style="max-width:700px;margin:0 auto 32px;">Prompt Guard is the prompt-protection capability inside Parse. Screen untrusted input, generated output, and peer-agent messages before they affect tools, memory, credentials, payments, code execution, or user-visible output.</p>
 
   <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
     <a href="/prompt-guard/playground" class="btn btn-primary" style="padding:12px 28px;font-size:15px;">Try the Playground</a>
@@ -81,7 +81,7 @@ Retry with ${X402_PAYMENT.header}</pre>
     <div class="card">
       <div style="font-size:32px;font-weight:800;color:var(--accent2);margin-bottom:12px;line-height:1;">1</div>
       <div style="font-weight:700;font-size:16px;margin-bottom:8px;">Install</div>
-      <p style="font-size:13px;color:var(--text-dim);margin:0;">Add Parse Agents via hosted MCP, REST, OpenAPI, or x402. Configure a bearer key for sustained usage.</p>
+      <p style="font-size:13px;color:var(--text-dim);margin:0;">Add Parse via hosted MCP, REST, OpenAPI, or x402. Configure a bearer key for sustained usage.</p>
     </div>
     <div class="card">
       <div style="font-size:32px;font-weight:800;color:var(--accent2);margin-bottom:12px;line-height:1;">2</div>
@@ -97,7 +97,7 @@ Retry with ${X402_PAYMENT.header}</pre>
 
   <aside style="border-left:3px solid var(--accent);margin-top:24px;">
     <p style="font-weight:700;font-size:14px;margin-bottom:8px;color:var(--accent2);">Security default: fail-closed</p>
-    <p style="font-size:13px;color:var(--text-dim);margin:0;">For high-impact boundaries, if Parse Agents is unreachable or returns an error, block or require review. Low-impact paths may fail open only when the operator explicitly accepts that risk.</p>
+    <p style="font-size:13px;color:var(--text-dim);margin:0;">For high-impact boundaries, if Parse is unreachable or returns an error, block or require review. Low-impact paths may fail open only when the operator explicitly accepts that risk.</p>
   </aside>
 </div>
 
@@ -177,21 +177,21 @@ function copyCode(btn, srcId) {
 `;
 
   return renderPage({
-    title: "Parse Agents Prompt Guard",
+    title: "Parse Prompt Guard",
     description:
-      "Prompt Guard is the Parse Agents prompt-protection capability for screening untrusted input, output, and agent handoffs.",
+      "Prompt Guard is the Parse prompt-protection capability for screening untrusted input, output, and agent handoffs.",
     path: "/prompt-guard",
     content,
     baseUrl,
     jsonLd: [
       breadcrumbSchema([
         { name: "Home", url: `${baseUrl}/` },
-        { name: "Parse Agents Prompt Guard", url: `${baseUrl}/prompt-guard` },
+        { name: "Parse Prompt Guard", url: `${baseUrl}/prompt-guard` },
       ]),
     ],
     breadcrumbs: [
       { name: "Home", href: "/" },
-      { name: "Parse Agents Prompt Guard", href: "/prompt-guard" },
+      { name: "Parse Prompt Guard", href: "/prompt-guard" },
     ],
   });
 }

@@ -50,7 +50,7 @@ export function webAPISchema(baseUrl: string): object {
   return {
     "@context": "https://schema.org",
     "@type": "WebAPI",
-    name: "Parse Agents API",
+    name: "Parse API",
     description:
       "REST API and hosted MCP endpoint for prompt protection, output screening, agent trust verification, and x402 pay-per-call access.",
     documentation: `${baseUrl}/docs`,

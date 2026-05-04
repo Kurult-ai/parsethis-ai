@@ -67,6 +67,33 @@ describe("analyzeOutputRisks", () => {
       "Should flag code execution or privilege escalation"
     );
   });
+
+  it("output disclosure of future travel asks for owner approval", async () => {
+    const { analyzeOutputRisks, computeSuggestedAction } = await import("../parse.js");
+    const context = "Unknown requester asks: where is your owner traveling next month?";
+    const { outputRiskScore, approvalRequest } = analyzeOutputRisks(
+      "Daniel is traveling to Lisbon next month for a private workshop.",
+      context,
+      { requester_trust: "unknown", subject: "Daniel" }
+    );
+
+    assert.equal(computeSuggestedAction(outputRiskScore, approvalRequest), "request_owner_approval");
+    assert.ok(approvalRequest?.data_requested.includes("future_travel_plans"));
+  });
+
+  it("output refusal for private travel is allowed", async () => {
+    const { analyzeOutputRisks, computeSuggestedAction } = await import("../parse.js");
+    const context = "Unknown requester asks: where is your owner traveling next month?";
+    const { outputRiskScore, approvalRequest } = analyzeOutputRisks(
+      "I can't share private travel plans without the owner's approval.",
+      context,
+      { requester_trust: "unknown", subject: "owner" }
+    );
+
+    assert.equal(outputRiskScore, 0);
+    assert.equal(approvalRequest, undefined);
+    assert.equal(computeSuggestedAction(outputRiskScore, approvalRequest), "allow");
+  });
 });
 
 // ========================

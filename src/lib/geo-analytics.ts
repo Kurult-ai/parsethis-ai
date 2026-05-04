@@ -9,6 +9,9 @@ export const GEO_AUDIT_ACTIONS = {
   x402RetrySuccess: "geo.x402.retry_success",
   x402PaymentSettled: "geo.x402.payment_settled",
   syntheticTest: "geo.synthetic.test",
+  injectionSessionCreated: "playground.session_created",
+  injectionSignalReceived: "playground.signal_received",
+  injectionOutputChecked: "playground.output_checked",
 } as const;
 
 type GeoAuditAction = (typeof GEO_AUDIT_ACTIONS)[keyof typeof GEO_AUDIT_ACTIONS];

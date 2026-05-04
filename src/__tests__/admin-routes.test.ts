@@ -12,7 +12,7 @@ describe("admin routes", () => {
     const res = await app.request("/.well-known/parse-admin.json");
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.equal(body.service, "Parse Agents Admin");
+    assert.equal(body.service, "Parse Admin");
     assert.equal(body.auth.required_scope, "admin");
     assert.equal(body.action_endpoint.endsWith("/v1/admin/actions"), true);
   });
@@ -37,7 +37,7 @@ describe("admin routes", () => {
     const res = await app.request("/v1/admin/manifest", { headers: adminHeaders });
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.equal(body.service, "Parse Agents Admin");
+    assert.equal(body.service, "Parse Admin");
     assert.equal(body.action_endpoint.endsWith("/v1/admin/actions"), true);
     const actions = body.actions.map((action: { name: string }) => action.name);
     assert.ok(actions.includes("admin.dashboard.snapshot"));

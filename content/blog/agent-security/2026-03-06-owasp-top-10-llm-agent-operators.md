@@ -128,7 +128,7 @@ Parse's multi-agent analysis pipeline addresses this with 10 specialized agents 
 
 **What it means for agents:** Autonomous agents can self-loop without human intervention. An attacker — or a simple bug — can trigger runaway API calls, infinite tool chains, or excessive token consumption. The financial damage from unbounded consumption is OWASP's "Denial of Wallet" scenario, and it is particularly acute for agents that operate on billing accounts with high or no spending limits.
 
-Parse Agents implements per-key rate limiting by tier (free keys default to 10 requests per minute) with `X-RateLimit-Remaining` headers for client-side awareness and `Retry-After` headers when limits are hit. Cost evaluation tracks per-request spend across model pricing tiers.
+Parse implements per-key rate limiting by tier (free keys default to 10 requests per minute) with `X-RateLimit-Remaining` headers for client-side awareness and `Retry-After` headers when limits are hit. Cost evaluation tracks per-request spend across model pricing tiers.
 
 **What to do:** Set hard rate limits and budget caps per agent. Monitor cost per request. Parse's cost evaluator calculates exact per-request costs by model, giving operators real-time visibility into spending before it becomes a problem.
 

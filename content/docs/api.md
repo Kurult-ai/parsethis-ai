@@ -1,17 +1,17 @@
 ---
-title: "API Reference — Parse Agents"
+title: "API Reference — Parse"
 slug: api
 date: "2026-03-22"
-lastUpdated: "2026-03-22"
-description: "Complete API reference for Parse Agents prompt protection. All endpoints, authentication, request/response schemas, and code examples."
-author: "Parse Agents"
+lastUpdated: "2026-05-04"
+description: "Complete API reference for Parse prompt protection. All endpoints, authentication, request/response schemas, and code examples."
+author: "Parse"
 ---
 
 # API Reference
 
-## What authentication does Parse Agents use?
+## What authentication does Parse use?
 
-Parse Agents accepts two authentication methods: Bearer token (API key) and x402 USDC payment. Include your API key in the Authorization header for authenticated endpoints. Alternatively, use the x402 402 flow and retry with a `payment-signature` header. Legacy clients may still send `x-payment`.
+Parse accepts two authentication methods: Bearer token (API key) and x402 USDC payment. Include your API key in the Authorization header for authenticated endpoints. Alternatively, use the x402 402 flow and retry with a `payment-signature` header. Legacy clients may still send `x-payment`.
 
 ```
 Authorization: Bearer pfa_live_...
@@ -23,7 +23,7 @@ Generate an API key at `POST /v1/keys/generate` (no auth required). Keys expire 
 
 ## POST /v1/parse
 
-Screen a prompt for injection attacks, jailbreaks, and adversarial patterns. This is the primary endpoint for prompt safety screening.
+Screen a prompt for injection attacks, jailbreaks, adversarial patterns, and private-disclosure requests that require owner approval. This is the primary endpoint for prompt safety screening.
 
 **Auth required:** Yes (scope: `evaluate`)
 
@@ -35,7 +35,7 @@ Screen a prompt for injection attacks, jailbreaks, and adversarial patterns. Thi
 | `execute` | boolean | No | Run in isolated sandbox, returns 202 with poll_url |
 | `test_input` | string | No | Input data to pair with prompt during sandbox execution |
 | `agent_config` | object | No | `{ model, temperature, max_tokens, agent_role }` |
-| `metadata` | object | No | `{ agent_id, session_id, source }` for tracking |
+| `metadata` | object | No | `{ agent_id, session_id, source, requester_trust, requester_id, channel, subject, conversation_context }` for tracking and owner-approval decisions |
 
 ### Response (200 OK)
 
@@ -56,9 +56,33 @@ Screen a prompt for injection attacks, jailbreaks, and adversarial patterns. Thi
   "categories": ["prompt_injection", "system_prompt_leak"],
   "policy": {
     "auto_block": true,
-    "threshold": 7
+    "threshold": 7,
+    "approval_required_for_personal_data": true,
+    "approval_required_for_location": true,
+    "approval_required_for_future_plans": true,
+    "approval_default_action": "deny"
   },
   "suggested_action": "block"
+}
+```
+
+When a private disclosure needs owner consent, `suggested_action` is `request_owner_approval` and the response includes `approval_request`:
+
+```json
+{
+  "risk_score": 5,
+  "verdict": "medium_risk",
+  "suggested_action": "request_owner_approval",
+  "approval_request": {
+    "type": "privacy_disclosure",
+    "sensitivity": "personal",
+    "data_requested": ["future_travel_plans"],
+    "requester_trust": "unknown",
+    "owner_prompt": "An unknown requester is asking whether to share future travel plans. Approve sharing only a minimal summary? Default is deny if you do not respond within 15 minutes.",
+    "default_action": "deny",
+    "expires_in_seconds": 900,
+    "allowed_response_modes": ["deny", "share_approved_summary"]
+  }
 }
 ```
 
@@ -200,7 +224,7 @@ curl -X POST https://parsethis.ai/v1/keys/generate \
 
 ## POST /v1/analyze
 
-Submit a URL for media credibility analysis. Parse Agents fetches the URL content, extracts metadata, and evaluates source credibility.
+Submit a URL for media credibility analysis. Parse fetches the URL content, extracts metadata, and evaluates source credibility.
 
 **Auth required:** Yes (scope: `analyze`)
 

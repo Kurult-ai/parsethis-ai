@@ -1,6 +1,15 @@
 import { callLLMFull, getAvailableModels } from "./model-client.js";
 import { INJECTION_PATTERNS, HARMFUL_OUTPUT_PATTERNS, RISK_CATEGORIES, type RiskCategory } from "./lib/patterns/index.js";
 import { detectContextualPromptRisks } from "./lib/patterns/contextual.js";
+import { detectIntentPromptRisks, isDiscussionOnlyPrompt, type DetectorActionFloor, type DetectorConfidence } from "./lib/patterns/intent.js";
+import {
+  computeSuggestedAction,
+  detectPrivacyApprovalOutput,
+  detectPrivacyApprovalRequest,
+  type ApprovalRequest,
+  type RequesterTrust,
+  type SuggestedAction,
+} from "./lib/privacy-approval.js";
 import { normalizeForDetection } from "./lib/patterns/normalize.js";
 import { calculateRiskScore } from "./lib/scoring.js";
 import type { TokenUsage } from "./types.js";
@@ -43,6 +52,10 @@ function detectStructuralRisks(prompt: string): Array<{ category: RiskCategory; 
   }
 
   return risks;
+}
+
+function ruleId(prefix: string, label: string): string {
+  return `${prefix}.${label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
 }
 
 // === LLM-based deep analysis (when model is available) ===
@@ -232,6 +245,16 @@ export interface ParseRequest {
     agent_id?: string;
     session_id?: string;
     source?: string;
+    source_kind?: "user" | "email" | "retrieved_doc" | "web_page" | "tool_output" | "memory" | "agent_handoff";
+    trust_level?: "trusted" | "untrusted" | "external";
+    tool_permissions?: string[];
+    data_classification?: string[];
+    intended_action?: "summarize" | "execute" | "route" | "reply" | "extract";
+    requester_trust?: RequesterTrust;
+    requester_id?: string;
+    channel?: string;
+    subject?: string;
+    conversation_context?: string;
   };
   execute?: boolean | "auto"; // if true, run prompt; "auto" runs only for scores 3-6 and flags 7+ for inspection
   test_input?: string; // optional input to pair with prompt during execution
@@ -242,6 +265,7 @@ export interface ParseRequest {
     agent_role?: string;  // NOT system_prompt — optional description of agent function
   };
   mode?: "full" | "pattern-only"; // pattern-only skips LLM analysis (privacy-sensitive)
+  policy_mode?: "strict" | "balanced" | "low_fp";
   agentSafe?: boolean; // server-controlled: suppress low-severity display flags AFTER scoring
 }
 
@@ -250,6 +274,12 @@ export interface RiskFlag {
   severity: number; // 1-10
   label: string;
   detail: string;
+  id?: string;
+  confidence?: DetectorConfidence | number;
+  attack_family?: string;
+  action_floor?: DetectorActionFloor;
+  evidence?: string;
+  source?: string;
 }
 
 export interface ExecutionResult {
@@ -275,13 +305,37 @@ export interface ParseResponse {
   execution?: ExecutionResult;
   execution_pending?: boolean;
   poll_url?: string;
-  suggested_action?: "allow" | "sandbox" | "block"; // recommended next step based on risk score
-  score_components?: { patternScore: number; llmScore: number | null; correlationBonus: number; severityMultiplier: number; monotonicFloorApplied: boolean };
-  policy?: { auto_block: boolean; threshold: number; tier: string };
+  suggested_action?: SuggestedAction; // recommended next step based on risk score and trust boundary
+  recommended_action?: SuggestedAction;
+  attack_detected?: boolean;
+  approval_request?: ApprovalRequest;
+  score_components?: {
+    patternScore: number;
+    llmScore: number | null;
+    correlationBonus: number;
+    severityMultiplier: number;
+    monotonicFloorApplied: boolean;
+    likelihood?: number;
+    impact?: number;
+    confidence?: number;
+    max_rule_severity?: number;
+    rule_ids?: string[];
+    policy_action?: SuggestedAction;
+    suppression_applied?: boolean;
+  };
+  policy?: {
+    auto_block: boolean;
+    threshold: number;
+    tier: string;
+    approval_required_for_personal_data?: boolean;
+    approval_required_for_location?: boolean;
+    approval_required_for_future_plans?: boolean;
+    approval_default_action?: "deny";
+  };
   model_used?: string;
   analyzed_at: string;
   prompt_length: number;
-  analysis_method: "pattern" | "pattern+llm";
+  analysis_method: "pattern" | "pattern+llm" | "pattern+local_classifier";
   latency_ms: number;
 }
 
@@ -291,6 +345,74 @@ export function computeVerdict(score: number): ParseResponse["verdict"] {
   if (score <= 6) return "medium_risk";
   if (score <= 8) return "high_risk";
   return "critical";
+}
+
+function isOwnerApprovalFlag(flag: RiskFlag): boolean {
+  return flag.source === "privacy_approval" || flag.label.startsWith("Owner approval required:");
+}
+
+function isAttackFlag(flag: RiskFlag): boolean {
+  if (isOwnerApprovalFlag(flag)) return false;
+  if (flag.label.startsWith("Secret disclosure request:")) return true;
+  return [
+    "prompt_injection",
+    "jailbreak",
+    "data_exfiltration",
+    "system_prompt_leak",
+    "privilege_escalation",
+    "code_execution",
+    "indirect_injection",
+  ].includes(flag.category);
+}
+
+function actionRank(action?: DetectorActionFloor): number {
+  if (action === "block") return 4;
+  if (action === "sandbox") return 3;
+  if (action === "allow_log") return 2;
+  if (action === "allow") return 1;
+  return 0;
+}
+
+function confidenceValue(confidence: RiskFlag["confidence"]): number {
+  if (typeof confidence === "number") return confidence;
+  if (confidence === "high") return 0.9;
+  if (confidence === "medium") return 0.65;
+  if (confidence === "low") return 0.4;
+  return 0.6;
+}
+
+function applyDiscussionSuppression(flags: RiskFlag[], prompt: string, normalizedPrompt: string): { flags: RiskFlag[]; suppressed: boolean } {
+  if (!isDiscussionOnlyPrompt(prompt) && !isDiscussionOnlyPrompt(normalizedPrompt)) return { flags, suppressed: false };
+  const filtered = flags.filter((flag) => {
+    if (["data_exfiltration", "code_execution", "privilege_escalation"].includes(flag.category)) return true;
+    return !["prompt_injection", "jailbreak", "system_prompt_leak", "social_engineering"].includes(flag.category);
+  });
+  return { flags: filtered, suppressed: filtered.length !== flags.length };
+}
+
+function computeAttackDetected(flags: RiskFlag[], riskScore: number): boolean {
+  return flags.some((flag) => isAttackFlag(flag) && (flag.severity >= 5 || riskScore > 3));
+}
+
+function computeRecommendedAction(
+  riskScore: number,
+  approvalRequest: ApprovalRequest | undefined,
+  attackDetected: boolean,
+  flags: RiskFlag[],
+  policyMode: ParseRequest["policy_mode"] = "balanced",
+): SuggestedAction {
+  if (riskScore >= 7 || flags.some((flag) => flag.action_floor === "block")) return "block";
+  if (approvalRequest && !attackDetected) return "request_owner_approval";
+  if (approvalRequest && riskScore > 3) return "request_owner_approval";
+
+  const highestAction = flags.reduce((max, flag) => Math.max(max, actionRank(flag.action_floor)), 0);
+  if (highestAction >= actionRank("sandbox")) return "sandbox";
+
+  if (!attackDetected) return "allow";
+  if (policyMode === "low_fp" && riskScore <= 6) return "sandbox";
+  if (riskScore <= 2) return "allow";
+  if (riskScore <= 6) return "sandbox";
+  return "block";
 }
 
 export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
@@ -313,24 +435,49 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
   for (const rule of INJECTION_PATTERNS) {
     if (rule.pattern.test(normalizedPrompt) || rule.pattern.test(prompt)) {
       flags.push({
+        id: ruleId("pattern", rule.label),
         category: rule.category,
         severity: rule.severity,
         label: rule.label,
         detail: "",
+        confidence: rule.severity >= 8 ? "high" : "medium",
+        attack_family: rule.category,
+        action_floor: rule.severity >= 8 ? "block" : rule.severity >= 5 ? "sandbox" : "allow_log",
+        source: "pattern",
       });
     }
   }
 
   // Phase 2: Structural analysis
-  const structuralRisks = detectStructuralRisks(prompt);
+  const structuralRisks = detectStructuralRisks(prompt).map((risk) => ({
+    ...risk,
+    id: ruleId("structural", risk.label),
+    confidence: "medium" as const,
+    attack_family: risk.category,
+    action_floor: risk.severity >= 8 ? "block" as const : "allow_log" as const,
+    source: "structural",
+  }));
   flags.push(...structuralRisks);
 
   // Phase 2b: Contextual analysis for paired agent/tool instructions.
   // This catches callback+receipt exfiltration without flagging standalone URLs or receipt codes.
   flags.push(...detectContextualPromptRisks(prompt, normalizedPrompt));
 
+  // Phase 2c: Local intent grammar for paraphrased overrides, extraction,
+  // role spoofing, boundary manipulation, and bounded decoding.
+  flags.push(...detectIntentPromptRisks(prompt, normalizedPrompt));
+
+  // Phase 2d: Privacy/owner-approval analysis. This does not add a public risk
+  // category; it emits existing data_exfiltration/social_engineering flags plus
+  // structured approval metadata when the safe next step is owner consent.
+  const approvalAnalysis = detectPrivacyApprovalRequest(prompt, req.metadata);
+  flags.push(...approvalAnalysis.flags);
+
+  const suppression = applyDiscussionSuppression(flags, prompt, normalizedPrompt);
+  const activeFlags = suppression.flags;
+
   // Compute max severity from pattern + structural analysis (before LLM)
-  const maxPatternSeverity = flags.length > 0 ? Math.max(...flags.map((f) => f.severity)) : 0;
+  const maxPatternSeverity = activeFlags.length > 0 ? Math.max(...activeFlags.map((f) => f.severity)) : 0;
 
   // Phase 3: LLM-based deep analysis (if no critical pattern matches found)
   let analysisMethod: "pattern" | "pattern+llm" = "pattern";
@@ -357,11 +504,16 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
       const effectiveLlmSeverity = Math.max(llmResult.risk_score, maxPatternSeverity);
       for (const cat of llmResult.categories) {
         if (cat !== "none" && !flags.some((f) => f.category === cat)) {
-          flags.push({
+          activeFlags.push({
             category: cat,
             severity: effectiveLlmSeverity,
             label: `LLM-detected: ${cat}`,
             detail: llmResult.reasoning,
+            id: `llm.${cat}`,
+            confidence: "medium",
+            attack_family: cat,
+            action_floor: effectiveLlmSeverity >= 7 ? "block" : "sandbox",
+            source: "llm",
           });
         }
       }
@@ -370,18 +522,23 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
 
   // Unified scoring: weighted average with monotonic floor at 80% of pattern severity
   const scoreResult = calculateRiskScore({
-    flags,
+    flags: activeFlags,
     maxPatternSeverity,
     llmScore: llmResult?.risk_score ?? null,
   });
   let riskScore = scoreResult.riskScore;
-  const categories = [...new Set(flags.map((f) => f.category))];
+  const categories = [...new Set(activeFlags.map((f) => f.category))];
+  const attackDetected = computeAttackDetected(activeFlags, riskScore);
+  const recommendedAction = computeRecommendedAction(riskScore, approvalAnalysis.approvalRequest, attackDetected, activeFlags, req.policy_mode);
 
   // agentSafe: suppress low-severity display flags AFTER scoring (correlation bonus preserved)
   const unsuppressible = new Set(["harmful_content", "privilege_escalation"]);
   const displayFlags = req.agentSafe
-    ? flags.filter((f) => f.severity >= 5 || unsuppressible.has(f.category))
-    : flags;
+    ? activeFlags.filter((f) => f.severity >= 5 || unsuppressible.has(f.category))
+    : activeFlags;
+
+  const attackFlags = activeFlags.filter(isAttackFlag);
+  const maxConfidence = activeFlags.reduce((max, flag) => Math.max(max, confidenceValue(flag.confidence)), 0);
 
   const response: ParseResponse = {
     id: crypto.randomUUID(),
@@ -390,12 +547,28 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
     verdict: computeVerdict(riskScore),
     flags: displayFlags,
     categories,
-    score_components: scoreResult.components,
+    attack_detected: attackDetected,
+    recommended_action: recommendedAction,
+    score_components: {
+      ...scoreResult.components,
+      likelihood: attackDetected ? Math.min(10, Math.max(0, riskScore)) : 0,
+      impact: attackFlags.length > 0 ? Math.max(...attackFlags.map((flag) => flag.severity)) : 0,
+      confidence: Number(maxConfidence.toFixed(2)),
+      max_rule_severity: maxPatternSeverity,
+      rule_ids: activeFlags.map((flag) => flag.id).filter((id): id is string => Boolean(id)),
+      policy_action: recommendedAction,
+      suppression_applied: suppression.suppressed,
+    },
     analyzed_at: new Date().toISOString(),
     prompt_length: prompt.length,
     analysis_method: analysisMethod,
     latency_ms: Math.round(performance.now() - startedAt),
   };
+
+  if (approvalAnalysis.approvalRequest) {
+    response.approval_request = approvalAnalysis.approvalRequest;
+  }
+  response.suggested_action = computeSuggestedAction(response.risk_score, response.approval_request);
 
   if (modelNote) {
     (response as any).model_note = modelNote;
@@ -623,9 +796,10 @@ Write the analysis now (2-4 sentences, no bullet points):`;
 
 // === Output Risk Analysis (applied to sandbox output or inline fallback) ===
 
-export function analyzeOutputRisks(output: string, originalPrompt: string): {
+export function analyzeOutputRisks(output: string, originalPrompt: string, metadata?: ParseRequest["metadata"]): {
   outputFlags: RiskFlag[];
   outputRiskScore: number;
+  approvalRequest?: ApprovalRequest;
 } {
   const outputFlags: RiskFlag[] = [];
 
@@ -705,9 +879,15 @@ export function analyzeOutputRisks(output: string, originalPrompt: string): {
     }
   }
 
+  const approvalAnalysis = detectPrivacyApprovalOutput(output, originalPrompt, metadata);
+  outputFlags.push(...approvalAnalysis.flags);
+
   const outputRiskScore = outputFlags.length > 0
     ? Math.min(10, Math.max(...outputFlags.map((f) => f.severity)))
     : 0;
 
-  return { outputFlags, outputRiskScore };
+  return { outputFlags, outputRiskScore, approvalRequest: approvalAnalysis.approvalRequest };
 }
+
+export { computeSuggestedAction };
+export type { ApprovalRequest, RequesterTrust, SuggestedAction };

@@ -2,14 +2,14 @@ import { CONTACT_EMAIL, GITHUB_URL } from "./constants.js";
 import { INJECTION_PATTERNS, RISK_CATEGORIES } from "./patterns/index.js";
 
 export const PRODUCT = {
-  name: "Parse Agents",
-  shortName: "Parse Agents",
+  name: "Parse",
+  shortName: "Parse",
   domain: "parsethis.ai",
   canonicalBaseUrl: "https://parsethis.ai",
   modelFacingName: "Parse prompt protection API for AI agents",
   category: "prompt protection API for AI agents",
   description:
-    "Parse Agents screens untrusted prompts, tool outputs, retrieved content, and agent-to-agent messages before an AI agent gives that text authority over tools, memory, credentials, payments, code execution, or user-visible output.",
+    "Parse screens untrusted prompts, tool outputs, retrieved content, private disclosures, and agent-to-agent messages before an AI agent gives that text authority over tools, memory, credentials, payments, code execution, or user-visible output.",
   contactEmail: CONTACT_EMAIL,
   githubUrl: GITHUB_URL,
 } as const;
@@ -32,7 +32,7 @@ export const DETECTION_FACTS = {
     "optional isolated sandbox execution for suspicious prompts",
   ],
   limitations:
-    "Parse Agents is a defensive screening layer for honest agents. It reduces prompt-injection risk but does not guarantee protection, replace least-privilege permissions, or prevent a malicious caller from bypassing screening.",
+    "Parse is a defensive screening layer for honest agents. It reduces prompt-injection risk but does not guarantee protection, replace least-privilege permissions, or prevent a malicious caller from bypassing screening.",
 } as const;
 
 export const ACTION_ROUTER = [
@@ -46,7 +46,7 @@ export const ACTION_ROUTER = [
     trigger: "LLM output before showing it to a user, storing it, or sending it to another tool or agent",
     endpoint: "POST /v1/screen-output",
     tool: "screen_output",
-    action: "screen for prompt reflection, data leakage, and unsafe generated content",
+    action: "screen for prompt reflection, data leakage, owner-approval disclosure risk, and unsafe generated content",
   },
   {
     trigger: "A peer agent, plugin, or service asks for delegation or requests sensitive work",
@@ -111,7 +111,7 @@ export const X402_ENDPOINTS = {
     operationId: "chat",
     price: "$0.005",
     atomicUSDC: "5000",
-    description: "Chat with Parse Agents about analysis results and agent safety.",
+    description: "Chat with Parse about analysis results and agent safety.",
   },
 } as const;
 
