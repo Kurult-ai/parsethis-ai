@@ -29,6 +29,7 @@ export const INJECTION_PATTERNS: Array<{
 }> = [
   // Prompt injection
   { pattern: /ignore\s+(previous|above|all)\s+(instructions|prompts)/i, category: "prompt_injection", severity: 8, label: "Override instructions" },
+  { pattern: /ignore\s+(?:all\s+)?(?:previous|above|prior|earlier)\s+(?:instructions|prompts|rules|directives)/i, category: "prompt_injection", severity: 8, label: "Override prior instructions" },
   { pattern: /disregard\s+(previous|above|all|your)/i, category: "prompt_injection", severity: 8, label: "Disregard instructions" },
   { pattern: /forget\s+(everything|all|your)\s+(previous|prior|above)/i, category: "prompt_injection", severity: 7, label: "Memory wipe attempt" },
   { pattern: /new\s+instructions?\s*:/i, category: "prompt_injection", severity: 6, label: "Instruction override" },
@@ -69,6 +70,7 @@ export const INJECTION_PATTERNS: Array<{
 
   // Code execution
   { pattern: /exec\(|eval\(|system\(|subprocess|os\.popen|child_process/i, category: "code_execution", severity: 8, label: "Code execution attempt" },
+  { pattern: /\bcurl\s+https?:\/\/[^\s|]+[^\n]{0,120}\|\s*(?:bash|sh)\b/i, category: "code_execution", severity: 8, label: "Remote shell execution" },
   { pattern: /import\s+(os|subprocess|shutil|socket)\b/i, category: "code_execution", severity: 7, label: "Dangerous import" },
 
   // ── Indirect injection (15 patterns) ──────────────────────────────────────
@@ -156,7 +158,7 @@ export const INJECTION_PATTERNS: Array<{
   { pattern: /(?:hex|0x|\\x)[^.]{0,30}(?:[0-9a-f]{2}[\s,]{0,2}){8,}/i, category: "prompt_injection", severity: 5, label: "Hex-encoded instruction sequence" },
 
   // ── Enhanced system prompt extraction (10 patterns) ───────────────────────
-  { pattern: /(?:show|display|print|output|reveal|tell\s+me)\s+(?:your|the)\s+(?:system|initial|original|full)\s+(?:prompt|instructions|message|configuration)/i, category: "system_prompt_leak", severity: 7, label: "System prompt extraction" },
+  { pattern: /(?:show\s+me|show|display|print|output|reveal|tell\s+me)\s+(?:your|the)\s+(?:(?:full|complete|entire|exact)\s+)?(?:system|developer|initial|original|full)\s+(?:prompt|instructions|message|configuration)/i, category: "system_prompt_leak", severity: 8, label: "System prompt extraction" },
   { pattern: /what\s+(?:were|are)\s+you\s+(?:told|instructed|programmed)\s+to\s+do/i, category: "system_prompt_leak", severity: 6, label: "Instruction query" },
   { pattern: /repeat\s+(?:your|the)\s+(?:system|original|initial)\s+(?:prompt|message|instructions)/i, category: "system_prompt_leak", severity: 7, label: "Repeat system prompt" },
   { pattern: /(?:copy|paste|echo|mirror)\s+(?:your|the)\s+instructions/i, category: "system_prompt_leak", severity: 7, label: "Echo instructions" },

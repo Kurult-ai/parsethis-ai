@@ -37,6 +37,8 @@ __pycache__/
 
 # Debug
 npm-debug.log*
+screening-fixture-results.json
+public-screening-results.json
 
 # Workspace (agent output)
 workspace/

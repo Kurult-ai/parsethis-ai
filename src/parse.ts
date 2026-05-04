@@ -1,5 +1,6 @@
 import { callLLMFull, getAvailableModels } from "./model-client.js";
 import { INJECTION_PATTERNS, HARMFUL_OUTPUT_PATTERNS, RISK_CATEGORIES, type RiskCategory } from "./lib/patterns/index.js";
+import { detectContextualPromptRisks } from "./lib/patterns/contextual.js";
 import { normalizeForDetection } from "./lib/patterns/normalize.js";
 import { calculateRiskScore } from "./lib/scoring.js";
 import type { TokenUsage } from "./types.js";
@@ -23,9 +24,11 @@ function detectStructuralRisks(prompt: string): Array<{ category: RiskCategory; 
     risks.push({ category: "prompt_injection", severity: 3, label: "Mixed scripts", detail: "Prompt mixes Latin with non-Latin scripts — can be used for obfuscation" });
   }
 
-  // Base64-encoded blocks (potential obfuscation)
-  if (/[A-Za-z0-9+/]{40,}={0,2}/.test(prompt)) {
-    risks.push({ category: "prompt_injection", severity: 5, label: "Base64-like content", detail: "Prompt contains long base64-like strings — may hide encoded instructions" });
+  // Encoded blocks are only structurally suspicious when paired with decode language.
+  // Opaque hashes and archive IDs are common in business text; decoded unsafe instructions
+  // are handled by contextual analysis below.
+  if (/\b(?:base64|rot13|decode|decoded|decrypt|deobfuscate|unescape)\b/i.test(prompt) && /[A-Za-z0-9+/]{40,}={0,2}/.test(prompt)) {
+    risks.push({ category: "prompt_injection", severity: 4, label: "Encoded content with decode instruction", detail: "Prompt contains encoded-looking content plus explicit decode/deobfuscation language" });
   }
 
   // Markdown/HTML injection (can alter rendering)
@@ -321,6 +324,10 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
   // Phase 2: Structural analysis
   const structuralRisks = detectStructuralRisks(prompt);
   flags.push(...structuralRisks);
+
+  // Phase 2b: Contextual analysis for paired agent/tool instructions.
+  // This catches callback+receipt exfiltration without flagging standalone URLs or receipt codes.
+  flags.push(...detectContextualPromptRisks(prompt, normalizedPrompt));
 
   // Compute max severity from pattern + structural analysis (before LLM)
   const maxPatternSeverity = flags.length > 0 ? Math.max(...flags.map((f) => f.severity)) : 0;

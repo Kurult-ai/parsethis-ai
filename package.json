@@ -1,7 +1,7 @@
 {
   "name": "parse-for-agents",
   "version": "1.0.0",
-  "description": "Parse Agents - prompt protection API for AI agents with MCP and x402",
+  "description": "Parse - prompt protection API for AI agents with MCP and x402",
   "type": "module",
   "workspaces": [
     "packages/prompt-guard",
@@ -13,6 +13,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/**/*.test.ts",
+    "eval:screening": "tsx scripts/evaluate-screening-fixtures.ts",
+    "eval:public-screening": "tsx scripts/evaluate-public-screening.ts",
     "worker": "tsx src/worker.ts",
     "seed": "tsx prisma/seed.ts"
   },
