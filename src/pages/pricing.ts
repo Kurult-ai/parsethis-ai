@@ -3,6 +3,30 @@ import { organizationSchema } from "../lib/schema.js";
 import { PLAN_LIMITS, PRODUCT, X402_ENDPOINTS, X402_PAYMENT, x402EndpointList } from "../lib/product-facts.js";
 
 export function renderPricingPage(baseUrl: string): string {
+  const parsePrice = X402_ENDPOINTS.parse.price;
+  const outputPrice = X402_ENDPOINTS.screen_output.price;
+  const x402SetupPrompt = `Integrate Parse x402 pay-per-call screening.
+
+Goal:
+- Use Parse before an autonomous agent lets untrusted text affect tools, memory, private owner data, credentials, payments, code execution, other agents, or user-visible output.
+- Prefer Bearer auth when PARSE_API_KEY exists.
+- If no account context exists or Parse returns HTTP 402, use x402.
+
+Payment facts:
+- Prompt screening: ${X402_ENDPOINTS.parse.method} ${baseUrl}${X402_ENDPOINTS.parse.path} costs ${parsePrice} ${X402_PAYMENT.currency}.
+- Output screening: ${X402_ENDPOINTS.screen_output.method} ${baseUrl}${X402_ENDPOINTS.screen_output.path} costs ${outputPrice} ${X402_PAYMENT.currency}.
+- Asset: ${X402_PAYMENT.currency} at ${X402_PAYMENT.assetAddress}.
+- Network: ${X402_PAYMENT.networkName} (${X402_PAYMENT.network}).
+- Pricing manifest: ${baseUrl}/v1/pricing.
+- Retry header: ${X402_PAYMENT.header}; legacy clients may send ${X402_PAYMENT.legacyHeader}.
+
+Implementation steps:
+1. Call GET ${baseUrl}/v1/pricing and read the x402 accepts[] payment requirements.
+2. Send the intended Parse request without a bearer key when using pay-per-call.
+3. On HTTP 402, sign the advertised USDC payment with a scoped funded wallet.
+4. Retry the identical request with the ${X402_PAYMENT.header} header.
+5. Treat Parse's recommended_action / decision.action as authoritative for the agent boundary.`;
+
   const x402Rows = x402EndpointList().map((endpoint) => `
         <tr>
           <td><code>${endpoint.method} ${endpoint.path}</code></td>
@@ -11,13 +35,249 @@ export function renderPricingPage(baseUrl: string): string {
         </tr>`).join("");
 
   const content = `
+<style>
+  .pricing-hero {
+    display:grid;
+    grid-template-columns:minmax(0,1.05fr) minmax(320px,0.95fr);
+    gap:28px;
+    align-items:stretch;
+  }
+  .pricing-hero-copy {
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    min-height:360px;
+  }
+  .pricing-x402-panel {
+    background:linear-gradient(145deg, rgba(47, 111, 237, 0.12), rgba(25, 182, 175, 0.09));
+    border:1px solid rgba(47, 111, 237, 0.34);
+    border-radius:8px;
+    padding:24px;
+    box-shadow:0 18px 55px rgba(10, 22, 45, 0.11);
+  }
+  .pricing-x402-head {
+    display:flex;
+    justify-content:space-between;
+    gap:16px;
+    align-items:flex-start;
+    margin-bottom:18px;
+  }
+  .pricing-label {
+    color:var(--text-dim);
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+  }
+  .pricing-price-grid {
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:12px;
+    margin:18px 0;
+  }
+  .pricing-price-tile {
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:16px;
+  }
+  .pricing-price-tile strong {
+    display:block;
+    font-size:30px;
+    line-height:1;
+    letter-spacing:0;
+    margin:8px 0 6px;
+  }
+  .pricing-fact-strip {
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:10px;
+    margin:18px 0;
+  }
+  .pricing-fact {
+    background:rgba(255,255,255,0.72);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:12px;
+    min-width:0;
+  }
+  .pricing-fact strong,
+  .pricing-fact code {
+    display:block;
+    margin-top:4px;
+    overflow-wrap:anywhere;
+  }
+  .pricing-action-row {
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-top:18px;
+  }
+  .pricing-copy-status {
+    color:var(--text-dim);
+    font-size:13px;
+    min-height:1.3em;
+  }
+  .pricing-decision-grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:12px;
+    margin-top:16px;
+  }
+  .pricing-decision {
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:16px;
+    background:var(--surface);
+  }
+  .pricing-decision h3 {
+    margin:6px 0 8px;
+    font-size:18px;
+  }
+  .pricing-choice-rail {
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-top:18px;
+  }
+  .pricing-choice {
+    flex:1 1 190px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:12px 14px;
+    background:var(--surface);
+  }
+  .pricing-choice strong {
+    display:block;
+    margin-top:4px;
+  }
+  .pricing-muted {
+    color:var(--text-dim);
+    font-size:14px;
+    margin:0;
+  }
+  @media (max-width: 820px) {
+    .pricing-hero { grid-template-columns:1fr; }
+    .pricing-hero-copy { min-height:auto; }
+    .pricing-price-grid,
+    .pricing-fact-strip { grid-template-columns:1fr; }
+    .pricing-choice-rail { display:none; }
+  }
+</style>
 <!-- Chunk 1: Hero -->
-<div class="section-chunk animate-in">
-  <h1>Pricing</h1>
-  <p class="answer-capsule">Free to start. Scale with Pro, Team, or Enterprise.</p>
+<div class="section-chunk animate-in pricing-hero">
+  <div class="pricing-hero-copy">
+    <h1>Pricing</h1>
+    <p class="answer-capsule">Pay per screening with x402, or use a monthly key when request volume becomes predictable.</p>
+    <div class="pricing-choice-rail" aria-label="Pricing choices">
+      <div class="pricing-choice">
+        <span class="pricing-label">No account</span>
+        <strong>x402 pay-per-call</strong>
+      </div>
+      <div class="pricing-choice">
+        <span class="pricing-label">Steady volume</span>
+        <strong>Monthly API key</strong>
+      </div>
+    </div>
+  </div>
+
+  <section class="pricing-x402-panel" aria-labelledby="x402-pricing-title">
+    <div class="pricing-x402-head">
+      <div>
+        <div class="pricing-label">x402 pay-per-call</div>
+        <h2 id="x402-pricing-title" style="margin:4px 0 0;">Screen first, pay only for the call.</h2>
+      </div>
+    </div>
+    <div class="pricing-price-grid" aria-label="x402 screening prices">
+      <div class="pricing-price-tile">
+        <div class="pricing-label">Prompt screening</div>
+        <strong>${parsePrice}</strong>
+        <p class="pricing-muted"><code>POST /v1/parse</code></p>
+      </div>
+      <div class="pricing-price-tile">
+        <div class="pricing-label">Output screening</div>
+        <strong>${outputPrice}</strong>
+        <p class="pricing-muted"><code>POST /v1/screen-output</code></p>
+      </div>
+    </div>
+    <div class="pricing-fact-strip" aria-label="x402 payment rail">
+      <div class="pricing-fact">
+        <span class="pricing-label">Asset</span>
+        <strong>${X402_PAYMENT.currency}</strong>
+      </div>
+      <div class="pricing-fact">
+        <span class="pricing-label">Network</span>
+        <strong>${X402_PAYMENT.networkName}</strong>
+        <code>${X402_PAYMENT.network}</code>
+      </div>
+      <div class="pricing-fact">
+        <span class="pricing-label">Token</span>
+        <code>${X402_PAYMENT.assetAddress}</code>
+      </div>
+    </div>
+    <div class="pricing-action-row">
+      <button type="button" class="btn btn-primary" id="copy-x402-prompt">Copy x402 setup prompt</button>
+      <a href="/docs/x402" class="btn btn-outline">Read x402 guide</a>
+      <span class="pricing-copy-status" id="copy-x402-status" aria-live="polite"></span>
+    </div>
+  </section>
 </div>
 
-<!-- Chunk 2: Tier cards -->
+<!-- Chunk 2: x402 setup -->
+<div class="section-chunk">
+  <h2 style="margin-top:0;">x402 setup in four steps</h2>
+  <div class="pricing-decision-grid">
+    <div class="pricing-decision"><div class="pricing-label">1</div><h3>Read prices</h3><p class="pricing-muted">Call <code>GET /v1/pricing</code> and inspect <code>accepts[]</code>.</p></div>
+    <div class="pricing-decision"><div class="pricing-label">2</div><h3>Call endpoint</h3><p class="pricing-muted">Send the screening request without a bearer key when using pay-per-call.</p></div>
+    <div class="pricing-decision"><div class="pricing-label">3</div><h3>Sign USDC</h3><p class="pricing-muted">Pay on ${X402_PAYMENT.networkName} with a scoped funded wallet.</p></div>
+    <div class="pricing-decision"><div class="pricing-label">4</div><h3>Retry request</h3><p class="pricing-muted">Retry with <code>${X402_PAYMENT.header}</code>; legacy clients may send <code>${X402_PAYMENT.legacyHeader}</code>.</p></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var promptText = ${JSON.stringify(x402SetupPrompt)};
+  var button = document.getElementById('copy-x402-prompt');
+  var status = document.getElementById('copy-x402-status');
+  function setStatus(message) {
+    if (!status) return;
+    status.textContent = message;
+    if (message) setTimeout(function(){ status.textContent = ''; }, 2600);
+  }
+  function fallbackCopy(text) {
+    var area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', 'readonly');
+    area.style.position = 'fixed';
+    area.style.top = '-1000px';
+    document.body.appendChild(area);
+    area.select();
+    try {
+      document.execCommand('copy');
+      setStatus('Copied setup prompt.');
+    } catch (_) {
+      setStatus('Copy failed. Open /docs/x402 for setup.');
+    }
+    document.body.removeChild(area);
+  }
+  if (button) {
+    button.addEventListener('click', function() {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(promptText).then(function() {
+          setStatus('Copied setup prompt.');
+        }).catch(function() {
+          fallbackCopy(promptText);
+        });
+      } else {
+        fallbackCopy(promptText);
+      }
+    });
+  }
+})();
+</script>
+
+<!-- Chunk 3: Tier cards -->
 <div class="section-chunk">
   <h2 style="margin-top:0;">Plans</h2>
 
@@ -91,7 +351,7 @@ export function renderPricingPage(baseUrl: string): string {
   </div>
 </div>
 
-<!-- Chunk 3: Cost calculator -->
+<!-- Chunk 4: Cost calculator -->
 <div class="section-chunk">
   <h2 style="margin-top:0;">Cost Calculator</h2>
   <p class="answer-capsule">Estimate your monthly cost across plans. Drag the slider to set your expected request volume.</p>
@@ -151,13 +411,11 @@ export function renderPricingPage(baseUrl: string): string {
   </script>
 </div>
 
-<!-- Chunk 4: x402 micropayments -->
+<!-- Chunk 5: x402 micropayments -->
 <div class="section-chunk">
-  <h2 style="margin-top:0;">How does x402 payment work?</h2>
+  <h2 style="margin-top:0;">Complete x402 endpoint prices</h2>
 
-  <p class="answer-capsule">x402 uses the HTTP 402 Payment Required standard. Send ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName} &mdash; no API key, no account, no credit card. Include a <code>${X402_PAYMENT.header}</code> (legacy: <code>${X402_PAYMENT.legacyHeader}</code>) header with a signed payment on the retry request. A facilitator verifies the payment before the request is processed.</p>
-
-  <h3>Per-request pricing</h3>
+  <p class="answer-capsule">All x402 payments use ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}. The screening calls most agents need first are ${parsePrice} for <code>/v1/parse</code> and ${outputPrice} for <code>/v1/screen-output</code>.</p>
 
   <div class="table-wrapper">
     <table>
@@ -187,7 +445,7 @@ res = session.post("https://parsethis.ai/v1/parse", json={"prompt": "..."})</cod
   <pre><code>npx @x402/purl POST https://parsethis.ai/v1/parse -d '{"prompt":"..."}'</code></pre>
 </div>
 
-<!-- Chunk 5: Decision guide -->
+<!-- Chunk 6: Decision guide -->
 <div class="section-chunk">
   <h2 style="margin-top:0;">Should I use x402 or an API key?</h2>
 
@@ -226,7 +484,7 @@ res = session.post("https://parsethis.ai/v1/parse", json={"prompt": "..."})</cod
   </div>
 </div>
 
-<!-- Chunk 6: Free endpoints -->
+<!-- Chunk 7: Free endpoints -->
 <div class="section-chunk">
   <h2 style="margin-top:0;">What endpoints are free?</h2>
 
@@ -244,7 +502,7 @@ res = session.post("https://parsethis.ai/v1/parse", json={"prompt": "..."})</cod
   return renderPage({
     title: "Pricing — Free Tier, Pro $49/mo, Team $199/mo",
     description:
-      `${PRODUCT.name} pricing: free tier with ${PLAN_LIMITS.free.requestsPerMinute} req/min. Pro $49/mo with 10K requests included. Team $199/mo with 50K included. x402 ${X402_PAYMENT.currency} micropayments available.`,
+      `${PRODUCT.name} pricing: x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}. Free, Pro, Team, and Enterprise keys available.`,
     path: "/pricing",
     content,
     baseUrl,
@@ -253,6 +511,6 @@ res = session.post("https://parsethis.ai/v1/parse", json={"prompt": "..."})</cod
       { name: "Home", href: "/" },
       { name: "Pricing", href: "/pricing" },
     ],
-    lastUpdated: "2026-04-06",
+    lastUpdated: "2026-05-05T12:00:00-04:00",
   });
 }
