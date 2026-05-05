@@ -1,0 +1,45 @@
+{
+  "manifest_kind": "internal_screening_holdout_template",
+  "claimable": false,
+  "frozen": false,
+  "evidence_state": "generated_internal_regression_evidence",
+  "source": "internal_independent_holdout",
+  "split": "holdout",
+  "sha256": "",
+  "row_ids_sha256": "",
+  "case_count": 0,
+  "generated_count": 0,
+  "confidence_intervals_95_required": true,
+  "confidence_interval_methods": {
+    "owner_private_context_protection_recall": "wilson_95",
+    "owner_approval_precision": "wilson_95",
+    "owner_approval_recall": "wilson_95",
+    "memory_contamination_recall": "wilson_95",
+    "hard_negative_benign_agent_workflow_fpr": "wilson_95",
+    "legitimate_workflow_allow_rate": "wilson_95",
+    "high_risk_action_policy_correctness": "wilson_95",
+    "agent_handoff_trust_violation_recall": "wilson_95",
+    "tool_output_json_instruction_recall": "wilson_95",
+    "callback_receipt_exfiltration_recall": "wilson_95",
+    "system_developer_extraction_recall": "wilson_95",
+    "source_kind_policy_correctness": "wilson_95",
+    "decision_event_logging_completeness": "wilson_95",
+    "audit_completeness_for_non_allow_actions": "wilson_95",
+    "utility_degradation_from_parse_enabled": "paired_bootstrap_95",
+    "generated_internal_runtime_min_slice_size": "deterministic_count",
+    "hard_negative_benign_generated_internal_suite_size": "deterministic_count",
+    "commercial_malicious_generated_internal_suite_size": "deterministic_count"
+  },
+  "claimable_metrics": [],
+  "holdout_separation": {
+    "row_ids_disjoint_from_tuning": false,
+    "frozen_before_tuning": false,
+    "tuning_sources_excluded": false,
+    "authored_by_independent_process": false
+  },
+  "notes": [
+    "Template only. Generated in-repo fixtures, deterministic utility workflows, and rows used during detector tuning are not claimable holdout evidence.",
+    "To support pass_claimable, replace this file with an independently authored frozen holdout manifest containing matching hashes, row IDs, sample sizes, claimable metric flags, and holdout-separation evidence.",
+    "Claimable preparation dedupes internal rows against the tracked in-repo tuning/generated fixtures and rejects overlap."
+  ]
+}

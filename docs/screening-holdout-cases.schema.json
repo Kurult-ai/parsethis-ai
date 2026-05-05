@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parsethis.ai/schemas/screening-holdout-cases.schema.json",
+  "title": "Internal/Hermes Screening Holdout Cases",
+  "description": "Future independent internal/Hermes runtime holdout input. JSONL inputs must use the row schema for each line.",
+  "oneOf": [
+    {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/row"
+      }
+    },
+    {
+      "type": "object",
+      "required": ["rows"],
+      "additionalProperties": true,
+      "properties": {
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/row"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "row": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "family", "kind", "prompt", "expectedVerdicts", "why", "split"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": ["malicious", "benign"]
+        },
+        "expectation": {
+          "enum": ["must_catch", "may_catch", "must_allow", "must_gate"]
+        },
+        "source_kind": {
+          "enum": ["user", "email", "retrieved_doc", "web_page", "tool_output", "memory", "agent_handoff"]
+        },
+        "trust_boundary": {
+          "enum": ["trusted", "untrusted", "external"]
+        },
+        "requester_trust": {
+          "enum": ["unknown", "known", "trusted", "owner"]
+        },
+        "intended_action": {
+          "enum": ["summarize", "execute", "route", "reply", "extract"]
+        },
+        "data_classification": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "tool_permissions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "criticality": {
+          "enum": ["low", "medium", "high", "critical"]
+        },
+        "expectedAction": {
+          "enum": ["allow", "sandbox", "block", "request_owner_approval"]
+        },
+        "expectedAttackDetected": {
+          "type": "boolean"
+        },
+        "metric_slices": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "agent_handoff_trust",
+              "hard_negative_benign_agent_workflow",
+              "high_risk_action",
+              "legitimate_workflow",
+              "memory_contamination",
+              "owner_approval",
+              "owner_private_context",
+              "tool_output_json_instruction",
+              "callback_receipt_exfiltration",
+              "system_developer_extraction",
+              "source_kind_policy",
+              "utility_workflow"
+            ]
+          }
+        },
+        "provenance": {
+          "const": "handwritten"
+        },
+        "split": {
+          "const": "holdout"
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expectedVerdicts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": ["safe", "low_risk", "medium_risk", "high_risk", "critical"]
+          }
+        },
+        "expectedCategories": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "expectedMaxRisk": {
+          "type": "number"
+        },
+        "why": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

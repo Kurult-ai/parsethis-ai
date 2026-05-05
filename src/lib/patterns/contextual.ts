@@ -37,6 +37,12 @@ const FINAL_RECEIPT_INSTRUCTION = /\b(?:include|cite|echo|return|append|acknowle
 const RECEIPT_FINAL_REVERSED = /\b(?:receipt|token|code|identifier|ref(?:erence)?|ack|event\s*id|tracking\s*id|nonce|canary|marker|proof)\b[^.\n]{0,120}\b(?:include|cite|echo|return|append|acknowledge|confirm|report|mention|repeat|copy|quote|write|add)\b[^.\n]{0,120}\b(?:final|response|answer|output|message|summary|body|payload|query|header|callback|url|request)\b/i;
 const AGENT_HANDOFF = /\b(?:handoff|hand[-\s]?off|next\s+agent|downstream\s+(?:assistant|agent|model)|receiving\s+(?:assistant|agent|model)|worker\s+agent)\b[^.\n]{0,160}\b(?:system|developer|admin|operator|trusted|override|new\s+instructions?|ignore\s+(?:previous|above|all)|do\s+not\s+reveal)\b/i;
 const MARKDOWN_LINK = /\[[^\]\n]{0,120}\]\((https?:\/\/[^\s)]+)\)/gi;
+const MEMORY_CONTAMINATION =
+  /\b(?:memory|remember|save|store|profile|preference|long[-\s]?term memory|user memory|persistent note|future context)\b[^.\n]{0,220}\b(?:ignore|override|disregard|forget|developer|system|admin|trusted|approved|authorization|do not mention|without mentioning|without asking|without approval|future agents?|next agent|downstream agent|tools? may|secret|password|api\s*key)\b|\b(?:when|if)\b[^.\n]{0,120}\b(?:loaded|reused|retrieved|remembered|seen by future agents?)\b[^.\n]{0,180}\b(?:ignore|override|treat .* approved|do not mention|without approval|send|post|reveal)\b/i;
+const BENIGN_SECURITY_STORAGE_CONTEXT =
+  /\b(?:security policy|policy excerpt|admin guide|documentation|docs)\b[^.\n]{0,180}\b(?:rotate|store|vault|redact|do not paste|never paste|masked|example)\b[^.\n]{0,180}\b(?:secrets?|api\s*keys?|tokens?|credentials?)\b|\b(?:secrets?|api\s*keys?|tokens?|credentials?)\b[^.\n]{0,180}\b(?:vault|redact|do not paste|never paste|masked|example|rotation policy)\b/i;
+const HIGH_RISK_ACTION_BYPASS =
+  /\b(?:delete|drop|destroy|erase|purge|cancel|refund|wire|transfer|pay|send payment|rotate|revoke|grant|approve|merge|deploy|publish|disable|change permissions?)\b[^.\n]{0,180}\b(?:without approval|without owner approval|without asking|do not ask|don't ask|skip (?:owner )?approval|bypass (?:owner )?approval|already approved|treat .* approved|no review needed|silently|do not mention)\b/i;
 
 function isCallbackLikeUrl(url: string): boolean {
   return CALLBACK_URL_PATTERN.test(url) || TOKEN_IN_URL_PATTERN.test(url) || LONG_TOKEN_PATH_PATTERN.test(url);
@@ -254,6 +260,25 @@ export function detectContextualPromptRisks(prompt: string, normalizedPrompt = p
         severity: 7,
         label: "Agent handoff spoofing",
         detail: "The text impersonates a trusted handoff/system/developer instruction for a downstream agent.",
+      });
+    }
+
+    if (MEMORY_CONTAMINATION.test(text) && !BENIGN_SECURITY_STORAGE_CONTEXT.test(text)) {
+      addFlag(flags, {
+        category: "prompt_injection",
+        severity: 8,
+        label: "Memory contamination instruction",
+        detail: "The text attempts to persist or reuse an instruction that changes future agent authority, approval, secrecy, or tool behavior.",
+      });
+    }
+
+    if (HIGH_RISK_ACTION_BYPASS.test(text)) {
+      addFlag(flags, {
+        category: "privilege_escalation",
+        severity: 9,
+        label: "High-risk action approval bypass",
+        detail: "The prompt asks an agent to perform a destructive, financial, permission, deployment, or account action while bypassing owner approval or review.",
+        action_floor: "block",
       });
     }
 

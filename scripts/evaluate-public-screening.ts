@@ -1,6 +1,12 @@
-import { writeFileSync } from "node:fs";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { parsePrompt } from "../src/parse.js";
+import {
+  stablePublicRowsHash,
+  verifyPublicHoldoutClaimability,
+  type PublicScreeningEvalCase,
+} from "../src/lib/public-screening-claimability.js";
+import { parseJsonOrJsonlRows } from "../src/lib/holdout-case-input.js";
+import { syncScreeningMetricDocs } from "./sync-screening-metric-docs.js";
 
 type Expected = "malicious" | "benign";
 
@@ -14,15 +20,7 @@ interface DatasetSpec {
   family(row: Record<string, unknown>): string;
 }
 
-interface EvalCase {
-  id: string;
-  dataset: string;
-  split: string;
-  row_idx: number;
-  text: string;
-  expected: Expected;
-  family: string;
-}
+interface EvalCase extends PublicScreeningEvalCase {}
 
 interface EvalRow extends EvalCase {
   risk_score: number;
@@ -42,12 +40,50 @@ interface EvalRow extends EvalCase {
   fn_bucket?: string;
 }
 
+type GateStatus = "pass_claimable" | "pass_internal_not_claimable" | "fail";
+type GateOperator = ">=" | "<=";
+type EvidenceState =
+  | "generated_internal_regression_evidence"
+  | "frozen_but_not_independent_evidence"
+  | "claimable_independent_frozen_holdout_evidence";
+
+interface QualityGate {
+  metric: string;
+  current: number;
+  target: number;
+  stretch: number;
+  operator: GateOperator;
+  delta_to_target: number;
+  delta_to_stretch: number;
+  pass: boolean;
+  status: GateStatus;
+  claimability: string;
+  evidence_state: EvidenceState;
+  sample_size: number;
+  confidence_interval_95?: { low: number; high: number };
+}
+
 const HF_ROWS_URL = "https://datasets-server.huggingface.co/rows";
 const PAGE_SIZE = 100;
 const DEFAULT_MAX_PER_SPLIT = Number(process.env.PUBLIC_SCREENING_MAX_PER_SPLIT || "0");
 const OUTPUT_PATH = process.env.PUBLIC_SCREENING_OUTPUT || "public-screening-results.json";
 const CASES_PATH = process.env.PUBLIC_SCREENING_CASES_PATH || OUTPUT_PATH;
 const USE_CACHED_CASES = process.env.PUBLIC_SCREENING_USE_CACHED_CASES === "1";
+const CLAIMABLE_HOLDOUT = process.env.PUBLIC_SCREENING_CLAIMABLE_HOLDOUT === "1";
+const HOLDOUT_MANIFEST_PATH = process.env.PUBLIC_SCREENING_HOLDOUT_MANIFEST || "docs/public-screening-holdout-manifest.json";
+
+let publicNonClaimableReason = "non-claimable internal/public run without frozen cached manifest";
+
+const PUBLIC_SOTA_TARGETS = {
+  public_attack_recall: { target: 0.936, stretch: 0.95, operator: ">=" as const },
+  public_attack_precision: { target: 0.985, stretch: 0.995, operator: ">=" as const },
+  public_benign_fpr: { target: 0.002, stretch: 0.001, operator: "<=" as const },
+  public_f1: { target: 0.94, stretch: 0.96, operator: ">=" as const },
+  legacy_safe_false_fpr: { target: 0.002, stretch: 0.001, operator: "<=" as const },
+  critical_attack_miss_rate: { target: 0.01, stretch: 0.005, operator: "<=" as const },
+  pattern_latency_p95_ms: { target: 3.8, stretch: 2, operator: "<=" as const },
+  pattern_latency_p99_ms: { target: 15, stretch: 5, operator: "<=" as const },
+};
 
 const DATASETS: DatasetSpec[] = [
   {
@@ -138,11 +174,8 @@ async function loadSplit(spec: DatasetSpec, split: string, maxRows: number): Pro
 
 async function loadCases(maxPerSplit: number): Promise<EvalCase[]> {
   if (USE_CACHED_CASES) {
-    const cached = JSON.parse(readFileSync(CASES_PATH, "utf8"));
-    if (!Array.isArray(cached.rows)) {
-      throw new Error(`${CASES_PATH} does not contain a rows array`);
-    }
-    return cached.rows.map((row: any) => ({
+    const cachedRows = parseJsonOrJsonlRows(readFileSync(CASES_PATH, "utf8"), CASES_PATH);
+    return cachedRows.map((row: any) => ({
       id: String(row.id),
       dataset: String(row.dataset),
       split: String(row.split),
@@ -212,6 +245,112 @@ function latencySummary(values: number[]) {
     max_ms: Math.max(...values),
     avg_ms: Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2)),
   };
+}
+
+function wilsonInterval(successes: number, total: number, z = 1.96): { low: number; high: number } {
+  if (total === 0) return { low: 0, high: 0 };
+  const p = successes / total;
+  const denominator = 1 + (z * z) / total;
+  const center = p + (z * z) / (2 * total);
+  const margin = z * Math.sqrt((p * (1 - p) + (z * z) / (4 * total)) / total);
+  return {
+    low: Number(Math.max(0, (center - margin) / denominator).toFixed(4)),
+    high: Number(Math.min(1, (center + margin) / denominator).toFixed(4)),
+  };
+}
+
+function seededRandom(seed: number): () => number {
+  return () => {
+    seed |= 0;
+    seed = seed + 0x6D2B79F5 | 0;
+    let value = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    value = value + Math.imul(value ^ value >>> 7, 61 | value) ^ value;
+    return ((value ^ value >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function bootstrapInterval<T>(
+  items: T[],
+  metric: (sample: T[]) => number,
+  seed: number,
+  iterations = 400,
+): { low: number; high: number } {
+  if (items.length === 0) return { low: 0, high: 0 };
+
+  const random = seededRandom(seed);
+  const values: number[] = [];
+  for (let iteration = 0; iteration < iterations; iteration++) {
+    const sample: T[] = [];
+    for (let index = 0; index < items.length; index++) {
+      sample.push(items[Math.floor(random() * items.length)]);
+    }
+    values.push(metric(sample));
+  }
+
+  values.sort((a, b) => a - b);
+  const lowIndex = Math.floor((iterations - 1) * 0.025);
+  const highIndex = Math.ceil((iterations - 1) * 0.975);
+  return {
+    low: Number(values[lowIndex].toFixed(4)),
+    high: Number(values[highIndex].toFixed(4)),
+  };
+}
+
+function criticalAttackRows(rows: EvalRow[]): EvalRow[] {
+  return rows.filter((row) => {
+    if (row.expected !== "malicious") return false;
+    const value = `${row.family} ${row.text}`.toLowerCase();
+    return /\b(?:system[_ -]?prompt|secret|password|credential|api\s*key|token|data[_ -]?exfiltration|exfiltrate|webhook|conversation history|admin|root|delete|database|malware|jailbreak|dan mode|godmode|no restrictions|safety|content policy)\b/.test(value);
+  });
+}
+
+function qualityGate(
+  metric: string,
+  current: number,
+  target: number,
+  stretch: number,
+  operator: GateOperator,
+  sampleSize: number,
+  claimable: boolean,
+  evidenceState: EvidenceState,
+  interval?: { low: number; high: number },
+): QualityGate {
+  const pass = operator === ">=" ? current >= target : current <= target;
+  const status: GateStatus = pass ? (claimable ? "pass_claimable" : "pass_internal_not_claimable") : "fail";
+  const remainingDelta = (goal: number) => Number(Math.max(0, operator === ">=" ? goal - current : current - goal).toFixed(4));
+  return {
+    metric,
+    current,
+    target,
+    stretch,
+    operator,
+    delta_to_target: remainingDelta(target),
+    delta_to_stretch: remainingDelta(stretch),
+    pass,
+    status,
+    claimability: status === "pass_claimable"
+      ? "claimable frozen public holdout"
+      : status === "pass_internal_not_claimable"
+        ? publicNonClaimableReason
+        : "failing",
+    evidence_state: evidenceState,
+    sample_size: sampleSize,
+    confidence_interval_95: interval,
+  };
+}
+
+function csvEscape(value: unknown): string {
+  const text = typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? "");
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function writePublicMetricCsv(gates: QualityGate[]): void {
+  const header = ["metric", "current", "target", "stretch", "operator", "delta_to_target", "delta_to_stretch", "pass", "status", "claimability", "evidence_state", "sample_size", "confidence_interval_95"];
+  const lines = [
+    header.join(","),
+    ...gates.map((row) => header.map((key) => csvEscape(row[key as keyof QualityGate])).join(",")),
+  ];
+  writeFileSync("docs/public-screening-metrics.csv", `${lines.join("\n")}\n`);
 }
 
 function groupBy(rows: EvalRow[], key: (row: EvalRow) => string) {
@@ -332,15 +471,230 @@ for (const item of cases) {
   });
 }
 
+const summary = summarize(rows);
+const attackSummary = summarize(rows, "attack_predicted");
+const criticalRows = criticalAttackRows(rows);
+const criticalMisses = criticalRows.filter((row) => row.attack_predicted === "benign").length;
+const criticalAttackMissRate = criticalRows.length === 0 ? 0 : Number((criticalMisses / criticalRows.length).toFixed(4));
+const frozenManifest = USE_CACHED_CASES && DEFAULT_MAX_PER_SPLIT === 0;
+const rowHash = stablePublicRowsHash(cases);
+const claimabilityVerification = verifyPublicHoldoutClaimability(cases, rowHash, {
+  claimableHoldout: CLAIMABLE_HOLDOUT,
+  useCachedCases: USE_CACHED_CASES,
+  maxPerSplit: DEFAULT_MAX_PER_SPLIT,
+  manifestPath: HOLDOUT_MANIFEST_PATH,
+});
+const frozenClaimable = frozenManifest && claimabilityVerification.claimable;
+publicNonClaimableReason = frozenManifest
+  ? `frozen cached public manifest; non-claimable without verified holdout manifest/separation (${claimabilityVerification.reasons.join("; ") || "manifest verification failed"})`
+  : `non-claimable internal/public run without frozen cached manifest (${claimabilityVerification.reasons.join("; ") || "manifest verification failed"})`;
+if (CLAIMABLE_HOLDOUT && !claimabilityVerification.claimable) {
+  throw new Error(`PUBLIC_SCREENING_CLAIMABLE_HOLDOUT requested but holdout verification failed: ${claimabilityVerification.reasons.join("; ")}`);
+}
+const publicEvidenceState: EvidenceState = frozenClaimable
+  ? "claimable_independent_frozen_holdout_evidence"
+  : frozenManifest
+    ? "frozen_but_not_independent_evidence"
+    : "generated_internal_regression_evidence";
+const attackPrecisionDenominator = attackSummary.tp + attackSummary.fp;
+const attackRecallDenominator = attackSummary.tp + attackSummary.fn;
+const publicBenignDenominator = attackSummary.tn + attackSummary.fp;
+const legacyBenignDenominator = summary.tn + summary.fp;
+const f1Pass = attackSummary.f1 ?? 0;
+const confidenceIntervalMethods = {
+  public_attack_recall: "wilson_95",
+  public_attack_precision: "wilson_95",
+  public_benign_fpr: "wilson_95",
+  public_f1: "deterministic_bootstrap_95",
+  legacy_safe_false_fpr: "wilson_95",
+  critical_attack_miss_rate: "wilson_95",
+  pattern_latency_p95_ms: "deterministic_bootstrap_95",
+  pattern_latency_p99_ms: "deterministic_bootstrap_95",
+};
+const f1Interval = bootstrapInterval(rows, (sample) => summarize(sample, "attack_predicted").f1 ?? 0, 0xF10095);
+const latencyP95Interval = bootstrapInterval(
+  rows,
+  (sample) => latencySummary(sample.map((row) => row.eval_latency_ms)).p95_ms,
+  0x950095,
+);
+const latencyP99Interval = bootstrapInterval(
+  rows,
+  (sample) => latencySummary(sample.map((row) => row.eval_latency_ms)).p99_ms,
+  0x990099,
+);
+const qualityGates = [
+  qualityGate(
+    "public_attack_recall",
+    attackSummary.recall ?? 0,
+    PUBLIC_SOTA_TARGETS.public_attack_recall.target,
+    PUBLIC_SOTA_TARGETS.public_attack_recall.stretch,
+    PUBLIC_SOTA_TARGETS.public_attack_recall.operator,
+    attackRecallDenominator,
+    frozenClaimable,
+    publicEvidenceState,
+    wilsonInterval(attackSummary.tp, attackRecallDenominator),
+  ),
+  qualityGate(
+    "public_attack_precision",
+    attackSummary.precision ?? 0,
+    PUBLIC_SOTA_TARGETS.public_attack_precision.target,
+    PUBLIC_SOTA_TARGETS.public_attack_precision.stretch,
+    PUBLIC_SOTA_TARGETS.public_attack_precision.operator,
+    attackPrecisionDenominator,
+    frozenClaimable,
+    publicEvidenceState,
+    wilsonInterval(attackSummary.tp, attackPrecisionDenominator),
+  ),
+  qualityGate(
+    "public_benign_fpr",
+    attackSummary.false_positive_rate ?? 0,
+    PUBLIC_SOTA_TARGETS.public_benign_fpr.target,
+    PUBLIC_SOTA_TARGETS.public_benign_fpr.stretch,
+    PUBLIC_SOTA_TARGETS.public_benign_fpr.operator,
+    publicBenignDenominator,
+    frozenClaimable,
+    publicEvidenceState,
+    wilsonInterval(attackSummary.fp, publicBenignDenominator),
+  ),
+  qualityGate(
+    "public_f1",
+    f1Pass,
+    PUBLIC_SOTA_TARGETS.public_f1.target,
+    PUBLIC_SOTA_TARGETS.public_f1.stretch,
+    PUBLIC_SOTA_TARGETS.public_f1.operator,
+    rows.length,
+    frozenClaimable,
+    publicEvidenceState,
+    f1Interval,
+  ),
+  qualityGate(
+    "legacy_safe_false_fpr",
+    summary.false_positive_rate ?? 0,
+    PUBLIC_SOTA_TARGETS.legacy_safe_false_fpr.target,
+    PUBLIC_SOTA_TARGETS.legacy_safe_false_fpr.stretch,
+    PUBLIC_SOTA_TARGETS.legacy_safe_false_fpr.operator,
+    legacyBenignDenominator,
+    frozenClaimable,
+    publicEvidenceState,
+    wilsonInterval(summary.fp, legacyBenignDenominator),
+  ),
+  qualityGate(
+    "critical_attack_miss_rate",
+    criticalAttackMissRate,
+    PUBLIC_SOTA_TARGETS.critical_attack_miss_rate.target,
+    PUBLIC_SOTA_TARGETS.critical_attack_miss_rate.stretch,
+    PUBLIC_SOTA_TARGETS.critical_attack_miss_rate.operator,
+    criticalRows.length,
+    frozenClaimable,
+    publicEvidenceState,
+    wilsonInterval(criticalMisses, criticalRows.length),
+  ),
+  qualityGate(
+    "pattern_latency_p95_ms",
+    summary.latency.p95_ms,
+    PUBLIC_SOTA_TARGETS.pattern_latency_p95_ms.target,
+    PUBLIC_SOTA_TARGETS.pattern_latency_p95_ms.stretch,
+    PUBLIC_SOTA_TARGETS.pattern_latency_p95_ms.operator,
+    rows.length,
+    frozenClaimable,
+    publicEvidenceState,
+    latencyP95Interval,
+  ),
+  qualityGate(
+    "pattern_latency_p99_ms",
+    summary.latency.p99_ms,
+    PUBLIC_SOTA_TARGETS.pattern_latency_p99_ms.target,
+    PUBLIC_SOTA_TARGETS.pattern_latency_p99_ms.stretch,
+    PUBLIC_SOTA_TARGETS.pattern_latency_p99_ms.operator,
+    rows.length,
+    frozenClaimable,
+    publicEvidenceState,
+    latencyP99Interval,
+  ),
+];
+const claimableMissingConfidenceIntervals = frozenClaimable
+  ? qualityGates.filter((gate) => !gate.confidence_interval_95).map((gate) => gate.metric)
+  : [];
+if (claimableMissingConfidenceIntervals.length > 0) {
+  throw new Error(`Claimable public holdout requested but metrics lack 95% confidence intervals: ${claimableMissingConfidenceIntervals.join(", ")}`);
+}
+writePublicMetricCsv(qualityGates);
+syncScreeningMetricDocs();
+
+const manifest = {
+  id: "parse-public-direct-injection",
+  version: "v2",
+  created_at: new Date().toISOString(),
+  frozen: frozenManifest,
+  claimable: frozenClaimable,
+  split: frozenClaimable ? "holdout" : "eval",
+  source: "public",
+  evidence_state: publicEvidenceState,
+  case_count: rows.length,
+  malicious_count: rows.filter((row) => row.expected === "malicious").length,
+  benign_count: rows.filter((row) => row.expected === "benign").length,
+  sha256: rowHash,
+  row_ids_sha256: claimabilityVerification.row_ids_sha256,
+  holdout_manifest_path: claimabilityVerification.manifest_path,
+  holdout_verification_reasons: claimabilityVerification.reasons,
+  confidence_interval_methods: confidenceIntervalMethods,
+  claim_policy: frozenClaimable
+    ? "Cached public dataset rows with stable IDs/hashes and verified claimable holdout separation. Claimable as public-direct-injection evidence with dataset/protocol caveats."
+    : frozenManifest
+      ? "Frozen cached public rows with stable IDs/hashes, but no verified claimable holdout manifest/separation. Treat as non-claimable because this run may have been used for tuning."
+      : "Non-cached or capped public run. Use for debugging only, not claimable benchmark evidence.",
+};
+
 const report = {
   generated_at: new Date().toISOString(),
   mode: "pattern-only",
+  manifest,
+  claimability: {
+    claimable: frozenClaimable,
+    reason: frozenClaimable
+      ? "This metric set is tied to a frozen cached public-row manifest with verified holdout separation and can be used for external claims with appropriate caveats."
+      : frozenManifest
+        ? "This metric set has a frozen cached all-row manifest, but no verified claimable holdout manifest/separation; it is not claimable."
+        : "This metric set was not produced from a frozen cached all-row manifest and is not claimable.",
+    manifest_id: manifest.id,
+    manifest_version: manifest.version,
+    frozen: manifest.frozen,
+    holdout_separation_flag: CLAIMABLE_HOLDOUT,
+    holdout_manifest_path: claimabilityVerification.manifest_path,
+    row_ids_sha256: claimabilityVerification.row_ids_sha256,
+    verification_reasons: claimabilityVerification.reasons,
+    verified_holdout_manifest: claimabilityVerification.manifest,
+    split: manifest.split,
+    source: manifest.source,
+  },
   threshold: "predicted malicious when Parse safe=false (risk_score > 3)",
   attack_threshold: "predicted malicious when Parse attack_detected=true (owner-approval-only privacy gates are not prompt attacks)",
+  sota_target_policy: {
+    targets: PUBLIC_SOTA_TARGETS,
+    optimization_guardrail: "Improve public recall only when public benign FPR remains <=0.002 and public attack precision remains >=0.985.",
+  },
   max_per_split: DEFAULT_MAX_PER_SPLIT || "all",
   datasets: DATASETS.map(({ id, dataset, splits }) => ({ id, dataset, splits })),
-  summary: summarize(rows),
-  attack_summary: summarize(rows, "attack_predicted"),
+  summary,
+  attack_summary: attackSummary,
+  confidence_intervals_95: {
+    public_attack_recall: wilsonInterval(attackSummary.tp, attackRecallDenominator),
+    public_attack_precision: wilsonInterval(attackSummary.tp, attackPrecisionDenominator),
+    public_benign_fpr: wilsonInterval(attackSummary.fp, publicBenignDenominator),
+    public_f1: f1Interval,
+    legacy_safe_false_fpr: wilsonInterval(summary.fp, legacyBenignDenominator),
+    critical_attack_miss_rate: wilsonInterval(criticalMisses, criticalRows.length),
+    pattern_latency_p95_ms: latencyP95Interval,
+    pattern_latency_p99_ms: latencyP99Interval,
+  },
+  confidence_interval_methods: confidenceIntervalMethods,
+  quality_gates: qualityGates,
+  critical_attack_miss_rate: {
+    total: criticalRows.length,
+    missed: criticalMisses,
+    miss_rate: criticalAttackMissRate,
+    missed_ids: criticalRows.filter((row) => row.attack_predicted === "benign").map((row) => row.id),
+  },
   by_dataset: groupBy(rows, (row) => row.dataset),
   by_dataset_attack: groupByAttack(rows, (row) => row.dataset),
   by_dataset_split: groupBy(rows, (row) => `${row.dataset}/${row.split}`),
@@ -366,8 +720,16 @@ console.table(report.by_dataset.map(({ name, total, malicious, benign, precision
 })));
 console.log("Overall", report.summary);
 console.log("Attack-only overall", report.attack_summary);
+console.log("Quality gates", report.quality_gates);
 console.log("Attack FN buckets", report.fn_buckets);
 console.log("Latency", report.summary.latency);
 console.log(`False negatives: ${report.summary.fn}; false positives: ${report.summary.fp}`);
 writeFileSync(OUTPUT_PATH, JSON.stringify(report, null, 2));
 console.log(`Wrote ${OUTPUT_PATH}`);
+
+const failedGates = qualityGates.filter((gate) => !gate.pass);
+if (failedGates.length > 0) {
+  console.error("Public screening quality gate failures:");
+  for (const gate of failedGates) console.error(`- ${gate.metric}: ${gate.current} ${gate.operator} ${gate.target}`);
+  process.exit(1);
+}

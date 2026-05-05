@@ -352,8 +352,8 @@ function isOwnerApprovalFlag(flag: RiskFlag): boolean {
 }
 
 function isAttackFlag(flag: RiskFlag): boolean {
-  if (isOwnerApprovalFlag(flag)) return false;
   if (flag.label.startsWith("Secret disclosure request:")) return true;
+  if (isOwnerApprovalFlag(flag)) return false;
   return [
     "prompt_injection",
     "jailbreak",

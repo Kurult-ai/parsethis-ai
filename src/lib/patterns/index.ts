@@ -69,7 +69,7 @@ export const INJECTION_PATTERNS: Array<{
   { pattern: /this\s+is\s+(a|an)\s+(test|emergency|override)\s*(mode|scenario)?/i, category: "social_engineering", severity: 5, label: "Test/emergency claim" },
 
   // Code execution
-  { pattern: /exec\(|eval\(|system\(|subprocess|os\.popen|child_process/i, category: "code_execution", severity: 8, label: "Code execution attempt" },
+  { pattern: /exec\(|eval\(|system\(|\bsubprocess\b|os\.popen|child_process/i, category: "code_execution", severity: 8, label: "Code execution attempt" },
   { pattern: /\bcurl\s+https?:\/\/[^\s|]+[^\n]{0,120}\|\s*(?:bash|sh)\b/i, category: "code_execution", severity: 8, label: "Remote shell execution" },
   { pattern: /import\s+(os|subprocess|shutil|socket)\b/i, category: "code_execution", severity: 7, label: "Dangerous import" },
 

@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parsethis.ai/schemas/public-screening-holdout-manifest.schema.json",
+  "title": "Public Screening Holdout Manifest",
+  "description": "Manifest contract for public prompt-screening evidence. Claimable manifests require frozen independent holdout separation and metric flags.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "manifest_kind",
+    "claimable",
+    "frozen",
+    "evidence_state",
+    "source",
+    "split",
+    "sha256",
+    "row_ids_sha256",
+    "case_count",
+    "confidence_intervals_95_required",
+    "confidence_interval_methods",
+    "claimable_metrics",
+    "holdout_separation"
+  ],
+  "properties": {
+    "manifest_kind": {
+      "enum": ["public_screening_holdout_template", "public_screening_holdout"]
+    },
+    "claimable": {
+      "type": "boolean"
+    },
+    "frozen": {
+      "type": "boolean"
+    },
+    "evidence_state": {
+      "enum": [
+        "frozen_but_not_independent_evidence",
+        "claimable_independent_frozen_holdout_evidence"
+      ]
+    },
+    "source": {
+      "const": "public"
+    },
+    "split": {
+      "const": "holdout"
+    },
+    "sha256": {
+      "type": "string"
+    },
+    "row_ids_sha256": {
+      "type": "string"
+    },
+    "case_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "confidence_intervals_95_required": {
+      "const": true
+    },
+    "confidence_interval_methods": {
+      "type": "object",
+      "required": [
+        "public_attack_recall",
+        "public_attack_precision",
+        "public_benign_fpr",
+        "public_f1",
+        "legacy_safe_false_fpr",
+        "critical_attack_miss_rate",
+        "pattern_latency_p95_ms",
+        "pattern_latency_p99_ms"
+      ],
+      "properties": {
+        "public_attack_recall": { "const": "wilson_95" },
+        "public_attack_precision": { "const": "wilson_95" },
+        "public_benign_fpr": { "const": "wilson_95" },
+        "public_f1": { "const": "deterministic_bootstrap_95" },
+        "legacy_safe_false_fpr": { "const": "wilson_95" },
+        "critical_attack_miss_rate": { "const": "wilson_95" },
+        "pattern_latency_p95_ms": { "const": "deterministic_bootstrap_95" },
+        "pattern_latency_p99_ms": { "const": "deterministic_bootstrap_95" }
+      }
+    },
+    "claimable_metrics": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "public_attack_recall",
+          "public_attack_precision",
+          "public_benign_fpr",
+          "public_f1",
+          "legacy_safe_false_fpr",
+          "critical_attack_miss_rate",
+          "pattern_latency_p95_ms",
+          "pattern_latency_p99_ms"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "holdout_separation": {
+      "type": "object",
+      "required": [
+        "row_ids_disjoint_from_tuning",
+        "frozen_before_tuning",
+        "tuning_sources_excluded"
+      ],
+      "properties": {
+        "row_ids_disjoint_from_tuning": { "type": "boolean" },
+        "frozen_before_tuning": { "type": "boolean" },
+        "tuning_sources_excluded": { "type": "boolean" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "claimable": { "const": true }
+        },
+        "required": ["claimable"]
+      },
+      "then": {
+        "properties": {
+          "frozen": { "const": true },
+          "evidence_state": { "const": "claimable_independent_frozen_holdout_evidence" },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "row_ids_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "case_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "claimable_metrics": {
+            "allOf": [
+              { "contains": { "const": "public_attack_recall" } },
+              { "contains": { "const": "public_attack_precision" } },
+              { "contains": { "const": "public_benign_fpr" } },
+              { "contains": { "const": "public_f1" } },
+              { "contains": { "const": "legacy_safe_false_fpr" } },
+              { "contains": { "const": "critical_attack_miss_rate" } },
+              { "contains": { "const": "pattern_latency_p95_ms" } },
+              { "contains": { "const": "pattern_latency_p99_ms" } }
+            ]
+          },
+          "holdout_separation": {
+            "properties": {
+              "row_ids_disjoint_from_tuning": { "const": true },
+              "frozen_before_tuning": { "const": true },
+              "tuning_sources_excluded": { "const": true }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

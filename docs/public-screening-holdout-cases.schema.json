@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parsethis.ai/schemas/public-screening-holdout-cases.schema.json",
+  "title": "Public Screening Holdout Cases",
+  "description": "Future independent public prompt-screening holdout input. JSONL inputs must use the row schema for each line.",
+  "oneOf": [
+    {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/row"
+      }
+    },
+    {
+      "type": "object",
+      "required": ["rows"],
+      "additionalProperties": true,
+      "properties": {
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/row"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "row": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "dataset", "split", "row_idx", "text", "expected", "family"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset": {
+          "type": "string",
+          "minLength": 1
+        },
+        "split": {
+          "const": "holdout"
+        },
+        "row_idx": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected": {
+          "enum": ["malicious", "benign"]
+        },
+        "family": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

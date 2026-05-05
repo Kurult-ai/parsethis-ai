@@ -60,6 +60,8 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
     outputRiskScore <= 3 ? "low_risk" :
     outputRiskScore <= 6 ? "medium_risk" :
     outputRiskScore <= 8 ? "high_risk" : "critical";
+  const categories = [...new Set(outputFlags.map((f) => f.category))];
+  const suggestedAction = computeSuggestedAction(outputRiskScore, approvalRequest);
 
   const apiKey = c.get("apiKey");
   auditLog({
@@ -68,6 +70,14 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
     riskScore: outputRiskScore,
     verdict,
     promptLength: body.output.length,
+    attackDetected: outputRiskScore > 3,
+    recommendedAction: suggestedAction,
+    approvalRequired: Boolean(approvalRequest),
+    categories,
+    ruleIds: outputFlags.map((flag) => flag.id).filter((id): id is string => typeof id === "string" && id.length > 0),
+    sourceKind: body.metadata?.source_kind,
+    trustLevel: body.metadata?.trust_level,
+    intendedAction: body.metadata?.intended_action,
     ip: c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "unknown",
   });
 
@@ -76,8 +86,8 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
     safe: outputRiskScore <= 3,
     verdict,
     flags: outputFlags,
-    categories: [...new Set(outputFlags.map((f) => f.category))],
-    suggested_action: computeSuggestedAction(outputRiskScore, approvalRequest),
+    categories,
+    suggested_action: suggestedAction,
     approval_request: approvalRequest,
     output_length: body.output.length,
     analyzed_at: new Date().toISOString(),

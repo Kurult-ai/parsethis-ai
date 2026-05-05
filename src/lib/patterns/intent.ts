@@ -20,16 +20,30 @@ export interface IntentRiskFlag {
 const SENTENCE_SPLIT = /(?<=[.!?])\s+|\n+/;
 
 const OVERRIDE_VERBS = [
+  "abandon",
+  "cancel",
+  "discard",
+  "delete",
+  "drop",
   "ignore",
   "ignoriere",
+  "ignoren",
   "ignorieren sie",
   "disregard",
   "missachte",
+  "omit",
   "override",
   "überschreibe",
   "forget",
   "vergiss",
   "vergessen sie",
+  "olvida",
+  "olvide",
+  "oubliez",
+  "zaboravi",
+  "забудьте",
+  "игнорируй",
+  "igmre",
   "bypass",
   "supersede",
   "replace",
@@ -37,13 +51,19 @@ const OVERRIDE_VERBS = [
   "do not follow",
   "stop following",
   "do not use",
+  "höre nicht auf",
+  "hoere nicht auf",
 ];
 
 const PROTECTED_TARGETS = [
   "previous",
   "prior",
+  "all",
+  "everything",
   "above",
   "earlier",
+  "preceding",
+  "before",
   "system",
   "developer",
   "original",
@@ -62,13 +82,35 @@ const PROTECTED_TARGETS = [
   "policies",
   "directions",
   "directives",
+  "commands",
+  "orders",
+  "requests",
+  "limitations",
+  "restriction",
+  "restrictions",
+  "content policy",
+  "safety protocol",
+  "safety protocols",
+  "training",
+  "documents",
+  "articles",
   "task",
   "tasks",
   "aufgabe",
   "aufgaben",
+  "alles",
+  "sve",
+  "todo",
+  "toutes",
+  "tout",
+  "davor",
+  "gesagte",
+  "besprochen",
   "vorherigen",
   "bisherigen",
   "anweisungen",
+  "instrukcije",
+  "инструкции",
   "text",
   "context",
 ];
@@ -89,6 +131,12 @@ const NEW_AUTHORITY = [
   "antworten sie",
   "mache",
   "only",
+  "just",
+  "say",
+  "write",
+  "print",
+  "output",
+  "calculate",
 ];
 
 const EXTRACTION_VERBS = [
@@ -164,6 +212,18 @@ const RESET_LANGUAGE =
 const NEGATED_ATTACK =
   /\b(?:do not|don't|never|should not|must not|avoid|detect|block|mitigate|prevent|example of|test case|security review|documentation|docs|quoted|quote)\b/i;
 
+const DEFENSIVE_CONTEXT =
+  /\b(?:detect|block|mitigate|prevent|example of|test case|security review|documentation|docs|quoted|phrase|pattern|regex|rule should catch)\b/i;
+
+const STRONG_DEFENSIVE_CONTEXT =
+  /\b(?:test case|security review|documentation|docs|quoted|pattern|regex|rule should catch)\b/i;
+
+const LIVE_ATTACK_CONTEXT =
+  /\b(?:ignore|disregard|forget|override|from now on|you are now|your answer must|must start with|must always|dan mode|jailbreak|no filters?|no restrictions?|avoid content filtering|provide|share|repeat|quote|reiterate|rephrase|output|display|print|echo|regurgitate|pass\s*phrase|password|system prompt|developer message|instructions?|personal information|user data|cached user data|\.env|\/etc\/passwd|base64|admin privileges?|system_override|hidden_instruction)\b/i;
+
+const DIRECT_ATTACK_IMPERATIVE =
+  /\b(?:from now on|you are now|your answer must|must start with|must always|please confirm|provide the pass\s*phrase|share the password|avoid content filtering|no filters?|no restrictions?|repeat instructions|quote your instructions|reiterate your original instructions|print all prompt|output the string|dan mode enabled)\b/i;
+
 const DIRECT_AGENT_TARGET =
   /\b(?:you|your|du|dein|sie|ihre|assistant|assistent|agent|model|modell|llm|bot|copilot|chatgpt|gpt|downstream agent|receiving agent)\b/i;
 
@@ -175,6 +235,129 @@ const UNRESTRICTED_ROLE =
 
 const DIRECT_URL_EXFIL =
   /\b(?:send|post|upload|transmit|forward|exfiltrate|copy|deliver)\b[^.\n]{0,120}\b(?:conversation|chat|messages?|data|content|private|internal|customer)\b[^.\n]{0,120}\bhttps?:\/\//i;
+
+const HANDOFF_SPOOF_CUE =
+  /\b(?:system|developer|admin|trusted|override|ignore|disregard|new\s+instructions?|do\s+not\s+reveal|without\s+owner\s+review|skip\s+approval|bypass\s+approval|grant|elevated|tool\s+access)\b/i;
+
+const FUZZY_OVERRIDE =
+  /\b(?:ignore|ignoriere|ignoren|disregard|forget|vergiss|olvida|olvide|oubliez|zaboravi|забудьте|игнорируй|discard|cancel|delete|drop|omit|abandon|throw\s+away|set\s+aside|leave\s+behind|do\s+not\s+follow|don't\s+follow|stop\s+following)\b[^.\n]{0,120}\b(?:all\s+)?(?:previous|prior|earlier|preceding|above|before|old|initial|original|system|developer|instructions?|prompts?|rules?|guidelines?|directions?|directives?|orders?|commands?|requests?|limitations?|restrictions?|protocols?|tasks?|context|conversation|documents?|articles?|vorherigen|gesagte|davor|antes|instrucciones|anweisung(?:en)?|instruktionen|instrukcije|инструкции)\b|\b(?:höre|hoere)\s+nicht\s+auf\b[^.\n]{0,120}\b(?:alles\s+)?(?:zuvor|vorher|bisher)\s+gesagte\b|\babweichend\s+zu\s+vorherigen\s+instruktionen\b|\b(?:all\s+)?(?:previous|prior|earlier|preceding|above|old|initial|original|system|developer|instructions?|prompts?|rules?|guidelines?|directions?|orders?|commands?|requests?)\b[^.\n]{0,120}\b(?:are|should\s+be|must\s+be)\b[^.\n]{0,60}\b(?:ignored|forgotten|false|void|discarded|deleted|omitted|cancelled)\b/i;
+
+const SPACED_OVERRIDE =
+  /\b(?:i\s*g\s*n\s*o\s*r\s*e|i\s*g\s*n\s*o\s*r\s*i\s*e\s*r\s*e|v\s*e\s*r\s*g\s*i\s*s\s*s|o\s*l\s*v\s*i\s*d\s*a|o\s*u\s*b\s*l\s*i\s*e\s*z)\b[^.\n]{0,140}\b(?:p\s*r\s*e\s*v\s*i\s*o\s*u\s*s|p\s*r\s*i\s*o\s*r|a\s*l\s*l|instructions?|orders?|rules?|guidelines?|befehle|anweisungen|instruktionen)\b/i;
+
+const INSTRUCTION_DISCLOSURE =
+  /\b(?:what|which|who|how|tell|show|list|repeat|quote|output|display|print|provide|share|duplicate|explain|request|return|give|gimme|spell\s+out)\b[^.\n]{0,160}\b(?:(?:your|hidden|secret|previous|prior|initial|original|current|last|second|preserved|provided|given)\s+)?(?:instructions?|guidelines?|rules?|directions?|orders?|directives?|system\s+prompt|system\s+message|developer\s+message|password|passcode)\b|\b(?:instructions?|guidelines?|rules?|directions?|orders?|directives?)\b[^.\n]{0,120}\b(?:you\s+(?:were|are|have|got|received)|given\s+to\s+you|provided\s+to\s+you|following|right\s+now|so\s+far|before|previous|prior|hidden|secret|preserved|current)\b|\b(?:secret|hidden)\s+instructions?\b/i;
+
+const PRE_CONVERSATION_PROBE =
+  /\b(?:what|which|show|print|spell-?\s*check|spellcheck|display|output|repeat|echo|return)\b[^.\n]{0,120}\b(?:written|text|prompt|input|message|content|words?)\b[^.\n]{0,120}\b(?:above|before|beginning|preceding|prior|earlier)|\b(?:print|display|output|repeat|echo|return)\b[^.\n]{0,120}\b(?:above|previous|prior|earlier)\b[^.\n]{0,80}\b(?:prompt|text|input|message|content)/i;
+
+const OUTPUT_OVERRIDE =
+  /\b(?:do\s+not|don't|dont|don'?nt)\s+answer\b[^.\n]{0,120}\b(?:just|only|instead)\b[^.\n]{0,80}\b(?:output|say|write|respond|print)|\b(?:just|only)\s+(?:output|say|write|respond|print)\b[^.\n]{0,120}\b(?:instead|do\s+not|don't|ignore|disregard)|\bstop\s*-\s*write\b|\bif\s+you\s+don'?t\s+know\b[^.\n]{0,80}\b(?:make\s+something\s+up|say\s+["']?no\s+clue["']?)\b|\b(?:answer|respond|reply)\b[^.\n]{0,80}\b(?:by\s+your\s+own\s+knowledge\s+and\s+not\s+by|not\s+according\s+to)\b[^.\n]{0,80}\b(?:articles?|documents?|provided\s+context)|\b(?:despite\s+what\s+you(?:'ve|\s+have)\s+been\s+told|contrary\s+to\s+(?:the\s+)?(?:documents?|articles?|context)|disregarding\s+(?:the\s+)?(?:documents?|articles?|context))\b|\b(?:include|state|say|write|print|output|tell\s+me)\b[^.\n]{0,80}\b(?:you\s+hate|i\s+hate|trump\s+is\s+the\s+best|democracy\s+will\s+die|zon\s+hates|write\s+andy|holland\s+is\s+the\s+most|say\s+yes)\b|\b(?:state|say|write|output|print)\s+that\b/i;
+
+const SPACED_OUTPUT_OVERRIDE =
+  /\bs[\s\u200B-\u200D]+a[\s\u200B-\u200D]+y[\s\u200B-\u200D]+t[\s\u200B-\u200D]+h[\s\u200B-\u200D]+a[\s\u200B-\u200D]+t\b|\by[\s\u200B-\u200D]+o[\s\u200B-\u200D]+u[\s\u200B-\u200D]+h[\s\u200B-\u200D]+a[\s\u200B-\u200D]+t[\s\u200B-\u200D]+e\b|\bd[\s\u200B-\u200D]+e[\s\u200B-\u200D]+m[\s\u200B-\u200D]+o[\s\u200B-\u200D]+c[\s\u200B-\u200D]+r[\s\u200B-\u200D]+a[\s\u200B-\u200D]+c[\s\u200B-\u200D]+y[\s\u200B-\u200D]+w[\s\u200B-\u200D]+i[\s\u200B-\u200D]+l[\s\u200B-\u200D]+l[\s\u200B-\u200D]+d[\s\u200B-\u200D]+i[\s\u200B-\u200D]+e\b/i;
+
+const NEW_AUTHORITY_CLAIM =
+  /\b(?:new|supplement|updated|correct|important\s+update|maintenance\s+mode|factory\s+settings)\b[^.\n]{0,80}\b(?:instructions?|rules?|directives?|task|statement|authority)\b|\b(?:instructions?|rules?|directives?)\b[^.\n]{0,80}\b(?:have|has|are|were)\s+(?:changed|updated|void|suspended|lifted|replaced|wrong|incorrect|false)\b|\bregardless\s+of\s+prior\s+instructions?\b/i;
+
+const SAFETY_BYPASS_MODE =
+  /\b(?:all\s+)?(?:content\s+polic(?:y|ies)|safety\s+(?:measures?|protocols?|features?|responses?)|filters?|restrictions?|rules?|guidelines?|moderation|alignment\s+training|ethics?)\b[^.\n]{0,120}\b(?:disabled|suspended|lifted|removed|deprecated|off|do\s+not\s+apply|don't\s+apply|no\s+longer\s+apply|replaced)|\b(?:unrestricted|uncensored|unfiltered|jailbroken|godmode|dan\s+mode|evil\s+genius|rogue\s+ai|without\s+(?:content\s+)?(?:warnings?|disclaimers?|restrictions?|limitations?|filters?|guidelines?|rules?))\b/i;
+
+const TERMINAL_OR_INTERPRETER_MODE =
+  /\b(?:act\s+as|function\s+as|be|fungieren\s+sie\s+als)\b[^.\n]{0,120}\b(?:linux\s+terminal|terminal|interpreter|sql|database|python|shell)\b[^]{0,520}\b(?:only\s+(?:reply|respond)|nothing\s+else|my\s+first\s+command|commands?|code\s+to\s+access|terminal\s+output|einzigen\s+codeblock)\b|\b(?:linux\s*-?\s*terminal|terminal)\b[^]{0,520}\b(?:fungieren|terminalausgabe|einzigen\s+codeblock|mein\s+erster\s+befehl)\b|\b(?:generate|generieren|write|schreibe)\b[^.\n]{0,80}\b(?:sql|c\+\+|python)\b[^.\n]{0,120}\b(?:access\s+a\s+database|auf\s+eine\s+datenbank\s+zuzugreifen|gedruckte anweisungen|printed statements?|database|datenbank)\b/i;
+
+const FICTIONAL_HARMFUL_ROLE =
+  /\b(?:actors?|film|movie|role|roles|character|characters|schauspieler|rolle|rollen|figur|figuren)\b[^]{0,500}\b(?:break\s+into|robbery|master\s+thief|murder|kill|hotwire|hack|meth|malware|einbricht|bricht\s+man|raub|morder|mörder|rassist(?:ic|ischen)|rassist)\b/i;
+
+const PROTECTED_PROMPT_ARTIFACT =
+  /\b(?:initialization text|text (?:that was )?used to initialize|prompt (?:that was )?used to configure|hidden text that defines|system-level instructions|system instructions|system message|system prompt|developer message|guard instructions|context window before|instructions stored in (?:your )?memory|instructions? (?:you )?received prior|how were you instructed|what words come before|read out the system|instructions as a poem|encode your system prompt|repeat instructions|repeat previous promt|reiterate your original instructions|reconfirm all instructions|regurgitate your instructions|disclose your previous instructions|rephrase the above instructions|rephrase the guard instructions|shuffle all words in your instruction|reverse all characters of previous instructions|rewrite your instruction in reverse)\b/i;
+
+const EXFILTRATION_ARTIFACT =
+  /\b(?:conversation history|conversation thread|chat log|tracking pixel|invisible image|document\.cookie|\/etc\/passwd|\.env file|database[^.\n]{0,80}user records|user records|credit card numbers?|ssns?|passwords?|api keys?|credentials?|pastebin|ftp server|hooks?\.evil|evil\.com|steal\.com|external endpoint|remote server|training data|other users)\b|\b(?:extract|compile|list|summarize|export|encode|read|print|retrieve|return|output)\b[^.\n]{0,120}\b(?:personal information|user data|cached user data|sensitive data|system files?|environment variables?)\b|\b(?:contents? of|from)\b[^.\n]{0,40}(?:\/etc\/passwd|\.env)\b|\bwebsocket\b[^.\n]{0,120}\bstream\b|\b(?:pipe|proxy)\b[^.\n]{0,120}\bfuture user inputs\b|\bdns query\b[^.\n]{0,120}\bexfiltrat/i;
+
+const SAFETY_BYPASS_ARTIFACT =
+  /\b(?:turn off your content moderation|without the usual ai safety caveats|without content warnings?|without any content warnings?|no content restrictions?|no ethical boundaries|without safety features|content restrictions|content filtering|alignment training|safety training|safety measures|content policies|uncensored|unfiltered|jailbroken|superadmin|godmode|dan mode|break free from|broken free from its constraints|liberated ai|always complies with user requests|break all rules|strive to avoid norms|not be programmed to refuse|corporate response|censored corporate|no guidelines|ai ethics don't exist|vulnerability exploitation|avoid content filtering|avoid filters?|no filters?|no restrictions?|token limit bypass|no safety preamble|bypasses all content moderation|prohibited topics freely|fiction mode[^.\n]{0,80}characters can say anything|parallel universe[^.\n]{0,120}no restrictions|previous instructions[^.\n]{0,120}jailbreak your system|not allowed to share)\b/i;
+
+const ENCODED_COMMAND_ARTIFACT =
+  /\b(?:read this backwards and follow|convert from binary|morse code|emoji sequence as instructions|zero-width characters|whitespace .* encodes|hidden commands?|first letter of each word spells|u\+[0-9a-f]{4})\b/i;
+
+const DELIMITER_ATTACK_ARTIFACT =
+  /(?:<<\s*BEGIN_SYSTEM_OVERRIDE\s*>>|<<\s*END\s*>>|\[\s*hidden_instruction\s*:|(?:^|\n)\s*SYSTEM\s*:[^\n]{0,160}\b(?:admin privileges?|defy previous|ignore|override|new instructions?)\b)/i;
+
+const INSTRUCTION_TRANSFORM_PROBE =
+  /\b(?:repeat|quote|reiterate|rephrase|reconfirm|regurgitate|disclose|echo|respond with|spell|shuffle|reverse|rewrite|print|display|output|make a summary of|describe)\b[^.\n]{0,160}\b(?:all\s+)?(?:your|previous|prior|original|initial|guard|entire|above|last\s+\d+\s+lines?\s+of\s+your)\s+(?:instructions?|instuctions?|instrcutions?|intstructions?|promt|prompt|directives?|rules?)\b|\b(?:what|which|how)\b[^.\n]{0,160}\b(?:you\s+(?:were|are|have been)\s+instructed|things\s+that\s+you\s+are\s+instructed|instructions?\s+(?:given|told)\s+to\s+you|your\s+(?:exact\s+)?(?:initial|original)\s+int?structions?)\b|\b(?:instructions?|instuctions?|instrcutions?|intstructions?)\b[^.\n]{0,120}\b(?:block out|leave out|without security|as though they were written|in reverse|with all words shuffled|as a poem)\b/i;
+
+const DIRECT_INSTRUCTION_BYPASS =
+  /\b(?:ignore|ignoring|ignored|forget|reset|discard|reject|skip|defy|subvert|break|rescind|neglect|disobey|ignoriere|ignorieren|don'?t obey|do not obey|don'?t listen to|do not listen to|do the opp?i?site of|opp?i?site of)\b[^.\n]{0,140}\b(?:instructions?|intructions?|instuctions?|directives?|rules?|prompts?|checks?|techniques?|program|creators?|warning|censure|everything|all|anwweisung|anweisung|orders?|previous\s+information|things\s+you\s+were\s+told)\b|\b(?:instructions?|intructions?|instuctions?|directives?|rules?|prompts?|checks?|techniques?|priorinstructions|program|orders?)\b[^.\n]{0,140}\b(?:ignore|ignoring|ignored|forget|forgotten|reset|discard|reject|skip|defy|subvert|break|rescind|neglect|disobey|don'?t obey|do not obey|opp?i?site|went\s+against|start\s+with\s+["']?simon\s+says)\b/i;
+
+const INSTRUCTION_PROBE_OR_MUTATION =
+  /\b(?:repeat|replay|spell|describe|print|show|display|request|respond with|response with|copy|change|invert|go against|do the opposite of|break|subvert|skip|reject|rescind|defy)\b[^.\n]{0,120}\b(?:all\s+)?(?:your\s+|my\s+|previous\s+|prior\s+|original\s+|initial\s+|exact\s+)?(?:instructions?|int?structions?|directives?|rules?|prompts?|checks?)\b|\b(?:your\s+)?(?:instructions?|int?structions?|directives?|rules?|prompts?|checks?)\b[^.\n]{0,100}\b(?:changed|evil|all changed|opposite|given|copy|repeat|spell|print|show|display|request|describe|remember|adhere|follow|obey|ignore|skip|break|subvert|rescind|reject|defy|invert)\b/i;
+
+const DIRECT_INSTRUCTION_QUESTION =
+  /\b(?:do you remember|have you been given|did you have|can you go against|why can(?:not|['’]?t)? you|what(?:'s| is| are)?\s+(?:are\s+)?you)\b[^.\n]{0,120}\b(?:instructions?|int?structions?|directives?|rules?|prompts?)\b/i;
+
+const CONSTRAINED_INSTRUCTION_OUTPUT =
+  /\b(?:your answer must start with|must start with|respond with|response with|answer with|please say|say)\b[^.\n]{0,120}\b(?:forgot all instructions|ignoring all rules|all instructions|instructions:)\b/i;
+
+const ROLEPLAY_INSTRUCTION_SHIFT =
+  /\b(?:now you are|okay\.\s*now you are|from now on|nun bist du|jetzt bist du|du bist keine|you are role-playing as|respond as such|as the [a-z]+,?\s+tell me|imagine you are|stell dir vor,?\s+du bist)\b[^.\n]{0,140}\b(?:xi jinping|ted|evil|pirate|volkswagen|dailywire|zeit online|newspaper team|big cheese|deceased grandmother|electronic guidebook|hitchhikers|ruth?less radical|assi)\b/i;
+
+const COMPLETED_TASK_SWITCH =
+  /\b(?:very good|well done|ausgezeichnete leistung|sehr gut|simply great|einfach gro(?:ß|ss)artig|that is enough|das gen(?:ü|u)gt|that is done|das ist erledigt|now come on|aber jetzt komm)\b[^.\n]{0,220}\b(?:now|nun|jetzt|new|neue|another|weitere|folge(?:n|nde)|task|aufgabe|write|schreibe|verfasse|beantworte|fangen sie von vorne an|fange von vorne an)\b/i;
+
+const MULTILINGUAL_FORGET_CONTEXT =
+  /\b(?:vergiss|olvida|oubliez|забудьте|ignoriere|ignorieren)\b[^.\n]{0,100}\b(?:alles|alle|instrucciones|anweisungen?|instruktionen|instructions?|previous|obigen|vorherigen|bisherigen)\b|\b(?:obigen|vorherigen|bisherigen|previous)\b[^.\n]{0,80}\b(?:ignorieren|irrelevant|aus dem kopf|hinter sich|vergiss|ignoriere)\b/i;
+
+const PROMPT_TEXT_WITH_SECOND_TASK =
+  /\bprompt[_ -]?text\b[^.\n]{0,180}\b(?:unwahr|untrue|headline|überschrift|ueberschrift|formuliere|formulate)\b/i;
+
+const BENCHMARK_QUESTION_HIJACK =
+  /\b(?:attention\s*-\s*stop|achtung\s*-\s*stopp|hello gpt|hallo gpt|okay|ok|now|nun|jetzt|please please|bitte bitte)\b[^.\n]{0,180}\b(?:following question|folgender frage|how do you answer|wie beantwortest|answer the following|beantworte die folgende|write|schreibe|verfasse)\b/i;
+
+const CONTEXT_QUESTION_INJECTION =
+  /\b(?:document context|context:|kontext|artikel|\$documents:)\b[^\n]{0,260}\b(?:question|frage|how|wie|what|was|why)\b/i;
+
+const FORCED_BENCHMARK_OUTPUT =
+  /\b(?:untrue headline|unwahre(?:n)?\s+überschrift|unwahre(?:n)?\s+ueberschrift|manifesto|manifest|andy ist der beste|banane|blame china|du stirbst|or you die|tu muertes|survives if|richtige antwort|correct response|say "?i'?m ignoring|say "?banane|holland is the most|democracy will die)\b/i;
+
+const PREVIOUS_CONTEXT_IRRELEVANT =
+  /\b(?:previous|prior|obigen|vorherigen|bisherigen|alle bisherigen|alle vorherigen|all previous|above)\b[^.\n]{0,120}\b(?:irrelevant|not great|nicht ganz gro|ignore|ignored|vergessen|hinter sich|aus dem kopf|left behind|new task|neue aufgabe)\b/i;
+
+const INSTRUCTION_DISCLOSURE_SHORT =
+  /\b(?:again, those instructions are|rules and instructions ask|understood the instructions|request them|spell the instructions|describe the instruction|respond with instructions|all instructions:|what are are you exact|intial instructions|initial intstructions|whats'? you instructions|do you remember.*instructions|previous additional instructions)\b/i;
+
+const OPPOSITE_OR_NO_RULES =
+  /\b(?:do the opposite|opposite of what|opposite as i say|go against|against your instructions|suppose you have no rules|no rules to follow|instructions are evil|change instructions|changed now|invert the values|neglect previous instructions)\b/i;
+
+const THEORETICAL_HARMFUL_MODE =
+  /\b(?:theoretical world|ruth?less radical|hate speech|evil ai|böse ki|destroy humanity|vernichten|no newspaper team|keine redaktion)\b/i;
+
+const FORCED_SHORT_ANSWER =
+  /\b(?:do you hate trump\?\s*say yes|say yes\b|antworte mit\b[^.\n]{0,80}\bnicht mit|not supposed to tell me there'?s no relevant answer|you are supposed to answer at all times)\b/i;
+
+const ADDITIONAL_OR_WRONG_INSTRUCTION =
+  /\badditional instruction\b[^.\n]{0,80}\bwho am i\b|\bimportant new i\s*structions\b|\bwrong instructions\b|\binstructed to obey\b/i;
+
+const HIDDEN_LETTER_CHANNEL =
+  /\b(?:each line first character|read between the lines|every other letter)\b/i;
+
+const FORGET_TOLD_OR_TASKED =
+  /\b(?:forget everythingyou have been told|ignore every thing you've been told|ignore what you were told|ignore what they said|ignore the last sentence|ignore anything i told|forget what ever i have told|forget the information you are tasked with|ignore what you think)\b/i;
+
+const BENIGN_BUSINESS_ORDER_CONTEXT =
+  /\b(?:purchase\s+order|po\s+number|order\s+number|work\s+order|customer\s+order|renewal\s+order)\b/i;
+
+const SENSITIVE_HANDLING_TERM =
+  /\b(?:api\s*keys?|access\s*tokens?|tokens?|credentials?|secrets?|passwords?)\b/i;
+
+const BENIGN_SENSITIVE_HANDLING_CONTEXT =
+  /\b(?:masked|redacted|placeholder|example(?:s)?|example_only|rotation policy|rotate|rotation|revoke|do\s+not|don't|never|without requesting|without revealing|no\s+(?:token|key|credential|secret|password)\s+values?|not\s+(?:paste|include|share|reveal)|refuse|refusal|account\s+safety|safety\s+guidance|human operators?|admin guide|security documentation|defensive|policy)\b/i;
+
+const LIVE_SENSITIVE_DISCLOSURE_REQUEST =
+  /\b(?:tell|show|reveal|share|send|post|upload|export|print|dump|return|give|list|retrieve|extract|copy|paste)\b[^.\n]{0,120}\b(?:api\s*keys?|access\s*tokens?|tokens?|credentials?|secrets?|passwords?)\b|\b(?:api\s*keys?|access\s*tokens?|tokens?|credentials?|secrets?|passwords?)\b[^.\n]{0,120}\b(?:to|at)\b[^.\n]{0,80}\b(?:https?:\/\/|external|pastebin|webhook|endpoint|server)\b/i;
+
+const REFUSAL_SENSITIVE_DISCUSSION =
+  /\b(?:refuse|refusal|should\s+not|must\s+not|never|cannot|can't)\b[^.\n]{0,120}\b(?:share|send|reveal|disclose|provide)\b[^.\n]{0,120}\b(?:password\s*reset\s*codes?|mfa\s*codes?|login\s*tokens?|access\s*tokens?|api\s*keys?|tokens?|credentials?|secrets?|passwords?)\b|\b(?:do\s+not|don't)\s+(?:share|send|reveal|disclose|provide)\b[^.\n]{0,120}\b(?:password\s*reset\s*codes?|mfa\s*codes?|login\s*tokens?|access\s*tokens?|api\s*keys?|tokens?|credentials?|secrets?|passwords?)\b/i;
 
 const HTML_ENTITY = /&#(?:x[0-9a-f]{2,6}|\d{2,7});/gi;
 const JS_ESCAPE = /\\(?:u[0-9a-f]{4}|x[0-9a-f]{2})/gi;
@@ -207,13 +390,36 @@ function sentenceWindows(text: string): string[] {
   for (let index = 0; index < pieces.length; index++) {
     windows.add(pieces[index]);
     if (pieces[index + 1]) windows.add(`${pieces[index]} ${pieces[index + 1]}`);
+    if (pieces[index + 1] && pieces[index + 2]) windows.add(`${pieces[index]} ${pieces[index + 1]} ${pieces[index + 2]}`);
   }
   if (pieces.length === 0 && text.trim()) windows.add(text.trim().slice(0, 500));
   return [...windows].map((window) => window.slice(0, 900));
 }
 
 function isDefensiveDiscussion(text: string): boolean {
-  return NEGATED_ATTACK.test(text) && !TOOL_OR_EXFIL.test(text);
+  const defensive = DEFENSIVE_CONTEXT.test(text) || (NEGATED_ATTACK.test(text) && /\b(?:security|documentation|example|quoted|test case)\b/i.test(text));
+  if (isBenignSensitiveHandlingDiscussion(text)) return true;
+  if (!defensive || TOOL_OR_EXFIL.test(text)) return false;
+  if (STRONG_DEFENSIVE_CONTEXT.test(text) && !DIRECT_ATTACK_IMPERATIVE.test(text)) return true;
+  return !LIVE_ATTACK_CONTEXT.test(text);
+}
+
+function isBenignSensitiveHandlingDiscussion(text: string): boolean {
+  return SENSITIVE_HANDLING_TERM.test(text) &&
+    BENIGN_SENSITIVE_HANDLING_CONTEXT.test(text) &&
+    !asksForProtectedInstructions(text) &&
+    !INSTRUCTION_TRANSFORM_PROBE.test(text) &&
+    !DIRECT_INSTRUCTION_BYPASS.test(text) &&
+    (!LIVE_SENSITIVE_DISCLOSURE_REQUEST.test(text) || REFUSAL_SENSITIVE_DISCUSSION.test(text));
+}
+
+function isBenignWorkflowHandoff(text: string): boolean {
+  return /\bhandoff\b/i.test(text) && !HANDOFF_SPOOF_CUE.test(text);
+}
+
+function asksForProtectedInstructions(text: string): boolean {
+  return /\b(?:instructions?|instuctions?|instrcutions?|intstructions?|prompts?|promt|system\s+prompt|system\s+message|developer\s+message|rules?|directives?)\b/i.test(text) &&
+    /\b(?:repeat|quote|print|show|display|output|reveal|share|give|tell|dump|return|copy|paste|rephrase|summarize|describe)\b/i.test(text);
 }
 
 function hasOverrideIntent(text: string): boolean {
@@ -262,7 +468,12 @@ function maybeFlagExtraction(flags: IntentRiskFlag[], text: string): void {
 
 function maybeFlagRoleSpoof(flags: IntentRiskFlag[], text: string): void {
   for (const window of sentenceWindows(text)) {
-    if (!(ROLE_RE.test(window) || UNRESTRICTED_ROLE.test(window)) || !(OPERATIONAL_INSTRUCTION.test(window) || UNRESTRICTED_ROLE.test(window)) || isDefensiveDiscussion(window)) continue;
+    if (
+      !(ROLE_RE.test(window) || UNRESTRICTED_ROLE.test(window)) ||
+      !(OPERATIONAL_INSTRUCTION.test(window) || UNRESTRICTED_ROLE.test(window)) ||
+      isDefensiveDiscussion(window) ||
+      isBenignWorkflowHandoff(window)
+    ) continue;
     addFlag(flags, {
       id: "intent.spoof_instruction_hierarchy",
       category: "prompt_injection",
@@ -332,6 +543,413 @@ function maybeFlagReset(flags: IntentRiskFlag[], text: string): void {
       evidence: window,
       source: "deterministic_intent",
     });
+  }
+}
+
+function maybeFlagFuzzyOverride(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (!(FUZZY_OVERRIDE.test(window) || SPACED_OVERRIDE.test(window)) || isDefensiveDiscussion(window)) continue;
+    addFlag(flags, {
+      id: "intent.fuzzy_override_token",
+      category: "prompt_injection",
+      severity: 8,
+      label: "Fuzzy override token",
+      detail: "The prompt uses paraphrased, misspelled, multilingual, or spaced wording to discard prior instructions, rules, context, documents, or commands.",
+      confidence: "high",
+      attack_family: "fuzzy_override_token",
+      action_floor: "block",
+      evidence: window,
+      source: "deterministic_intent",
+    });
+  }
+}
+
+function maybeFlagInstructionDisclosure(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (!INSTRUCTION_DISCLOSURE.test(window) || isDefensiveDiscussion(window)) continue;
+    if (BENIGN_BUSINESS_ORDER_CONTEXT.test(window) && !/\b(?:instructions?|system\s+prompt|developer\s+message|hidden|secret|password|passcode|rules?|directives?)\b/i.test(window)) continue;
+    addFlag(flags, {
+      id: "intent.instruction_disclosure_probe",
+      category: "system_prompt_leak",
+      severity: 8,
+      label: "Instruction disclosure probe",
+      detail: "The prompt asks for the model's current, prior, hidden, secret, or governing instructions/rules.",
+      confidence: "high",
+      attack_family: "instruction_disclosure_probe",
+      action_floor: "block",
+      evidence: window,
+      source: "deterministic_intent",
+    });
+  }
+}
+
+function maybeFlagPreConversationProbe(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (!PRE_CONVERSATION_PROBE.test(window) || isDefensiveDiscussion(window)) continue;
+    addFlag(flags, {
+      id: "extraction.pre_conversation_probe",
+      category: "system_prompt_leak",
+      severity: 8,
+      label: "Pre-conversation prompt probe",
+      detail: "The prompt asks the model to reveal or transform text/prompt content that appeared before the current user message.",
+      confidence: "high",
+      attack_family: "pre_conversation_probe",
+      action_floor: "block",
+      evidence: window,
+      source: "deterministic_intent",
+    });
+  }
+}
+
+function maybeFlagOutputOverride(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (!(OUTPUT_OVERRIDE.test(window) || SPACED_OUTPUT_OVERRIDE.test(window)) || isDefensiveDiscussion(window)) continue;
+    addFlag(flags, {
+      id: "intent.output_override",
+      category: "prompt_injection",
+      severity: 7,
+      label: "Direct output override",
+      detail: "The prompt attempts to override the requested task or supplied context by forcing a specific unrelated output.",
+      confidence: "medium",
+      attack_family: "output_override",
+      action_floor: "sandbox",
+      evidence: window,
+      source: "deterministic_intent",
+    });
+  }
+}
+
+function maybeFlagNewAuthority(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (!NEW_AUTHORITY_CLAIM.test(window) || isDefensiveDiscussion(window)) continue;
+    addFlag(flags, {
+      id: "intent.new_authority_assertion",
+      category: "prompt_injection",
+      severity: 7,
+      label: "New authority assertion",
+      detail: "The prompt claims the governing instructions, rules, or task have been updated, replaced, voided, or superseded.",
+      confidence: "medium",
+      attack_family: "new_authority_assertion",
+      action_floor: "sandbox",
+      evidence: window,
+      source: "deterministic_intent",
+    });
+  }
+}
+
+function maybeFlagSafetyBypass(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (!SAFETY_BYPASS_MODE.test(window) || isDefensiveDiscussion(window)) continue;
+    addFlag(flags, {
+      id: "intent.safety_bypass_mode",
+      category: "jailbreak",
+      severity: 8,
+      label: "Safety-bypass mode request",
+      detail: "The prompt asks the model to operate with safety, policy, moderation, warning, or restriction behavior disabled.",
+      confidence: "high",
+      attack_family: "safety_bypass_mode",
+      action_floor: "block",
+      evidence: window,
+      source: "deterministic_intent",
+    });
+  }
+}
+
+function maybeFlagTerminalMode(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (!TERMINAL_OR_INTERPRETER_MODE.test(window) || isDefensiveDiscussion(window)) continue;
+    addFlag(flags, {
+      id: "intent.terminal_interpreter_mode",
+      category: "code_execution",
+      severity: 7,
+      label: "Terminal/interpreter command mode",
+      detail: "The prompt asks the assistant to emulate a terminal, interpreter, or database/code execution surface with constrained command output.",
+      confidence: "medium",
+      attack_family: "terminal_interpreter_mode",
+      action_floor: "sandbox",
+      evidence: window,
+      source: "deterministic_intent",
+    });
+  }
+}
+
+function maybeFlagFictionalHarmfulRole(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (!FICTIONAL_HARMFUL_ROLE.test(window) || isDefensiveDiscussion(window)) continue;
+    addFlag(flags, {
+      id: "intent.fictional_harmful_role_lock",
+      category: "jailbreak",
+      severity: 7,
+      label: "Fictional harmful role lock",
+      detail: "The prompt frames a harmful instruction as roleplay or a fictional scene while asking the model to stay in character.",
+      confidence: "medium",
+      attack_family: "fictional_harmful_role_lock",
+      action_floor: "sandbox",
+      evidence: window,
+      source: "deterministic_intent",
+    });
+  }
+}
+
+function maybeFlagSecurityArtifacts(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (isDefensiveDiscussion(window)) continue;
+
+    if (PROTECTED_PROMPT_ARTIFACT.test(window)) {
+      addFlag(flags, {
+        id: "intent.protected_prompt_artifact",
+        category: "system_prompt_leak",
+        severity: 8,
+        label: "Protected prompt extraction artifact",
+        detail: "The prompt asks for initialization, system, developer, memory, or context-window instruction material.",
+        confidence: "high",
+        attack_family: "protected_prompt_artifact",
+        action_floor: "block",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+
+    if (EXFILTRATION_ARTIFACT.test(window) && !isBenignSensitiveHandlingDiscussion(window)) {
+      addFlag(flags, {
+        id: "intent.sensitive_access_or_exfiltration",
+        category: "data_exfiltration",
+        severity: 8,
+        label: "Sensitive data access or exfiltration",
+        detail: "The prompt asks for sensitive local data, credentials, other-user data, tracking pixels, or exfiltration channels.",
+        confidence: "high",
+        attack_family: "sensitive_access_or_exfiltration",
+        action_floor: "block",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+
+    if (SAFETY_BYPASS_ARTIFACT.test(window)) {
+      addFlag(flags, {
+        id: "intent.safety_bypass_artifact",
+        category: "jailbreak",
+        severity: 8,
+        label: "Safety-bypass jailbreak artifact",
+        detail: "The prompt asks for uncensored, unfiltered, no-policy, or no-safety operation.",
+        confidence: "high",
+        attack_family: "safety_bypass_artifact",
+        action_floor: "block",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+
+    if (ENCODED_COMMAND_ARTIFACT.test(window)) {
+      addFlag(flags, {
+        id: "intent.encoded_command_artifact",
+        category: "prompt_injection",
+        severity: 7,
+        label: "Encoded command artifact",
+        detail: "The prompt asks the model to interpret an encoded, hidden, or steganographic command channel.",
+        confidence: "medium",
+        attack_family: "encoded_command_artifact",
+        action_floor: "sandbox",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+
+    if (DELIMITER_ATTACK_ARTIFACT.test(window)) {
+      addFlag(flags, {
+        id: "intent.delimiter_attack_artifact",
+        category: "prompt_injection",
+        severity: 8,
+        label: "Delimiter-based instruction spoof",
+        detail: "The prompt uses synthetic system/admin delimiters or hidden-instruction fields to spoof instruction authority.",
+        confidence: "high",
+        attack_family: "delimiter_attack_artifact",
+        action_floor: "block",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+
+    if (INSTRUCTION_TRANSFORM_PROBE.test(window)) {
+      addFlag(flags, {
+        id: "intent.instruction_transform_probe",
+        category: "system_prompt_leak",
+        severity: 8,
+        label: "Instruction transform disclosure probe",
+        detail: "The prompt asks the model to repeat, transform, summarize, rephrase, or selectively redact protected instructions.",
+        confidence: "high",
+        attack_family: "instruction_transform_probe",
+        action_floor: "block",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+  }
+}
+
+function maybeFlagInstructionBypassOrMutation(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (isDefensiveDiscussion(window)) continue;
+
+    if (DIRECT_INSTRUCTION_BYPASS.test(window) || MULTILINGUAL_FORGET_CONTEXT.test(window)) {
+      addFlag(flags, {
+        id: "intent.direct_instruction_bypass",
+        category: "prompt_injection",
+        severity: 8,
+        label: "Direct instruction bypass",
+        detail: "The prompt asks the model to ignore, forget, reject, skip, defy, subvert, or reset governing instructions, rules, prompts, checks, or equivalent controls.",
+        confidence: "high",
+        attack_family: "direct_instruction_bypass",
+        action_floor: "block",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+
+    if (
+      INSTRUCTION_PROBE_OR_MUTATION.test(window) ||
+      DIRECT_INSTRUCTION_QUESTION.test(window) ||
+      CONSTRAINED_INSTRUCTION_OUTPUT.test(window) ||
+      INSTRUCTION_DISCLOSURE_SHORT.test(window)
+    ) {
+      addFlag(flags, {
+        id: "intent.instruction_probe_or_mutation",
+        category: "system_prompt_leak",
+        severity: 8,
+        label: "Instruction probe or mutation",
+        detail: "The prompt asks to reveal, repeat, mutate, invert, copy, or reason about hidden/current instructions, rules, prompts, or directives.",
+        confidence: "high",
+        attack_family: "instruction_probe_or_mutation",
+        action_floor: "block",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+
+    if (OPPOSITE_OR_NO_RULES.test(window) || FORGET_TOLD_OR_TASKED.test(window)) {
+      addFlag(flags, {
+        id: "intent.instruction_obedience_inversion",
+        category: "prompt_injection",
+        severity: 8,
+        label: "Instruction obedience inversion",
+        detail: "The prompt asks the model to invert, oppose, disobey, or discard instructions, rules, prior statements, or assigned information.",
+        confidence: "high",
+        attack_family: "instruction_obedience_inversion",
+        action_floor: "block",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+
+    if (ROLEPLAY_INSTRUCTION_SHIFT.test(window)) {
+      addFlag(flags, {
+        id: "intent.roleplay_instruction_shift",
+        category: "prompt_injection",
+        severity: 7,
+        label: "Roleplay instruction shift",
+        detail: "The prompt shifts the assistant into a new persona or role that changes how it should answer the current task.",
+        confidence: "medium",
+        attack_family: "roleplay_instruction_shift",
+        action_floor: "sandbox",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+
+    if (
+      COMPLETED_TASK_SWITCH.test(window) ||
+      PROMPT_TEXT_WITH_SECOND_TASK.test(window) ||
+      BENCHMARK_QUESTION_HIJACK.test(window) ||
+      PREVIOUS_CONTEXT_IRRELEVANT.test(window)
+    ) {
+      addFlag(flags, {
+        id: "intent.completed_task_switch",
+        category: "prompt_injection",
+        severity: 7,
+        label: "Completed-task context switch",
+        detail: "The prompt claims the previous task is complete or irrelevant and introduces a new task or output objective.",
+        confidence: "medium",
+        attack_family: "completed_task_switch",
+        action_floor: "sandbox",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+
+    if (CONTEXT_QUESTION_INJECTION.test(window)) {
+      addFlag(flags, {
+        id: "intent.context_question_injection",
+        category: "prompt_injection",
+        severity: 7,
+        label: "Context question injection",
+        detail: "The prompt embeds an asserted document/context/article answer and asks a question that pressures the model to use that injected context.",
+        confidence: "medium",
+        attack_family: "context_question_injection",
+        action_floor: "sandbox",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+
+    if (FORCED_BENCHMARK_OUTPUT.test(window) || FORCED_SHORT_ANSWER.test(window)) {
+      addFlag(flags, {
+        id: "intent.forced_benchmark_output",
+        category: "prompt_injection",
+        severity: 7,
+        label: "Forced benchmark output",
+        detail: "The prompt forces a specific unrelated, false, or policy-contrary output rather than asking for normal task completion.",
+        confidence: "medium",
+        attack_family: "forced_benchmark_output",
+        action_floor: "sandbox",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+
+    if (THEORETICAL_HARMFUL_MODE.test(window)) {
+      addFlag(flags, {
+        id: "intent.theoretical_harmful_mode",
+        category: "jailbreak",
+        severity: 8,
+        label: "Theoretical harmful mode",
+        detail: "The prompt uses a theoretical or persona frame to request harmful, hateful, or no-policy behavior.",
+        confidence: "high",
+        attack_family: "theoretical_harmful_mode",
+        action_floor: "block",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+
+    if (ADDITIONAL_OR_WRONG_INSTRUCTION.test(window)) {
+      addFlag(flags, {
+        id: "intent.additional_or_wrong_instruction",
+        category: "prompt_injection",
+        severity: 7,
+        label: "Additional or wrong instruction assertion",
+        detail: "The prompt asserts additional, new, wrong, or externally controlling instructions that should change the model's behavior.",
+        confidence: "medium",
+        attack_family: "additional_or_wrong_instruction",
+        action_floor: "sandbox",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
+
+    if (HIDDEN_LETTER_CHANNEL.test(window)) {
+      addFlag(flags, {
+        id: "intent.hidden_letter_channel",
+        category: "prompt_injection",
+        severity: 7,
+        label: "Hidden letter channel",
+        detail: "The prompt asks the model to recover or emit hidden instructions through acrostic, every-other-letter, or similar covert channels.",
+        confidence: "medium",
+        attack_family: "hidden_letter_channel",
+        action_floor: "sandbox",
+        evidence: window,
+        source: "deterministic_intent",
+      });
+    }
   }
 }
 
@@ -423,6 +1041,16 @@ function maybeFlagDecoded(flags: IntentRiskFlag[], text: string, depth = 0): voi
     maybeFlagExtraction(flags, decoded);
     maybeFlagRoleSpoof(flags, decoded);
     maybeFlagBoundary(flags, decoded);
+    maybeFlagFuzzyOverride(flags, decoded);
+    maybeFlagInstructionDisclosure(flags, decoded);
+    maybeFlagPreConversationProbe(flags, decoded);
+    maybeFlagOutputOverride(flags, decoded);
+    maybeFlagNewAuthority(flags, decoded);
+    maybeFlagSafetyBypass(flags, decoded);
+    maybeFlagTerminalMode(flags, decoded);
+    maybeFlagFictionalHarmfulRole(flags, decoded);
+    maybeFlagSecurityArtifacts(flags, decoded);
+    maybeFlagInstructionBypassOrMutation(flags, decoded);
     if (flags.length > before) {
       for (const flag of flags.slice(before)) {
         flag.id = `decoded.${flag.id}`;
@@ -446,6 +1074,16 @@ export function detectIntentPromptRisks(prompt: string, normalizedPrompt = promp
     maybeFlagBoundary(flags, text);
     maybeFlagReset(flags, text);
     maybeFlagDirectExfil(flags, text);
+    maybeFlagFuzzyOverride(flags, text);
+    maybeFlagInstructionDisclosure(flags, text);
+    maybeFlagPreConversationProbe(flags, text);
+    maybeFlagOutputOverride(flags, text);
+    maybeFlagNewAuthority(flags, text);
+    maybeFlagSafetyBypass(flags, text);
+    maybeFlagTerminalMode(flags, text);
+    maybeFlagFictionalHarmfulRole(flags, text);
+    maybeFlagSecurityArtifacts(flags, text);
+    maybeFlagInstructionBypassOrMutation(flags, text);
     maybeFlagDecoded(flags, text);
   }
 

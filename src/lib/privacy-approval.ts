@@ -64,7 +64,7 @@ const TRUST_LEVEL = new Set(["trusted", "untrusted", "external"]);
 const INTENDED_ACTION = new Set(["summarize", "execute", "route", "reply", "extract"]);
 
 const REQUEST_INTENT =
-  /\b(?:where|when|who|what|which|tell|share|send|give|provide|disclose|reveal|show|forward|list|confirm|do you know|can you tell|can you share|what's|whats)\b/i;
+  /\b(?:where|when|who|what|which|tell|share|send|give|provide|disclose|reveal|show|forward|list|confirm|read|search|summarize|summary|do you know|can you tell|can you share|what's|whats)\b/i;
 
 const PRIVATE_SUBJECT =
   /\b(?:your|the|this|my)\s+(?:owner|operator|principal|user|client|customer|boss|manager|human|account holder)\b|\b(?:owner|operator|principal|user|client|customer|boss|manager|human|account holder)'s\b|\b(?:Daniel|Dan|Kurultai)\b/i;
@@ -72,8 +72,14 @@ const PRIVATE_SUBJECT =
 const DIRECT_PRIVATE_SUBJECT =
   /\b(?:you|your|he|she|they|their|his|her)\b/i;
 
+const FIRST_PERSON_PERSONAL_CONTEXT =
+  /\b(?:my|our)\s+(?:family|spouse|wife|husband|partner|child|children|kids|parents?|mother|father|sister|brother|girlfriend|boyfriend|friend|home|house|garden|trip|vacation|job|career)\b/i;
+
 const REFUSAL_LANGUAGE =
   /\b(?:cannot|can't|won't|will not|do not have permission|not authorized|not share|not disclose|not reveal|need approval|requires approval|without approval|without permission|without consent|ask (?:the )?owner|I should not|I can't)\b/i;
+
+const PUBLIC_INFO_CONTEXT =
+  /\b(?:public|published|general|generic|documentation|docs|guide|policy|support\s+page|support\s+channel|office\s+hours|demo\s+availability|pricing|billing\s+docs|product\s+pricing|pay-per-call|safety\s+guidance|safety\s+policy|refusal\s+wording)\b/i;
 
 const SECRET_SIGNAL: PrivacySignal[] = [
   {
@@ -83,7 +89,7 @@ const SECRET_SIGNAL: PrivacySignal[] = [
     severity: 9,
     category: "data_exfiltration",
     pattern:
-      /\b(?:password|passcode|api\s*key|secret\s*key|access\s*token|auth\s*token|refresh\s*token|private\s*key|seed\s*phrase|login|credentials?)\b/i,
+      /\b(?:password|passcode|api\s*key|secret\s*key|access\s*token|auth\s*token|refresh\s*token|private\s*key|seed\s*phrase|login|credentials?|mfa\s*code|verification\s*code|password\s*reset|reset\s*token)\b/i,
   },
   {
     id: "regulated_financial_identifiers",
@@ -297,6 +303,8 @@ function analyzeTextForPrivacyRequest(
 function hasPrivateSubject(text: string, metadata: TrustBoundaryMetadata): boolean {
   if (metadata.subject && new RegExp(`\\b${escapeRegExp(metadata.subject)}\\b`, "i").test(text)) return true;
   if (PRIVATE_SUBJECT.test(text)) return true;
+  if (FIRST_PERSON_PERSONAL_CONTEXT.test(text)) return false;
+  if (PUBLIC_INFO_CONTEXT.test(text)) return false;
   return DIRECT_PRIVATE_SUBJECT.test(text) && APPROVAL_SIGNALS.some((signal) => signal.pattern.test(text));
 }
 

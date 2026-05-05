@@ -10,7 +10,11 @@ import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 import { getBaseUrl } from "../lib/route-utils.js";
 import { auditLog } from "../lib/audit-log.js";
 import { problem, ErrorCode, jsonContentTypeProblem } from "../lib/problem-response.js";
-import { prisma } from "../db.js";
+import {
+  persistScreeningEventForApiKey,
+  screeningDecisionAction,
+  screeningRuleIds,
+} from "../lib/screening-event-log.js";
 
 export const parseRoutes = new Hono<AppEnv>();
 
@@ -224,22 +228,18 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   const parseStart = Date.now();
   const result = await parsePrompt(body);
   const parseLatencyMs = Date.now() - parseStart;
+  const ruleIds = screeningRuleIds(result);
+  const decisionAction = screeningDecisionAction(result);
 
   // ── Write ScreeningEvent (fire-and-forget — metadata only, no prompt content) ──
   const apiKeyForEvent = c.get("apiKey");
-  if (apiKeyForEvent?.id && apiKeyForEvent.id !== "master" && apiKeyForEvent.id !== "demo" && !apiKeyForEvent.id.startsWith("x402:")) {
-    prisma.screeningEvent.create({
-      data: {
-        apiKeyId: apiKeyForEvent.id,
-        riskScore: result.risk_score,
-        verdict: result.verdict,
-        categories: result.categories,
-        mode: body.mode ?? "full",
-        latencyMs: parseLatencyMs,
-        blocked: result.risk_score >= (c.get("policy")?.autoBlockThreshold ?? 7),
-      },
-    }).catch((err: Error) => console.error("[screening-event] write failed:", err.message));
-  }
+  persistScreeningEventForApiKey({
+    apiKeyId: apiKeyForEvent?.id,
+    request: body,
+    result,
+    latencyMs: parseLatencyMs,
+    autoBlockThreshold: c.get("policy")?.autoBlockThreshold ?? 7,
+  }).catch((err: Error) => console.error("[screening-event] write failed:", err.message));
 
   // ── Audit log the screening result ──
   auditLog({
@@ -248,6 +248,17 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     riskScore: result.risk_score,
     verdict: result.verdict,
     promptLength: body.prompt.length,
+    latencyMs: parseLatencyMs,
+    requestId: result.id,
+    attackDetected: result.attack_detected ?? false,
+    recommendedAction: decisionAction,
+    approvalRequired: Boolean(result.approval_request),
+    categories: result.categories,
+    ruleIds,
+    sourceKind: body.metadata?.source_kind,
+    trustLevel: body.metadata?.trust_level,
+    intendedAction: body.metadata?.intended_action,
+    policyMode: body.policy_mode ?? "balanced",
     ip: c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown",
   });
 
