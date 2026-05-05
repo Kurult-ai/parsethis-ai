@@ -1,4 +1,5 @@
 import { PRODUCT } from "./product-facts.js";
+import { getLogoMarkSvg } from "./logo.js";
 
 export interface PageOptions {
   title: string;
@@ -211,18 +212,13 @@ export function renderPage(options: PageOptions): string {
       gap: 9px;
       line-height: 1;
     }
-    .site-header .logo::before {
-      content: '';
-      display: inline-block;
-      width: 24px;
-      height: 24px;
-      background:
-        linear-gradient(135deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 42%),
-        var(--text);
-      border-radius: 5px;
+    .parse-logo-mark {
+      width: 72px;
+      height: 30px;
       flex-shrink: 0;
+      display: block;
     }
-    .logo-lockup { display:flex; align-items:center; gap:7px; }
+    .logo-lockup { display:flex; align-items:center; gap:12px; }
     .logo-primary { color:var(--text); }
     .site-header .logo:hover { color: var(--text); text-decoration: none; }
     .site-header nav a {
@@ -585,7 +581,7 @@ export function renderPage(options: PageOptions): string {
   <a href="#main-content" class="sr-only">Skip to main content</a>
   <header class="site-header">
     <nav aria-label="Site">
-      <a href="/" class="logo" aria-label="Parse home"><span class="logo-lockup"><span class="logo-primary">Parse</span></span></a>
+      <a href="/" class="logo" aria-label="Parse home"><span class="logo-lockup">${getLogoMarkSvg()}<span class="logo-primary">Parse</span></span></a>
       <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links" onclick="const n=document.getElementById('nav-links');const open=n.classList.toggle('open');this.setAttribute('aria-expanded',open);this.textContent=open?'\u2715':'\u2630';">\u2630</button>
       <div class="nav-links" id="nav-links">
       ${navLinksHtml}

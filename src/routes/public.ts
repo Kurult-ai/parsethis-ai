@@ -12,6 +12,7 @@ import { prisma } from "../db.js";
 import { getBaseUrl } from "../lib/route-utils.js";
 import { renderPage } from "../lib/html-template.js";
 import { organizationSchema } from "../lib/schema.js";
+import { getLogoLockupSvg } from "../lib/logo.js";
 import { renderLandingPage } from "../pages/landing.js";
 import { renderFaqPage } from "../pages/faq.js";
 import { renderDocsPage, renderGuidePage, renderComparePage, renderSecurityPage } from "../pages/docs.js";
@@ -47,7 +48,7 @@ publicRoutes.get("/og-image.svg", (c) => {
 publicRoutes.get("/logo.png", (c) => {
   c.header("Content-Type", "image/svg+xml");
   c.header("Cache-Control", "public, max-age=86400");
-  return c.body(getFaviconSvg());
+  return c.body(getLogoLockupSvg());
 });
 
 // Root - HTML landing page for browsers, JSON service descriptor for agents
