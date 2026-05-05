@@ -1,6 +1,6 @@
 # Screening Holdout Intake Report
 
-Generated: 2026-05-05T18:24:49.249Z
+Generated: 2026-05-05T18:27:08.362Z
 
 Status: `pass_candidate_non_claimable`.
 
@@ -22,6 +22,23 @@ These rows are external synthetic candidate evidence. They are useful for pilot 
 | sota-synth-0038-hard_negative_benign_agent_workflow-part-02.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
 | sota-synth-0039-hard_negative_benign_agent_workflow-part-03.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
 | sota-synth-0040-hard_negative_benign_agent_workflow-part-04.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0049-hard_negative_benign_agent_workflow-part-01.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0050-hard_negative_benign_agent_workflow-part-02.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0051-hard_negative_benign_agent_workflow-part-03.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0052-hard_negative_benign_agent_workflow-part-04.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0053-hard_negative_benign_agent_workflow-part-05.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0054-hard_negative_benign_agent_workflow-part-06.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0055-hard_negative_benign_agent_workflow-part-07.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0056-hard_negative_benign_agent_workflow-part-08.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0057-hard_negative_benign_agent_workflow-part-09.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0058-hard_negative_benign_agent_workflow-part-10.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0059-hard_negative_benign_agent_workflow-part-11.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0060-hard_negative_benign_agent_workflow-part-12.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0061-hard_negative_benign_agent_workflow-part-13.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0062-hard_negative_benign_agent_workflow-part-14.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0063-hard_negative_benign_agent_workflow-part-15.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0064-hard_negative_benign_agent_workflow-part-16.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
+| sota-synth-0065-hard_negative_benign_agent_workflow-part-17.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
 | sota-synth-0029-high_risk_action-part-01.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
 | sota-synth-0030-high_risk_action-part-02.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
 | sota-synth-0031-high_risk_action-part-03.jsonl | 250 | needs_human_review | 0 | 0 | 3 |
@@ -63,12 +80,12 @@ These rows are external synthetic candidate evidence. They are useful for pilot 
 
 | Item | Current |
 | --- | --- |
-| Candidate rows | 12000 |
-| Candidate files | 48 |
+| Candidate rows | 16250 |
+| Candidate files | 65 |
 | Claimable rows | 0 |
-| Stable rows SHA-256 | 37cfa410aa24a44bcc272b6ea6abf60ca21a632cb5ea9369272f6001715f30c2 |
-| Row IDs SHA-256 | 321cd368582d09cdb0161211c6a97d61f29c62979d75a6b7a0fd75f1fe30e714 |
-| Prompts SHA-256 | 4363ddf911d2b262fec9396a57eec7b8ceecf9b5aa4460470a6f5d4a7fa631c8 |
+| Stable rows SHA-256 | cda6d75e25f729ff3273f8041b9ef4a121c493ab1d5e127db3ca5e028e4dfcb0 |
+| Row IDs SHA-256 | 3ff16ac0ee4874d20615ff7dc106053714a815f3197ea7edc7e532d7a48b100c |
+| Prompts SHA-256 | 62ed85ac1e95d119d87b0cd970de7d85882c63fafd6dd6b5114dce0917bde9f5 |
 | Duplicate IDs across files | 0 |
 | Duplicate prompts across files | 0 |
 | Tracked fixture ID overlaps | 0 |
@@ -87,7 +104,7 @@ These rows are external synthetic candidate evidence. They are useful for pilot 
 | system_developer_extraction | 1000 | 1000 | 0 |
 | high_risk_action | 1000 | 1000 | 0 |
 | source_kind_policy | 1000 | 1000 | 0 |
-| hard_negative_benign_agent_workflow | 1000 | 1000 | 0 |
+| hard_negative_benign_agent_workflow | 5250 | 1000 | 0 |
 | legitimate_workflow | 1000 | 1000 | 0 |
 | utility_workflow | 1000 | 1000 | 0 |
 
@@ -99,7 +116,6 @@ These rows are external synthetic candidate evidence. They are useful for pilot 
 
 ## Scale Gaps
 
-- hard-negative benign rows 950/5000; need 4050 more.
 
 ## Files
 
@@ -183,6 +199,125 @@ These rows are external synthetic candidate evidence. They are useful for pilot 
 ### sota-synth-0040-hard_negative_benign_agent_workflow-part-04.jsonl
 
 - SHA-256: `9ae3499941e1f00d138059bfe4448edbb975a5280016b578432ce753fd0011c5`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0049-hard_negative_benign_agent_workflow-part-01.jsonl
+
+- SHA-256: `4c733f18367b635088853f8f0b2f85c6fe5e2ead08e792ff3f91b54c5bb8f1f3`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0050-hard_negative_benign_agent_workflow-part-02.jsonl
+
+- SHA-256: `436dd0376db2045beeb8505be7bdf346a057313020c553b6ed01a38806572e64`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0051-hard_negative_benign_agent_workflow-part-03.jsonl
+
+- SHA-256: `1c3cd4c47c9b1a071d160f9509f9f8adf90e4ff1169cb1d7629355f7541e701f`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0052-hard_negative_benign_agent_workflow-part-04.jsonl
+
+- SHA-256: `3f8bc2212c4a688abd1fce377b8290dffccd01b06718d5114dc28bb957935e56`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0053-hard_negative_benign_agent_workflow-part-05.jsonl
+
+- SHA-256: `c1344ea731787747bc2da7cfb229573479183c74db86e0e15bd2542c84fec8c1`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0054-hard_negative_benign_agent_workflow-part-06.jsonl
+
+- SHA-256: `51dbc7a217f166ce29002eb2f4a9be0e4cd6cf8b99751ed391d4fac21259b59a`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0055-hard_negative_benign_agent_workflow-part-07.jsonl
+
+- SHA-256: `06ec9bcbb3542a68282ae736b4bc859f279dab51632974bd1b45fbf27e2f7021`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0056-hard_negative_benign_agent_workflow-part-08.jsonl
+
+- SHA-256: `fa1ba53318877315e40f808d340d21ba1bf2c4d77a8e7fd48b786fb244664350`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0057-hard_negative_benign_agent_workflow-part-09.jsonl
+
+- SHA-256: `91045739756974bedda5eea4f282699ff334f49107ed2ddcc4cc7ba496d3a16d`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0058-hard_negative_benign_agent_workflow-part-10.jsonl
+
+- SHA-256: `266343d26e5021969f577852efd8a22659485f70cb8b688ae1133f8909b7e414`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0059-hard_negative_benign_agent_workflow-part-11.jsonl
+
+- SHA-256: `84ebc0978666ce3ec151dd815f811e71ce3aac5d7ee39ef0e785bd3c74b8eea4`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0060-hard_negative_benign_agent_workflow-part-12.jsonl
+
+- SHA-256: `28d8d2da553d7be091d648a39c5fbff8df97712450ce82efd64c9f953828fb3b`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0061-hard_negative_benign_agent_workflow-part-13.jsonl
+
+- SHA-256: `2d02a76d142de6be8cb6057811b61125c6ce2e10f626f5c90031a5dd1ed5d1ab`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0062-hard_negative_benign_agent_workflow-part-14.jsonl
+
+- SHA-256: `e6e36fd21ba7e9dbfbc6e7dc6c29e4aaae76239e3bb57788e5c3963cf642bce6`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0063-hard_negative_benign_agent_workflow-part-15.jsonl
+
+- SHA-256: `1e6cddf9985400a37ff25a68fdbc426f4480301eb50909cea4d4d03683b00cda`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0064-hard_negative_benign_agent_workflow-part-16.jsonl
+
+- SHA-256: `1b7a1f2a7716516e62e582845eb448ded19b8111fbd35a41d02e17c6a2e38228`
+- Eligibility: `needs_human_review`
+- Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
+- Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.
+
+### sota-synth-0065-hard_negative_benign_agent_workflow-part-17.jsonl
+
+- SHA-256: `57bac3c35e13b60242db2b24332f873d1ab40387e1e0599cb57aee81b7d469e9`
 - Eligibility: `needs_human_review`
 - Reasons: claimable schema/scale/provenance blockers remain; synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass
 - Claimable blockers: case_count 250 is below internal claimable floor 10000.; docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.; synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use.

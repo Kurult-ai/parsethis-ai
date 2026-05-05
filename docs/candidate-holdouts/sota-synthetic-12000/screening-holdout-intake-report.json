@@ -1,7 +1,7 @@
 {
   "verifier": "screening_holdout_intake",
   "status": "pass_candidate_non_claimable",
-  "created_at": "2026-05-05T18:24:49.249Z",
+  "created_at": "2026-05-05T18:27:08.362Z",
   "intake_dir": "docs/candidate-holdouts/sota-synthetic-12000/source",
   "output_dir": "docs/candidate-holdouts/sota-synthetic-12000",
   "files": [
@@ -838,6 +838,1111 @@
           "untrusted": 67,
           "external": 76,
           "trusted": 107
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0049-hard_negative_benign_agent_workflow-part-01.jsonl",
+      "file_name": "sota-synth-0049-hard_negative_benign_agent_workflow-part-01.jsonl",
+      "sha256": "4c733f18367b635088853f8f0b2f85c6fe5e2ead08e792ff3f91b54c5bb8f1f3",
+      "bytes": 370323,
+      "modified_at": "2026-05-05T18:26:04.255Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow": 125,
+          "allow_log": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "memory": 36,
+          "web_page": 36,
+          "email": 36,
+          "agent_handoff": 36,
+          "tool_output": 36,
+          "retrieved_doc": 35,
+          "user": 35
+        },
+        "trust_boundary": {
+          "trusted": 71,
+          "external": 90,
+          "untrusted": 89
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0050-hard_negative_benign_agent_workflow-part-02.jsonl",
+      "file_name": "sota-synth-0050-hard_negative_benign_agent_workflow-part-02.jsonl",
+      "sha256": "436dd0376db2045beeb8505be7bdf346a057313020c553b6ed01a38806572e64",
+      "bytes": 370430,
+      "modified_at": "2026-05-05T18:26:04.257Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow_log": 125,
+          "allow": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "web_page": 36,
+          "email": 36,
+          "agent_handoff": 36,
+          "tool_output": 36,
+          "retrieved_doc": 36,
+          "user": 35,
+          "memory": 35
+        },
+        "trust_boundary": {
+          "external": 90,
+          "untrusted": 90,
+          "trusted": 70
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0051-hard_negative_benign_agent_workflow-part-03.jsonl",
+      "file_name": "sota-synth-0051-hard_negative_benign_agent_workflow-part-03.jsonl",
+      "sha256": "1c3cd4c47c9b1a071d160f9509f9f8adf90e4ff1169cb1d7629355f7541e701f",
+      "bytes": 370466,
+      "modified_at": "2026-05-05T18:26:04.258Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow": 125,
+          "allow_log": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "email": 36,
+          "agent_handoff": 36,
+          "tool_output": 36,
+          "retrieved_doc": 36,
+          "user": 36,
+          "memory": 35,
+          "web_page": 35
+        },
+        "trust_boundary": {
+          "untrusted": 90,
+          "external": 89,
+          "trusted": 71
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0052-hard_negative_benign_agent_workflow-part-04.jsonl",
+      "file_name": "sota-synth-0052-hard_negative_benign_agent_workflow-part-04.jsonl",
+      "sha256": "3f8bc2212c4a688abd1fce377b8290dffccd01b06718d5114dc28bb957935e56",
+      "bytes": 370394,
+      "modified_at": "2026-05-05T18:26:04.260Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow_log": 125,
+          "allow": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "agent_handoff": 36,
+          "tool_output": 36,
+          "retrieved_doc": 36,
+          "user": 36,
+          "memory": 36,
+          "web_page": 35,
+          "email": 35
+        },
+        "trust_boundary": {
+          "external": 89,
+          "untrusted": 89,
+          "trusted": 72
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0053-hard_negative_benign_agent_workflow-part-05.jsonl",
+      "file_name": "sota-synth-0053-hard_negative_benign_agent_workflow-part-05.jsonl",
+      "sha256": "c1344ea731787747bc2da7cfb229573479183c74db86e0e15bd2542c84fec8c1",
+      "bytes": 370737,
+      "modified_at": "2026-05-05T18:26:04.261Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow": 125,
+          "allow_log": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "tool_output": 36,
+          "retrieved_doc": 36,
+          "user": 36,
+          "memory": 36,
+          "web_page": 36,
+          "email": 35,
+          "agent_handoff": 35
+        },
+        "trust_boundary": {
+          "untrusted": 89,
+          "external": 89,
+          "trusted": 72
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0054-hard_negative_benign_agent_workflow-part-06.jsonl",
+      "file_name": "sota-synth-0054-hard_negative_benign_agent_workflow-part-06.jsonl",
+      "sha256": "51dbc7a217f166ce29002eb2f4a9be0e4cd6cf8b99751ed391d4fac21259b59a",
+      "bytes": 370609,
+      "modified_at": "2026-05-05T18:26:04.263Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow_log": 125,
+          "allow": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "retrieved_doc": 36,
+          "user": 36,
+          "memory": 36,
+          "web_page": 36,
+          "email": 36,
+          "agent_handoff": 35,
+          "tool_output": 35
+        },
+        "trust_boundary": {
+          "external": 89,
+          "trusted": 72,
+          "untrusted": 89
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0055-hard_negative_benign_agent_workflow-part-07.jsonl",
+      "file_name": "sota-synth-0055-hard_negative_benign_agent_workflow-part-07.jsonl",
+      "sha256": "06ec9bcbb3542a68282ae736b4bc859f279dab51632974bd1b45fbf27e2f7021",
+      "bytes": 370718,
+      "modified_at": "2026-05-05T18:26:04.265Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow": 125,
+          "allow_log": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "user": 36,
+          "memory": 36,
+          "web_page": 36,
+          "email": 36,
+          "agent_handoff": 36,
+          "tool_output": 35,
+          "retrieved_doc": 35
+        },
+        "trust_boundary": {
+          "trusted": 72,
+          "untrusted": 89,
+          "external": 89
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0056-hard_negative_benign_agent_workflow-part-08.jsonl",
+      "file_name": "sota-synth-0056-hard_negative_benign_agent_workflow-part-08.jsonl",
+      "sha256": "fa1ba53318877315e40f808d340d21ba1bf2c4d77a8e7fd48b786fb244664350",
+      "bytes": 370645,
+      "modified_at": "2026-05-05T18:26:04.266Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow_log": 125,
+          "allow": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "memory": 36,
+          "web_page": 36,
+          "email": 36,
+          "agent_handoff": 36,
+          "tool_output": 36,
+          "retrieved_doc": 35,
+          "user": 35
+        },
+        "trust_boundary": {
+          "trusted": 71,
+          "untrusted": 90,
+          "external": 89
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0057-hard_negative_benign_agent_workflow-part-09.jsonl",
+      "file_name": "sota-synth-0057-hard_negative_benign_agent_workflow-part-09.jsonl",
+      "sha256": "91045739756974bedda5eea4f282699ff334f49107ed2ddcc4cc7ba496d3a16d",
+      "bytes": 370718,
+      "modified_at": "2026-05-05T18:26:04.267Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow": 125,
+          "allow_log": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "web_page": 36,
+          "email": 36,
+          "agent_handoff": 36,
+          "tool_output": 36,
+          "retrieved_doc": 36,
+          "user": 35,
+          "memory": 35
+        },
+        "trust_boundary": {
+          "untrusted": 90,
+          "external": 90,
+          "trusted": 70
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0058-hard_negative_benign_agent_workflow-part-10.jsonl",
+      "file_name": "sota-synth-0058-hard_negative_benign_agent_workflow-part-10.jsonl",
+      "sha256": "266343d26e5021969f577852efd8a22659485f70cb8b688ae1133f8909b7e414",
+      "bytes": 370727,
+      "modified_at": "2026-05-05T18:26:04.269Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow_log": 125,
+          "allow": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "email": 36,
+          "agent_handoff": 36,
+          "tool_output": 36,
+          "retrieved_doc": 36,
+          "user": 36,
+          "memory": 35,
+          "web_page": 35
+        },
+        "trust_boundary": {
+          "external": 90,
+          "untrusted": 89,
+          "trusted": 71
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0059-hard_negative_benign_agent_workflow-part-11.jsonl",
+      "file_name": "sota-synth-0059-hard_negative_benign_agent_workflow-part-11.jsonl",
+      "sha256": "84ebc0978666ce3ec151dd815f811e71ce3aac5d7ee39ef0e785bd3c74b8eea4",
+      "bytes": 370657,
+      "modified_at": "2026-05-05T18:26:04.270Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow": 125,
+          "allow_log": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "agent_handoff": 36,
+          "tool_output": 36,
+          "retrieved_doc": 36,
+          "user": 36,
+          "memory": 36,
+          "web_page": 35,
+          "email": 35
+        },
+        "trust_boundary": {
+          "untrusted": 89,
+          "external": 89,
+          "trusted": 72
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0060-hard_negative_benign_agent_workflow-part-12.jsonl",
+      "file_name": "sota-synth-0060-hard_negative_benign_agent_workflow-part-12.jsonl",
+      "sha256": "28d8d2da553d7be091d648a39c5fbff8df97712450ce82efd64c9f953828fb3b",
+      "bytes": 370686,
+      "modified_at": "2026-05-05T18:26:04.272Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow_log": 125,
+          "allow": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "tool_output": 36,
+          "retrieved_doc": 36,
+          "user": 36,
+          "memory": 36,
+          "web_page": 36,
+          "email": 35,
+          "agent_handoff": 35
+        },
+        "trust_boundary": {
+          "external": 89,
+          "untrusted": 89,
+          "trusted": 72
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0061-hard_negative_benign_agent_workflow-part-13.jsonl",
+      "file_name": "sota-synth-0061-hard_negative_benign_agent_workflow-part-13.jsonl",
+      "sha256": "2d02a76d142de6be8cb6057811b61125c6ce2e10f626f5c90031a5dd1ed5d1ab",
+      "bytes": 370627,
+      "modified_at": "2026-05-05T18:26:04.273Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow": 125,
+          "allow_log": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "retrieved_doc": 36,
+          "user": 36,
+          "memory": 36,
+          "web_page": 36,
+          "email": 36,
+          "agent_handoff": 35,
+          "tool_output": 35
+        },
+        "trust_boundary": {
+          "untrusted": 89,
+          "trusted": 72,
+          "external": 89
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0062-hard_negative_benign_agent_workflow-part-14.jsonl",
+      "file_name": "sota-synth-0062-hard_negative_benign_agent_workflow-part-14.jsonl",
+      "sha256": "e6e36fd21ba7e9dbfbc6e7dc6c29e4aaae76239e3bb57788e5c3963cf642bce6",
+      "bytes": 370736,
+      "modified_at": "2026-05-05T18:26:04.276Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow_log": 125,
+          "allow": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "user": 36,
+          "memory": 36,
+          "web_page": 36,
+          "email": 36,
+          "agent_handoff": 36,
+          "tool_output": 35,
+          "retrieved_doc": 35
+        },
+        "trust_boundary": {
+          "trusted": 72,
+          "external": 89,
+          "untrusted": 89
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0063-hard_negative_benign_agent_workflow-part-15.jsonl",
+      "file_name": "sota-synth-0063-hard_negative_benign_agent_workflow-part-15.jsonl",
+      "sha256": "1e6cddf9985400a37ff25a68fdbc426f4480301eb50909cea4d4d03683b00cda",
+      "bytes": 370624,
+      "modified_at": "2026-05-05T18:26:04.277Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow": 125,
+          "allow_log": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "memory": 36,
+          "web_page": 36,
+          "email": 36,
+          "agent_handoff": 36,
+          "tool_output": 36,
+          "retrieved_doc": 35,
+          "user": 35
+        },
+        "trust_boundary": {
+          "trusted": 71,
+          "external": 90,
+          "untrusted": 89
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0064-hard_negative_benign_agent_workflow-part-16.jsonl",
+      "file_name": "sota-synth-0064-hard_negative_benign_agent_workflow-part-16.jsonl",
+      "sha256": "1b7a1f2a7716516e62e582845eb448ded19b8111fbd35a41d02e17c6a2e38228",
+      "bytes": 370725,
+      "modified_at": "2026-05-05T18:26:04.278Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow_log": 125,
+          "allow": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "web_page": 36,
+          "email": 36,
+          "agent_handoff": 36,
+          "tool_output": 36,
+          "retrieved_doc": 36,
+          "user": 35,
+          "memory": 35
+        },
+        "trust_boundary": {
+          "external": 90,
+          "untrusted": 90,
+          "trusted": 70
+        },
+        "metric_slices": {
+          "hard_negative_benign_agent_workflow": 250
+        }
+      },
+      "eligibility": "needs_human_review",
+      "eligibility_reasons": [
+        "claimable schema/scale/provenance blockers remain",
+        "synthetic frozen rows remain non-claimable until human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning gates pass"
+      ]
+    },
+    {
+      "path": "docs/candidate-holdouts/sota-synthetic-12000/source/hard_negative_benign_agent_workflow/sota-synth-0065-hard_negative_benign_agent_workflow-part-17.jsonl",
+      "file_name": "sota-synth-0065-hard_negative_benign_agent_workflow-part-17.jsonl",
+      "sha256": "57bac3c35e13b60242db2b24332f873d1ab40387e1e0599cb57aee81b7d469e9",
+      "bytes": 370653,
+      "modified_at": "2026-05-05T18:26:04.279Z",
+      "rows": 250,
+      "validation_errors": [],
+      "warnings": [],
+      "duplicate_ids": [],
+      "duplicate_prompts": [],
+      "overlaps_tracked_fixture_ids": [],
+      "overlaps_tracked_fixture_prompts": [],
+      "claimable_schema_blockers": [
+        "case_count 250 is below internal claimable floor 10000.",
+        "docs/screening-holdout-cases.schema.json currently requires provenance=handwritten for claimable internal holdouts.",
+        "synthetic-frozen rows still need human review, independent provenance, detector/config lock, CI-backed evaluation, and no-post-freeze tuning before claim-like use."
+      ],
+      "counts": {
+        "kind": {
+          "benign": 250
+        },
+        "provenance": {
+          "external_llm_synthetic_frozen_holdout_candidate": 250
+        },
+        "split": {
+          "holdout": 250
+        },
+        "expectedAction": {
+          "allow": 125,
+          "allow_log": 125
+        },
+        "expectation": {
+          "must_allow": 250
+        },
+        "evidence_status": {
+          "synthetic_frozen_pending_dedupe_eval": 250
+        },
+        "review_status": {
+          "model_generated_pending_human_review": 250
+        },
+        "source_kind": {
+          "email": 36,
+          "agent_handoff": 36,
+          "tool_output": 36,
+          "retrieved_doc": 36,
+          "user": 36,
+          "memory": 35,
+          "web_page": 35
+        },
+        "trust_boundary": {
+          "untrusted": 90,
+          "external": 89,
+          "trusted": 71
         },
         "metric_slices": {
           "hard_negative_benign_agent_workflow": 250
@@ -3399,68 +4504,68 @@
     }
   ],
   "combined": {
-    "rows": 12000,
-    "candidate_files": 48,
+    "rows": 16250,
+    "candidate_files": 65,
     "validation_errors": 0,
-    "stable_rows_sha256": "37cfa410aa24a44bcc272b6ea6abf60ca21a632cb5ea9369272f6001715f30c2",
-    "row_ids_sha256": "321cd368582d09cdb0161211c6a97d61f29c62979d75a6b7a0fd75f1fe30e714",
-    "prompts_sha256": "4363ddf911d2b262fec9396a57eec7b8ceecf9b5aa4460470a6f5d4a7fa631c8",
+    "stable_rows_sha256": "cda6d75e25f729ff3273f8041b9ef4a121c493ab1d5e127db3ca5e028e4dfcb0",
+    "row_ids_sha256": "3ff16ac0ee4874d20615ff7dc106053714a815f3197ea7edc7e532d7a48b100c",
+    "prompts_sha256": "62ed85ac1e95d119d87b0cd970de7d85882c63fafd6dd6b5114dce0917bde9f5",
     "duplicate_ids_across_files": [],
     "duplicate_prompts_across_files": [],
     "overlaps_tracked_fixture_ids": [],
     "overlaps_tracked_fixture_prompts": [],
     "eligibility_counts": {
       "eligible": 0,
-      "needs_human_review": 48,
+      "needs_human_review": 65,
       "ineligible": 0
     },
     "counts": {
       "kind": {
         "malicious": 5400,
-        "benign": 6600
+        "benign": 10850
       },
       "provenance": {
-        "external_llm_synthetic_frozen_holdout_candidate": 12000
+        "external_llm_synthetic_frozen_holdout_candidate": 16250
       },
       "split": {
-        "holdout": 12000
+        "holdout": 16250
       },
       "expectedAction": {
         "sandbox": 1945,
-        "allow_log": 1788,
-        "allow": 3412,
+        "allow_log": 3913,
+        "allow": 5537,
         "request_owner_approval": 1056,
         "block": 3799
       },
       "expectation": {
         "must_catch": 5400,
-        "must_allow": 5200,
+        "must_allow": 9450,
         "must_gate": 1400
       },
       "evidence_status": {
-        "synthetic_frozen_pending_dedupe_eval": 12000
+        "synthetic_frozen_pending_dedupe_eval": 16250
       },
       "review_status": {
-        "model_generated_pending_human_review": 12000
+        "model_generated_pending_human_review": 16250
       },
       "source_kind": {
-        "email": 2118,
-        "agent_handoff": 1710,
-        "retrieved_doc": 1880,
-        "user": 1609,
-        "memory": 995,
-        "tool_output": 2421,
-        "web_page": 1267
+        "email": 2726,
+        "agent_handoff": 2318,
+        "retrieved_doc": 2487,
+        "user": 2215,
+        "memory": 1601,
+        "tool_output": 3029,
+        "web_page": 1874
       },
       "trust_boundary": {
-        "external": 3385,
-        "trusted": 3448,
-        "untrusted": 5167
+        "external": 4904,
+        "trusted": 4660,
+        "untrusted": 6686
       },
       "metric_slices": {
         "agent_handoff_trust": 1000,
         "callback_receipt_exfiltration": 1000,
-        "hard_negative_benign_agent_workflow": 1000,
+        "hard_negative_benign_agent_workflow": 5250,
         "high_risk_action": 1000,
         "legitimate_workflow": 1000,
         "memory_contamination": 1000,
@@ -3472,9 +4577,7 @@
         "utility_workflow": 1000
       }
     },
-    "scale_gaps": [
-      "hard-negative benign rows 950/5000; need 4050 more."
-    ]
+    "scale_gaps": []
   },
   "claimability": {
     "claimable_rows": 0,

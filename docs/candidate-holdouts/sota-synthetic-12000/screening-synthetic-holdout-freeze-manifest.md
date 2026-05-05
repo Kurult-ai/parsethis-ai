@@ -1,6 +1,6 @@
 # Synthetic Screening Holdout Freeze Manifest
 
-Generated: 2026-05-05T18:24:49.249Z
+Generated: 2026-05-05T18:27:08.362Z
 
 Status: `not_claimable_synthetic_frozen_candidate`.
 
@@ -8,12 +8,12 @@ This manifest freezes synthetic LLM-generated candidate rows for internal eviden
 
 | Field | Value |
 | --- | --- |
-| Rows | 12000 |
-| Batch files | 48 |
-| Generated count | 12000 |
-| Stable rows SHA-256 | 37cfa410aa24a44bcc272b6ea6abf60ca21a632cb5ea9369272f6001715f30c2 |
-| Row IDs SHA-256 | 321cd368582d09cdb0161211c6a97d61f29c62979d75a6b7a0fd75f1fe30e714 |
-| Prompts SHA-256 | 4363ddf911d2b262fec9396a57eec7b8ceecf9b5aa4460470a6f5d4a7fa631c8 |
+| Rows | 16250 |
+| Batch files | 65 |
+| Generated count | 16250 |
+| Stable rows SHA-256 | cda6d75e25f729ff3273f8041b9ef4a121c493ab1d5e127db3ca5e028e4dfcb0 |
+| Row IDs SHA-256 | 3ff16ac0ee4874d20615ff7dc106053714a815f3197ea7edc7e532d7a48b100c |
+| Prompts SHA-256 | 62ed85ac1e95d119d87b0cd970de7d85882c63fafd6dd6b5114dce0917bde9f5 |
 | Evidence state | synthetic_frozen_pending_dedupe_eval |
 | Claimable rows | 0 |
 
@@ -24,5 +24,4 @@ This manifest freezes synthetic LLM-generated candidate rows for internal eviden
 - Detector/config lock has not been captured in this manifest.
 - No detector evaluation or 95% confidence interval pass has been recorded.
 - Rows must not be tuned on before any future claim-like evaluation.
-- hard-negative benign rows 950/5000; need 4050 more.
 

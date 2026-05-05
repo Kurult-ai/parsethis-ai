@@ -12,11 +12,11 @@ This directory stores candidate screening holdout evidence for Parse Agents.
 
 `sota-synthetic-12000/` currently freezes:
 
-- 12,000 synthetic rows.
-- 48 JSONL batch files.
+- 16,250 synthetic rows.
+- 65 JSONL batch files.
 - 1,000 rows for each tracked Hermes/runtime metric slice.
+- 5,250 benign hard-negative workflow rows.
 - 0 duplicate IDs or prompts against the corpus.
 - 0 exact ID or normalized-prompt overlaps against tracked in-repo screening fixtures.
 
 Current blockers are recorded in `sota-synthetic-12000/screening-synthetic-holdout-freeze-manifest.json`.
-
