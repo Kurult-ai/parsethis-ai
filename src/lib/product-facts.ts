@@ -1,4 +1,4 @@
-import { CONTACT_EMAIL, GITHUB_URL } from "./constants.js";
+import { CONTACT_EMAIL } from "./constants.js";
 import { INJECTION_PATTERNS, RISK_CATEGORIES } from "./patterns/index.js";
 
 export const PRODUCT = {
@@ -11,7 +11,6 @@ export const PRODUCT = {
   description:
     "Parse screens untrusted prompts, tool outputs, retrieved content, private disclosures, and agent-to-agent messages before an AI agent gives that text authority over tools, memory, credentials, payments, code execution, or user-visible output.",
   contactEmail: CONTACT_EMAIL,
-  githubUrl: GITHUB_URL,
 } as const;
 
 export const PLAN_LIMITS = {

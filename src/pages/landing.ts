@@ -3,7 +3,6 @@ import {
   organizationSchema,
   webApplicationSchema,
 } from "../lib/schema.js";
-import { GITHUB_URL } from "../lib/constants.js";
 import { listBlogPosts } from "../lib/markdown.js";
 import { DETECTION_FACTS, PLAN_LIMITS, X402_PAYMENT } from "../lib/product-facts.js";
 
@@ -275,7 +274,7 @@ Use x402 for autonomous first calls and metered workflows. Use subscriptions for
     <div class="pa-trust">
       <div class="pa-trust-item"><strong>Risk taxonomy</strong><p>${DETECTION_FACTS.riskCategoryCount} public categories aligned to prompt and agent security risks.</p></div>
       <div class="pa-trust-item"><strong>Transparent limits</strong><p>Detection reduces risk but does not replace least-privilege tools or output validation.</p></div>
-      <div class="pa-trust-item"><strong>Open repo</strong><p>Source and issue tracking live at <a href="${GITHUB_URL}">github.com/Danservfinn/parse-for-agents</a>.</p></div>
+      <div class="pa-trust-item"><strong>Private source</strong><p>Production source, issue tracking, and evidence intake are maintained privately while public docs disclose behavior and limits.</p></div>
       <div class="pa-trust-item"><strong>Agent-native billing</strong><p>Free keys start at ${PLAN_LIMITS.free.requestsPerMinute} req/min; x402 uses ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}.</p></div>
     </div>
   </section>

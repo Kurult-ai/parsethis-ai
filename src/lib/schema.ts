@@ -15,7 +15,6 @@ export function organizationSchema(baseUrl: string): object {
     description:
       PRODUCT.description,
     foundingDate: "2025",
-    sameAs: [PRODUCT.githubUrl],
   };
 }
 

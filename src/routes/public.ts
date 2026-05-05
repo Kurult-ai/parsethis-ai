@@ -16,6 +16,7 @@ import { renderLandingPage } from "../pages/landing.js";
 import { renderFaqPage } from "../pages/faq.js";
 import { renderDocsPage, renderGuidePage, renderComparePage, renderSecurityPage } from "../pages/docs.js";
 import { renderPricingPage } from "../pages/pricing.js";
+import { renderTechnologyPage } from "../pages/technology.js";
 import { renderGeoPage } from "../pages/geo.js";
 import { getFaviconSvg } from "../pages/favicon.js";
 import { getOgImageSvg } from "../pages/og-image.js";
@@ -300,6 +301,7 @@ publicRoutes.get("/docs", (c) => {
 <ul>
   <li><a href="/docs/quickstart">Quick Start Guide</a> — Get started in 5 minutes</li>
   <li><a href="/docs/api">Full API Reference</a> — Complete REST API documentation</li>
+  <li><a href="/technology">Technology</a> — Architecture, decision fields, and current evidence status</li>
   <li><a href="/docs/x402">x402 Guide</a> — Pay-per-call prompt protection for autonomous agents</li>
   <li><a href="/docs/risk-categories">Risk Categories</a> — Canonical threat taxonomy</li>
   <li><a href="/docs/openapi-gpt-actions-prompt-screening">OpenAPI / GPT Actions Guide</a> — Tool-calling setup</li>
@@ -337,9 +339,9 @@ publicRoutes.get("/docs", (c) => {
 
 <ul>
   <li><a href="/faq">FAQ</a> — 20+ common questions</li>
+  <li><a href="/technology">Technology</a> — Public architecture and non-claimable evidence state</li>
   <li><a href="/pricing">Pricing</a> — x402 USDC payments and tier information</li>
   <li><a href="/playground">Playground</a> — Test the API interactively</li>
-  <li><a href="https://github.com/Danservfinn/parse-for-agents" target="_blank" rel="noopener">GitHub</a> — Source code and issues</li>
 </ul>
 `;
   return c.html(renderPage({
@@ -392,6 +394,12 @@ publicRoutes.get("/faq", (c) => {
 
 // Pricing
 publicRoutes.get("/pricing", (c) => c.html(renderPricingPage(getBaseUrl(c))));
+
+// Technology
+publicRoutes.get("/technology", (c) => {
+  recordGeoSurfaceHit(c, "technology");
+  return c.html(renderTechnologyPage(getBaseUrl(c)));
+});
 
 // Docs pages (markdown content, supports Accept: text/markdown)
 publicRoutes.get("/docs/:slug", (c) => {
@@ -657,7 +665,6 @@ publicRoutes.get("/privacy", (c) => {
 
 <ul>
   <li><strong>Email:</strong> privacy@parsethis.ai</li>
-  <li><strong>GitHub:</strong> <a href="https://github.com/Danservfinn/parse-for-agents" target="_blank" rel="noopener">https://github.com/Danservfinn/parse-for-agents</a></li>
   <li><strong>Website:</strong> <a href="https://parsethis.ai">https://parsethis.ai</a></li>
 </ul>
 `;

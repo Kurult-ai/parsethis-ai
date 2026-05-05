@@ -1,4 +1,3 @@
-import { GITHUB_URL } from "./constants.js";
 import { PRODUCT } from "./product-facts.js";
 
 export interface PageOptions {
@@ -100,6 +99,7 @@ export function renderPage(options: PageOptions): string {
   const navLinks = [
     { href: "/playground", label: "Playground" },
     { href: "/docs", label: "Docs" },
+    { href: "/technology", label: "Technology" },
     { href: "/pricing", label: "Pricing" },
     { href: "/blog", label: "Blog" },
   ];
@@ -589,7 +589,6 @@ export function renderPage(options: PageOptions): string {
       <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links" onclick="const n=document.getElementById('nav-links');const open=n.classList.toggle('open');this.setAttribute('aria-expanded',open);this.textContent=open?'\u2715':'\u2630';">\u2630</button>
       <div class="nav-links" id="nav-links">
       ${navLinksHtml}
-      <a href="${GITHUB_URL}" class="external" target="_blank" rel="noopener noreferrer">GitHub<span class="sr-only"> (opens in new tab)</span></a>
       <a href="/docs/quickstart" class="nav-cta">Get API key</a>
       </div>
     </nav>
@@ -617,7 +616,6 @@ export function renderPage(options: PageOptions): string {
           <a href="/skill">Skill</a>
           <a href="/llms.txt">llms.txt</a>
           <a href="/openapi.json">OpenAPI</a>
-          <a href="${GITHUB_URL}" target="_blank" rel="noopener noreferrer">GitHub<span class="sr-only"> (opens in new tab)</span></a>
           <a href="/pricing">Pricing</a>
           <a href="/status">Status</a>
           <a href="/privacy">Privacy</a>

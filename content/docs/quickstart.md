@@ -133,7 +133,7 @@ Sandbox output is treated as untrusted — full risk analysis is applied to the 
 
 ## Next steps
 
-- [Gold Integration Example](https://github.com/Danservfinn/parse-for-agents/tree/main/examples/agent-protection-gold) — TypeScript, Python, MCP, bearer auth, and x402 fallback
+- Production integration examples — available to Pro, Team, and Enterprise customers during onboarding
 - [API Reference](/docs/api) — full endpoint documentation with request/response schemas
 - [Playground](/playground) — test prompts interactively in your browser
 - [x402 Guide](/docs/x402) — pay per call without an API key

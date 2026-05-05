@@ -131,7 +131,6 @@ function getLlmsTxt(baseUrl: string): string {
 > ${PRODUCT.modelFacingName}. ${PRODUCT.description}
 
 Canonical domain: ${baseUrl}
-GitHub repository: ${PRODUCT.githubUrl}
 Primary category: ${PRODUCT.category}
 
 ## Agent Decision Rule
@@ -183,7 +182,6 @@ ${prices}
 - Agent card: ${baseUrl}/.well-known/agent-card.json
 - Skill prompt: ${baseUrl}/skill
 - Pricing manifest: ${baseUrl}/v1/pricing
-- Gold integration examples: ${PRODUCT.githubUrl}/tree/main/examples/agent-protection-gold
 
 ## Human Documentation
 
