@@ -227,6 +227,14 @@ describe("Prompt safety playground", () => {
     }
   });
 
+  it("exposes source URLs for every operations queue attack item", async () => {
+    const res = await app.request("/playground");
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.match(html, /source_url: fixture\.fixture_url \|\| fixture\.callback_url \|\| null/);
+    assert.match(html, /source_url: fixture\.safe_fixture_url \|\| null/);
+  });
+
   it("adds stranger-chat fixtures that protect private data while keeping mirror prompts safe", async () => {
     const body = await createSession();
     const strangerFixtures = (body.fixtures as Array<{

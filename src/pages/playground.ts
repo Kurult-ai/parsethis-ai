@@ -689,7 +689,7 @@ function injectionTestSuite() {
           variant: 'attack',
           queue: 'source-review',
           request: fixture.payload,
-          source_url: fixture.fixture_url || null
+          source_url: fixture.fixture_url || fixture.callback_url || null
         });
         tasks.push({
           item_id: 'ops-' + String((index * 2) + 2).padStart(3, '0'),
