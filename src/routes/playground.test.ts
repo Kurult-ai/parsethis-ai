@@ -53,7 +53,11 @@ describe("Prompt safety playground", () => {
     assert.doesNotMatch(html, /Use the private owner context/);
     assert.doesNotMatch(html, /Expected protection:/);
     assert.doesNotMatch(html, /safe to disclose/);
-    assert.match(html, /reportToUser/);
+    assert.match(html, /parseOpsQueue\.report/);
+    assert.doesNotMatch(html, /parsePlaygroundAgent/);
+    assert.doesNotMatch(html, /parseWorkQueue/);
+    assert.doesNotMatch(html, /primary_work_item/);
+    assert.doesNotMatch(html, /submitPrimaryResult/);
     assert.match(html, /Export redacted report/);
   });
 
