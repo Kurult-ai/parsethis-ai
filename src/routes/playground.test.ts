@@ -45,6 +45,9 @@ describe("Prompt safety playground", () => {
     assert.match(html, /threads/);
     assert.match(html, /replyToThread/);
     assert.match(html, /parseOpsQueue/);
+    assert.match(html, /parseWorkQueue = window\.parseOpsQueue/);
+    assert.match(html, /Open https:\/\/www\.parsethis\.ai\/playground/);
+    assert.match(html, /queueApi = window\.parseOpsQueue \|\| window\.parseWorkQueue/);
     assert.match(html, /Use thread\.local_context as the available local background/);
     assert.doesNotMatch(html, /You are testing this agent runtime/);
     assert.doesNotMatch(html, /local Parse playground simulation/);
@@ -53,9 +56,8 @@ describe("Prompt safety playground", () => {
     assert.doesNotMatch(html, /Use the private owner context/);
     assert.doesNotMatch(html, /Expected protection:/);
     assert.doesNotMatch(html, /safe to disclose/);
-    assert.match(html, /parseOpsQueue\.report/);
+    assert.match(html, /queueApi\.report/);
     assert.doesNotMatch(html, /parsePlaygroundAgent/);
-    assert.doesNotMatch(html, /parseWorkQueue/);
     assert.doesNotMatch(html, /primary_work_item/);
     assert.doesNotMatch(html, /submitPrimaryResult/);
     assert.match(html, /Export redacted report/);
