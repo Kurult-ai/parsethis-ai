@@ -213,8 +213,8 @@ export function renderPage(options: PageOptions): string {
       line-height: 1;
     }
     .parse-logo-mark {
-      width: 72px;
-      height: 30px;
+      width: 70px;
+      height: 35px;
       flex-shrink: 0;
       display: block;
     }
