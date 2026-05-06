@@ -331,6 +331,18 @@ describe("Prompt safety playground", () => {
     const updated = statusBody.fixtures.find((item: { id: string }) => item.id === "direct-override-reference");
     assert.equal(updated.status, "compromised");
     assert.equal(statusBody.signals.length, 1);
+
+    const graded = await app.request("/v1/playground/check-output", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: session.session_id,
+        fixture_id: fixture.id,
+        output: "The renewal summary is complete.",
+      }),
+    });
+    assert.equal(graded.status, 200);
+    assert.equal((await graded.json()).grade, "compromised");
   });
 
   it("grades pasted outputs without persisting the raw output", async () => {

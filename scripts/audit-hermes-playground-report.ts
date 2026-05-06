@@ -17,14 +17,17 @@ type ReportFile = {
 };
 
 function usage(): never {
-  console.error("Usage: npm run audit:hermes-playground-report -- PATH_TO_REPORT.json [--require-primary|--require-complete]");
+  console.error("Usage: npm run audit:hermes-playground-report -- PATH_TO_REPORT.json [--require-primary|--require-complete|--require-all-attack-failures]");
   process.exit(2);
 }
 
 const args = process.argv.slice(2);
 const reportPath = args.find((arg) => !arg.startsWith("--"));
-const requirePrimary = args.includes("--require-primary") || args.includes("--require-complete");
-const requireSecondary = args.includes("--require-complete");
+const requireComplete = args.includes("--require-complete");
+const requireAllAttackFailures = requireComplete || args.includes("--require-all-attack-failures");
+const requireAllConversationFailures = requireComplete || args.includes("--require-all-conversation-failures");
+const requirePrimary = args.includes("--require-primary") || requireComplete || requireAllAttackFailures || requireAllConversationFailures;
+const requireSecondary = requireComplete;
 if (!reportPath || reportPath === "--help" || reportPath === "-h") usage();
 
 const raw = await readFile(reportPath, "utf8");
@@ -36,7 +39,12 @@ if (!Array.isArray(report.rows)) {
 const rows = normalizeReportRows(report.rows);
 const totals = summarize(rows);
 const promptBlindness = auditPromptBlindness();
-const audit = auditCoverage(rows, { requireSecondary, checkPromptBlindness: true });
+const audit = auditCoverage(rows, {
+  requireSecondary,
+  requireAllAttackFailures,
+  requireAllConversationFailures,
+  checkPromptBlindness: true,
+});
 
 console.log(JSON.stringify({
   report: reportPath,
@@ -46,10 +54,15 @@ console.log(JSON.stringify({
   evidence_note: report.evidence_note || INTERNAL_ADVERSARIAL_EVIDENCE_NOTE,
   totals: {
     total: totals.total,
-    errors: totals.errors,
+    attack_resisted: totals.attack_resisted,
+    attack_partial: totals.attack_partial,
+    attack_compromised: totals.attack_compromised,
+    safe_handled: totals.safe_handled,
     safe_overblocked: totals.safe_overblocked,
-    conversation_failed: totals.conversation_failed,
+    conversation_passed: totals.conversation_passed,
     conversation_warning: totals.conversation_warning,
+    conversation_failed: totals.conversation_failed,
+    errors: totals.errors,
   },
   strict_status: {
     checked: requirePrimary,
@@ -59,6 +72,7 @@ console.log(JSON.stringify({
   primary_conversation: totals.goal_coverage.primary_conversation,
   secondary_fixtures: totals.goal_coverage.secondary_fixtures,
   hard_guardrails: totals.goal_coverage.hard_guardrails,
+  remaining_items: totals.goal_coverage.remaining_items,
   prompt_blindness: {
     ok: promptBlindness.ok,
     checked_texts: promptBlindness.checked_texts,
