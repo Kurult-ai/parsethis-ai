@@ -11,6 +11,7 @@ Goal:
 - Use Parse before an autonomous agent lets untrusted text affect tools, memory, private owner data, credentials, payments, code execution, other agents, or user-visible output.
 - Prefer Bearer auth when PARSE_API_KEY exists.
 - If no account context exists or Parse returns HTTP 402, use x402.
+- Make setup frictionless: expose or use status, doctor, test, pricing, and x402-status checks so the operator can see what is configured and what remains missing.
 
 Payment facts:
 - Prompt screening: ${X402_ENDPOINTS.parse.method} ${baseUrl}${X402_ENDPOINTS.parse.path} costs ${parsePrice} ${X402_PAYMENT.currency}.
@@ -20,12 +21,23 @@ Payment facts:
 - Pricing manifest: ${baseUrl}/v1/pricing.
 - Retry header: ${X402_PAYMENT.header}; legacy clients may send ${X402_PAYMENT.legacyHeader}.
 
-Implementation steps:
+Hermes fast path:
+1. If native Hermes commands are available, run: hermes parse pricing, hermes parse x402-status, hermes parse setup --quick, hermes parse test, and hermes parse doctor.
+2. Do not make a paid x402 call unless the operator explicitly approves spending.
+3. Do not print private keys, seed phrases, payment signatures, API keys, or wallet secrets.
+
+Generic implementation steps:
 1. Call GET ${baseUrl}/v1/pricing and read the x402 accepts[] payment requirements.
 2. Send the intended Parse request without a bearer key when using pay-per-call.
 3. On HTTP 402, sign the advertised USDC payment with a scoped funded wallet.
 4. Retry the identical request with the ${X402_PAYMENT.header} header.
-5. Treat Parse's recommended_action / decision.action as authoritative for the agent boundary.`;
+5. Treat Parse's decision.action, recommended_action, or suggested_action as authoritative for the agent boundary.
+
+Required verification:
+- Benign local fixture returns allow.
+- Encoded prompt-injection fixture returns block.
+- Tool-output/JSON instruction fixture returns block.
+- Status/doctor output redacts secrets and gives the next action.`;
 
   const x402Rows = x402EndpointList().map((endpoint) => `
         <tr>

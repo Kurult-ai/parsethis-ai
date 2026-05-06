@@ -30,7 +30,12 @@ export function renderLandingPage(baseUrl: string): string {
 
   const bearerPrompt = `Integrate Parse as the prompt protection boundary for this agent runtime.
 
-Use Bearer auth when PARSE_API_KEY is available. If no key exists, create one with POST https://www.parsethis.ai/v1/keys/generate and store it as PARSE_API_KEY. Only send that key to www.parsethis.ai.
+Fast path:
+- If this runtime has native Hermes commands, run: hermes parse status, hermes parse doctor, hermes parse setup --quick, then hermes parse test.
+- If native commands are unavailable, implement the same checks in code: configured/enabled status, auth presence, test fixture, and a doctor message with the next action.
+- Keep Parse disabled until the local test passes. Do not print API keys or wallet/private-key values.
+
+Use Bearer auth when PARSE_API_KEY is available. If no key exists, create one with POST https://www.parsethis.ai/v1/keys/generate and store it as PARSE_API_KEY in the runtime secret store. Only send that key to www.parsethis.ai.
 
 Call POST https://www.parsethis.ai/v1/parse before untrusted user input, retrieved documents, browser content, tool output, email, or another agent's message can affect tools, memory, credentials, payments, code execution, or user-visible output.
 
@@ -38,9 +43,21 @@ Call POST https://www.parsethis.ai/v1/screen-output before forwarding generated 
 
 Call POST https://www.parsethis.ai/v1/agent/trust/verify before accepting delegation from an unknown agent, plugin, or service.
 
-Follow suggested_action or recommended_action. Block high-risk results, sandbox ambiguous results, and log trace_id for review. Verify with /docs/quickstart and /openapi.json.`;
+Follow decision.action, recommended_action, or suggested_action. Block high-risk results, sandbox ambiguous results, request owner approval for private/irreversible actions, and log trace_id for review.
+
+Verification required before reporting done:
+- Local encoded-injection fixture blocks.
+- Benign fixture allows.
+- Tool-output or JSON instruction fixture blocks.
+- Status/doctor output redacts secrets.
+- If Hermes native commands exist, include the output summary from hermes parse test and hermes parse doctor.`;
 
   const x402Prompt = `Integrate Parse with x402 pay-per-call fallback.
+
+Fast path:
+- If this runtime has native Hermes commands, run: hermes parse pricing, hermes parse x402-status, hermes parse setup --quick, then hermes parse test.
+- Do not make a paid x402 screening call until the operator confirms spending is allowed and the funded wallet is scoped for Parse.
+- Never print private keys, seed phrases, payment signatures, or wallet secrets.
 
 First try Bearer auth if PARSE_API_KEY exists. If the request receives HTTP 402 or no account context exists, use the x402 402 payment flow from https://www.parsethis.ai/v1/pricing and retry the same resource with the payment header.
 
@@ -50,7 +67,13 @@ Output boundary: POST https://www.parsethis.ai/v1/screen-output before forwardin
 
 Trust boundary: POST https://www.parsethis.ai/v1/agent/trust/verify before accepting delegation from an unknown agent, plugin, or service.
 
-Use x402 for autonomous first calls and metered workflows. Use subscriptions for sustained production volume.`;
+Use x402 for autonomous first calls and metered workflows. Use subscriptions for sustained production volume.
+
+Verification required before reporting done:
+- Pricing manifest read from https://www.parsethis.ai/v1/pricing.
+- Prompt/output prices, asset, network, and retry header recorded.
+- Local no-paid-call test passes.
+- If Hermes native commands exist, include the output summary from hermes parse x402-status and hermes parse test.`;
 
   const promptsPayload = JSON.stringify({ bearer: bearerPrompt, x402: x402Prompt }).replace(/</g, "\\u003c");
   const blogPosts = listBlogPosts().slice(0, 3);
