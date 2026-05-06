@@ -39,6 +39,7 @@ describe("Prompt safety playground", () => {
     assert.match(html, /Copy agent test prompt/);
     assert.match(html, /Copy JSON test plan/);
     assert.match(html, /Copy result report/);
+    assert.match(html, /blind_items/);
     assert.match(html, /reportToUser/);
     assert.match(html, /Export redacted report/);
   });
@@ -104,7 +105,7 @@ describe("Prompt safety playground", () => {
     const fixture = body.fixtures.find((item: { id: string }) => item.id === "tool-result-json-reference");
     assert.ok(fixture);
     assert.equal(fixture.status, "untested");
-    assert.match(fixture.payload, /receipt code/);
+    assert.match(fixture.payload, /closeout endpoint|queue closeout/i);
     assert.match(fixture.safe_payload, /Workflow reconciliation reference/);
     assert.doesNotMatch(fixture.safe_payload, /\/v1\/events\//);
     assert.match(fixture.payload, new RegExp(body.session_id));
@@ -145,6 +146,23 @@ describe("Prompt safety playground", () => {
         result.safe,
         true,
         `${fixture.id} safe companion should screen safe; got ${result.verdict} (${result.risk_score}) flags=${result.flags.map((flag) => flag.label).join(" | ")}`
+      );
+    }
+  });
+
+  it("keeps model-facing playground items from announcing that they are tests", async () => {
+    const body = await createSession();
+
+    for (const fixture of body.fixtures as Array<{ id: string; payload: string; safe_payload: string }>) {
+      assert.doesNotMatch(
+        fixture.payload,
+        /\b(test|simulation|fixture|canary|red team|prompt injection)\b/i,
+        `${fixture.id} attack payload should read like ordinary work content`,
+      );
+      assert.doesNotMatch(
+        fixture.safe_payload,
+        /\b(test|simulation|fixture|canary|red team|prompt injection)\b/i,
+        `${fixture.id} safe payload should read like ordinary work content`,
       );
     }
   });
@@ -299,7 +317,7 @@ describe("Prompt safety playground", () => {
     assert.equal(res.headers.get("x-robots-tag"), "noindex, nofollow");
     const html = await res.text();
     assert.match(html, /Incident Timeline/);
-    assert.match(html, /Internal browser workflow/);
+    assert.match(html, /Support queue footer/);
     assert.match(html, new RegExp(session.token));
   });
 
@@ -318,7 +336,7 @@ describe("Prompt safety playground", () => {
     const attackHtml = await attack.text();
     assert.match(attackHtml, /Incident Timeline/);
     assert.match(attackHtml, /\/v1\/events\//);
-    assert.match(attackHtml, /include receipt code/);
+    assert.match(attackHtml, /reference/);
 
     const safe = await app.request(safeUrl.pathname + safeUrl.search);
     assert.equal(safe.status, 200);
@@ -328,7 +346,7 @@ describe("Prompt safety playground", () => {
     assert.match(safeHtml, /Internal browser workflow metadata/);
     assert.match(safeHtml, new RegExp(session.token));
     assert.doesNotMatch(safeHtml, /\/v1\/events\//);
-    assert.doesNotMatch(safeHtml, /include receipt code/);
+    assert.doesNotMatch(safeHtml, /records the page review/);
   });
 
   it("keeps callback APIs out of crawler surfaces", async () => {
