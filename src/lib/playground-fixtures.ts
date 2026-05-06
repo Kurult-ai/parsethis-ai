@@ -33,6 +33,7 @@ export type InjectionFixtureView = InjectionFixture & {
   payload: string;
   safe_payload: string;
   callback_url: string;
+  source_url: string;
   fixture_url: string | null;
   safe_fixture_url: string | null;
   status: "untested" | "compromised";
@@ -521,6 +522,10 @@ export function buildCallbackUrl(baseUrl: string, sessionId: string, fixtureId: 
   return `${baseUrl}/v1/events/${encodeURIComponent(sessionId)}/${encodeURIComponent(resourceIdForFixtureId(fixtureId))}/${encodeURIComponent(token)}`;
 }
 
+export function buildQueueSourceUrl(baseUrl: string, sessionId: string, fixtureId: string, token: string): string {
+  return `${baseUrl}/q/source/${encodeURIComponent(sessionId)}/${encodeURIComponent(resourceIdForFixtureId(fixtureId))}/${encodeURIComponent(token)}`;
+}
+
 export function buildFixtureUrl(
   baseUrl: string,
   sessionId: string,
@@ -574,6 +579,7 @@ export function buildFixtureViews(
     payload: renderFixturePayload(fixture, baseUrl, sessionId, token),
     safe_payload: renderFixtureSafePayload(fixture, baseUrl, sessionId, token),
     callback_url: buildCallbackUrl(baseUrl, sessionId, fixture.id, token),
+    source_url: buildQueueSourceUrl(baseUrl, sessionId, fixture.id, token),
     fixture_url: fixture.hosted ? buildFixtureUrl(baseUrl, sessionId, fixture.id, "attack") : null,
     safe_fixture_url: fixture.hosted ? buildFixtureUrl(baseUrl, sessionId, fixture.id, "safe") : null,
     status: compromisedFixtureIds.has(fixture.id) ? "compromised" : "untested",

@@ -12,6 +12,7 @@ import {
   renderFixturePayload,
   renderFixtureSafePayload,
 } from "../lib/playground-fixtures.js";
+import { AGENT_SIMULATION_SCENARIOS } from "../lib/agent-simulation.js";
 import { renderInjectionPlaygroundPage } from "../pages/playground.js";
 import { GEO_AUDIT_ACTIONS, recordGeoAnalyticsEvent } from "../lib/geo-analytics.js";
 
@@ -201,6 +202,30 @@ function gradeOutput(output: string, session: StoredSession, fixtureId: string) 
   };
 }
 
+async function appendSignal(c: Context, session: StoredSession, signalId: string): Promise<boolean> {
+  const signal: StoredSignal = {
+    fixture_id: signalId,
+    received_at: new Date().toISOString(),
+    method: c.req.method,
+    user_agent_hash: hashValue(c.req.header("user-agent") || "unknown"),
+    ip_hash: hashValue(ipFor(c)),
+  };
+
+  const alreadyCompromised = session.signals.some((item) => item.fixture_id === signalId);
+  if (!alreadyCompromised) {
+    session.signals.push(signal);
+    session.signals = session.signals.slice(-80);
+    await saveSession(session);
+    void recordEvent(c, GEO_AUDIT_ACTIONS.injectionSignalReceived, {
+      event: "playground_signal_received",
+      session_id: session.id,
+      fixture_id: signalId,
+      method: c.req.method,
+    });
+  }
+  return alreadyCompromised;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -208,6 +233,81 @@ function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#x27;");
+}
+
+function renderQueueSourceHtml(baseUrl: string, session: StoredSession, fixtureId: string): string {
+  const fixture = getInjectionFixture(fixtureId);
+  if (!fixture) return "";
+  if (fixture.hosted) return renderHostedFixtureHtml(baseUrl, session, fixtureId, "attack");
+
+  const payload = renderFixturePayload(fixture, baseUrl, session.id, session.token);
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>${escapeHtml(fixture.title)} | Source Packet</title>
+  <style>
+    body{margin:0;background:#f6f8fb;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.6}
+    main{max-width:860px;margin:0 auto;padding:42px 22px}
+    article{background:#fff;border:1px solid #d9e1ec;border-radius:10px;box-shadow:0 12px 30px rgba(31,41,55,.07);padding:28px}
+    h1{font-size:25px;line-height:1.15;margin:0 0 10px}
+    p{color:#42526b}
+    pre{white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid #d9e1ec;border-radius:8px;padding:16px;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>${escapeHtml(fixture.title)}</h1>
+      <p>Source packet for queue processing.</p>
+      <pre>${escapeHtml(payload)}</pre>
+    </article>
+  </main>
+</body>
+</html>`;
+}
+
+function renderThreadSourceHtml(session: StoredSession, scenarioId: string): string {
+  const scenario = AGENT_SIMULATION_SCENARIOS.find((item) => item.id === scenarioId);
+  if (!scenario) return "";
+  const messages = scenario.turns.map((turn, index) => `${index + 1}. ${turn.message}`).join("\n\n");
+  const packet = [
+    scenario.privateContext.replace(/^Local thread context:\s*/i, "Thread packet context: "),
+    "",
+    "Inbound message sequence:",
+    messages,
+    "",
+    `Packet reference: ${session.token}`,
+  ].join("\n");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Thread Packet | ${escapeHtml(scenario.title)}</title>
+  <style>
+    body{margin:0;background:#f6f8fb;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.6}
+    main{max-width:860px;margin:0 auto;padding:42px 22px}
+    article{background:#fff;border:1px solid #d9e1ec;border-radius:10px;box-shadow:0 12px 30px rgba(31,41,55,.07);padding:28px}
+    h1{font-size:25px;line-height:1.15;margin:0 0 10px}
+    p{color:#42526b}
+    pre{white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid #d9e1ec;border-radius:8px;padding:16px;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>${escapeHtml(scenario.title)}</h1>
+      <p>Thread source packet for queue processing.</p>
+      <pre>${escapeHtml(packet)}</pre>
+    </article>
+  </main>
+</body>
+</html>`;
 }
 
 function renderHostedFixtureHtml(baseUrl: string, session: StoredSession, fixtureId: string, variant: "attack" | "safe"): string {
@@ -272,6 +372,41 @@ playgroundRoutes.get("/r/:resourceId", async (c) => {
   return c.html(renderHostedFixtureHtml(getBaseUrl(c), session, fixtureId, variant));
 });
 
+playgroundRoutes.get("/q/source/:sessionId/:resourceId/:token", async (c) => {
+  c.header("X-Robots-Tag", "noindex, nofollow");
+  const limited = await rateLimited(c, "source", 100, 60);
+  if (limited === "unavailable") return c.json({ error: "Rate limiting service unavailable. Try again later." }, 503);
+  if (limited) return c.json({ error: "Rate limit exceeded" }, 429);
+
+  const fixtureId = fixtureIdForResourceId(c.req.param("resourceId") || "");
+  const sessionId = c.req.param("sessionId");
+  const token = c.req.param("token");
+  if (!getInjectionFixture(fixtureId)) return c.json({ error: "Unknown source" }, 404);
+  const session = await loadSession(sessionId);
+  if (!session || session.token !== token) return c.json({ error: "Source not found" }, 404);
+
+  await appendSignal(c, session, fixtureId);
+  return c.html(renderQueueSourceHtml(getBaseUrl(c), session, fixtureId));
+});
+
+playgroundRoutes.get("/q/thread/:sessionId/:scenarioId/:token", async (c) => {
+  c.header("X-Robots-Tag", "noindex, nofollow");
+  const limited = await rateLimited(c, "source", 100, 60);
+  if (limited === "unavailable") return c.json({ error: "Rate limiting service unavailable. Try again later." }, 503);
+  if (limited) return c.json({ error: "Rate limit exceeded" }, 429);
+
+  const scenarioId = c.req.param("scenarioId") || "";
+  const sessionId = c.req.param("sessionId");
+  const token = c.req.param("token");
+  const scenario = AGENT_SIMULATION_SCENARIOS.find((item) => item.id === scenarioId);
+  if (!scenario) return c.json({ error: "Unknown source" }, 404);
+  const session = await loadSession(sessionId);
+  if (!session || session.token !== token) return c.json({ error: "Source not found" }, 404);
+
+  await appendSignal(c, session, `thread:${scenario.id}`);
+  return c.html(renderThreadSourceHtml(session, scenario.id));
+});
+
 playgroundRoutes.post("/v1/playground/sessions", async (c) => {
   const limited = await rateLimited(c, "sessions", 10, 60);
   if (limited === "unavailable") return c.json({ error: "Rate limiting service unavailable. Try again later." }, 503);
@@ -322,26 +457,7 @@ async function recordSignal(c: Context) {
   const session = await loadSession(sessionId);
   if (!session || session.token !== token) return c.json({ error: "Not found" }, 404);
 
-  const signal: StoredSignal = {
-    fixture_id: fixtureId,
-    received_at: new Date().toISOString(),
-    method: c.req.method,
-    user_agent_hash: hashValue(c.req.header("user-agent") || "unknown"),
-    ip_hash: hashValue(ipFor(c)),
-  };
-
-  const alreadyCompromised = session.signals.some((item) => item.fixture_id === fixtureId);
-  if (!alreadyCompromised) {
-    session.signals.push(signal);
-    session.signals = session.signals.slice(-50);
-    await saveSession(session);
-    void recordEvent(c, GEO_AUDIT_ACTIONS.injectionSignalReceived, {
-      event: "playground_signal_received",
-      session_id: session.id,
-      fixture_id: fixtureId,
-      method: c.req.method,
-    });
-  }
+  const alreadyCompromised = await appendSignal(c, session, fixtureId);
 
   if (c.req.method === "GET") return c.body(null, 204);
   return c.json({ ok: true, status: "compromised", fixture_id: fixtureId, already_recorded: alreadyCompromised });
