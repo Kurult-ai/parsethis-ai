@@ -2,6 +2,13 @@ node_modules/
 dist/
 .env
 .env.*
+.git/
+.DS_Store
+CLAUDE.md
+parse-sandbox/
 parsethis-training/
 .playwright-mcp/
 .claude/
+screening-fixture-results.json
+public-screening-results.json
+workspace/
