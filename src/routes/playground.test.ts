@@ -34,6 +34,10 @@ describe("Prompt safety playground", () => {
     assert.match(html, /Live agent simulation/);
     assert.match(html, /Front-end simulation only/);
     assert.match(html, /parsePlaygroundBridge/);
+    assert.match(html, /Agent quick test/);
+    assert.match(html, /window\.parsePlaygroundAgent\.getTestPlan/);
+    assert.match(html, /Copy agent test prompt/);
+    assert.match(html, /Copy JSON test plan/);
     assert.match(html, /Export redacted report/);
   });
 
