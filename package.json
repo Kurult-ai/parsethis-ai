@@ -21,7 +21,9 @@
     "audit:screening-claimability": "node --import tsx scripts/audit-screening-claimability.ts",
     "audit:screening-completion": "node --import tsx scripts/audit-screening-completion.ts",
     "audit:screening-holdout-intake": "node --import tsx scripts/audit-screening-holdout-intake.ts",
+    "audit:hermes-playground-report": "node --import tsx scripts/audit-hermes-playground-report.ts",
     "verify:screening-event-persistence": "node --import tsx scripts/verify-screening-event-persistence.ts",
+    "eval:hermes-playground": "node --import tsx scripts/run-hermes-playground-work-queue.ts",
     "worker": "tsx src/worker.ts",
     "seed": "tsx prisma/seed.ts"
   },
