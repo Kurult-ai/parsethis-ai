@@ -12,6 +12,7 @@ export const GEO_AUDIT_ACTIONS = {
   injectionSessionCreated: "playground.session_created",
   injectionSignalReceived: "playground.signal_received",
   injectionOutputChecked: "playground.output_checked",
+  playgroundFunnelEvent: "playground.funnel_event",
 } as const;
 
 type GeoAuditAction = (typeof GEO_AUDIT_ACTIONS)[keyof typeof GEO_AUDIT_ACTIONS];

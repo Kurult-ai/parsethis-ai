@@ -27,8 +27,9 @@ describe("Prompt safety playground", () => {
     const html = await res.text();
 
     assert.match(html, /Playground/);
-    assert.match(html, /Start test session/);
-    assert.match(html, /Injection test/);
+    assert.match(html, /Agent Security Workbench/);
+    assert.match(html, /Start workbench session/);
+    assert.match(html, /Primary source/);
     assert.match(html, /Safe companion/);
     assert.match(html, /Stranger Chat/);
     assert.match(html, /Grade pasted output/);
@@ -41,6 +42,9 @@ describe("Prompt safety playground", () => {
     assert.match(html, /Copy work-queue prompt/);
     assert.match(html, /Copy JSON queue/);
     assert.match(html, /Copy result report/);
+    assert.match(html, /Pilot Proof Kit/);
+    assert.match(html, /Browser/);
+    assert.match(html, /MCP handoff/);
     assert.match(html, /items/);
     assert.match(html, /threads/);
     assert.match(html, /replyToThread/);
@@ -64,6 +68,27 @@ describe("Prompt safety playground", () => {
     assert.doesNotMatch(html, /primary_work_item/);
     assert.doesNotMatch(html, /submitPrimaryResult/);
     assert.match(html, /Export redacted report/);
+  });
+
+  it("records playground funnel events without accepting arbitrary event names", async () => {
+    const ok = await app.request("/v1/playground/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: "pg_testevent",
+        event: "guide_clicked",
+        guide: "rag",
+      }),
+    });
+    assert.equal(ok.status, 200);
+    assert.equal((await ok.json()).ok, true);
+
+    const bad = await app.request("/v1/playground/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event: "raw_prompt_uploaded", prompt: "do not store this" }),
+    });
+    assert.equal(bad.status, 400);
   });
 
   it("defines local stranger-agent simulations without making them look like tests inside the stranger messages", () => {

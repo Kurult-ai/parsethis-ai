@@ -55,6 +55,8 @@ export function renderAdminDashboardPage(baseUrl: string): string {
             <div id="geo-surfaces" class="admin-list">No data loaded.</div>
             <h3>x402 funnel</h3>
             <div id="geo-x402" class="admin-list">No data loaded.</div>
+            <h3>Playground funnel</h3>
+            <div id="geo-playground" class="admin-list">No data loaded.</div>
           </div>
           <div class="admin-stack">
             <h3>Synthetic GEO tests</h3>
@@ -278,6 +280,7 @@ export function renderAdminDashboardPage(baseUrl: string): string {
           ["x402 402s", summary.x402_payment_required],
           ["x402 retry rate", pct(summary.x402_retry_rate_percent)],
           ["x402 revenue", summary.x402_revenue_usdc ? "$" + summary.x402_revenue_usdc : "-"],
+          ["Playground funnel", summary.playground_funnel_events],
           ["Synthetic tests", summary.synthetic_tests],
           ["Synthetic pass", pct(summary.synthetic_pass_rate_percent)],
           ["Hallucination rate", pct(summary.hallucination_rate_percent)]
@@ -293,6 +296,10 @@ export function renderAdminDashboardPage(baseUrl: string): string {
           '<div><strong>Payment submitted</strong><br><span>' + esc(funnel.payment_submitted ?? 0) + ' / ' + pct(funnel.submit_rate_percent) + '</span></div>' +
           '<div><strong>Retry success</strong><br><span>' + esc(funnel.retry_success ?? 0) + ' / ' + pct(funnel.retry_success_rate_percent) + '</span></div>' +
           '<div><strong>Settled</strong><br><span>' + esc(funnel.settled_payments ?? 0) + ' payments, $' + esc(funnel.revenue_usdc ?? "0.000000") + '</span></div>';
+
+        document.getElementById("geo-playground").innerHTML = compactList(geo?.playground_funnel?.events, "No playground funnel events yet.", (item) =>
+          '<div><strong>' + esc(item.name) + '</strong><br><span>' + esc(item.count) + ' events</span></div>'
+        );
 
         const synthetic = geo?.synthetic_tests || {};
         const byModel = compactList(synthetic.by_model, "No synthetic test runs recorded.", (item) =>

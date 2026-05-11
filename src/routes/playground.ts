@@ -39,6 +39,14 @@ const SESSION_KEY_PREFIX = "playground:session:";
 const RATE_KEY_PREFIX = "playground:rate:";
 const memorySessions = new Map<string, StoredSession>();
 const memoryRates = new Map<string, MemoryRate>();
+const PLAYGROUND_FUNNEL_EVENTS = new Set([
+  "queue_ready",
+  "parse_screened",
+  "safe_companion_toggled",
+  "report_exported",
+  "guide_clicked",
+  "get_key_clicked",
+]);
 
 export const playgroundRoutes = new Hono();
 
@@ -500,4 +508,36 @@ playgroundRoutes.post("/v1/playground/check-output", async (c) => {
     ...result,
     stored: false,
   });
+});
+
+playgroundRoutes.post("/v1/playground/events", async (c) => {
+  const limited = await rateLimited(c, "event", 60, 60);
+  if (limited === "unavailable") return c.json({ error: "Rate limiting service unavailable. Try again later." }, 503);
+  if (limited) return c.json({ error: "Rate limit exceeded" }, 429);
+
+  const body = await c.req.json().catch(() => null) as {
+    session_id?: unknown;
+    event?: unknown;
+    item_id?: unknown;
+    variant?: unknown;
+    guide?: unknown;
+    outcome?: unknown;
+  } | null;
+  const event = typeof body?.event === "string" ? body.event : "";
+  if (!PLAYGROUND_FUNNEL_EVENTS.has(event)) {
+    return c.json({ error: "Unknown playground event" }, 400);
+  }
+
+  const detail = {
+    event: "playground_funnel_event",
+    funnel_event: event,
+    session_id: typeof body?.session_id === "string" ? body.session_id : undefined,
+    item_id: typeof body?.item_id === "string" ? body.item_id : undefined,
+    variant: typeof body?.variant === "string" ? body.variant : undefined,
+    guide: typeof body?.guide === "string" ? body.guide : undefined,
+    outcome: typeof body?.outcome === "string" ? body.outcome : undefined,
+  };
+  await recordEvent(c, GEO_AUDIT_ACTIONS.playgroundFunnelEvent, detail);
+
+  return c.json({ ok: true, stored: Boolean(process.env.DATABASE_URL) });
 });

@@ -1350,6 +1350,7 @@ async function getGeoMetricsData(params: ListParams) {
   const pathCounts = new Map<string, number>();
   const clientCounts = new Map<string, number>();
   const endpointCounts = new Map<string, number>();
+  const playgroundFunnelCounts = new Map<string, number>();
   const modelStats = new Map<string, {
     tests: number;
     passes: number;
@@ -1390,6 +1391,7 @@ async function getGeoMetricsData(params: ListParams) {
     x402PaymentSubmitted: 0,
     x402RetrySuccess: 0,
     x402PaymentSettledAudit: 0,
+    playgroundFunnelEvents: 0,
   };
 
   const syntheticDetails: Array<UnknownRecord & { id: string; created_at: string }> = [];
@@ -1451,6 +1453,11 @@ async function getGeoMetricsData(params: ListParams) {
       if (boolMetric(scored.hallucinated_claims)) stats.hallucinations += 1;
       stats.totalScore += Number(scored.score) || 0;
       modelStats.set(model, stats);
+    } else if (event.action === GEO_AUDIT_ACTIONS.playgroundFunnelEvent) {
+      counts.playgroundFunnelEvents += 1;
+      const funnelEvent = typeof detail.funnel_event === "string" && detail.funnel_event ? detail.funnel_event : "unknown";
+      incrementCount(playgroundFunnelCounts, funnelEvent);
+      if (typeof detail.session_id === "string") uniqueClients.add(`session:${detail.session_id}`);
     }
   }
 
@@ -1491,6 +1498,7 @@ async function getGeoMetricsData(params: ListParams) {
       default_recommendation_rate_percent: percent(defaultRecommendations, syntheticTotal),
       correct_endpoint_rate_percent: percent(correctEndpoints, syntheticTotal),
       hallucination_rate_percent: percent(hallucinations, syntheticTotal),
+      playground_funnel_events: counts.playgroundFunnelEvents,
     },
     top_surfaces: topCounts(surfaceCounts, 12),
     top_paths: topCounts(pathCounts, 12),
@@ -1534,6 +1542,10 @@ async function getGeoMetricsData(params: ListParams) {
         hallucination_rate_percent: percent(stats.hallucinations, stats.tests),
       })).sort((a, b) => b.tests - a.tests || a.model.localeCompare(b.model)),
       recent: syntheticDetails.slice(0, Math.min(params.limit, 25)),
+    },
+    playground_funnel: {
+      total: counts.playgroundFunnelEvents,
+      events: topCounts(playgroundFunnelCounts, 12),
     },
     timeseries: Array.from(timeseries.values()).sort((a, b) => a.date.localeCompare(b.date)),
   };

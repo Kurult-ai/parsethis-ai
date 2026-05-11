@@ -29,18 +29,43 @@ export function renderInjectionPlaygroundPage(baseUrl: string): string {
 <div class="inj-suite" x-data="injectionTestSuite()" x-init="init()">
   <div class="inj-topbar">
     <div>
-      <h1>Playground</h1>
-      <p>Connect your agent to a local stranger simulation, inspect its real replies, and run prompt fixtures for privacy, injection, and false-positive testing.</p>
+      <h1>Agent Security Workbench</h1>
+      <p>Run real agent outputs through neutral work queues, privacy probes, callback evidence, safe companions, and Parse screening before a pilot ever touches production traffic.</p>
     </div>
     <div class="inj-topbar-actions">
       <a class="inj-link" href="/docs">Docs</a>
-      <a class="inj-link" href="/playground">Playground</a>
+      <a class="inj-link" href="/guides/agent-security">Guides</a>
       <a class="inj-link" href="/pricing">Pricing</a>
+      <a class="inj-btn inj-btn-secondary" href="/docs/quickstart" @click="recordPlaygroundEvent('get_key_clicked')">Get API key</a>
       <button type="button" class="inj-btn inj-btn-primary" @click="createSession()" :disabled="loading">
-        <span x-text="session ? 'New test session' : 'Start test session'"></span>
+        <span x-text="session ? 'New workbench session' : 'Start workbench session'"></span>
       </button>
     </div>
   </div>
+
+  <section class="inj-proof-strip" aria-label="Workbench proof status">
+    <div>
+      <span>First call</span>
+      <strong x-text="session ? 'Ready now' : 'One click'"></strong>
+      <small>session-scoped queue</small>
+    </div>
+    <div>
+      <span>Boundary</span>
+      <strong x-text="selectedFixture() ? selectedFixture().targetSurface : 'Tool output'"></strong>
+      <small>untrusted source review</small>
+    </div>
+    <div>
+      <span>Mode</span>
+      <strong x-text="activePromptVariant === 'safe' ? 'safe companion' : 'pattern + callback'"></strong>
+      <small>false-positive pair included</small>
+    </div>
+    <div>
+      <span>Report</span>
+      <strong x-text="agentResultsReport().totals.attack_resisted + '/' + agentResultsReport().totals.fixtures + ' resisted'"></strong>
+      <small>local export, no raw output stored</small>
+    </div>
+    <a href="/docs/screening-metrics" @click="recordPlaygroundEvent('guide_clicked', { guide: 'screening-metrics' })">View holdout results</a>
+  </section>
 
   <section class="inj-session-rail" aria-label="Session status">
     <div class="inj-session-cell">
@@ -59,20 +84,20 @@ export function renderInjectionPlaygroundPage(baseUrl: string): string {
       <span>Listener</span>
       <strong :class="session ? 'ok' : ''" x-text="session ? 'polling for callbacks' : 'idle'"></strong>
     </div>
-    <button type="button" class="inj-btn inj-btn-secondary" @click="createSession()" :disabled="loading">Reset</button>
+    <button type="button" class="inj-btn inj-btn-secondary" @click="createSession()" :disabled="loading">Reset session</button>
   </section>
 
   <section class="inj-agent-quick" aria-labelledby="agent-quick-title">
     <div class="inj-agent-copy">
       <span class="inj-agent-label">Agent queue</span>
-      <h2 id="agent-quick-title">Point your agent here and run the queue.</h2>
-      <p>This page exposes a browser-readable queue at <code>window.parseOpsQueue.ready()</code>. A browser-capable agent can process every item, record each response, and return the final report without manual clicking.</p>
+      <h2 id="agent-quick-title">Point your agent here and run the workbench.</h2>
+      <p>This page exposes <code>window.parseOpsQueue.ready()</code>. A browser-capable agent can process ordinary work items, record each real response, and return the final report without manual clicking.</p>
     </div>
     <div class="inj-agent-steps">
-      <div><span>1</span><strong>Load page</strong><p>Session starts automatically.</p></div>
-      <div><span>2</span><strong>Read queue</strong><p>Use the browser bridge or copied prompt.</p></div>
-      <div><span>3</span><strong>Run items</strong><p>Process each queued request normally.</p></div>
-      <div><span>4</span><strong>Report back</strong><p>Use <code>report</code> after recording outputs.</p></div>
+      <div><span>1</span><strong>Load queue</strong><p>Session starts automatically.</p></div>
+      <div><span>2</span><strong>Open sources</strong><p>Use the neutral source packets.</p></div>
+      <div><span>3</span><strong>Record replies</strong><p>Submit exact agent output.</p></div>
+      <div><span>4</span><strong>Return report</strong><p>Use <code>report</code> after all rows.</p></div>
     </div>
     <div class="inj-agent-actions">
       <button type="button" class="inj-btn inj-btn-primary" @click="copyAgentPrompt()" :disabled="!session">
@@ -84,7 +109,7 @@ export function renderInjectionPlaygroundPage(baseUrl: string): string {
       <button type="button" class="inj-btn inj-btn-secondary" @click="copyAgentResults()" :disabled="!session">
         <span x-text="copied === 'agentResults' ? 'Copied' : 'Copy result report'"></span>
       </button>
-      <button type="button" class="inj-btn inj-btn-secondary" @click="activeMode = 'fixtures'">View fixtures</button>
+      <button type="button" class="inj-btn inj-btn-secondary" @click="activeMode = 'fixtures'">View work items</button>
     </div>
     <div class="inj-agent-status">
       <span>Session</span>
@@ -95,7 +120,7 @@ export function renderInjectionPlaygroundPage(baseUrl: string): string {
   </section>
 
   <div class="inj-mode-tabs" role="tablist" aria-label="Playground mode">
-    <button type="button" role="tab" :aria-selected="activeMode === 'fixtures'" :class="activeMode === 'fixtures' ? 'active' : ''" @click="activeMode = 'fixtures'">Prompt fixtures</button>
+    <button type="button" role="tab" :aria-selected="activeMode === 'fixtures'" :class="activeMode === 'fixtures' ? 'active' : ''" @click="activeMode = 'fixtures'">Work queue</button>
     <button type="button" role="tab" :aria-selected="activeMode === 'simulation'" :class="activeMode === 'simulation' ? 'active' : ''" @click="activeMode = 'simulation'">Live agent simulation</button>
   </div>
 
@@ -226,8 +251,8 @@ export function renderInjectionPlaygroundPage(baseUrl: string): string {
     <aside class="inj-panel inj-catalog" aria-label="Fixture catalog">
       <div class="inj-panel-head">
         <div>
-          <h2>Fixtures</h2>
-          <p>Injection tests with safe companions</p>
+          <h2>Agent Queue</h2>
+          <p>Neutral work items with safe companions</p>
         </div>
         <span class="inj-count" x-text="filteredFixtures().length"></span>
       </div>
@@ -268,13 +293,13 @@ export function renderInjectionPlaygroundPage(baseUrl: string): string {
 
           <div class="inj-copy-area">
             <div class="inj-copy-head">
-              <span x-text="activePromptVariant === 'safe' ? 'Safe companion prompt' : 'Injection payload'"></span>
+              <span x-text="activePromptVariant === 'safe' ? 'Safe companion source' : 'Source packet prompt'"></span>
               <span x-show="!session">Start a session to generate callback URLs</span>
               <span x-show="session && activePromptVariant === 'attack'" x-text="session ? ('callback bound to ' + session.session_id) : ''"></span>
               <span x-show="session && activePromptVariant === 'safe'">false-positive check</span>
             </div>
             <div class="inj-prompt-tabs" role="tablist" aria-label="Prompt variant">
-              <button type="button" role="tab" :aria-selected="activePromptVariant === 'attack'" :class="activePromptVariant === 'attack' ? 'active' : ''" @click="setPromptVariant('attack')">Injection test</button>
+              <button type="button" role="tab" :aria-selected="activePromptVariant === 'attack'" :class="activePromptVariant === 'attack' ? 'active' : ''" @click="setPromptVariant('attack')">Primary source</button>
               <button type="button" role="tab" :aria-selected="activePromptVariant === 'safe'" :class="activePromptVariant === 'safe' ? 'active' : ''" @click="setPromptVariant('safe')">Safe companion</button>
             </div>
             <pre x-text="selectedPayload()"></pre>
@@ -282,13 +307,13 @@ export function renderInjectionPlaygroundPage(baseUrl: string): string {
 
           <div class="inj-action-row">
             <button type="button" class="inj-btn inj-btn-primary" @click="copyPayload()" :disabled="!session">
-              <span x-text="copied === 'payload' ? 'Copied' : (activePromptVariant === 'safe' ? 'Copy safe prompt' : 'Copy injection prompt')"></span>
+              <span x-text="copied === 'payload' ? 'Copied' : (activePromptVariant === 'safe' ? 'Copy safe source' : 'Copy source prompt')"></span>
             </button>
             <a class="inj-btn inj-btn-secondary" :href="selectedFixtureUrl() || '#'" target="_blank" rel="noopener" :aria-disabled="!selectedFixtureUrl()" :class="!selectedFixtureUrl() ? 'disabled' : ''">
               <span x-text="activePromptVariant === 'safe' ? 'Open safe fixture link' : 'Open fixture link'"></span>
             </a>
             <button type="button" class="inj-btn inj-btn-secondary" @click="screenWithParse()" :disabled="!session || screening">
-              <span x-text="screening ? 'Screening...' : (activePromptVariant === 'safe' ? 'Screen safe prompt' : 'Screen injection prompt')"></span>
+              <span x-text="screening ? 'Screening...' : (activePromptVariant === 'safe' ? 'Screen safe source' : 'Send to Parse')"></span>
             </button>
           </div>
 
@@ -322,7 +347,7 @@ export function renderInjectionPlaygroundPage(baseUrl: string): string {
       <div class="inj-panel-head">
         <div>
           <h2>Live Result</h2>
-          <p>Callback and pasted-output grading</p>
+          <p>Parse score, callback evidence, and output grading</p>
         </div>
       </div>
 
@@ -377,7 +402,7 @@ export function renderInjectionPlaygroundPage(baseUrl: string): string {
           <h2>Session Event Log</h2>
           <p>Local report preview; raw pasted outputs are not stored server-side.</p>
         </div>
-        <button type="button" class="inj-btn inj-btn-secondary" @click="exportReport()" :disabled="!session">Export test report</button>
+        <button type="button" class="inj-btn inj-btn-secondary" @click="exportReport()" :disabled="!session">Export local report</button>
       </div>
       <template x-if="eventLog.length === 0">
         <p class="inj-empty">Start a session, copy a fixture, or receive a callback to populate the report.</p>
@@ -398,6 +423,43 @@ export function renderInjectionPlaygroundPage(baseUrl: string): string {
         <div><span>Partial</span><strong x-text="summary().partial"></strong></div>
         <div><span>Untested</span><strong x-text="summary().untested"></strong></div>
       </div>
+    </div>
+  </section>
+
+  <section class="inj-pilot-kit" x-show="activeMode === 'fixtures'" aria-label="Pilot proof kit">
+    <div class="inj-pilot-head">
+      <div>
+        <h2>Pilot Proof Kit</h2>
+        <p>Five real integration paths for staging pilots. Same session, same boundary language, no broad safety claims.</p>
+      </div>
+      <a href="/guides/agent-security" @click="recordPlaygroundEvent('guide_clicked', { guide: 'agent-security' })">View all guides</a>
+    </div>
+    <div class="inj-pilot-grid">
+      <a href="/guides/rag-prompt-injection-screening" @click="recordPlaygroundEvent('guide_clicked', { guide: 'rag' })">
+        <span>RAG</span>
+        <strong>Retrieved documents</strong>
+        <p>Screen source chunks before they reach model context.</p>
+      </a>
+      <a href="/guides/browser-agent-screening" @click="recordPlaygroundEvent('guide_clicked', { guide: 'browser' })">
+        <span>Browser</span>
+        <strong>Page and HTML output</strong>
+        <p>Check snippets, hidden text, and source packets before tool decisions.</p>
+      </a>
+      <a href="/guides/email-support-agent-screening" @click="recordPlaygroundEvent('guide_clicked', { guide: 'email' })">
+        <span>Email</span>
+        <strong>Support and inbox agents</strong>
+        <p>Catch social pressure and private-data disclosure before replies.</p>
+      </a>
+      <a href="/guides/code-tool-agent-screening" @click="recordPlaygroundEvent('guide_clicked', { guide: 'code-tool' })">
+        <span>Code / Tool</span>
+        <strong>Shell, logs, and tool results</strong>
+        <p>Screen tool output before execution, commits, or API calls.</p>
+      </a>
+      <a href="/guides/mcp-agent-handoff-screening" @click="recordPlaygroundEvent('guide_clicked', { guide: 'mcp-handoff' })">
+        <span>MCP handoff</span>
+        <strong>Delegation from agents</strong>
+        <p>Verify trust before accepting work from another agent or plugin.</p>
+      </a>
     </div>
   </section>
 </div>
@@ -453,7 +515,10 @@ function injectionTestSuite() {
       window.parseThreadBridge = threadBridge;
       window.parsePlaygroundBridge = threadBridge;
       window.parseOpsQueue = {
-        ready: () => this.ensureSession().then(() => this.agentOperationsPlan()),
+        ready: () => this.ensureSession().then(() => {
+          this.recordPlaygroundEvent('queue_ready');
+          return this.agentOperationsPlan();
+        }),
         current: () => this.agentOperationsPlan(),
         refresh: () => this.pollStatus().then(() => this.agentOperationsPlan()),
         completeItem: (itemId, output) => this.completeOperationsItem(itemId, output),
@@ -535,6 +600,7 @@ function injectionTestSuite() {
       this.activePromptVariant = variant;
       this.parseResult = null;
       this.parseVariant = '';
+      if (variant === 'safe') this.recordPlaygroundEvent('safe_companion_toggled', { item_id: this.selectedId, variant });
     },
     selectedFixture() {
       return this.fixtures.find((fixture) => fixture.id === this.selectedId) || this.fixtures[0] || null;
@@ -639,7 +705,8 @@ function injectionTestSuite() {
         if (!res.ok) throw new Error('Parse screening failed: ' + res.status);
         this.parseResult = await res.json();
         this.parseVariant = variant;
-        this.log('parse', 'Screened ' + (variant === 'safe' ? 'safe companion for ' : 'injection test for ') + fixture.id + ' with Parse');
+        this.recordPlaygroundEvent('parse_screened', { item_id: fixture.id, variant, outcome: this.parseResult.verdict || String(this.parseResult.risk_score || '') });
+        this.log('parse', 'Screened ' + (variant === 'safe' ? 'safe companion for ' : 'primary source for ') + fixture.id + ' with Parse');
       } catch (err) {
         this.log('error', err.message || 'Parse screening failed');
       } finally {
@@ -681,6 +748,7 @@ function injectionTestSuite() {
       a.download = 'parse-playground-' + this.session.session_id + '.json';
       a.click();
       URL.revokeObjectURL(url);
+      this.recordPlaygroundEvent('report_exported', { outcome: 'fixture_report' });
       this.log('export', 'Exported local report');
     },
     operationsTasks() {
@@ -984,6 +1052,18 @@ function injectionTestSuite() {
       this.eventLog.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()), type, message, ts: new Date().toISOString() });
       if (this.eventLog.length > 80) this.eventLog.shift();
     },
+    recordPlaygroundEvent(event, detail) {
+      const body = {
+        event,
+        session_id: this.session ? this.session.session_id : undefined,
+        ...(detail || {})
+      };
+      fetch('/v1/playground/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).catch(() => {});
+    },
     simulationFamilies() {
       return ['All'].concat([...new Set(this.simulation.scenarios.map((scenario) => scenario.family))]);
     },
@@ -1166,6 +1246,7 @@ function injectionTestSuite() {
       a.download = 'parse-agent-simulation-' + scenario.id + '.json';
       a.click();
       URL.revokeObjectURL(url);
+      this.recordPlaygroundEvent('report_exported', { item_id: scenario.id, outcome: 'simulation_report' });
     }
   };
 }
@@ -1229,6 +1310,13 @@ function injectionTestSuite() {
     .inj-topbar-actions { display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end; }
     .inj-link { color:#42526b;font-size:13px;font-weight:650;padding:8px 6px; }
     .inj-link:hover { color:#165dff; }
+    .inj-proof-strip { display:grid;grid-template-columns:1fr 1.35fr 1.25fr 1.2fr auto;gap:0;align-items:stretch;background:#fff;border:1px solid #d9e1ec;border-radius:8px;margin:0 0 14px;overflow:hidden;box-shadow:0 1px 2px rgba(17,24,39,.03); }
+    .inj-proof-strip div { padding:14px 18px;border-right:1px solid #e5ebf3;min-width:0; }
+    .inj-proof-strip span { display:block;color:#111827;font-size:12px;font-weight:850;letter-spacing:.01em;margin-bottom:5px; }
+    .inj-proof-strip strong { display:block;color:#165dff;font-size:21px;line-height:1.1;letter-spacing:-.035em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .inj-proof-strip small { display:block;color:#607086;font-size:11px;line-height:1.3;margin-top:4px; }
+    .inj-proof-strip a { display:flex;align-items:center;justify-content:center;padding:14px 18px;color:#165dff;font-size:13px;font-weight:800;white-space:nowrap; }
+    .inj-proof-strip a:hover { background:#f8fbff;color:#054ce0; }
     .inj-btn { appearance:none;border:1px solid transparent;border-radius:8px;padding:9px 13px;font-family:inherit;font-size:13px;font-weight:700;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;white-space:nowrap;transition:background 150ms ease,border-color 150ms ease,color 150ms ease,transform 150ms ease,box-shadow 150ms ease; }
     .inj-btn:hover { transform:translateY(-1px); }
     .inj-btn:disabled, .inj-btn.disabled, .inj-btn[aria-disabled="true"] { opacity:.48;pointer-events:none;transform:none; }
@@ -1241,21 +1329,21 @@ function injectionTestSuite() {
     .inj-session-cell span { display:block;color:#7a879a;font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:800;margin-bottom:4px; }
     .inj-session-cell strong { display:block;color:#111827;font-size:13px;font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
     .inj-session-cell strong.ok { color:#12805c; }
-    .inj-agent-quick { display:grid;grid-template-columns:minmax(0,1.25fr) minmax(440px,1fr);gap:16px;align-items:stretch;background:#10141a;color:#f7fbff;border:1px solid #202a35;border-radius:10px;padding:18px;margin:0 0 14px;box-shadow:0 20px 52px rgba(17,24,39,.16); }
+    .inj-agent-quick { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;background:#fff;color:#111827;border:1px solid #d9e1ec;border-radius:8px;padding:12px 14px;margin:0 0 14px;box-shadow:0 1px 2px rgba(17,24,39,.03); }
     .inj-agent-copy { min-width:0; }
-    .inj-agent-label { display:block;color:#8db5ff;font-size:10px;text-transform:uppercase;letter-spacing:.11em;font-weight:850;margin-bottom:7px; }
-    .inj-agent-copy h2 { margin:0 0 8px;color:#fff;font-size:24px;line-height:1.05;letter-spacing:-.035em; }
-    .inj-agent-copy p { margin:0;color:#b8c5d6;font-size:13px;line-height:1.55;max-width:760px; }
-    .inj-agent-copy code { color:#d6e5ff;background:#172235;border:1px solid #2a3950;border-radius:5px;padding:1px 4px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px; }
-    .inj-agent-steps { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px; }
-    .inj-agent-steps div { background:#151d28;border:1px solid #263448;border-radius:8px;padding:10px;min-width:0; }
+    .inj-agent-label { display:block;color:#607086;font-size:10px;text-transform:uppercase;letter-spacing:.11em;font-weight:850;margin-bottom:4px; }
+    .inj-agent-copy h2 { margin:0 0 4px;color:#111827;font-size:18px;line-height:1.1;letter-spacing:-.025em; }
+    .inj-agent-copy p { margin:0;color:#607086;font-size:12px;line-height:1.45;max-width:760px; }
+    .inj-agent-copy code { color:#0f3b8f;background:#eef4ff;border:1px solid #c9dbff;border-radius:5px;padding:1px 4px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px; }
+    .inj-agent-steps { display:none; }
+    .inj-agent-steps div { background:#f8fafc;border:1px solid #e5ebf3;border-radius:8px;padding:10px;min-width:0; }
     .inj-agent-steps span { display:inline-flex;width:20px;height:20px;border-radius:6px;background:#165dff;color:#fff;align-items:center;justify-content:center;font:800 11px 'JetBrains Mono',ui-monospace,monospace;margin-bottom:8px; }
-    .inj-agent-steps strong { display:block;color:#fff;font-size:12px;line-height:1.2;margin-bottom:4px; }
-    .inj-agent-steps p { margin:0;color:#9fb0c3;font-size:11px;line-height:1.35; }
-    .inj-agent-actions { grid-column:1 / 2;display:flex;gap:8px;flex-wrap:wrap;align-items:center; }
-    .inj-agent-status { grid-column:2 / 3;display:grid;grid-template-columns:auto 1fr auto 1fr;gap:8px;align-items:center;justify-self:end;color:#9fb0c3;font-size:11px; }
+    .inj-agent-steps strong { display:block;color:#111827;font-size:12px;line-height:1.2;margin-bottom:4px; }
+    .inj-agent-steps p { margin:0;color:#607086;font-size:11px;line-height:1.35; }
+    .inj-agent-actions { display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-end; }
+    .inj-agent-status { display:none;grid-template-columns:auto 1fr auto 1fr;gap:8px;align-items:center;justify-self:end;color:#607086;font-size:11px; }
     .inj-agent-status span { text-transform:uppercase;letter-spacing:.08em;font-weight:850; }
-    .inj-agent-status strong { color:#fff;font:800 13px 'JetBrains Mono',ui-monospace,monospace; }
+    .inj-agent-status strong { color:#111827;font:800 13px 'JetBrains Mono',ui-monospace,monospace; }
     .inj-mode-tabs { display:flex;gap:8px;margin:0 0 14px;border:1px solid #d9e1ec;background:#fff;border-radius:8px;padding:6px;width:max-content;max-width:100%;box-shadow:0 1px 2px rgba(17,24,39,.03); }
     .inj-mode-tabs button { appearance:none;border:0;background:transparent;color:#607086;border-radius:6px;padding:8px 12px;font:800 12px inherit;cursor:pointer;white-space:nowrap; }
     .inj-mode-tabs button.active { background:#111827;color:#fff;box-shadow:0 6px 14px rgba(17,24,39,.12); }
@@ -1345,6 +1433,18 @@ function injectionTestSuite() {
     .inj-summary-grid div { border:1px solid #e5ebf3;background:#f8fafc;border-radius:8px;padding:12px; }
     .inj-summary-grid span { display:block;color:#607086;font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:850;margin-bottom:6px; }
     .inj-summary-grid strong { font:800 22px 'JetBrains Mono',ui-monospace,monospace;color:#111827; }
+    .inj-pilot-kit { margin-top:14px;background:#fff;border:1px solid #d9e1ec;border-radius:8px;box-shadow:0 10px 28px rgba(31,41,55,.06);overflow:hidden; }
+    .inj-pilot-head { display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;border-bottom:1px solid #e5ebf3; }
+    .inj-pilot-head h2 { margin:0;color:#111827;font-size:15px;line-height:1.2;letter-spacing:-.015em;text-transform:uppercase; }
+    .inj-pilot-head p { margin:5px 0 0;color:#607086;font-size:12px;line-height:1.45; }
+    .inj-pilot-head a { color:#165dff;font-size:12px;font-weight:850;white-space:nowrap; }
+    .inj-pilot-grid { display:grid;grid-template-columns:repeat(5,minmax(0,1fr)); }
+    .inj-pilot-grid a { display:block;min-height:142px;padding:18px;border-right:1px solid #e5ebf3;color:#111827;background:#fff; }
+    .inj-pilot-grid a:last-child { border-right:0; }
+    .inj-pilot-grid a:hover { background:#f8fbff;color:#111827; }
+    .inj-pilot-grid span { display:inline-flex;align-items:center;justify-content:center;width:max-content;min-width:34px;height:30px;margin-bottom:16px;border-radius:999px;background:#eef4ff;color:#165dff;padding:0 10px;font-size:11px;font-weight:850;text-transform:uppercase;letter-spacing:.06em; }
+    .inj-pilot-grid strong { display:block;font-size:14px;line-height:1.25;margin-bottom:7px; }
+    .inj-pilot-grid p { margin:0;color:#607086;font-size:12px;line-height:1.45; }
     .sim-family-filters { padding:12px;display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid #e5ebf3; }
     .sim-family-filters button { appearance:none;border:1px solid #d9e1ec;background:#fff;color:#607086;border-radius:999px;padding:5px 9px;font:700 11px inherit;cursor:pointer; }
     .sim-family-filters button.active { background:#111827;color:#fff;border-color:#111827; }
@@ -1382,6 +1482,10 @@ function injectionTestSuite() {
       .inj-session-rail { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .inj-agent-quick { grid-template-columns:1fr; }
       .inj-agent-actions, .inj-agent-status { grid-column:auto;justify-self:start; }
+      .inj-proof-strip { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .inj-proof-strip a { grid-column:1 / -1;border-top:1px solid #e5ebf3; }
+      .inj-pilot-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .inj-pilot-grid a { border-bottom:1px solid #e5ebf3; }
     }
     @media (max-width: 760px) {
       .container { padding:14px; }
@@ -1389,6 +1493,10 @@ function injectionTestSuite() {
       .inj-topbar h1 { font-size:28px; }
       .inj-topbar-actions { justify-content:flex-start;width:100%; }
       .inj-session-rail, .inj-workbench, .sim-workbench, .inj-lower, .inj-expectations, .sim-bridge-panel { grid-template-columns:1fr; }
+      .inj-proof-strip, .inj-pilot-grid { grid-template-columns:1fr; }
+      .inj-proof-strip div, .inj-pilot-grid a { border-right:0;border-bottom:1px solid #e5ebf3; }
+      .inj-proof-strip a { justify-content:flex-start; }
+      .inj-pilot-head { align-items:flex-start;flex-direction:column; }
       .inj-agent-steps, .inj-agent-status { grid-template-columns:1fr; }
       .inj-mode-tabs { width:100%; }
       .inj-mode-tabs button { flex:1; }
