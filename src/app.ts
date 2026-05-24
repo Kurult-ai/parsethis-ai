@@ -14,6 +14,7 @@ import { agentTrustRoutes } from "./routes/agent-trust.js";
 import { discoveryRoutes } from "./routes/discovery.js";
 import { mcpRoutes } from "./routes/mcp.js";
 import { screeningMetricsRoutes } from "./routes/screening-metrics.js";
+import { exposureRoutes } from "./routes/exposure.js";
 import { billingRoutes, billingWebhookRoute } from "./routes/billing.js";
 import { adminRoutes } from "./routes/admin.js";
 import { playgroundRoutes } from "./routes/playground.js";
@@ -108,6 +109,8 @@ app.use("/v1/evaluate", x402Guard());
 app.use("/v1/chat", x402Guard());
 app.use("/v1/parse", x402Guard());
 app.use("/v1/screen-output", x402Guard());
+app.use("/v1/exposure/evaluate", x402Guard());
+app.use("/v1/exposure/ingest", x402Guard());
 
 // Mount routes
 app.route("/", discoveryRoutes);
@@ -120,6 +123,7 @@ app.route("/", chatRoutes);
 app.route("/", keysRoutes);
 app.route("/", policyRoutes);
 app.route("/", screenOutputRoutes);
+app.route("/", exposureRoutes);
 app.route("/", agentTrustRoutes);
 app.route("/", screeningMetricsRoutes);
 app.route("/", billingRoutes);

@@ -1,0 +1,13 @@
+{
+  "schema_version": "0.1.0",
+  "entries": [
+    {
+      "id": "advisory-2026-0042",
+      "name": "example-pkg 1.2.3 compromised release",
+      "ecosystem": "npm",
+      "package": "example-pkg",
+      "versions": ["1.2.3"],
+      "severity": "critical"
+    }
+  ]
+}

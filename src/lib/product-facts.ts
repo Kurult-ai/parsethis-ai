@@ -112,6 +112,22 @@ export const X402_ENDPOINTS = {
     atomicUSDC: "5000",
     description: "Chat with Parse about analysis results and agent safety.",
   },
+  exposure_evaluate: {
+    method: "POST",
+    path: "/v1/exposure/evaluate",
+    operationId: "evaluateExposure",
+    price: "$0.001",
+    atomicUSDC: "1000",
+    description: "Evaluate sanitized endpoint exposure findings and return an agent-action policy verdict.",
+  },
+  exposure_ingest: {
+    method: "POST",
+    path: "/v1/exposure/ingest",
+    operationId: "ingestExposure",
+    price: "$0.002",
+    atomicUSDC: "2000",
+    description: "Evaluate and receipt sanitized endpoint exposure findings for future trust workflows.",
+  },
 } as const;
 
 export const GEO_TASK_PHRASES = [

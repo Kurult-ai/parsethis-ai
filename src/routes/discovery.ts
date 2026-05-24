@@ -1186,6 +1186,87 @@ discoveryRoutes.get("/openapi.json", (c) => {
           },
         },
       },
+      "/v1/exposure/evaluate": {
+        post: {
+          operationId: "evaluateExposure",
+          summary: "Evaluate endpoint exposure findings",
+          description: "Evaluates sanitized Bumblebee-compatible endpoint exposure findings and returns an allow, warn, block, or reject decision. Defaults to findings-only payloads and rejects raw secret-bearing configuration.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ExposurePayload" },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Exposure verdict",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ExposureEvaluationResult" },
+                },
+              },
+            },
+            "400": { description: "Invalid or privacy-unsafe exposure payload" },
+            "401": { description: "Authentication required" },
+            "402": { description: "Payment required when using x402" },
+          },
+        },
+      },
+      "/v1/exposure/ingest": {
+        post: {
+          operationId: "ingestExposure",
+          summary: "Evaluate and receipt endpoint exposure findings",
+          description: "Phase 1 stateless ingest endpoint. Returns the same verdict shape as exposure evaluation plus storage_mode=stateless_phase_1.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ExposurePayload" },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Stateless exposure receipt",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ExposureEvaluationResult" },
+                },
+              },
+            },
+            "400": { description: "Invalid or privacy-unsafe exposure payload" },
+            "401": { description: "Authentication required" },
+            "402": { description: "Payment required when using x402" },
+          },
+        },
+      },
+      "/v1/exposure/catalogs": {
+        get: {
+          operationId: "listExposureCatalogs",
+          summary: "List exposure catalog metadata",
+          description: "Lists Parse Exposure catalog metadata and privacy defaults. Does not expose raw customer inventories.",
+          security: [],
+          responses: {
+            "200": {
+              description: "Catalog metadata",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      catalogs: { type: "array", items: { type: "object" } },
+                      privacy_default: { type: "string" },
+                      note: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
       "/version": {
         get: {
           operationId: "versionCheck",
