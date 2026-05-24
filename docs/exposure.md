@@ -20,6 +20,8 @@ The first supported payload shape is Bumblebee-compatible findings-only output: 
 
 ## Phase 1 endpoints
 
+These Bumblebee-compatible exposure features are free and available on every tier. They do not require an API key, subscription entitlement, or x402 payment.
+
 - `POST /v1/exposure/evaluate` — evaluate sanitized findings and return a stateless verdict.
 - `POST /v1/exposure/ingest` — phase-1 stateless receipt wrapper; persistence comes later.
 - `GET /v1/exposure/catalogs` — catalog/privacy metadata.

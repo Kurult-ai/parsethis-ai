@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 const baseUrl = process.env.PARSE_SMOKE_BASE_URL || process.argv.find((arg) => arg.startsWith("--base-url="))?.split("=")[1] || "http://127.0.0.1:3000";
-const apiKey = process.env.PARSE_API_KEY || process.argv.find((arg) => arg.startsWith("--api-key="))?.split("=")[1] || "test-master-key-for-exposure-smoke";
 
 const samplePayload = {
   schema_version: "0.1.0",
@@ -48,7 +47,7 @@ assert(openapi.body.paths["/v1/exposure/evaluate"], "openapi must include exposu
 
 const evaluate = await request("/v1/exposure/evaluate", {
   method: "POST",
-  headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+  headers: { "Content-Type": "application/json" },
   body: JSON.stringify(samplePayload),
 });
 assert(evaluate.res.status === 200, `evaluate expected 200, got ${evaluate.res.status}: ${evaluate.text.slice(0, 200)}`);
@@ -57,7 +56,7 @@ assert(/^exp_/.test(evaluate.body.receipt_id), "evaluate must return exp_ receip
 
 const unsafe = await request("/v1/exposure/evaluate", {
   method: "POST",
-  headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+  headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ ...samplePayload, findings: [{ ...samplePayload.findings[0], evidence: "ghp_abcdefghijklmnopqrstuvwxyz1234567890" }] }),
 });
 assert(unsafe.res.status === 400, `unsafe payload expected 400, got ${unsafe.res.status}`);

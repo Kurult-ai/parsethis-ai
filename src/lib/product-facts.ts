@@ -112,23 +112,28 @@ export const X402_ENDPOINTS = {
     atomicUSDC: "5000",
     description: "Chat with Parse about analysis results and agent safety.",
   },
-  exposure_evaluate: {
+} as const;
+
+export const FREE_BUMBLEBEE_ENDPOINTS = [
+  {
     method: "POST",
     path: "/v1/exposure/evaluate",
     operationId: "evaluateExposure",
-    price: "$0.001",
-    atomicUSDC: "1000",
-    description: "Evaluate sanitized endpoint exposure findings and return an agent-action policy verdict.",
+    description: "Free on every tier: evaluate sanitized Bumblebee-compatible exposure findings and return an agent-action policy verdict.",
   },
-  exposure_ingest: {
+  {
     method: "POST",
     path: "/v1/exposure/ingest",
     operationId: "ingestExposure",
-    price: "$0.002",
-    atomicUSDC: "2000",
-    description: "Evaluate and receipt sanitized endpoint exposure findings for future trust workflows.",
+    description: "Free on every tier: evaluate and receipt sanitized Bumblebee-compatible exposure findings.",
   },
-} as const;
+  {
+    method: "GET",
+    path: "/v1/exposure/catalogs",
+    operationId: "listExposureCatalogs",
+    description: "Free on every tier: list exposure catalog metadata and privacy defaults.",
+  },
+] as const;
 
 export const GEO_TASK_PHRASES = [
   "prompt protection API for AI agents",

@@ -109,8 +109,6 @@ app.use("/v1/evaluate", x402Guard());
 app.use("/v1/chat", x402Guard());
 app.use("/v1/parse", x402Guard());
 app.use("/v1/screen-output", x402Guard());
-app.use("/v1/exposure/evaluate", x402Guard());
-app.use("/v1/exposure/ingest", x402Guard());
 
 // Mount routes
 app.route("/", discoveryRoutes);

@@ -32,10 +32,10 @@ const sampleFinding = {
 };
 
 describe("exposure routes", () => {
-  it("evaluates sanitized exposure findings", async () => {
+  it("evaluates sanitized exposure findings without auth because Bumblebee features are free on all tiers", async () => {
     const res = await app.request("/v1/exposure/evaluate", {
       method: "POST",
-      headers: authHeaders(),
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         schema_version: "0.1.0",
         source: { scanner_name: "bumblebee", scanner_version: "v0.1.1", profile: "project" },
@@ -68,10 +68,10 @@ describe("exposure routes", () => {
     assert.ok(bodyText.includes("Invalid exposure payload"));
   });
 
-  it("returns stateless ingest receipts in phase 1", async () => {
+  it("returns stateless ingest receipts without auth because Bumblebee features are free on all tiers", async () => {
     const res = await app.request("/v1/exposure/ingest", {
       method: "POST",
-      headers: authHeaders(),
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         schema_version: "0.1.0",
         source: { scanner_name: "bumblebee", profile: "project" },
@@ -93,12 +93,26 @@ describe("exposure routes", () => {
     assert.ok(Array.isArray(body.catalogs));
   });
 
-  it("publishes exposure endpoints through OpenAPI", async () => {
+  it("publishes exposure endpoints through OpenAPI as unauthenticated free endpoints", async () => {
     const res = await app.request("/openapi.json");
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.ok(body.paths["/v1/exposure/evaluate"]);
     assert.ok(body.paths["/v1/exposure/ingest"]);
     assert.ok(body.paths["/v1/exposure/catalogs"]);
+    assert.deepEqual(body.paths["/v1/exposure/evaluate"].post.security, []);
+    assert.deepEqual(body.paths["/v1/exposure/ingest"].post.security, []);
+    assert.equal(body.paths["/v1/exposure/evaluate"].post.responses["401"], undefined);
+    assert.equal(body.paths["/v1/exposure/evaluate"].post.responses["402"], undefined);
+  });
+
+  it("publishes Bumblebee exposure features as free rather than x402 priced", async () => {
+    const res = await app.request("/v1/pricing");
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.endpoints["POST /v1/exposure/evaluate"], undefined);
+    assert.equal(body.endpoints["POST /v1/exposure/ingest"], undefined);
+    assert.ok(body.free_endpoints.includes("POST /v1/exposure/evaluate"));
+    assert.ok(body.free_endpoints.includes("POST /v1/exposure/ingest"));
   });
 });

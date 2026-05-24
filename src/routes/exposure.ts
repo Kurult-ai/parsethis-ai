@@ -1,7 +1,5 @@
 import { Hono } from "hono";
-import { authMiddleware } from "../auth.js";
 import type { AppEnv } from "../types.js";
-import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 import { EXPOSURE_CATALOGS } from "../lib/exposure/catalog.js";
 import { evaluateExposurePayload } from "../lib/exposure/evaluate.js";
 import { sanitizeExposurePayload } from "../lib/exposure/sanitize.js";
@@ -19,7 +17,7 @@ function invalidExposurePayload(c: Parameters<typeof problem>[0], detail: string
   });
 }
 
-exposureRoutes.post("/v1/exposure/evaluate", authMiddleware("evaluate"), billableUsageMiddleware(), async (c) => {
+exposureRoutes.post("/v1/exposure/evaluate", async (c) => {
   const contentTypeProblem = jsonContentTypeProblem(c);
   if (contentTypeProblem) return contentTypeProblem;
 
@@ -30,7 +28,7 @@ exposureRoutes.post("/v1/exposure/evaluate", authMiddleware("evaluate"), billabl
   return c.json(evaluateExposurePayload(sanitized.value));
 });
 
-exposureRoutes.post("/v1/exposure/ingest", authMiddleware("evaluate"), billableUsageMiddleware(), async (c) => {
+exposureRoutes.post("/v1/exposure/ingest", async (c) => {
   const contentTypeProblem = jsonContentTypeProblem(c);
   if (contentTypeProblem) return contentTypeProblem;
 

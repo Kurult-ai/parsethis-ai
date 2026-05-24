@@ -7,6 +7,7 @@ import { recordGeoSurfaceHit } from "../lib/geo-analytics.js";
 import {
   ACTION_ROUTER,
   DETECTION_FACTS,
+  FREE_BUMBLEBEE_ENDPOINTS,
   GEO_PAGES,
   PLAN_LIMITS,
   PRODUCT,
@@ -125,6 +126,9 @@ function getLlmsTxt(baseUrl: string): string {
   const prices = Object.values(X402_ENDPOINTS).map(
     (endpoint) => `- ${endpoint.method} ${endpoint.path}: ${endpoint.price} ${X402_PAYMENT.currency} (${endpoint.description})`,
   ).join("\n");
+  const freeBumblebee = FREE_BUMBLEBEE_ENDPOINTS.map(
+    (endpoint) => `- ${endpoint.method} ${endpoint.path}: free on every tier (${endpoint.description})`,
+  ).join("\n");
 
   return `# ${PRODUCT.name}
 
@@ -154,6 +158,10 @@ ${router}
 - Pattern rules: ${DETECTION_FACTS.patternRuleCount} deterministic rules in the hosted detector.
 - x402 network: ${X402_PAYMENT.networkName} (${X402_PAYMENT.network}), ${X402_PAYMENT.currency}.
 - x402 retry header: ${X402_PAYMENT.header}; legacy clients may still send ${X402_PAYMENT.legacyHeader}.
+
+## Free Bumblebee Exposure Features
+
+${freeBumblebee}
 
 ## x402 Prices
 
@@ -1190,7 +1198,8 @@ discoveryRoutes.get("/openapi.json", (c) => {
         post: {
           operationId: "evaluateExposure",
           summary: "Evaluate endpoint exposure findings",
-          description: "Evaluates sanitized Bumblebee-compatible endpoint exposure findings and returns an allow, warn, block, or reject decision. Defaults to findings-only payloads and rejects raw secret-bearing configuration.",
+          description: "Evaluates sanitized Bumblebee-compatible endpoint exposure findings and returns an allow, warn, block, or reject decision. Free and unauthenticated on every tier. Defaults to findings-only payloads and rejects raw secret-bearing configuration.",
+          security: [],
           requestBody: {
             required: true,
             content: {
@@ -1209,8 +1218,6 @@ discoveryRoutes.get("/openapi.json", (c) => {
               },
             },
             "400": { description: "Invalid or privacy-unsafe exposure payload" },
-            "401": { description: "Authentication required" },
-            "402": { description: "Payment required when using x402" },
           },
         },
       },
@@ -1218,7 +1225,8 @@ discoveryRoutes.get("/openapi.json", (c) => {
         post: {
           operationId: "ingestExposure",
           summary: "Evaluate and receipt endpoint exposure findings",
-          description: "Phase 1 stateless ingest endpoint. Returns the same verdict shape as exposure evaluation plus storage_mode=stateless_phase_1.",
+          description: "Phase 1 stateless ingest endpoint. Free and unauthenticated on every tier. Returns the same verdict shape as exposure evaluation plus storage_mode=stateless_phase_1.",
+          security: [],
           requestBody: {
             required: true,
             content: {
@@ -1237,8 +1245,6 @@ discoveryRoutes.get("/openapi.json", (c) => {
               },
             },
             "400": { description: "Invalid or privacy-unsafe exposure payload" },
-            "401": { description: "Authentication required" },
-            "402": { description: "Payment required when using x402" },
           },
         },
       },
