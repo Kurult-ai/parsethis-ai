@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "build": "prisma generate && tsc",
+    "build": "prisma generate && tsc && node scripts/patch-prisma-dist-imports.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test src/**/*.test.ts",
     "eval:screening": "node --import tsx scripts/evaluate-screening-fixtures.ts",
