@@ -29,6 +29,8 @@ export const PRICING = {
   analyze: X402_ENDPOINTS.analyze.priceByDepth,
   evaluate: X402_ENDPOINTS.evaluate.price,
   chat: X402_ENDPOINTS.chat.price,
+  exposure_evaluate: X402_ENDPOINTS.exposure_evaluate.price,
+  exposure_ingest: X402_ENDPOINTS.exposure_ingest.price,
 } as const;
 
 // Initialize x402 middleware only when enabled and wallet configured
@@ -278,6 +280,14 @@ async function initX402(): Promise<void> {
           accepts: { scheme: "exact", price: PRICING.chat, network: NETWORK, payTo: WALLET },
           description: "Chat with Parse AI assistant",
         },
+        "POST /v1/exposure/evaluate": {
+          accepts: { scheme: "exact", price: PRICING.exposure_evaluate, network: NETWORK, payTo: WALLET },
+          description: "Evaluate sanitized endpoint exposure findings",
+        },
+        "POST /v1/exposure/ingest": {
+          accepts: { scheme: "exact", price: PRICING.exposure_ingest, network: NETWORK, payTo: WALLET },
+          description: "Evaluate and receipt sanitized endpoint exposure findings",
+        },
       },
       resourceServer,
     );
@@ -485,6 +495,8 @@ export function getPricingInfo() {
       "POST /v1/analyze": PRICING.analyze,
       "POST /v1/evaluate": PRICING.evaluate,
       "POST /v1/chat": PRICING.chat,
+      "POST /v1/exposure/evaluate": PRICING.exposure_evaluate,
+      "POST /v1/exposure/ingest": PRICING.exposure_ingest,
     },
     free_endpoints: ["GET /v1/models", "GET /v1/pricing", "POST /v1/keys/generate"],
     free_tier: {
