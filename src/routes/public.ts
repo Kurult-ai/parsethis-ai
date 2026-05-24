@@ -122,14 +122,16 @@ publicRoutes.get("/health", async (c) => {
     } else { checks.redis = "not_configured"; }
   } catch { checks.redis = "degraded"; }
 
-  // Database is critical; Redis is optional (degrades queue features only)
   const dbOk = checks.database === "ok";
 
+  // `/health` is the Railway/container liveness probe. Keep the process alive
+  // even when backing services are degraded so public static/docs/pricing pages
+  // can serve and dependency-specific routes can return their own 503s.
   return c.json({
-    status: dbOk ? (checks.redis === "ok" || checks.redis === "not_configured" ? "ok" : "degraded") : "error",
+    status: dbOk ? (checks.redis === "ok" || checks.redis === "not_configured" ? "ok" : "degraded") : "degraded",
     timestamp: new Date().toISOString(),
     version: "1.0.0",
-  }, dbOk ? 200 : 503);
+  }, 200);
 });
 
 // Detailed health — admin only

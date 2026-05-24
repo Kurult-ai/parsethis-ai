@@ -7,7 +7,13 @@ import { runMigrations } from "./migrate.js";
 
 const port = parseInt(process.env.PORT || "3000");
 
-await runMigrations();
+await runMigrations().catch((err) => {
+  console.error(`[migrate] startup migration failed: ${(err as Error).message}`);
+  if (process.env.MIGRATIONS_REQUIRED === "true") {
+    throw err;
+  }
+  console.warn("[migrate] continuing startup with degraded database-dependent routes");
+});
 
 // Initialize Redis connection (lazy connect — will connect on first use)
 if (process.env.REDIS_URL) {
