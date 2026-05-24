@@ -43,6 +43,21 @@ describe("Public Routes", () => {
     assert.ok(body.status === "ok" || body.status === "degraded");
     assert.ok(body.timestamp);
     assert.equal(body.version, "1.0.0");
+    assert.ok(body.deployment);
+    assert.equal(body.deployment.commit, "unknown");
+    assert.equal(body.deployment.runtime, "source");
+  });
+
+  it("GET /version returns public deployment metadata", async () => {
+    const res = await req("/version");
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.service, "Parse");
+    assert.equal(body.version, "1.0.0");
+    assert.ok(body.deployment);
+    assert.equal(body.deployment.commit, "unknown");
+    assert.equal(body.deployment.build_time, "unknown");
+    assert.equal(body.deployment.runtime, "source");
   });
 
   it("GET /docs returns documentation page", async () => {

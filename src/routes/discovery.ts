@@ -1176,12 +1176,38 @@ discoveryRoutes.get("/openapi.json", (c) => {
                       timestamp: { type: "string", format: "date-time" },
                       uptime_seconds: { type: "integer" },
                       version: { type: "string" },
+                      deployment: { $ref: "#/components/schemas/DeploymentMetadata" },
                     },
                   },
                 },
               },
             },
             "503": { description: "Service is degraded" },
+          },
+        },
+      },
+      "/version": {
+        get: {
+          operationId: "versionCheck",
+          summary: "Deployment version",
+          description: "Returns public service version and deployment metadata.",
+          security: [],
+          responses: {
+            "200": {
+              description: "Deployment metadata",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      service: { type: "string" },
+                      version: { type: "string" },
+                      deployment: { $ref: "#/components/schemas/DeploymentMetadata" },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -1196,6 +1222,14 @@ discoveryRoutes.get("/openapi.json", (c) => {
         },
       },
       schemas: {
+        DeploymentMetadata: {
+          type: "object",
+          properties: {
+            commit: { type: "string" },
+            build_time: { type: "string" },
+            runtime: { type: "string", enum: ["source", "dist"] },
+          },
+        },
         ParseRequest: {
           type: "object",
           required: ["prompt"],

@@ -10,6 +10,7 @@ import { getParseSkillPrompt, getSkillInstallInstructions, getSkillInstallScript
 import { authMiddleware } from "../auth.js";
 import { prisma } from "../db.js";
 import { getBaseUrl } from "../lib/route-utils.js";
+import { getDeploymentMetadata, getPublicVersionPayload, SERVICE_VERSION } from "../lib/build-info.js";
 import { renderPage } from "../lib/html-template.js";
 import { organizationSchema } from "../lib/schema.js";
 import { getLogoLockupSvg } from "../lib/logo.js";
@@ -59,7 +60,7 @@ publicRoutes.get("/", (c) => {
   if (accept.includes("application/json") && !accept.includes("text/html")) {
     return c.json({
       service: PRODUCT.name,
-      version: "1.0.0",
+      version: SERVICE_VERSION,
       description: PRODUCT.description,
       docs: "/docs",
       dashboard: "/dashboard",
@@ -105,7 +106,15 @@ publicRoutes.get("/health", async (c) => {
   return c.json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "1.0.0",
+    version: SERVICE_VERSION,
+    deployment: getDeploymentMetadata(),
+  }, 200);
+});
+
+publicRoutes.get("/version", async (c) => {
+  return c.json({
+    service: PRODUCT.name,
+    ...getPublicVersionPayload(),
   }, 200);
 });
 
@@ -146,7 +155,7 @@ publicRoutes.get("/health/detail", authMiddleware("admin"), async (c) => {
       heap_used_mb: Math.round(mem.heapUsed / 1024 / 1024),
       heap_total_mb: Math.round(mem.heapTotal / 1024 / 1024),
     },
-    version: "1.0.0",
+    version: SERVICE_VERSION,
   }, allOk ? 200 : 503);
 });
 

@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test src/**/*.test.ts",
     "eval:screening": "node --import tsx scripts/evaluate-screening-fixtures.ts",
+    "smoke:parse": "node scripts/smoke-parse.mjs",
     "eval:public-screening": "node --import tsx scripts/evaluate-public-screening.ts",
     "docs:sync-screening-metrics": "node --import tsx scripts/sync-screening-metric-docs.ts",
     "prepare:screening-holdout-manifest": "node --import tsx scripts/prepare-screening-holdout-manifest.ts",
