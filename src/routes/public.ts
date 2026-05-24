@@ -100,35 +100,10 @@ publicRoutes.get("/", (c) => {
   return c.html(renderLandingPage(baseUrl));
 });
 
-// Health check — public (minimal), admin detail behind auth
+// Health check — public liveness only. Dependency checks belong in /health/detail.
 publicRoutes.get("/health", async (c) => {
-  const checks: Record<string, string> = {};
-
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    checks.database = "ok";
-  } catch { checks.database = "error"; }
-
-  try {
-    if (isRedisAvailable()) {
-      const redis = getRedis();
-      const connected = await ensureRedisConnected();
-      if (connected) {
-        await redis.ping();
-        checks.redis = "ok";
-      } else {
-        checks.redis = "degraded";
-      }
-    } else { checks.redis = "not_configured"; }
-  } catch { checks.redis = "degraded"; }
-
-  const dbOk = checks.database === "ok";
-
-  // `/health` is the Railway/container liveness probe. Keep the process alive
-  // even when backing services are degraded so public static/docs/pricing pages
-  // can serve and dependency-specific routes can return their own 503s.
   return c.json({
-    status: dbOk ? (checks.redis === "ok" || checks.redis === "not_configured" ? "ok" : "degraded") : "degraded",
+    status: "ok",
     timestamp: new Date().toISOString(),
     version: "1.0.0",
   }, 200);
