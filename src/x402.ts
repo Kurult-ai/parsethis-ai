@@ -298,16 +298,15 @@ async function initX402(): Promise<void> {
     console.error("[x402] Server will continue without x402 payments — fix facilitator connectivity and redeploy");
     x402MW = null;
     x402Ready = false;
-    if (X402_ENABLED) throw err;
   }
 }
 
-// Initialize async — fail-closed when x402 is enabled so misconfig exits the process
+// Initialize async. x402 is an optional paid-access path; a facilitator or
+// wallet outage must not take down public docs/pricing/API-key routes.
 initX402().catch((err) => {
-  console.error(`[x402] Fatal init error: ${(err as Error).message}`);
-  if (X402_ENABLED) {
-    process.exit(1);
-  }
+  console.error(`[x402] Init error: ${(err as Error).message}`);
+  x402MW = null;
+  x402Ready = false;
 });
 
 /**
