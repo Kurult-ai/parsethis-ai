@@ -296,6 +296,7 @@ publicRoutes.get("/docs", (c) => {
   <li><a href="/guides/prompt-injection-detection">Prompt Injection Detection Guide</a> — Comprehensive detection methods</li>
   <li><a href="/guides/agent-security">Securing AI Agents</a> — Best practices for agent security</li>
   <li><a href="/guides/screen-tool-results">Screen Tool Results</a> — Defend tool and browser boundaries</li>
+  <li><a href="/guides/nango-action-functions">Protect Nango action functions</a> — Screen OAuth-backed tool actions before they run</li>
   <li><a href="/guides/rag-prompt-injection-screening">RAG Prompt Injection Screening</a> — Screen retrieved documents</li>
   <li><a href="/security/limitations">Limitations</a> — What Parse does and does not guarantee</li>
   <li><a href="/compare/prompt-injection-tools">Tool Comparison</a> — Sourced tradeoff comparison</li>
@@ -397,7 +398,7 @@ publicRoutes.get("/docs/:slug", (c) => {
   if ("markdown" in result) {
     c.header("Content-Type", "text/markdown; charset=utf-8");
     c.header("Vary", "Accept");
-    return c.text(result.markdown);
+    return c.body(result.markdown);
   }
   return c.html(result.html);
 });
@@ -411,7 +412,7 @@ publicRoutes.get("/guides/:slug", (c) => {
   if ("markdown" in result) {
     c.header("Content-Type", "text/markdown; charset=utf-8");
     c.header("Vary", "Accept");
-    return c.text(result.markdown);
+    return c.body(result.markdown);
   }
   return c.html(result.html);
 });
@@ -425,7 +426,7 @@ publicRoutes.get("/compare/:slug", (c) => {
   if ("markdown" in result) {
     c.header("Content-Type", "text/markdown; charset=utf-8");
     c.header("Vary", "Accept");
-    return c.text(result.markdown);
+    return c.body(result.markdown);
   }
   return c.html(result.html);
 });
@@ -439,7 +440,7 @@ publicRoutes.get("/security/:slug", (c) => {
   if ("markdown" in result) {
     c.header("Content-Type", "text/markdown; charset=utf-8");
     c.header("Vary", "Accept");
-    return c.text(result.markdown);
+    return c.body(result.markdown);
   }
   return c.html(result.html);
 });
@@ -457,7 +458,7 @@ publicRoutes.get("/blog/:category/:slug", (c) => {
   if ("markdown" in result) {
     c.header("Content-Type", "text/markdown; charset=utf-8");
     c.header("Vary", "Accept");
-    return c.text(result.markdown);
+    return c.body(result.markdown);
   }
   return c.html(result.html);
 });

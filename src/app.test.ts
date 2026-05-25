@@ -67,6 +67,39 @@ describe("Public Routes", () => {
     assert.ok(html.includes("Documentation"), "Should contain documentation content");
   });
 
+  it("links the Nango action-functions guide from the docs index", async () => {
+    const res = await req("/docs");
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.ok(html.includes('/guides/nango-action-functions'), "Docs index should link the Nango guide");
+    assert.ok(html.includes("Protect Nango action functions"), "Docs index should name the integration use case");
+  });
+
+  it("serves a copy-pasteable Nango action-functions guide as HTML and Markdown", async () => {
+    const htmlRes = await req("/guides/nango-action-functions");
+    assert.equal(htmlRes.status, 200);
+    const html = await htmlRes.text();
+    assert.ok(html.includes("Protect Nango action functions with Parse"));
+    assert.ok(html.includes("safeNangoAction"));
+
+    const mdRes = await req("/guides/nango-action-functions", { headers: { Accept: "text/markdown" } });
+    assert.equal(mdRes.status, 200);
+    assert.match(mdRes.headers.get("content-type") || "", /text\/markdown/);
+    const markdown = await mdRes.text();
+    assert.ok(markdown.includes("providerConfigKey"));
+    assert.ok(markdown.includes("connectionId"));
+    assert.ok(markdown.includes("screen_output"));
+  });
+
+  it("includes Nango-style OAuth action boundaries in the installable skill", async () => {
+    const res = await req("/skill");
+    assert.equal(res.status, 200);
+    const skill = await res.text();
+    assert.ok(skill.includes("OAuth-backed action tools"));
+    assert.ok(skill.includes("Nango-style"));
+    assert.ok(skill.includes("providerConfigKey"));
+  });
+
   it("GET /v1/models returns models list", async () => {
     const res = await req("/v1/models");
     assert.equal(res.status, 200);
