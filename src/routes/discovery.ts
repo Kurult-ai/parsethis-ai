@@ -304,7 +304,7 @@ discoveryRoutes.get("/.well-known/ai-plugin.json", (c) => {
     description:
       `${PRODUCT.name} screens untrusted prompts, LLM outputs, private disclosures, and agent-to-agent messages before an AI agent acts. Returns a 0-10 risk score, verdict, typed flags, and recommended action.`,
     logo_url: `${baseUrl}/logo.png`,
-    contact_email: "hello@parsethis.ai",
+    contact_email: PRODUCT.contactEmail,
     legal_info_url: `${baseUrl}/privacy`,
     auth: {
       type: "bearer",
