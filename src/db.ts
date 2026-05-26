@@ -35,7 +35,14 @@ export function getPrisma(): PrismaClient {
     }
     const connectionString = databaseUrlWithoutPrismaSchemaParam(DATABASE_URL);
     const schema = databaseUrlSchema(DATABASE_URL);
-    const adapter = new PrismaPg({ connectionString }, schema ? { schema } : undefined);
+    const adapter = new PrismaPg(
+      {
+        connectionString,
+        connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS ?? 8000),
+        idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS ?? 10000),
+      },
+      schema ? { schema } : undefined,
+    );
     _prisma = new PrismaClient({ adapter });
   }
   return _prisma;
