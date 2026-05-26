@@ -293,7 +293,7 @@ export function authMiddleware(requiredScope?: string) {
           limit: 200,
         });
       }
-      const ownerScopes = ["analyze", "evaluate", "chat"];
+      const ownerScopes = ["analyze", "evaluate", "chat", "admin"];
       if (requiredScope && !ownerScopes.includes(requiredScope)) {
         return problem(c, {
           status: 403,
