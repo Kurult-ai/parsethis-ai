@@ -101,6 +101,12 @@ export function renderAdminDashboardPage(baseUrl: string): string {
               <option value="admin.api_key.update">admin.api_key.update</option>
               <option value="admin.api_key.revoke">admin.api_key.revoke</option>
               <option value="admin.screening_policy.upsert">admin.screening_policy.upsert</option>
+              <option value="admin.customer.resolve">admin.customer.resolve</option>
+              <option value="admin.entitlement.grant">admin.entitlement.grant</option>
+              <option value="admin.entitlement.list">admin.entitlement.list</option>
+              <option value="admin.support.ticket.create">admin.support.ticket.create</option>
+              <option value="admin.support.ticket.list">admin.support.ticket.list</option>
+              <option value="admin.billing.anomaly.scan">admin.billing.anomaly.scan</option>
               <option value="admin.subscription.list">admin.subscription.list</option>
               <option value="admin.payment.list">admin.payment.list</option>
               <option value="admin.evaluation.list">admin.evaluation.list</option>

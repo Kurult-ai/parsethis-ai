@@ -28,6 +28,9 @@ model ApiKey {
   screeningEvents  ScreeningEvent[]
   subscription     Subscription?
   billingUsage     BillingUsage[]
+  entitlementGrants EntitlementGrant[]
+  supportTickets   SupportTicket[]
+  adminReceipts    AdminActionReceipt[]
 
   @@map("api_keys")
 }
@@ -181,4 +184,105 @@ model BillingUsage {
 
   @@unique([apiKeyId, periodStart], name: "idx_billing_usage_key_period")
   @@map("billing_usage")
+}
+
+model EntitlementGrant {
+  id              String   @id @default(cuid())
+  apiKeyId        String   @map("api_key_id")
+  userId          String   @map("user_id")
+  tier            String
+  reason          String
+  grantedBy       String   @map("granted_by")
+  priceMode       String   @default("manual") @map("price_mode")
+  priceUsdCents   Int?     @map("price_usd_cents")
+  stripePriceId   String?  @map("stripe_price_id")
+  startsAt        DateTime @map("starts_at")
+  endsAt          DateTime? @map("ends_at")
+  expireKeyAtEnd  Boolean  @default(false) @map("expire_key_at_end")
+  status          String   @default("active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@index([apiKeyId, status], name: "idx_entitlement_grants_key_status")
+  @@index([userId], name: "idx_entitlement_grants_user")
+  @@index([endsAt], name: "idx_entitlement_grants_ends")
+  @@map("entitlement_grants")
+}
+
+model SupportTicket {
+  id               String   @id @default(cuid())
+  source           String
+  externalId       String?  @map("external_id")
+  requesterEmail   String?  @map("requester_email")
+  requesterName    String?  @map("requester_name")
+  subject          String?
+  body             String
+  status           String   @default("open")
+  priority         String   @default("normal")
+  category         String?
+  apiKeyId         String?  @map("api_key_id")
+  stripeCustomerId String?  @map("stripe_customer_id")
+  assignedTo       String?  @map("assigned_to")
+  summary          String?
+  resolution       String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  resolvedAt       DateTime? @map("resolved_at")
+
+  apiKey   ApiKey? @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  messages SupportMessage[]
+  receipts AdminActionReceipt[]
+
+  @@index([status, priority], name: "idx_support_tickets_status_priority")
+  @@index([requesterEmail], name: "idx_support_tickets_requester")
+  @@index([apiKeyId], name: "idx_support_tickets_api_key")
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id         String   @id @default(cuid())
+  ticketId   String   @map("ticket_id")
+  direction  String
+  channel    String
+  externalId String?  @map("external_id")
+  from       String?
+  to         String?
+  body       String
+  screened   Boolean  @default(false)
+  riskScore  Float?   @map("risk_score")
+  verdict    String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt], name: "idx_support_messages_ticket_created")
+  @@map("support_messages")
+}
+
+model AdminActionReceipt {
+  id             String   @id @default(cuid())
+  action         String
+  actor          String
+  ticketId       String?  @map("ticket_id")
+  apiKeyId       String?  @map("api_key_id")
+  userId         String?  @map("user_id")
+  stripeObjectId String?  @map("stripe_object_id")
+  reason         String?
+  dryRun         Boolean  @default(false) @map("dry_run")
+  before         Json?
+  after          Json?
+  result         Json?
+  riskLevel      String   @default("low") @map("risk_level")
+  approvalState  String   @default("not_required") @map("approval_state")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  apiKey ApiKey? @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  ticket SupportTicket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+
+  @@index([action, createdAt], name: "idx_admin_receipts_action_created")
+  @@index([ticketId], name: "idx_admin_receipts_ticket")
+  @@index([apiKeyId], name: "idx_admin_receipts_api_key")
+  @@map("admin_action_receipts")
 }

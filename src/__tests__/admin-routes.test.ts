@@ -45,5 +45,16 @@ describe("admin routes", () => {
     assert.ok(actions.includes("admin.geo.synthetic.record"));
     assert.ok(actions.includes("admin.api_key.create"));
     assert.ok(actions.includes("admin.screening_policy.upsert"));
+    assert.ok(actions.includes("admin.customer.resolve"));
+    assert.ok(actions.includes("admin.entitlement.grant"));
+    assert.ok(actions.includes("admin.entitlement.list"));
+    assert.ok(actions.includes("admin.support.ticket.list"));
+    assert.ok(actions.includes("admin.support.ticket.create"));
+    assert.ok(actions.includes("admin.billing.anomaly.scan"));
+
+    const grant = body.actions.find((action: { name: string }) => action.name === "admin.entitlement.grant");
+    assert.equal(grant.dry_run_supported, true);
+    assert.equal(grant.mutates, true);
+    assert.equal(grant.risk, "medium");
   });
 });

@@ -14,6 +14,13 @@ import { invalidateApiKeyCache, invalidatePolicyCache } from "../result-store.js
 import type { AppEnv } from "../types.js";
 import { renderAdminDashboardPage } from "../pages/admin.js";
 import { PLAN_LIMITS } from "../lib/product-facts.js";
+import {
+  addGrantPeriod,
+  manualCustomerId,
+  manualPriceId,
+  manualSubscriptionId,
+  parsePriceUsdCents,
+} from "../lib/admin-entitlements.js";
 import { GEO_AUDIT_ACTIONS } from "../lib/geo-analytics.js";
 
 export const adminRoutes = new Hono<AppEnv>();
@@ -474,6 +481,76 @@ function buildAdminManifest(baseUrl: string) {
         agentSafe: "boolean optional",
         override_tier_limit: "boolean optional",
       },
+    },
+    {
+      name: "admin.customer.resolve",
+      method: "POST",
+      path: actionPath,
+      mutates: false,
+      risk: "low",
+      params: {
+        email: "string optional",
+        user_id: "string optional",
+        api_key_id: "string optional",
+        key_prefix: "string optional",
+        stripe_customer_id: "string optional",
+        ticket_id: "string optional",
+      },
+    },
+    {
+      name: "admin.entitlement.grant",
+      method: "POST",
+      path: actionPath,
+      mutates: true,
+      risk: "medium",
+      dry_run_supported: true,
+      autonomous_when: ["duration <= 30 days", "target customer resolved", "no abuse/security flags", "manual/comp price only"],
+      requires_approval_when: ["enterprise tier", "refund/charge", "duration > 30 days", "security-sensitive account"],
+      params: {
+        email: "string optional when api_key_id is provided",
+        api_key_id: "string optional when email is provided",
+        tier: VALID_TIERS,
+        period: "string optional, e.g. 1 month",
+        price_usd: "string|number optional",
+        price_id: "Stripe price id or manual id optional",
+        reason: "string required",
+        dry_run: "boolean default true",
+        create_key_if_missing: "boolean optional",
+        expire_key_at_period_end: "boolean optional",
+      },
+    },
+    {
+      name: "admin.entitlement.list",
+      method: "POST",
+      path: actionPath,
+      mutates: false,
+      risk: "low",
+      params: { limit: "number", offset: "number", status: "string optional", api_key_id: "string optional", user_id: "string optional" },
+    },
+    {
+      name: "admin.support.ticket.list",
+      method: "POST",
+      path: actionPath,
+      mutates: false,
+      risk: "low",
+      params: { limit: "number", offset: "number", status: "string optional", search: "string optional" },
+    },
+    {
+      name: "admin.support.ticket.create",
+      method: "POST",
+      path: actionPath,
+      mutates: true,
+      risk: "low",
+      dry_run_supported: true,
+      params: { source: "string", body: "string", requester_email: "string optional", subject: "string optional", category: "string optional" },
+    },
+    {
+      name: "admin.billing.anomaly.scan",
+      method: "POST",
+      path: actionPath,
+      mutates: false,
+      risk: "low",
+      params: { days: "number optional, 1-90", limit: "number optional" },
     },
     {
       name: "admin.subscription.list",
@@ -1232,6 +1309,405 @@ async function listAuditEventsData(params: ListParams) {
   };
 }
 
+
+function serializeGrant(grant: any) {
+  return grant
+    ? {
+        id: grant.id,
+        api_key_id: grant.apiKeyId,
+        user_id: grant.userId,
+        tier: grant.tier,
+        reason: grant.reason,
+        granted_by: grant.grantedBy,
+        price_mode: grant.priceMode,
+        price_usd_cents: grant.priceUsdCents,
+        stripe_price_id: grant.stripePriceId,
+        starts_at: iso(grant.startsAt),
+        ends_at: iso(grant.endsAt),
+        expire_key_at_end: grant.expireKeyAtEnd,
+        status: grant.status,
+        created_at: iso(grant.createdAt),
+      }
+    : null;
+}
+
+function serializeSupportTicket(ticket: any, includeMessages = false) {
+  return {
+    id: ticket.id,
+    source: ticket.source,
+    external_id: ticket.externalId,
+    requester_email: ticket.requesterEmail,
+    requester_name: ticket.requesterName,
+    subject: ticket.subject,
+    status: ticket.status,
+    priority: ticket.priority,
+    category: ticket.category,
+    api_key_id: ticket.apiKeyId,
+    stripe_customer_id: ticket.stripeCustomerId,
+    assigned_to: ticket.assignedTo,
+    summary: ticket.summary,
+    resolution: ticket.resolution,
+    created_at: iso(ticket.createdAt),
+    updated_at: iso(ticket.updatedAt),
+    resolved_at: iso(ticket.resolvedAt),
+    messages: includeMessages ? (ticket.messages || []).map((message: any) => ({
+      id: message.id,
+      direction: message.direction,
+      channel: message.channel,
+      external_id: message.externalId,
+      from: message.from,
+      to: message.to,
+      body: message.body,
+      screened: message.screened,
+      risk_score: message.riskScore,
+      verdict: message.verdict,
+      created_at: iso(message.createdAt),
+    })) : undefined,
+  };
+}
+
+function serializeReceipt(receipt: any) {
+  return {
+    id: receipt.id,
+    action: receipt.action,
+    actor: receipt.actor,
+    ticket_id: receipt.ticketId,
+    api_key_id: receipt.apiKeyId,
+    user_id: receipt.userId,
+    stripe_object_id: receipt.stripeObjectId,
+    reason: receipt.reason,
+    dry_run: receipt.dryRun,
+    before: receipt.before,
+    after: receipt.after,
+    result: receipt.result,
+    risk_level: receipt.riskLevel,
+    approval_state: receipt.approvalState,
+    created_at: iso(receipt.createdAt),
+  };
+}
+
+async function writeAdminReceipt(c: AdminContext, data: {
+  action: string;
+  apiKeyId?: string | null;
+  userId?: string | null;
+  ticketId?: string | null;
+  stripeObjectId?: string | null;
+  reason?: string | null;
+  dryRun?: boolean;
+  before?: unknown;
+  after?: unknown;
+  result?: unknown;
+  riskLevel?: string;
+  approvalState?: string;
+}) {
+  const actor = c.get("apiKey");
+  return prisma.adminActionReceipt.create({
+    data: {
+      action: data.action,
+      actor: `${actor.name || "admin"}:${actor.id}`,
+      apiKeyId: data.apiKeyId ?? null,
+      userId: data.userId ?? null,
+      ticketId: data.ticketId ?? null,
+      stripeObjectId: data.stripeObjectId ?? null,
+      reason: data.reason ?? null,
+      dryRun: Boolean(data.dryRun),
+      before: data.before as any,
+      after: data.after as any,
+      result: data.result as any,
+      riskLevel: data.riskLevel ?? "low",
+      approvalState: data.approvalState ?? "not_required",
+    },
+  });
+}
+
+async function resolveCustomerData(params: UnknownRecord) {
+  const email = getString(params, "email", "user_id", "userId");
+  const apiKeyId = getString(params, "api_key_id", "apiKeyId", "id");
+  const keyPrefix = getString(params, "key_prefix", "keyPrefix");
+  const stripeCustomerId = getString(params, "stripe_customer_id", "stripeCustomerId");
+  const ticketId = getString(params, "ticket_id", "ticketId");
+
+  let ticket: any = null;
+  if (ticketId) {
+    ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId }, include: { messages: { orderBy: { createdAt: "asc" } } } });
+  }
+
+  const resolvedEmail = email || ticket?.requesterEmail || undefined;
+  const resolvedApiKeyId = apiKeyId || ticket?.apiKeyId || undefined;
+  const resolvedStripeCustomerId = stripeCustomerId || ticket?.stripeCustomerId || undefined;
+  const where: Prisma.ApiKeyWhereInput = { OR: [] };
+  const or = where.OR as Prisma.ApiKeyWhereInput[];
+  if (resolvedApiKeyId) or.push({ id: resolvedApiKeyId });
+  if (resolvedEmail) or.push({ userId: resolvedEmail });
+  if (keyPrefix) or.push({ keyPrefix: { startsWith: keyPrefix } });
+  if (resolvedStripeCustomerId) or.push({ subscription: { stripeCustomerId: resolvedStripeCustomerId } });
+  if (!or.length) {
+    return { resolved: false, reason: "Provide email, user_id, api_key_id, key_prefix, stripe_customer_id, or ticket_id." };
+  }
+
+  const apiKeys = await prisma.apiKey.findMany({
+    where,
+    include: {
+      subscription: true,
+      entitlementGrants: { orderBy: { createdAt: "desc" }, take: 10 },
+      supportTickets: { orderBy: { updatedAt: "desc" }, take: 10 },
+      adminReceipts: { orderBy: { createdAt: "desc" }, take: 10 },
+      _count: { select: { evaluations: true, usageRecords: true, screeningEvents: true, billingUsage: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+
+  const stripeCustomerIds = new Set<string>();
+  for (const key of apiKeys) if (key.subscription?.stripeCustomerId) stripeCustomerIds.add(key.subscription.stripeCustomerId);
+  if (resolvedStripeCustomerId) stripeCustomerIds.add(resolvedStripeCustomerId);
+
+  const tickets = await prisma.supportTicket.findMany({
+    where: {
+      OR: [
+        ...(resolvedEmail ? [{ requesterEmail: resolvedEmail }] : []),
+        ...(resolvedApiKeyId ? [{ apiKeyId: resolvedApiKeyId }] : []),
+        ...Array.from(stripeCustomerIds).map((id) => ({ stripeCustomerId: id })),
+      ],
+    },
+    include: { messages: { orderBy: { createdAt: "asc" }, take: 5 } },
+    orderBy: { updatedAt: "desc" },
+    take: 20,
+  });
+
+  return {
+    resolved: apiKeys.length > 0 || tickets.length > 0,
+    query: { email: resolvedEmail ?? null, api_key_id: resolvedApiKeyId ?? null, key_prefix: keyPrefix ?? null, stripe_customer_id: resolvedStripeCustomerId ?? null, ticket_id: ticketId ?? null },
+    api_keys: apiKeys.map(serializeApiKey),
+    entitlement_grants: apiKeys.flatMap((key) => key.entitlementGrants.map(serializeGrant)),
+    support_tickets: tickets.map((t) => serializeSupportTicket(t, true)),
+    recent_receipts: apiKeys.flatMap((key) => key.adminReceipts.map(serializeReceipt)),
+    risk_flags: {
+      no_active_key: apiKeys.every((key) => apiKeyStatus(key) !== "active"),
+      past_due_subscription: apiKeys.some((key) => key.subscription && ["past_due", "unpaid", "incomplete"].includes(key.subscription.status)),
+      expiring_grants_soon: apiKeys.some((key) => key.entitlementGrants.some((grant: any) => grant.endsAt && grant.endsAt.getTime() < Date.now() + 3 * 24 * 60 * 60 * 1000)),
+    },
+  };
+}
+
+async function listEntitlementsData(params: ListParams) {
+  const where: Prisma.EntitlementGrantWhereInput = {};
+  if (params.status) where.status = params.status;
+  if (params.apiKeyId) where.apiKeyId = params.apiKeyId;
+  if (params.userId) where.userId = params.userId;
+  const [total, grants] = await Promise.all([
+    prisma.entitlementGrant.count({ where }),
+    prisma.entitlementGrant.findMany({ where, orderBy: { createdAt: "desc" }, take: params.limit, skip: params.offset }),
+  ]);
+  return { total, limit: params.limit, offset: params.offset, entitlement_grants: grants.map(serializeGrant) };
+}
+
+async function grantEntitlementData(c: AdminContext, params: UnknownRecord) {
+  const dryRun = params.dry_run !== false && params.dryRun !== false && params.live !== true;
+  const apiKeyId = getString(params, "api_key_id", "apiKeyId", "id");
+  const userId = getString(params, "email", "user_id", "userId");
+  const reason = getString(params, "reason") || "manual admin entitlement grant";
+  const tierValue = normalizeTier(params.tier, "pro");
+  if (typeof tierValue === "string" && !VALID_TIERS.includes(tierValue as Tier)) return jsonError(c, 400, "Invalid tier", tierValue);
+  const tier = tierValue as Tier;
+  let priceUsdCents: number | null;
+  try {
+    priceUsdCents = parsePriceUsdCents(params.price_usd as any ?? params.priceUsd as any);
+  } catch (err) {
+    return jsonError(c, 400, "Invalid price", (err as Error).message);
+  }
+
+  const now = new Date();
+  const period = getString(params, "period", "free_period", "freePeriod");
+  let endsAt: Date | null = null;
+  try {
+    endsAt = period ? addGrantPeriod(now, period) : null;
+  } catch (err) {
+    return jsonError(c, 400, "Invalid period", (err as Error).message);
+  }
+  const expireKeyAtEnd = boolParam(params.expire_key_at_period_end ?? params.expireKeyAtPeriodEnd);
+  const createKeyIfMissing = boolParam(params.create_key_if_missing ?? params.createKeyIfMissing);
+  const priceId = manualPriceId({ priceId: getString(params, "price_id", "priceId"), priceUsdCents, period });
+
+  let key: any = null;
+  if (apiKeyId) key = await prisma.apiKey.findUnique({ where: { id: apiKeyId }, include: { subscription: true, entitlementGrants: { orderBy: { createdAt: "desc" }, take: 5 } } });
+  if (!key && userId) {
+    key = await prisma.apiKey.findFirst({
+      where: { userId, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      include: { subscription: true, entitlementGrants: { orderBy: { createdAt: "desc" }, take: 5 } },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+  if (!key && !createKeyIfMissing) {
+    return jsonError(c, 404, "Customer not found", "No active API key found. Pass create_key_if_missing=true to provision a new key.", ErrorCode.RESOURCE_NOT_FOUND);
+  }
+  if (!key && !userId) return jsonError(c, 400, "Missing field", "email/user_id is required when creating a key.");
+
+  const planned = {
+    dry_run: dryRun,
+    user_id: userId || key?.userId,
+    api_key_id: key?.id ?? null,
+    create_key: !key,
+    tier,
+    rate_limit: TIER_RATE_LIMITS[tier],
+    price_mode: priceUsdCents === 0 || period ? "comp" : "manual",
+    price_usd_cents: priceUsdCents,
+    stripe_price_id: priceId,
+    starts_at: now.toISOString(),
+    ends_at: endsAt?.toISOString() ?? null,
+    expire_key_at_end: expireKeyAtEnd,
+    reason,
+    before: key ? serializeApiKey(key) : null,
+  };
+  if (dryRun) return { dry_run: true, planned };
+
+  let rawKey: string | undefined;
+  if (!key) {
+    const created = await createApiKey(userId!, `Admin ${tier} entitlement for ${userId}`, tier, undefined, ["analyze", "evaluate", "chat"], expireKeyAtEnd && endsAt ? endsAt : undefined);
+    key = created.record;
+    rawKey = created.key;
+  } else {
+    key = await prisma.apiKey.update({
+      where: { id: key.id },
+      data: { tier, rateLimit: TIER_RATE_LIMITS[tier], expiresAt: expireKeyAtEnd && endsAt ? endsAt : null },
+      include: { subscription: true },
+    });
+    await invalidateApiKeyCache(key.keyPrefix).catch(() => {});
+    await invalidatePolicyCache(key.id).catch(() => {});
+  }
+
+  const [grant, subscription] = await prisma.$transaction([
+    prisma.entitlementGrant.create({
+      data: {
+        apiKeyId: key.id,
+        userId: key.userId,
+        tier,
+        reason,
+        grantedBy: c.get("apiKey").id,
+        priceMode: priceUsdCents === 0 || period ? "comp" : "manual",
+        priceUsdCents,
+        stripePriceId: priceId,
+        startsAt: now,
+        endsAt,
+        expireKeyAtEnd,
+        status: "active",
+      },
+    }),
+    prisma.subscription.upsert({
+      where: { apiKeyId: key.id },
+      create: {
+        apiKeyId: key.id,
+        stripeCustomerId: manualCustomerId(key.userId),
+        stripeSubscriptionId: manualSubscriptionId(key.id),
+        stripePriceId: priceId,
+        status: "active",
+        currentPeriodStart: now,
+        currentPeriodEnd: endsAt ?? addGrantPeriod(now, "1 year"),
+        cancelAtPeriodEnd: Boolean(endsAt),
+      },
+      update: {
+        stripePriceId: priceId,
+        status: "active",
+        currentPeriodStart: now,
+        currentPeriodEnd: endsAt ?? addGrantPeriod(now, "1 year"),
+        cancelAtPeriodEnd: Boolean(endsAt),
+      },
+    }),
+  ]);
+
+  const afterKey = await prisma.apiKey.findUnique({ where: { id: key.id }, include: { subscription: true } });
+  const receipt = await writeAdminReceipt(c, {
+    action: "admin.entitlement.grant",
+    apiKeyId: key.id,
+    userId: key.userId,
+    reason,
+    dryRun: false,
+    before: planned.before,
+    after: afterKey ? serializeApiKey(afterKey) : null,
+    result: { grant: serializeGrant(grant), subscription_id: subscription.id, raw_key_created: Boolean(rawKey) },
+    riskLevel: "medium",
+  });
+
+  return {
+    changed: true,
+    api_key: afterKey ? serializeApiKey(afterKey) : serializeApiKey(key),
+    raw_key_created: rawKey,
+    entitlement_grant: serializeGrant(grant),
+    subscription: { id: subscription.id, status: subscription.status, stripe_price_id: subscription.stripePriceId, current_period_end: subscription.currentPeriodEnd.toISOString(), cancel_at_period_end: subscription.cancelAtPeriodEnd },
+    receipt: serializeReceipt(receipt),
+  };
+}
+
+async function listSupportTicketsData(params: ListParams) {
+  const where: Prisma.SupportTicketWhereInput = {};
+  if (params.status) where.status = params.status;
+  if (params.apiKeyId) where.apiKeyId = params.apiKeyId;
+  if (params.search) {
+    where.OR = [
+      { requesterEmail: { contains: params.search, mode: "insensitive" } },
+      { subject: { contains: params.search, mode: "insensitive" } },
+      { body: { contains: params.search, mode: "insensitive" } },
+    ];
+  }
+  const [total, tickets] = await Promise.all([
+    prisma.supportTicket.count({ where }),
+    prisma.supportTicket.findMany({ where, include: { messages: { orderBy: { createdAt: "asc" }, take: 5 } }, orderBy: { updatedAt: "desc" }, take: params.limit, skip: params.offset }),
+  ]);
+  return { total, limit: params.limit, offset: params.offset, support_tickets: tickets.map((ticket) => serializeSupportTicket(ticket, true)) };
+}
+
+async function createSupportTicketData(c: AdminContext, params: UnknownRecord) {
+  const source = getString(params, "source") || "manual";
+  const body = requireString(c, params, "body", "message");
+  if (body instanceof Response) return body;
+  const dryRun = boolParam(params.dry_run ?? params.dryRun);
+  const data = {
+    source,
+    externalId: getString(params, "external_id", "externalId"),
+    requesterEmail: getString(params, "requester_email", "requesterEmail", "email"),
+    requesterName: getString(params, "requester_name", "requesterName"),
+    subject: getString(params, "subject"),
+    body,
+    status: getString(params, "status") || "open",
+    priority: getString(params, "priority") || "normal",
+    category: getString(params, "category"),
+    apiKeyId: getString(params, "api_key_id", "apiKeyId"),
+    stripeCustomerId: getString(params, "stripe_customer_id", "stripeCustomerId"),
+    assignedTo: getString(params, "assigned_to", "assignedTo") || "kublai",
+    summary: getString(params, "summary"),
+  };
+  if (dryRun) return { dry_run: true, planned: data };
+  const ticket = await prisma.supportTicket.create({
+    data: {
+      ...data,
+      messages: { create: { direction: "inbound", channel: source, externalId: data.externalId, from: data.requesterEmail, body, screened: false } },
+    },
+    include: { messages: true },
+  });
+  const receipt = await writeAdminReceipt(c, { action: "admin.support.ticket.create", ticketId: ticket.id, apiKeyId: ticket.apiKeyId, userId: ticket.requesterEmail, result: { ticket_id: ticket.id }, riskLevel: "low" });
+  return { support_ticket: serializeSupportTicket(ticket, true), receipt: serializeReceipt(receipt) };
+}
+
+async function billingAnomalyScanData(params: ListParams) {
+  const now = new Date();
+  const soon = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+  const [pastDue, activeExpired, expiringGrants, danglingManual] = await Promise.all([
+    prisma.subscription.findMany({ where: { status: { in: ["past_due", "unpaid", "incomplete"] } }, include: { apiKey: true }, take: params.limit }),
+    prisma.subscription.findMany({ where: { status: "active", currentPeriodEnd: { lt: now }, cancelAtPeriodEnd: true }, include: { apiKey: true }, take: params.limit }),
+    prisma.entitlementGrant.findMany({ where: { status: "active", endsAt: { gte: now, lte: soon } }, include: { apiKey: true }, take: params.limit, orderBy: { endsAt: "asc" } }),
+    prisma.subscription.findMany({ where: { stripeSubscriptionId: { startsWith: "manual_subscription_" }, status: "active", currentPeriodEnd: { lt: now } }, include: { apiKey: true }, take: params.limit }),
+  ]);
+  return {
+    scanned_at: now.toISOString(),
+    anomalies: {
+      past_due_subscriptions: pastDue.map((sub) => ({ api_key_id: sub.apiKeyId, user_id: sub.apiKey.userId, status: sub.status, current_period_end: sub.currentPeriodEnd.toISOString() })),
+      active_subscriptions_past_period_end: activeExpired.map((sub) => ({ api_key_id: sub.apiKeyId, user_id: sub.apiKey.userId, status: sub.status, current_period_end: sub.currentPeriodEnd.toISOString(), cancel_at_period_end: sub.cancelAtPeriodEnd })),
+      expiring_entitlement_grants: expiringGrants.map((grant) => ({ id: grant.id, api_key_id: grant.apiKeyId, user_id: grant.userId, tier: grant.tier, ends_at: grant.endsAt?.toISOString() ?? null })),
+      expired_manual_subscriptions: danglingManual.map((sub) => ({ api_key_id: sub.apiKeyId, user_id: sub.apiKey.userId, stripe_subscription_id: sub.stripeSubscriptionId, current_period_end: sub.currentPeriodEnd.toISOString() })),
+    },
+  };
+}
+
 function scoreSyntheticGeoTest(detail: UnknownRecord) {
   const prompt = typeof detail.prompt === "string" ? detail.prompt : "";
   const x402Relevant =
@@ -1710,6 +2186,24 @@ adminRoutes.post("/v1/admin/actions", async (c) => {
       if (result instanceof Response) return result;
       return c.json(result);
     }
+    case "admin.customer.resolve":
+      return c.json(await resolveCustomerData(params));
+    case "admin.entitlement.grant": {
+      const result = await grantEntitlementData(c, params);
+      if (result instanceof Response) return result;
+      return c.json(result, result.dry_run ? 200 : 201);
+    }
+    case "admin.entitlement.list":
+      return c.json(await listEntitlementsData(listParamsFromBody(params)));
+    case "admin.support.ticket.list":
+      return c.json(await listSupportTicketsData(listParamsFromBody(params)));
+    case "admin.support.ticket.create": {
+      const result = await createSupportTicketData(c, params);
+      if (result instanceof Response) return result;
+      return c.json(result, result.dry_run ? 200 : 201);
+    }
+    case "admin.billing.anomaly.scan":
+      return c.json(await billingAnomalyScanData(listParamsFromBody(params)));
     case "admin.subscription.list":
       return c.json(await listSubscriptionsData(listParamsFromBody(params)));
     case "admin.payment.list":
