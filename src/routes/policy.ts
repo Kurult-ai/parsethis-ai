@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { cachePolicyData, getCachedPolicyData, invalidatePolicyCache } from "../result-store.js";
 import type { AppEnv, ScreeningPolicy } from "../types.js";
 import { auditLog } from "../lib/audit-log.js";
+import { formatBypassPolicy, hashBypassCodeword } from "../lib/bypass-codeword.js";
 
 export const policyRoutes = new Hono<AppEnv>();
 
@@ -15,6 +16,9 @@ export const DEFAULT_POLICY: ScreeningPolicy = {
   screenAllPrompts: false,
   autoBlockThreshold: 7,
   executeInSandbox: true,
+  bypassEnabled: false,
+  bypassCodewordHash: null,
+  bypassExpiresAt: null,
   approvalRequiredForPersonalData: true,
   approvalRequiredForLocation: true,
   approvalRequiredForFuturePlans: true,
@@ -38,6 +42,7 @@ function formatPolicyResponse(policy: ScreeningPolicy, tier: string) {
     screenAllPrompts: policy.screenAllPrompts,
     autoBlockThreshold: policy.autoBlockThreshold,
     executeInSandbox: policy.executeInSandbox,
+    ...formatBypassPolicy(policy),
     approvalRequiredForPersonalData: policy.approvalRequiredForPersonalData ?? true,
     approvalRequiredForLocation: policy.approvalRequiredForLocation ?? true,
     approvalRequiredForFuturePlans: policy.approvalRequiredForFuturePlans ?? true,
@@ -77,6 +82,9 @@ policyRoutes.get("/v1/policy", authMiddleware("evaluate"), async (c) => {
           screenAllPrompts: dbPolicy.screenAllPrompts,
           autoBlockThreshold: dbPolicy.autoBlockThreshold,
           executeInSandbox: dbPolicy.executeInSandbox,
+          bypassEnabled: dbPolicy.bypassEnabled,
+          bypassCodewordHash: dbPolicy.bypassCodewordHash,
+          bypassExpiresAt: dbPolicy.bypassExpiresAt,
           approvalRequiredForPersonalData: true,
           approvalRequiredForLocation: true,
           approvalRequiredForFuturePlans: true,
@@ -133,6 +141,38 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
   if (body.screenAllPrompts !== undefined) updateData.screenAllPrompts = Boolean(body.screenAllPrompts);
   if (body.autoBlockThreshold !== undefined) updateData.autoBlockThreshold = Number(body.autoBlockThreshold);
   if (body.executeInSandbox !== undefined) updateData.executeInSandbox = Boolean(body.executeInSandbox);
+  if (body.bypassCodeword !== undefined) {
+    if (body.bypassCodeword === null || body.bypassCodeword === "") {
+      updateData.bypassCodewordHash = null;
+      updateData.bypassEnabled = false;
+    } else if (typeof body.bypassCodeword !== "string") {
+      return c.json({ error: "bypassCodeword must be a string or null" }, 400);
+    } else {
+      const normalizedLength = body.bypassCodeword.trim().replace(/\s+/g, " ").length;
+      if (normalizedLength < 8 || normalizedLength > 128) {
+        return c.json({ error: "bypassCodeword must be between 8 and 128 characters" }, 400);
+      }
+      updateData.bypassCodewordHash = hashBypassCodeword(body.bypassCodeword);
+      updateData.bypassEnabled = true;
+    }
+  }
+  if (body.bypassEnabled !== undefined) updateData.bypassEnabled = Boolean(body.bypassEnabled);
+  if (body.bypassExpiresAt !== undefined) {
+    if (body.bypassExpiresAt === null || body.bypassExpiresAt === "") {
+      updateData.bypassExpiresAt = null;
+    } else if (typeof body.bypassExpiresAt !== "string" || Number.isNaN(Date.parse(body.bypassExpiresAt))) {
+      return c.json({ error: "bypassExpiresAt must be an ISO date string or null" }, 400);
+    } else {
+      updateData.bypassExpiresAt = new Date(body.bypassExpiresAt);
+    }
+  }
+
+  if (updateData.bypassEnabled === true && body.bypassCodeword === undefined) {
+    const existing = await prisma.screeningPolicy.findUnique({ where: { apiKeyId: apiKey.id } });
+    if (!existing?.bypassCodewordHash) {
+      return c.json({ error: "bypassCodeword is required before enabling codeword bypass" }, 400);
+    }
+  }
 
   try {
     const upserted = await prisma.screeningPolicy.upsert({
@@ -152,6 +192,9 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
       screenAllPrompts: upserted.screenAllPrompts,
       autoBlockThreshold: upserted.autoBlockThreshold,
       executeInSandbox: upserted.executeInSandbox,
+      bypassEnabled: upserted.bypassEnabled,
+      bypassCodewordHash: upserted.bypassCodewordHash,
+      bypassExpiresAt: upserted.bypassExpiresAt,
       approvalRequiredForPersonalData: true,
       approvalRequiredForLocation: true,
       approvalRequiredForFuturePlans: true,

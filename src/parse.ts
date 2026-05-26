@@ -266,6 +266,7 @@ export interface ParseRequest {
   };
   mode?: "full" | "pattern-only"; // pattern-only skips LLM analysis (privacy-sensitive)
   policy_mode?: "strict" | "balanced" | "low_fp";
+  bypass_codeword?: string; // separate trusted user confirmation; never read from prompt text
   agentSafe?: boolean; // server-controlled: suppress low-severity display flags AFTER scoring
 }
 

@@ -10,6 +10,9 @@ export interface ScreeningPolicy {
   approvalRequiredForLocation?: boolean;
   approvalRequiredForFuturePlans?: boolean;
   approvalDefaultAction?: "deny";
+  bypassEnabled?: boolean;
+  bypassCodewordHash?: string | null;
+  bypassExpiresAt?: Date | string | null;
 }
 
 export interface ApiKeyContext {

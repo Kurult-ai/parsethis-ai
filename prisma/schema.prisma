@@ -95,6 +95,9 @@ model ScreeningPolicy {
   autoBlockThreshold     Int     @default(7)      @map("auto_block_threshold")
   executeInSandbox       Boolean @default(true)   @map("execute_in_sandbox")
   agentSafe              Boolean @default(false)  @map("agent_safe")
+  bypassEnabled          Boolean @default(false)  @map("bypass_enabled")
+  bypassCodewordHash     String?                  @map("bypass_codeword_hash")
+  bypassExpiresAt        DateTime?                @map("bypass_expires_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt      @map("updated_at")

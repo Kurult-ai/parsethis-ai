@@ -15,6 +15,7 @@ import {
   screeningDecisionAction,
   screeningRuleIds,
 } from "../lib/screening-event-log.js";
+import { codewordBypassAllowed } from "../lib/bypass-codeword.js";
 
 export const parseRoutes = new Hono<AppEnv>();
 
@@ -112,6 +113,24 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
       title: "Validation failure",
       detail: "policy_mode must be 'strict', 'balanced', or 'low_fp'",
       code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
+  }
+  if (body.bypass_codeword !== undefined && typeof body.bypass_codeword !== "string") {
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "bypass_codeword must be a string when provided",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
+  }
+  if (body.bypass_codeword && body.bypass_codeword.length > 256) {
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "bypass_codeword must be less than 256 characters",
+      code: ErrorCode.VALIDATION_TOO_LARGE,
       retryable: false,
     });
   }
@@ -213,6 +232,38 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   }
 
   const apiKey = c.get("apiKey");
+  const effectivePolicy = c.get("policy");
+  if (body.bypass_codeword && codewordBypassAllowed(body.bypass_codeword, effectivePolicy)) {
+    const analyzedAt = new Date().toISOString();
+    auditLog({
+      action: "screening_codeword_bypass_used",
+      apiKeyId: apiKey?.id,
+      promptLength: body.prompt.length,
+      sourceKind: body.metadata?.source_kind,
+      trustLevel: body.metadata?.trust_level,
+      intendedAction: body.metadata?.intended_action,
+      ip: c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown",
+    });
+    return c.json({
+      id: crypto.randomUUID(),
+      risk_score: 0,
+      safe: true,
+      verdict: "safe",
+      flags: [],
+      categories: [],
+      suggested_action: "allow",
+      recommended_action: "allow",
+      bypassed: true,
+      bypass_type: "user_codeword",
+      bypass_scope: "single_turn",
+      policy: {
+        auto_block: false,
+        threshold: effectivePolicy?.autoBlockThreshold ?? 7,
+        tier: apiKey?.tier ?? "free",
+      },
+      analyzed_at: analyzedAt,
+    });
+  }
   if ((body.execute === true || body.execute === "auto") && apiKey.id.startsWith("x402:")) {
     return problem(c, {
       status: 400,

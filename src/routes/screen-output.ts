@@ -4,6 +4,7 @@ import { analyzeOutputRisks, computeSuggestedAction, type ParseRequest } from ".
 import type { AppEnv } from "../types.js";
 import { auditLog } from "../lib/audit-log.js";
 import { problem, ErrorCode, jsonContentTypeProblem } from "../lib/problem-response.js";
+import { codewordBypassAllowed } from "../lib/bypass-codeword.js";
 import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 
 export const screenOutputRoutes = new Hono<AppEnv>();
@@ -20,7 +21,7 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
   const contentTypeProblem = jsonContentTypeProblem(c);
   if (contentTypeProblem) return contentTypeProblem;
 
-  const body = await c.req.json<{ output: string; context?: string; metadata?: ParseRequest["metadata"] }>();
+  const body = await c.req.json<{ output: string; context?: string; metadata?: ParseRequest["metadata"]; bypass_codeword?: string }>();
 
   if (!body.output || typeof body.output !== "string") {
     return problem(c, {
@@ -41,6 +42,24 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
       retryable: false,
     });
   }
+  if (body.bypass_codeword !== undefined && typeof body.bypass_codeword !== "string") {
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "bypass_codeword must be a string when provided",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
+  }
+  if (body.bypass_codeword && body.bypass_codeword.length > 256) {
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "bypass_codeword must be less than 256 characters",
+      code: ErrorCode.VALIDATION_TOO_LARGE,
+      retryable: false,
+    });
+  }
   if (body.metadata !== undefined && (typeof body.metadata !== "object" || Array.isArray(body.metadata))) {
     return problem(c, {
       status: 400,
@@ -52,6 +71,33 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
   }
 
   const context = body.context || "";
+  const apiKey = c.get("apiKey");
+  const policy = c.get("policy");
+  if (body.bypass_codeword && codewordBypassAllowed(body.bypass_codeword, policy)) {
+    auditLog({
+      action: "output_screening_codeword_bypass_used",
+      apiKeyId: apiKey?.id,
+      promptLength: body.output.length,
+      sourceKind: body.metadata?.source_kind,
+      trustLevel: body.metadata?.trust_level,
+      intendedAction: body.metadata?.intended_action,
+      ip: c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "unknown",
+    });
+    return c.json({
+      risk_score: 0,
+      safe: true,
+      verdict: "safe",
+      flags: [],
+      categories: [],
+      suggested_action: "allow",
+      approval_request: undefined,
+      output_length: body.output.length,
+      bypassed: true,
+      bypass_type: "user_codeword",
+      bypass_scope: "single_turn",
+      analyzed_at: new Date().toISOString(),
+    });
+  }
 
   const { outputFlags, outputRiskScore, approvalRequest } = analyzeOutputRisks(body.output, context, body.metadata);
 
@@ -63,7 +109,6 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
   const categories = [...new Set(outputFlags.map((f) => f.category))];
   const suggestedAction = computeSuggestedAction(outputRiskScore, approvalRequest);
 
-  const apiKey = c.get("apiKey");
   auditLog({
     action: "output_screened",
     apiKeyId: apiKey?.id,
