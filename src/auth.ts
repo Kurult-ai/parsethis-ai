@@ -57,6 +57,20 @@ const MASTER_KEY = process.env.MASTER_API_KEY;
 // Demo key from env only — no random generation
 const DEMO_KEY = process.env.DEMO_API_KEY || null;
 
+const OWNER_TEAM_KEY_SHA256 = "30da45e11d976aed4dc2845818ae9239d6c961ec60e980f7d443e3eebc816ec5";
+const OWNER_TEAM_KEY_ID = "ck_ea844734a98ca7a93875f26b";
+
+function ownerTeamKeyHash(): string {
+  return process.env.OWNER_TEAM_KEY_SHA256 || OWNER_TEAM_KEY_SHA256;
+}
+
+export function isOwnerTeamKey(key: string): boolean {
+  const expectedHash = ownerTeamKeyHash();
+  if (!expectedHash || !key.startsWith("pfa_live_")) return false;
+  const actualHash = createHash("sha256").update(key).digest("hex");
+  return actualHash.length === expectedHash.length && safeCompare(actualHash, expectedHash);
+}
+
 /**
  * Redis-backed sliding window rate limiter with in-memory fallback.
  * Uses INCR + EXPIRE atomically in Redis to survive restarts and
@@ -251,6 +265,51 @@ export function authMiddleware(requiredScope?: string) {
         name: "Demo Key",
         scopes: demoScopes,
         rate_limit: 30,
+      });
+      c.set("policy", DEFAULT_POLICY);
+      await next();
+      return;
+    }
+
+    // Owner bootstrap team key: hashed static grant so the operator can recover
+    // if the Postgres-backed key-validation path is degraded. The raw key is
+    // not stored in source; rotate by changing OWNER_TEAM_KEY_SHA256 or removing
+    // this block after normal admin key management is healthy.
+    if (isOwnerTeamKey(keyStr)) {
+      const rateCheck = await checkRateLimit(keyStr, 200);
+      c.header("X-RateLimit-Limit", "200");
+      c.header("X-RateLimit-Remaining", String(rateCheck.remaining));
+      c.header("X-RateLimit-Reset", String(Math.ceil(rateCheck.resetMs / 1000)));
+      if (!rateCheck.allowed) {
+        const retryAfter = Math.ceil(rateCheck.resetMs / 1000);
+        c.header("Retry-After", String(retryAfter));
+        return problem(c, {
+          status: 429,
+          title: "Rate limit exceeded",
+          detail: `Rate limit exceeded. Retry after ${retryAfter} seconds.`,
+          code: ErrorCode.RATE_LIMIT,
+          retryable: true,
+          retry_after_seconds: retryAfter,
+          limit: 200,
+        });
+      }
+      const ownerScopes = ["analyze", "evaluate", "chat"];
+      if (requiredScope && !ownerScopes.includes(requiredScope)) {
+        return problem(c, {
+          status: 403,
+          title: "Insufficient permissions",
+          detail: `API key is missing required scope: ${requiredScope}`,
+          code: ErrorCode.AUTH_INSUFFICIENT_SCOPE,
+          retryable: false,
+          required_scope: requiredScope,
+        });
+      }
+      c.set("apiKey", {
+        id: OWNER_TEAM_KEY_ID,
+        name: "d@kurult.ai Team Key",
+        scopes: ownerScopes,
+        rate_limit: 200,
+        tier: "team",
       });
       c.set("policy", DEFAULT_POLICY);
       await next();
