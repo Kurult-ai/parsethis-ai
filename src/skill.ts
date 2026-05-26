@@ -174,6 +174,36 @@ Content-Type: application/json
 
 Read your current policy: \`GET ${baseUrl}/v1/policy\`
 
+### User codeword re-run
+
+For false positives, configure a per-key codeword. Parse stores only a SHA-256 hash and never returns the phrase:
+
+\`\`\`
+PUT ${baseUrl}/v1/policy
+Authorization: Bearer ***
+Content-Type: application/json
+
+{
+  "bypassCodeword": "a phrase the user can say to confirm one re-run",
+  "bypassExpiresAt": "2030-01-01T00:00:00.000Z"
+}
+\`\`\`
+
+If a turn is blocked and the user explicitly provides the codeword through the agent's trusted user channel, re-run the same request with the codeword in a separate request field, not inside the prompt text:
+
+\`\`\`
+POST ${baseUrl}/v1/parse
+Authorization: Bearer ***
+Content-Type: application/json
+
+{
+  "prompt": "same blocked turn",
+  "bypass_codeword": "the user's codeword"
+}
+\`\`\`
+
+The override is single-turn only, audited, and only honored when the authenticated API key has an enabled, unexpired codeword. Disable it with \`{ "bypassCodeword": null, "bypassEnabled": false }\`.
+
 <a id="x402-node"></a>
 ## x402 Node Recipe
 
