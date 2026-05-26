@@ -52,6 +52,11 @@ policyRoutes.get("/v1/policy", authMiddleware("evaluate"), async (c) => {
   const apiKey = c.get("apiKey");
   const tier = apiKey.tier ?? "free";
 
+  const preloadedPolicy = c.get("policy");
+  if (preloadedPolicy) {
+    return c.json(formatPolicyResponse(preloadedPolicy, tier));
+  }
+
   // Try Redis cache first
   const cached = await getCachedPolicyData(apiKey.id);
   if (cached) {
