@@ -81,6 +81,7 @@ discoveryRoutes.get("/sitemap.xml", (c) => {
     { loc: "/playground", priority: "0.8", changefreq: "weekly", lastmod: "2026-05-04" },
     { loc: "/faq", priority: "0.8", changefreq: "weekly", lastmod: "2026-05-03" },
     { loc: "/pricing", priority: "0.9", changefreq: "weekly", lastmod: "2026-05-03" },
+    { loc: "/support", priority: "0.7", changefreq: "monthly", lastmod: "2026-05-26" },
     { loc: "/docs", priority: "0.9", changefreq: "weekly", lastmod: "2026-05-03" },
     { loc: "/docs/quickstart", priority: "0.9", changefreq: "weekly", lastmod: "2026-05-03" },
     { loc: "/docs/api", priority: "0.9", changefreq: "weekly", lastmod: "2026-05-03" },

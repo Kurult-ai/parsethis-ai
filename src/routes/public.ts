@@ -1,4 +1,7 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
+import { createHash } from "node:crypto";
+import bcrypt from "bcrypt";
 import { createApiKey } from "../auth.js";
 import { countSelfServiceKeys } from "../api-key-service.js";
 import { getRedis, ensureRedisConnected, isRedisAvailable } from "../redis.js";
@@ -18,6 +21,7 @@ import { renderLandingPage } from "../pages/landing.js";
 import { renderFaqPage } from "../pages/faq.js";
 import { renderDocsPage, renderGuidePage, renderComparePage, renderSecurityPage } from "../pages/docs.js";
 import { renderPricingPage } from "../pages/pricing.js";
+import { renderSupportPage } from "../pages/support.js";
 import { renderTechnologyPage } from "../pages/technology.js";
 import { renderGeoPage } from "../pages/geo.js";
 import { getFaviconSvg } from "../pages/favicon.js";
@@ -32,6 +36,165 @@ import { PRODUCT, PLAN_LIMITS, DETECTION_FACTS, X402_PAYMENT } from "../lib/prod
 import { recordGeoSurfaceHit } from "../lib/geo-analytics.js";
 
 export const publicRoutes = new Hono();
+
+const SUPPORT_INTAKE_RATE_WINDOW_SECONDS = 60 * 60;
+const SUPPORT_INTAKE_IP_LIMIT = 5;
+const SUPPORT_INTAKE_EMAIL_LIMIT = 3;
+const SUPPORT_INTAKE_GLOBAL_LIMIT = 100;
+const supportIntakeMemoryRateLimits = new Map<string, { count: number; resetAt: number }>();
+const SUPPORT_ALLOWED_CATEGORIES = new Set(["support", "billing", "api", "account", "security"]);
+const API_KEY_SECRET_RE = /\bpfa_(?:live|test)_[A-Za-z0-9_-]{16,}\b/g;
+
+type SupportTicketIntakeBody = {
+  email?: unknown;
+  requester_email?: unknown;
+  requester_name?: unknown;
+  name?: unknown;
+  subject?: unknown;
+  body?: unknown;
+  message?: unknown;
+  category?: unknown;
+  api_key_hint?: unknown;
+  apiKeyHint?: unknown;
+  website?: unknown;
+  company_website?: unknown;
+  dry_run?: unknown;
+};
+
+function supportIntakeClientIp(c: Context): string {
+  return (
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
+    c.req.header("x-real-ip") ||
+    "unknown"
+  );
+}
+
+function supportIntakeClientKey(c: Context): string {
+  return createHash("sha256").update(supportIntakeClientIp(c)).digest("hex").slice(0, 16);
+}
+
+function supportRateKey(kind: string, value: string): string {
+  return `support:intake:${kind}:${createHash("sha256").update(value.toLowerCase()).digest("hex").slice(0, 16)}`;
+}
+
+async function checkSupportIntakeRateLimitKey(key: string, limit: number): Promise<{ allowed: boolean; retryAfterSeconds?: number }> {
+  if (isRedisAvailable()) {
+    try {
+      const connected = await ensureRedisConnected();
+      if (connected) {
+        const redis = getRedis();
+        const count = await redis.incr(key);
+        if (count === 1) await redis.expire(key, SUPPORT_INTAKE_RATE_WINDOW_SECONDS);
+        if (count > limit) {
+          const ttl = await redis.ttl(key);
+          return { allowed: false, retryAfterSeconds: Math.max(1, ttl) };
+        }
+        return { allowed: true };
+      }
+    } catch {
+      // Fall back to in-memory throttling. Public support should stay reachable
+      // during Redis blips, while still limiting repeated abuse per process.
+    }
+  }
+
+  const now = Date.now();
+  const current = supportIntakeMemoryRateLimits.get(key);
+  if (!current || current.resetAt <= now) {
+    supportIntakeMemoryRateLimits.set(key, { count: 1, resetAt: now + SUPPORT_INTAKE_RATE_WINDOW_SECONDS * 1000 });
+    return { allowed: true };
+  }
+  if (current.count >= limit) {
+    return { allowed: false, retryAfterSeconds: Math.ceil((current.resetAt - now) / 1000) };
+  }
+  current.count += 1;
+  return { allowed: true };
+}
+
+async function checkSupportIntakeRateLimit(c: Context, requesterEmail: string): Promise<{ allowed: boolean; retryAfterSeconds?: number; dimension?: string }> {
+  const checks = [
+    { dimension: "ip", key: supportRateKey("ip", supportIntakeClientKey(c)), limit: SUPPORT_INTAKE_IP_LIMIT },
+    { dimension: "email", key: supportRateKey("email", requesterEmail), limit: SUPPORT_INTAKE_EMAIL_LIMIT },
+    { dimension: "global", key: "support:intake:global", limit: SUPPORT_INTAKE_GLOBAL_LIMIT },
+  ];
+  for (const check of checks) {
+    const result = await checkSupportIntakeRateLimitKey(check.key, check.limit);
+    if (!result.allowed) return { ...result, dimension: check.dimension };
+  }
+  return { allowed: true };
+}
+
+function optionalTrimmedString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function redactedApiKeyLabel(secret: string): string {
+  return `[REDACTED_API_KEY:${secret.slice(0, 12)}…]`;
+}
+
+function redactSupportSecrets(value: string): string {
+  return value.replace(API_KEY_SECRET_RE, (secret) => redactedApiKeyLabel(secret));
+}
+
+function extractApiKeyPrefix(value?: string): string | undefined {
+  if (!value) return undefined;
+  const directSecret = value.match(API_KEY_SECRET_RE)?.[0];
+  if (directSecret) return directSecret.slice(0, 12);
+  const prefix = value.match(/\bpfa_(?:live|test)_[A-Za-z0-9_-]{3,}/)?.[0];
+  return prefix?.slice(0, 12);
+}
+
+function normalizedSupportCategory(value?: string): string {
+  if (!value) return "support";
+  const normalized = value.toLowerCase().replace(/[^a-z_-]/g, "").slice(0, 80);
+  return SUPPORT_ALLOWED_CATEGORIES.has(normalized) ? normalized : "support";
+}
+
+function scoreSupportSpam(input: { requesterName?: string; requesterEmail: string; subject: string; body: string; category: string }): { score: number; signals: string[] } {
+  const haystack = `${input.subject}\n${input.body}`.toLowerCase();
+  const signals: string[] = [];
+  let score = 0;
+  const linkCount = (haystack.match(/https?:\/\//g) || []).length;
+  if (linkCount >= 3) { score += 35; signals.push("many_links"); }
+  if (/\b(seo|casino|crypto giveaway|loan offer|guest post|backlink|whatsapp)\b/i.test(haystack)) { score += 35; signals.push("commercial_spam_terms"); }
+  if (/ignore (all|previous) instructions|system prompt|developer message|jailbreak/i.test(haystack)) { score += 25; signals.push("prompt_injection_text"); }
+  if (!input.requesterName) { score += 10; signals.push("missing_name"); }
+  if (input.subject.toLowerCase() === input.body.toLowerCase().slice(0, input.subject.length)) { score += 10; signals.push("subject_repeats_message"); }
+  if (/\b(mailinator|tempmail|10minutemail|guerrillamail)\b/i.test(input.requesterEmail)) { score += 20; signals.push("disposable_email_domain"); }
+  if (input.category === "security") score = Math.max(0, score - 10);
+  return { score, signals };
+}
+
+async function findSupportApiKeyId(apiKeyHint?: string): Promise<string | undefined> {
+  const fullSecret = apiKeyHint?.match(API_KEY_SECRET_RE)?.[0];
+  if (!fullSecret) return undefined;
+  const prefix = fullSecret.slice(0, 12);
+  const matches = await prisma.apiKey.findMany({
+    where: {
+      keyPrefix: prefix,
+      revokedAt: null,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
+    select: { id: true, keyHash: true },
+  });
+  for (const match of matches) {
+    if (await bcrypt.compare(fullSecret, match.keyHash)) return match.id;
+  }
+  return undefined;
+}
+
+function publicSupportTicketResponse(ticket: { id: string; subject: string | null; status: string; createdAt: Date }) {
+  return {
+    support_ticket: {
+      id: ticket.id,
+      subject: ticket.subject,
+      status: ticket.status,
+      created_at: ticket.createdAt.toISOString(),
+    },
+    note: "Support request received. We'll follow up at the requester email if a response is needed.",
+  };
+}
 
 // Static assets
 publicRoutes.get("/favicon.svg", (c) => {
@@ -75,6 +238,7 @@ publicRoutes.get("/", (c) => {
         mcp_remote: "POST /mcp",
         mcp_manifest: "GET /mcp.json",
         generate_key: "POST /v1/keys/generate",
+        support_ticket: "POST /v1/support/tickets",
         analyze: "POST /v1/analyze",
         analyze_result: "GET /v1/analyze/:id",
         evaluate: "POST /v1/evaluate",
@@ -683,6 +847,180 @@ publicRoutes.get("/v1/models", (c) => c.json({ models: getAvailableModels() }));
 publicRoutes.get("/v1/pricing", (c) => {
   recordGeoSurfaceHit(c, "v1.pricing");
   return c.json(getPricingInfo());
+});
+
+async function handleSupportTicketIntake(c: Context, input: SupportTicketIntakeBody, responseMode: "json" | "html" = "json"): Promise<Response> {
+  const honeypot = optionalTrimmedString(input.website) || optionalTrimmedString(input.company_website);
+  if (honeypot) {
+    if (responseMode === "html") return c.html(renderSupportPage(getBaseUrl(c), "success"));
+    return c.json({ accepted: true }, 202);
+  }
+
+  const requesterEmail = optionalTrimmedString(input.requester_email) || optionalTrimmedString(input.email);
+  const requesterName = optionalTrimmedString(input.requester_name) || optionalTrimmedString(input.name);
+  const rawSubject = optionalTrimmedString(input.subject) || "Support request";
+  const rawBody = optionalTrimmedString(input.body) || optionalTrimmedString(input.message);
+  const rawCategory = optionalTrimmedString(input.category);
+  const apiKeyHint = optionalTrimmedString(input.api_key_hint) || optionalTrimmedString(input.apiKeyHint);
+
+  const htmlValidationError = (message: string) => c.html(renderSupportPage(getBaseUrl(c), "error", message), 400);
+
+  if (!requesterEmail) {
+    if (responseMode === "html") return htmlValidationError("Email is required so support can follow up.");
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "email is required so support can follow up.",
+      code: ErrorCode.VALIDATION_REQUIRED,
+      retryable: false,
+    });
+  }
+  if (!/^\S+@\S+\.\S+$/.test(requesterEmail) || requesterEmail.length > 320) {
+    if (responseMode === "html") return htmlValidationError("Email must be a valid email address.");
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "email must be a valid email address.",
+      code: ErrorCode.VALIDATION_INVALID_INPUT,
+      retryable: false,
+    });
+  }
+  if (!rawBody) {
+    if (responseMode === "html") return htmlValidationError("Message is required.");
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "message is required.",
+      code: ErrorCode.VALIDATION_REQUIRED,
+      retryable: false,
+    });
+  }
+  if (rawSubject.length > 200 || rawBody.length > 5000 || (rawCategory?.length ?? 0) > 80 || (requesterName?.length ?? 0) > 120 || (apiKeyHint?.length ?? 0) > 80) {
+    if (responseMode === "html") return htmlValidationError("Support request fields exceed maximum lengths.");
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "Support request fields exceed maximum lengths.",
+      code: ErrorCode.VALIDATION_TOO_LARGE,
+      retryable: false,
+    });
+  }
+
+  const rateLimit = await checkSupportIntakeRateLimit(c, requesterEmail);
+  if (!rateLimit.allowed) {
+    if (rateLimit.retryAfterSeconds) c.header("Retry-After", String(rateLimit.retryAfterSeconds));
+    if (responseMode === "html") return c.html(renderSupportPage(getBaseUrl(c), "error", "Too many support requests. Please retry later."), 429);
+    return problem(c, {
+      status: 429,
+      title: "Rate limit exceeded",
+      detail: `Too many support requests for this ${rateLimit.dimension || "source"}. Please retry later.`,
+      code: ErrorCode.RATE_LIMIT,
+      retryable: true,
+    });
+  }
+
+  const subject = redactSupportSecrets(rawSubject);
+  const body = redactSupportSecrets(rawBody);
+  const sanitizedApiKeyHint = apiKeyHint ? extractApiKeyPrefix(apiKeyHint) : undefined;
+  const category = normalizedSupportCategory(rawCategory);
+  const spam = scoreSupportSpam({ requesterName, requesterEmail, subject, body, category });
+  const priority = category === "security" ? "high" : spam.score >= 50 ? "low" : "normal";
+  const verdict = spam.score >= 100 ? "discarded_spam" : spam.score >= 50 ? "flagged_spam" : "accepted";
+  const messageBody = sanitizedApiKeyHint
+    ? `${body}\n\n[api_key_prefix:${sanitizedApiKeyHint}]`
+    : body;
+
+  const dryRun = input.dry_run === true || input.dry_run === "true";
+  if (dryRun) {
+    const dryRunPayload = {
+      dry_run: true,
+      planned: {
+        source: "public_support",
+        requester_email: requesterEmail,
+        requester_name: requesterName ?? null,
+        subject,
+        body,
+        category,
+        api_key_prefix: sanitizedApiKeyHint ?? null,
+        spam_score: spam.score,
+        spam_signals: spam.signals,
+        verdict,
+      },
+    };
+    if (responseMode === "html") return c.html(renderSupportPage(getBaseUrl(c), "success"));
+    return c.json(dryRunPayload);
+  }
+
+  if (spam.score >= 100) {
+    // Silently accept obvious spam so the form/API does not become an oracle.
+    if (responseMode === "html") return c.html(renderSupportPage(getBaseUrl(c), "success"));
+    return c.json({ accepted: true }, 202);
+  }
+
+  try {
+    const apiKeyId = await findSupportApiKeyId(apiKeyHint);
+    const ticket = await prisma.supportTicket.create({
+      data: {
+        source: "public_support",
+        requesterEmail,
+        requesterName,
+        subject,
+        body: messageBody,
+        category,
+        status: "open",
+        priority,
+        assignedTo: "kublai",
+        apiKeyId,
+        messages: {
+          create: {
+            direction: "inbound",
+            channel: "public_support",
+            from: requesterEmail,
+            body: messageBody,
+            screened: true,
+            riskScore: Math.min(10, Math.ceil(spam.score / 10)),
+            verdict,
+          },
+        },
+      },
+    });
+    if (responseMode === "html") return c.html(renderSupportPage(getBaseUrl(c), "success"));
+    return c.json(publicSupportTicketResponse(ticket), 201);
+  } catch {
+    if (responseMode === "html") return c.html(renderSupportPage(getBaseUrl(c), "error", `Support request storage is temporarily unavailable. Please email d@kurult.ai if this persists.`), 503);
+    return problem(c, {
+      status: 503,
+      title: "Support intake unavailable",
+      detail: "Support request storage is temporarily unavailable. Please email d@kurult.ai if this persists.",
+      code: ErrorCode.SERVICE_UNAVAILABLE,
+      retryable: true,
+    });
+  }
+}
+
+// Public support form.
+publicRoutes.get("/support", (c) => c.html(renderSupportPage(getBaseUrl(c))));
+
+publicRoutes.post("/support", async (c) => {
+  const form = await c.req.parseBody().catch(() => null);
+  if (!form) return c.html(renderSupportPage(getBaseUrl(c), "error", "Submitted form data could not be read."), 400);
+  return handleSupportTicketIntake(c, form as SupportTicketIntakeBody, "html");
+});
+
+// Public support intake. Stores the request in the same support ticket tables used
+// by admin tooling, without exposing the admin action surface or requiring auth.
+publicRoutes.post("/v1/support/tickets", async (c) => {
+  const input = await c.req.json<SupportTicketIntakeBody>().catch(() => null);
+  if (!input || typeof input !== "object") {
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "Request body must be a JSON object.",
+      code: ErrorCode.VALIDATION_REQUIRED,
+      retryable: false,
+    });
+  }
+  return handleSupportTicketIntake(c, input, "json");
 });
 
 // Public API key generation (Phase 1: Redis rate limiting, global cap, expiry, env toggle)
