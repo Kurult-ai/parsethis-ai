@@ -5,6 +5,44 @@ import { cacheApiKey, getCachedApiKey, invalidateApiKeyCache } from "./result-st
 import { PLAN_LIMITS } from "./lib/product-facts.js";
 
 const BCRYPT_ROUNDS = 12;
+const LOCAL_TEST_BCRYPT_ROUNDS = 4;
+const LOCAL_KEYGEN_TEST_MODE_VALUES = new Set(["1", "true", "yes", "on"]);
+
+type StoredLocalApiKey = ApiKeyRecord & { keyHash: string };
+const localTestKeysByPrefix = new Map<string, StoredLocalApiKey[]>();
+
+export function isLocalKeyGenerationTestMode(): boolean {
+  const value = process.env.KEY_GENERATION_LOCAL_TEST_MODE ?? process.env.KEYGEN_LOCAL_TEST_MODE ?? "";
+  return LOCAL_KEYGEN_TEST_MODE_VALUES.has(value.toLowerCase());
+}
+
+function createLocalTestApiKeyRecord(
+  userId: string,
+  name: string,
+  tier: string,
+  orgId: string | undefined,
+  scopes: string[],
+  expiresAt: Date | undefined,
+  rawKey: string,
+  keyHash: string
+): StoredLocalApiKey {
+  const now = new Date();
+  return {
+    id: `local_${randomBytes(8).toString("hex")}`,
+    userId,
+    orgId: orgId ?? null,
+    keyPrefix: rawKey.slice(0, 12),
+    name,
+    tier,
+    scopes,
+    rateLimit: TIER_RATE_LIMITS[tier] ?? TIER_RATE_LIMITS.free,
+    lastUsedAt: null,
+    expiresAt: expiresAt ?? null,
+    createdAt: now,
+    revokedAt: null,
+    keyHash,
+  };
+}
 
 export interface ApiKeyRecord {
   id: string;
@@ -36,6 +74,16 @@ export async function createApiKey(
   scopes: string[] = ["evaluate"],
   expiresAt?: Date
 ): Promise<{ key: string; record: ApiKeyRecord }> {
+  if (isLocalKeyGenerationTestMode()) {
+    const rawKey = `pfa_test_${randomBytes(24).toString("hex")}`;
+    const keyHash = await bcrypt.hash(rawKey, LOCAL_TEST_BCRYPT_ROUNDS);
+    const record = createLocalTestApiKeyRecord(userId, name, tier, orgId, scopes, expiresAt, rawKey, keyHash);
+    const existing = localTestKeysByPrefix.get(record.keyPrefix) ?? [];
+    existing.push(record);
+    localTestKeysByPrefix.set(record.keyPrefix, existing);
+    return { key: rawKey, record };
+  }
+
   const rawKey = `pfa_live_${randomBytes(24).toString("hex")}`;
   const keyPrefix = rawKey.slice(0, 12);
   const keyHash = await bcrypt.hash(rawKey, BCRYPT_ROUNDS);
@@ -65,6 +113,19 @@ export async function validateApiKey(bearerToken: string): Promise<ApiKeyRecord 
   if (!bearerToken || !bearerToken.startsWith("pfa_")) return null;
 
   const prefix = bearerToken.slice(0, 12);
+
+  if (isLocalKeyGenerationTestMode() && bearerToken.startsWith("pfa_test_")) {
+    const candidates = localTestKeysByPrefix.get(prefix) ?? [];
+    for (const candidate of candidates) {
+      const valid = await bcrypt.compare(bearerToken, candidate.keyHash);
+      if (!valid) continue;
+      if (candidate.revokedAt) return null;
+      if (candidate.expiresAt && new Date(candidate.expiresAt) < new Date()) return null;
+      candidate.lastUsedAt = new Date();
+      return candidate;
+    }
+    return null;
+  }
 
   // Check Redis cache first (keyed by prefix for fast lookup)
   const cached = await getCachedApiKey(prefix);
@@ -119,6 +180,16 @@ export async function validateApiKey(bearerToken: string): Promise<ApiKeyRecord 
 }
 
 export async function revokeApiKey(id: string): Promise<void> {
+  if (isLocalKeyGenerationTestMode()) {
+    for (const records of localTestKeysByPrefix.values()) {
+      const record = records.find((item) => item.id === id);
+      if (record) {
+        record.revokedAt = new Date();
+        return;
+      }
+    }
+  }
+
   const key = await prisma.apiKey.update({
     where: { id },
     data: { revokedAt: new Date() },
@@ -127,6 +198,13 @@ export async function revokeApiKey(id: string): Promise<void> {
 }
 
 export async function listApiKeys(userId: string): Promise<ApiKeyRecord[]> {
+  if (isLocalKeyGenerationTestMode()) {
+    return Array.from(localTestKeysByPrefix.values())
+      .flat()
+      .filter((key) => key.userId === userId && key.revokedAt === null)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
   const keys = await prisma.apiKey.findMany({
     where: { userId, revokedAt: null },
     orderBy: { createdAt: "desc" },
@@ -135,6 +213,12 @@ export async function listApiKeys(userId: string): Promise<ApiKeyRecord[]> {
 }
 
 export async function countSelfServiceKeys(): Promise<number> {
+  if (isLocalKeyGenerationTestMode()) {
+    return Array.from(localTestKeysByPrefix.values())
+      .flat()
+      .filter((key) => key.userId === "self-service" && key.revokedAt === null).length;
+  }
+
   return prisma.apiKey.count({
     where: { userId: "self-service", revokedAt: null },
   });

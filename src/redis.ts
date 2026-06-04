@@ -9,7 +9,8 @@ export function getRedis(): Redis {
     redis = new Redis(REDIS_URL, {
       maxRetriesPerRequest: null, // required by BullMQ
       lazyConnect: true,
-      connectTimeout: 5000,
+      connectTimeout: Number(process.env.REDIS_CONNECT_TIMEOUT_MS ?? 1500),
+      commandTimeout: Number(process.env.REDIS_COMMAND_TIMEOUT_MS ?? 1500),
       retryStrategy(times) {
         // Exponential backoff: 500ms, 1s, 2s, 4s, then cap at 5s
         return Math.min(times * 500, 5000);
@@ -31,7 +32,18 @@ export async function connectRedis(): Promise<Redis> {
 
 export async function disconnectRedis(): Promise<void> {
   if (redis) {
-    await redis.quit();
+    if (redis.status === "ready") {
+      await redis.quit();
+    } else {
+      redis.disconnect();
+    }
+    redis = null;
+  }
+}
+
+export function abandonRedisConnection(): void {
+  if (redis) {
+    redis.disconnect();
     redis = null;
   }
 }
@@ -43,10 +55,10 @@ export function isRedisAvailable(): boolean {
 }
 
 export async function ensureRedisConnected(): Promise<boolean> {
-  if (!redis) return false;
-  if (redis.status === "ready") return true;
+  const client = redis ?? getRedis();
+  if (client.status === "ready") return true;
   try {
-    await redis.connect();
+    await client.connect();
     return true;
   } catch (err) {
     console.error("[redis] Failed to connect:", (err as Error).message);
