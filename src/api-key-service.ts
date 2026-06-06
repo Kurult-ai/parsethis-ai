@@ -3,17 +3,116 @@ import bcrypt from "bcrypt";
 import { prisma } from "./db.js";
 import { cacheApiKey, getCachedApiKey, invalidateApiKeyCache } from "./result-store.js";
 import { PLAN_LIMITS } from "./lib/product-facts.js";
+import { abandonRedisConnection, ensureRedisConnected, getRedis } from "./redis.js";
 
 const BCRYPT_ROUNDS = 12;
 const LOCAL_TEST_BCRYPT_ROUNDS = 4;
 const LOCAL_KEYGEN_TEST_MODE_VALUES = new Set(["1", "true", "yes", "on"]);
+const REDIS_FALLBACK_KEY_PREFIX = "keygen:fallback:v1";
+const REDIS_FALLBACK_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 type StoredLocalApiKey = ApiKeyRecord & { keyHash: string };
+type FallbackApiKeyRecord = ApiKeyRecord & { keyHash: string };
 const localTestKeysByPrefix = new Map<string, StoredLocalApiKey[]>();
 
 export function isLocalKeyGenerationTestMode(): boolean {
   const value = process.env.KEY_GENERATION_LOCAL_TEST_MODE ?? process.env.KEYGEN_LOCAL_TEST_MODE ?? "";
   return LOCAL_KEYGEN_TEST_MODE_VALUES.has(value.toLowerCase());
+}
+
+function redisFallbackEnabled(): boolean {
+  return (process.env.KEYGEN_REDIS_FALLBACK_ENABLED ?? "true").toLowerCase() !== "false";
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutValue: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(timeoutValue), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function redisTimeoutMs(): number {
+  return Number(process.env.REDIS_COMMAND_TIMEOUT_MS ?? 1500);
+}
+
+function dbFallbackTimeoutMs(): number {
+  return Number(process.env.KEYGEN_DB_FALLBACK_TIMEOUT_MS ?? 1500);
+}
+
+function fallbackRecordKey(prefix: string): string {
+  return `${REDIS_FALLBACK_KEY_PREFIX}:prefix:${prefix}`;
+}
+
+function fallbackIndexKey(): string {
+  return `${REDIS_FALLBACK_KEY_PREFIX}:self_service_ids`;
+}
+
+function serializeFallbackRecord(record: FallbackApiKeyRecord): string {
+  return JSON.stringify({
+    ...record,
+    lastUsedAt: record.lastUsedAt?.toISOString() ?? null,
+    expiresAt: record.expiresAt?.toISOString() ?? null,
+    createdAt: record.createdAt.toISOString(),
+    revokedAt: record.revokedAt?.toISOString() ?? null,
+  });
+}
+
+function deserializeFallbackRecord(value: string): FallbackApiKeyRecord {
+  const parsed = JSON.parse(value) as Omit<FallbackApiKeyRecord, "lastUsedAt" | "expiresAt" | "createdAt" | "revokedAt"> & {
+    lastUsedAt: string | null;
+    expiresAt: string | null;
+    createdAt: string;
+    revokedAt: string | null;
+  };
+  return {
+    ...parsed,
+    lastUsedAt: parsed.lastUsedAt ? new Date(parsed.lastUsedAt) : null,
+    expiresAt: parsed.expiresAt ? new Date(parsed.expiresAt) : null,
+    createdAt: new Date(parsed.createdAt),
+    revokedAt: parsed.revokedAt ? new Date(parsed.revokedAt) : null,
+  };
+}
+
+async function getFallbackRecord(prefix: string): Promise<FallbackApiKeyRecord | null> {
+  if (!redisFallbackEnabled()) return null;
+  const connected = await withTimeout(ensureRedisConnected(), redisTimeoutMs(), false);
+  if (!connected) {
+    abandonRedisConnection();
+    return null;
+  }
+  const value = await withTimeout(getRedis().get(fallbackRecordKey(prefix)), redisTimeoutMs(), null);
+  return value ? deserializeFallbackRecord(value) : null;
+}
+
+async function storeFallbackRecord(record: FallbackApiKeyRecord): Promise<void> {
+  if (!redisFallbackEnabled()) throw new Error("Redis fallback key store is disabled");
+  const connected = await withTimeout(ensureRedisConnected(), redisTimeoutMs(), false);
+  if (!connected) {
+    abandonRedisConnection();
+    throw new Error("Redis fallback key store unavailable");
+  }
+  const redis = getRedis();
+  const ttl = Math.max(60, Math.ceil(((record.expiresAt?.getTime() ?? (Date.now() + REDIS_FALLBACK_TTL_SECONDS * 1000)) - Date.now()) / 1000));
+  await withTimeout(redis.set(fallbackRecordKey(record.keyPrefix), serializeFallbackRecord(record), "EX", ttl), redisTimeoutMs(), null);
+  await withTimeout(redis.sadd(fallbackIndexKey(), record.id), redisTimeoutMs(), 0);
+  await withTimeout(redis.expire(fallbackIndexKey(), REDIS_FALLBACK_TTL_SECONDS), redisTimeoutMs(), 0);
+}
+
+async function countFallbackSelfServiceKeys(): Promise<number> {
+  if (!redisFallbackEnabled()) throw new Error("Redis fallback key store is disabled");
+  const connected = await withTimeout(ensureRedisConnected(), redisTimeoutMs(), false);
+  if (!connected) {
+    abandonRedisConnection();
+    throw new Error("Redis fallback key store unavailable");
+  }
+  return await withTimeout(getRedis().scard(fallbackIndexKey()), redisTimeoutMs(), 0);
 }
 
 function createLocalTestApiKeyRecord(
@@ -89,23 +188,49 @@ export async function createApiKey(
   const keyHash = await bcrypt.hash(rawKey, BCRYPT_ROUNDS);
   const rateLimit = TIER_RATE_LIMITS[tier] ?? TIER_RATE_LIMITS.free;
 
-  const record = await prisma.apiKey.create({
-    data: {
+  let record: ApiKeyRecord;
+  try {
+    const dbRecord = await withTimeout(
+      prisma.apiKey.create({
+        data: {
+          userId,
+          orgId: orgId ?? null,
+          keyHash,
+          keyPrefix,
+          name,
+          tier,
+          rateLimit,
+          scopes,
+          expiresAt: expiresAt ?? null,
+        },
+      }),
+      dbFallbackTimeoutMs(),
+      null
+    );
+    if (!dbRecord) throw new Error("api_key_create_timeout");
+    record = toApiKeyRecord(dbRecord);
+  } catch (err) {
+    if (!redisFallbackEnabled() || userId !== "self-service") throw err;
+    record = {
+      id: `redis_${randomBytes(8).toString("hex")}`,
       userId,
       orgId: orgId ?? null,
-      keyHash,
       keyPrefix,
       name,
       tier,
-      rateLimit,
       scopes,
+      rateLimit,
+      lastUsedAt: null,
       expiresAt: expiresAt ?? null,
-    },
-  });
+      createdAt: new Date(),
+      revokedAt: null,
+    };
+    await storeFallbackRecord({ ...record, keyHash });
+  }
 
   return {
     key: rawKey,
-    record: toApiKeyRecord(record),
+    record,
   };
 }
 
@@ -147,10 +272,32 @@ export async function validateApiKey(bearerToken: string): Promise<ApiKeyRecord 
     return record;
   }
 
+  // Check Redis fallback keys before DB. This keeps newly issued self-service
+  // keys usable during a Postgres binding outage without exposing secrets.
+  const fallbackRecord = await getFallbackRecord(prefix);
+  if (fallbackRecord) {
+    const valid = await bcrypt.compare(bearerToken, fallbackRecord.keyHash);
+    if (!valid) return null;
+    if (fallbackRecord.revokedAt) return null;
+    if (fallbackRecord.expiresAt && fallbackRecord.expiresAt < new Date()) return null;
+    return fallbackRecord;
+  }
+
   // Look up by prefix in the database
-  const candidates = await prisma.apiKey.findMany({
-    where: { keyPrefix: prefix },
-  });
+  let candidates;
+  try {
+    candidates = await withTimeout(
+      prisma.apiKey.findMany({
+        where: { keyPrefix: prefix },
+      }),
+      dbFallbackTimeoutMs(),
+      null
+    );
+    if (!candidates) return null;
+  } catch (err) {
+    if (redisFallbackEnabled()) return null;
+    throw err;
+  }
 
   for (const candidate of candidates) {
     const valid = await bcrypt.compare(bearerToken, candidate.keyHash);
@@ -219,9 +366,19 @@ export async function countSelfServiceKeys(): Promise<number> {
       .filter((key) => key.userId === "self-service" && key.revokedAt === null).length;
   }
 
-  return prisma.apiKey.count({
-    where: { userId: "self-service", revokedAt: null },
-  });
+  try {
+    const dbCount = await withTimeout(
+      prisma.apiKey.count({
+        where: { userId: "self-service", revokedAt: null },
+      }),
+      dbFallbackTimeoutMs(),
+      null
+    );
+    if (dbCount === null) throw new Error("api_key_count_timeout");
+    return dbCount;
+  } catch {
+    return countFallbackSelfServiceKeys();
+  }
 }
 
 export async function upgradeApiKeyTier(id: string, tier: string): Promise<void> {

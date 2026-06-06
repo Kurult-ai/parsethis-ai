@@ -89,13 +89,29 @@ describe("local/test-only public key generation", () => {
     assert.equal(body.key_exposed, false);
     assert.equal("key" in body, false);
     assert.equal(typeof body.last_checked_at, "string");
-    assert.equal(body.auth_db_ok, false);
+    assert.equal(body.auth_db_ok, true);
     assert.equal(body.keygen_count_ok, false);
     assert.equal(body.key_insert_ok, null);
     assert.equal(body.key_insert_reason, "disposable_create_disabled");
     assert.equal(body.invalid_key_401_ok, true);
     assert.equal(body.redis_ok, false);
     assert.equal(Array.isArray(body.alerts), true);
-    assert.ok(body.alerts.includes("auth_db_ok"));
+    assert.ok(body.alerts.includes("keygen_count_ok"));
   });
+  it("supports GET for the production-safe canary smoke", async () => {
+    process.env.KEY_GENERATION_LOCAL_TEST_MODE = "false";
+    process.env.KEYGEN_CANARY_DISPOSABLE_CREATE = "false";
+
+    const res = await req("/v1/keys/generate/canary", {
+      method: "GET",
+      headers: { "x-forwarded-for": "203.0.113.13" },
+    });
+
+    assert.notEqual(res.status, 404);
+    const body = await res.json();
+    assert.equal(body.mode, "production");
+    assert.equal(body.key_exposed, false);
+    assert.equal("key" in body, false);
+  });
+
 });
