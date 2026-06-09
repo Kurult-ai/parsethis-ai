@@ -289,3 +289,33 @@ model AdminActionReceipt {
   @@index([apiKeyId], name: "idx_admin_receipts_api_key")
   @@map("admin_action_receipts")
 }
+
+model AdminImprovementProposal {
+  id                 String    @id @default(cuid())
+  idempotencyKey     String    @unique @map("idempotency_key")
+  title              String
+  category           String    @default("saas_readiness")
+  priority           Int       @default(5)
+  status             String    @default("proposed")
+  riskLevel          String    @default("low") @map("risk_level")
+  source             String    @default("hourly_improvement_loop")
+  evidence           Json?
+  impact             String?
+  acceptanceCriteria Json?     @map("acceptance_criteria")
+  taskTitle          String?   @map("task_title")
+  taskBody           String?   @map("task_body")
+  taskAssignee       String    @default("triage") @map("task_assignee")
+  taskId             String?   @map("task_id")
+  taskCreatedAt      DateTime? @map("task_created_at")
+  approvedBy         String?   @map("approved_by")
+  approvedAt         DateTime? @map("approved_at")
+  approvalSource     String?   @map("approval_source")
+  rejectionReason    String?   @map("rejection_reason")
+  createdBy          String?   @map("created_by")
+  updatedBy          String?   @map("updated_by")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, priority, createdAt], name: "idx_admin_improvement_proposals_status_priority_created")
+  @@map("admin_improvement_proposals")
+}

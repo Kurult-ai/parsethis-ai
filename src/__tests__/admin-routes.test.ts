@@ -25,6 +25,8 @@ describe("admin routes", () => {
     assert.ok(html.includes("Admin Console"));
     assert.ok(html.includes("Agent action console"));
     assert.ok(html.includes("GEO performance"));
+    assert.ok(html.includes("Improvement proposals"));
+    assert.ok(html.includes("Create implementation task"));
     assert.ok(html.includes("/v1/admin/actions"));
   });
 
@@ -51,6 +53,10 @@ describe("admin routes", () => {
     assert.ok(actions.includes("admin.support.ticket.list"));
     assert.ok(actions.includes("admin.support.ticket.create"));
     assert.ok(actions.includes("admin.billing.anomaly.scan"));
+    assert.ok(actions.includes("admin.improvement_proposal.list"));
+    assert.ok(actions.includes("admin.improvement_proposal.create"));
+    assert.ok(actions.includes("admin.improvement_proposal.update_status"));
+    assert.ok(actions.includes("admin.improvement_proposal.create_triage_task"));
 
     const grant = body.actions.find((action: { name: string }) => action.name === "admin.entitlement.grant");
     assert.equal(grant.dry_run_supported, true);

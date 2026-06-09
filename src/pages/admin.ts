@@ -32,6 +32,17 @@ export function renderAdminDashboardPage(baseUrl: string): string {
 
       <section class="admin-panel">
         <div class="admin-panel-head">
+          <div>
+            <h2>Improvement proposals</h2>
+            <p class="admin-subtle">Review SaaS-readiness proposals. One click creates a tracked implementation task for triage; it does not deploy or mutate production.</p>
+          </div>
+          <button class="btn btn-outline" type="button" id="refresh-proposals">Refresh</button>
+        </div>
+        <div id="proposal-list" class="admin-list proposal-list">No proposals loaded.</div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="admin-panel-head">
           <h2>GEO performance</h2>
           <div class="admin-inline-controls">
             <label for="geo-days">Window</label>
@@ -111,6 +122,10 @@ export function renderAdminDashboardPage(baseUrl: string): string {
               <option value="admin.payment.list">admin.payment.list</option>
               <option value="admin.evaluation.list">admin.evaluation.list</option>
               <option value="admin.screening_event.list">admin.screening_event.list</option>
+              <option value="admin.improvement_proposal.list">admin.improvement_proposal.list</option>
+              <option value="admin.improvement_proposal.create">admin.improvement_proposal.create</option>
+              <option value="admin.improvement_proposal.update_status">admin.improvement_proposal.update_status</option>
+              <option value="admin.improvement_proposal.create_triage_task">admin.improvement_proposal.create_triage_task</option>
               <option value="admin.audit_event.list">admin.audit_event.list</option>
             </select>
           </label>
@@ -277,6 +292,27 @@ export function renderAdminDashboardPage(baseUrl: string): string {
         return items.map(renderItem).join("");
       }
 
+      function renderProposals(payload) {
+        const rows = payload?.improvement_proposals || [];
+        document.getElementById("proposal-list").innerHTML = rows.length ? rows.map((proposal) => {
+          const criteria = Array.isArray(proposal.acceptance_criteria) ? proposal.acceptance_criteria.slice(0, 4).map((item) => '<li>' + esc(item) + '</li>').join("") : "";
+          const taskLine = proposal.task_id ? '<br><span>Task: <code>' + esc(proposal.task_id) + '</code></span>' : "";
+          const approvalLine = proposal.approved_by ? '<br><span>Approved by: ' + esc(proposal.approved_by) + '</span>' : "";
+          const disabled = proposal.status === "converted" ? " disabled" : "";
+          return '<article class="proposal-card">' +
+            '<div class="proposal-head"><div><strong>' + esc(proposal.title) + '</strong><br><span>' + esc(proposal.category) + ' · P' + esc(proposal.priority) + ' · ' + esc(proposal.risk_level) + '</span></div><span class="badge badge-default">' + esc(proposal.status) + '</span></div>' +
+            (proposal.impact ? '<p>' + esc(proposal.impact) + '</p>' : '') +
+            (criteria ? '<ul>' + criteria + '</ul>' : '') +
+            '<div class="proposal-actions">' +
+              '<button class="btn btn-primary proposal-create-task" data-id="' + esc(proposal.id) + '" type="button"' + disabled + '>Create implementation task</button>' +
+              '<button class="btn btn-outline proposal-reject" data-id="' + esc(proposal.id) + '" type="button"' + disabled + '>Reject</button>' +
+              '<button class="btn btn-outline proposal-defer" data-id="' + esc(proposal.id) + '" type="button"' + disabled + '>Defer</button>' +
+              approvalLine + taskLine +
+            '</div>' +
+          '</article>';
+        }).join("") : 'No open improvement proposals.';
+      }
+
       function renderGeoMetrics(geo) {
         window.__lastGeo = geo || {};
         const summary = geo?.summary || {};
@@ -342,7 +378,18 @@ export function renderAdminDashboardPage(baseUrl: string): string {
           renderSummary(snapshot.summary || {});
           renderKeys({ api_keys: snapshot.api_keys || [] });
           renderActivity(snapshot);
+          await refreshProposals(false);
           setStatus("Loaded " + new Date().toLocaleTimeString(), "ok");
+        } catch (err) {
+          setStatus(err.message, "error");
+        }
+      }
+
+      async function refreshProposals(showStatus = true) {
+        try {
+          const payload = await api("/v1/admin/improvement-proposals?limit=20&status=proposed");
+          renderProposals(payload);
+          if (showStatus) setStatus("Improvement proposals refreshed.", "ok");
         } catch (err) {
           setStatus(err.message, "error");
         }
@@ -380,6 +427,7 @@ export function renderAdminDashboardPage(baseUrl: string): string {
       document.getElementById("refresh-keys").addEventListener("click", refreshKeys);
       document.getElementById("refresh-activity").addEventListener("click", loadDashboard);
       document.getElementById("refresh-geo").addEventListener("click", refreshGeo);
+      document.getElementById("refresh-proposals").addEventListener("click", () => refreshProposals(true));
 
       document.getElementById("action-form").addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -397,6 +445,7 @@ export function renderAdminDashboardPage(baseUrl: string): string {
           setOutput(result);
           setStatus("Action completed.", "ok");
           if (payload.action.startsWith("admin.api_key.")) refreshKeys();
+          if (payload.action.startsWith("admin.improvement_proposal.")) refreshProposals(false);
         } catch (err) {
           setOutput({ error: err.message });
           setStatus(err.message, "error");
@@ -454,6 +503,59 @@ export function renderAdminDashboardPage(baseUrl: string): string {
       });
 
       document.addEventListener("click", async (event) => {
+        const taskButton = event.target.closest(".proposal-create-task");
+        if (taskButton) {
+          if (!confirm("Create an implementation task for triage? This does not deploy or mutate production.")) return;
+          try {
+            const result = await api("/v1/admin/actions", {
+              method: "POST",
+              body: JSON.stringify({ action: "admin.improvement_proposal.create_triage_task", params: { id: taskButton.dataset.id, approved_by: "admin-ui", approval_source: "parsethis.ai/admin" } })
+            });
+            setOutput(result);
+            setStatus("Implementation task request created.", "ok");
+            await refreshProposals(false);
+          } catch (err) {
+            setOutput({ error: err.message });
+            setStatus(err.message, "error");
+          }
+          return;
+        }
+
+        const rejectButton = event.target.closest(".proposal-reject");
+        if (rejectButton) {
+          const reason = prompt("Reject reason", "not worth doing now") || "rejected in admin";
+          try {
+            const result = await api("/v1/admin/actions", {
+              method: "POST",
+              body: JSON.stringify({ action: "admin.improvement_proposal.update_status", params: { id: rejectButton.dataset.id, status: "rejected", reason } })
+            });
+            setOutput(result);
+            setStatus("Proposal rejected.", "ok");
+            await refreshProposals(false);
+          } catch (err) {
+            setOutput({ error: err.message });
+            setStatus(err.message, "error");
+          }
+          return;
+        }
+
+        const deferButton = event.target.closest(".proposal-defer");
+        if (deferButton) {
+          try {
+            const result = await api("/v1/admin/actions", {
+              method: "POST",
+              body: JSON.stringify({ action: "admin.improvement_proposal.update_status", params: { id: deferButton.dataset.id, status: "deferred", reason: "deferred in admin" } })
+            });
+            setOutput(result);
+            setStatus("Proposal deferred.", "ok");
+            await refreshProposals(false);
+          } catch (err) {
+            setOutput({ error: err.message });
+            setStatus(err.message, "error");
+          }
+          return;
+        }
+
         const button = event.target.closest(".admin-revoke");
         if (!button) return;
         if (!confirm("Revoke this API key?")) return;
@@ -562,7 +664,8 @@ export function renderAdminDashboardPage(baseUrl: string): string {
           align-content: space-between;
         }
         .admin-card span,
-        .admin-list span { color: var(--text-dim); }
+        .admin-list span,
+        .admin-subtle { color: var(--text-dim); }
         .admin-card strong {
           font-size: 28px;
           line-height: 1;

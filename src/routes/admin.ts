@@ -581,6 +581,54 @@ function buildAdminManifest(baseUrl: string) {
       params: { limit: "number", offset: "number", status: "string optional", api_key_id: "string optional" },
     },
     {
+      name: "admin.improvement_proposal.list",
+      method: "GET",
+      path: "/v1/admin/improvement-proposals",
+      mutates: false,
+      risk: "low",
+      params: { limit: "number optional", offset: "number optional", status: "string optional", category: "string optional" },
+    },
+    {
+      name: "admin.improvement_proposal.create",
+      method: "POST",
+      path: actionPath,
+      mutates: true,
+      risk: "low",
+      dry_run_supported: true,
+      params: {
+        idempotency_key: "string required; stable dedupe key for hourly loop",
+        title: "string required",
+        category: "saas_readiness|onboarding|reliability|billing|support|docs|legal|evals|string",
+        priority: "integer 1-10",
+        evidence: "JSON object/array; no secrets",
+        impact: "string optional",
+        acceptance_criteria: "string[] optional",
+        task_title: "string optional",
+        task_body: "string optional",
+        task_assignee: "string optional, default triage",
+        dry_run: "boolean optional",
+      },
+    },
+    {
+      name: "admin.improvement_proposal.update_status",
+      method: "POST",
+      path: actionPath,
+      mutates: true,
+      risk: "low",
+      params: { id: "string required", status: "proposed|approved|rejected|deferred|revision_requested", reason: "string optional", approved_by: "string optional", approval_source: "string optional" },
+    },
+    {
+      name: "admin.improvement_proposal.create_triage_task",
+      method: "POST",
+      path: actionPath,
+      mutates: true,
+      risk: "medium",
+      dry_run_supported: true,
+      params: { id: "string required", dry_run: "boolean optional", approved_by: "string optional", approval_source: "string optional" },
+      autonomous_when: ["human clicked approval in admin", "creates triage task only", "no production mutation"],
+      requires_approval_when: ["deploy", "billing/payment", "security policy", "legal/public copy", "customer outreach", "hard delete"],
+    },
+    {
       name: "admin.audit_event.list",
       method: "GET",
       path: "/v1/admin/audit-events",
@@ -1386,6 +1434,69 @@ function serializeReceipt(receipt: any) {
   };
 }
 
+function serializeImprovementProposal(proposal: any) {
+  return {
+    id: proposal.id,
+    idempotency_key: proposal.idempotencyKey,
+    title: proposal.title,
+    category: proposal.category,
+    priority: proposal.priority,
+    status: proposal.status,
+    risk_level: proposal.riskLevel,
+    source: proposal.source,
+    evidence: proposal.evidence,
+    impact: proposal.impact,
+    acceptance_criteria: proposal.acceptanceCriteria,
+    task_title: proposal.taskTitle,
+    task_body: proposal.taskBody,
+    task_assignee: proposal.taskAssignee,
+    task_id: proposal.taskId,
+    task_created_at: iso(proposal.taskCreatedAt),
+    approved_by: proposal.approvedBy,
+    approved_at: iso(proposal.approvedAt),
+    approval_source: proposal.approvalSource,
+    rejection_reason: proposal.rejectionReason,
+    created_by: proposal.createdBy,
+    updated_by: proposal.updatedBy,
+    created_at: iso(proposal.createdAt),
+    updated_at: iso(proposal.updatedAt),
+  };
+}
+
+function taskSpecForProposal(proposal: any) {
+  const title = proposal.taskTitle || proposal.title;
+  const body = proposal.taskBody || [
+    `Source proposal: ${proposal.id}`,
+    `Category: ${proposal.category}`,
+    `Priority: ${proposal.priority}`,
+    `Risk: ${proposal.riskLevel}`,
+    proposal.approvedBy ? `Approved by: ${proposal.approvedBy}` : null,
+    proposal.approvalSource ? `Approval source: ${proposal.approvalSource}` : null,
+    proposal.impact ? `Impact: ${proposal.impact}` : null,
+    "",
+    "Evidence:",
+    JSON.stringify(proposal.evidence ?? {}, null, 2),
+    "",
+    "Acceptance criteria:",
+    Array.isArray(proposal.acceptanceCriteria)
+      ? proposal.acceptanceCriteria.map((item: unknown) => `- ${String(item)}`).join("\n")
+      : JSON.stringify(proposal.acceptanceCriteria ?? [], null, 2),
+    "",
+    "Safety gates: create an implementation plan/task for triage only. No deploy, billing/payment, security-policy, legal/public-copy, customer-outreach, hard-delete, or provider/runtime mutation without explicit approval.",
+  ].filter(Boolean).join("\n");
+
+  return {
+    title,
+    assignee: proposal.taskAssignee || "triage",
+    body,
+    triage: true,
+    priority: Math.max(1, Math.min(10, Number(proposal.priority) || 5)),
+    idempotency_key: `parse-improvement-${proposal.idempotencyKey}`,
+    source: "parse_admin_improvement_proposal",
+    source_id: proposal.id,
+  };
+}
+
 async function writeAdminReceipt(c: AdminContext, data: {
   action: string;
   apiKeyId?: string | null;
@@ -1418,6 +1529,17 @@ async function writeAdminReceipt(c: AdminContext, data: {
       approvalState: data.approvalState ?? "not_required",
     },
   });
+}
+
+function adminActorLabel(c: AdminContext, params?: UnknownRecord): string {
+  const actor = c.get("apiKey");
+  const submittedBy = params ? getString(params, "approved_by", "approvedBy", "submitted_by", "submittedBy") : undefined;
+  const authActor = `${actor.name || "admin"}:${actor.id}`;
+  return submittedBy ? `${submittedBy} via ${authActor}` : authActor;
+}
+
+function approvalSource(params: UnknownRecord): string | null {
+  return getString(params, "approval_source", "approvalSource", "source") ?? null;
 }
 
 async function resolveCustomerData(params: UnknownRecord) {
@@ -1686,6 +1808,149 @@ async function createSupportTicketData(c: AdminContext, params: UnknownRecord) {
   });
   const receipt = await writeAdminReceipt(c, { action: "admin.support.ticket.create", ticketId: ticket.id, apiKeyId: ticket.apiKeyId, userId: ticket.requesterEmail, result: { ticket_id: ticket.id }, riskLevel: "low" });
   return { support_ticket: serializeSupportTicket(ticket, true), receipt: serializeReceipt(receipt) };
+}
+
+async function listImprovementProposalsData(params: ListParams & { category?: string }) {
+  const where: any = {};
+  if (params.status) where.status = params.status;
+  if (params.category) where.category = params.category;
+  const [total, proposals] = await Promise.all([
+    prisma.adminImprovementProposal.count({ where }),
+    prisma.adminImprovementProposal.findMany({
+      where,
+      orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
+      take: params.limit,
+      skip: params.offset,
+    }),
+  ]);
+  return { total, limit: params.limit, offset: params.offset, improvement_proposals: proposals.map(serializeImprovementProposal) };
+}
+
+async function createImprovementProposalData(c: AdminContext, params: UnknownRecord) {
+  const idempotencyKey = requireString(c, params, "idempotency_key", "idempotencyKey");
+  if (idempotencyKey instanceof Response) return idempotencyKey;
+  const title = requireString(c, params, "title");
+  if (title instanceof Response) return title;
+  const dryRun = boolParam(params.dry_run ?? params.dryRun);
+  const priority = Math.max(1, Math.min(10, Number(params.priority ?? 5) || 5));
+  const actor = c.get("apiKey");
+  const planned = {
+    idempotencyKey,
+    title,
+    category: getString(params, "category") || "saas_readiness",
+    priority,
+    status: "proposed",
+    riskLevel: getString(params, "risk_level", "riskLevel") || "low",
+    source: getString(params, "source") || "hourly_improvement_loop",
+    evidence: (params.evidence ?? null) as any,
+    impact: getString(params, "impact"),
+    acceptanceCriteria: (params.acceptance_criteria ?? params.acceptanceCriteria ?? null) as any,
+    taskTitle: getString(params, "task_title", "taskTitle"),
+    taskBody: getString(params, "task_body", "taskBody"),
+    taskAssignee: getString(params, "task_assignee", "taskAssignee") || "triage",
+    createdBy: `${actor.name || "admin"}:${actor.id}`,
+    updatedBy: `${actor.name || "admin"}:${actor.id}`,
+  };
+  if (dryRun) return { dry_run: true, planned };
+
+  const existing = await prisma.adminImprovementProposal.findUnique({ where: { idempotencyKey } });
+  if (existing) return { deduped: true, improvement_proposal: serializeImprovementProposal(existing) };
+
+  const proposal = await prisma.adminImprovementProposal.create({ data: planned });
+  const receipt = await writeAdminReceipt(c, {
+    action: "admin.improvement_proposal.create",
+    reason: getString(params, "reason") || "hourly SaaS-readiness proposal",
+    result: { proposal_id: proposal.id, idempotency_key: idempotencyKey },
+    riskLevel: "low",
+  });
+  return { improvement_proposal: serializeImprovementProposal(proposal), receipt: serializeReceipt(receipt) };
+}
+
+async function updateImprovementProposalStatusData(c: AdminContext, params: UnknownRecord) {
+  const id = requireString(c, params, "id", "proposal_id", "proposalId");
+  if (id instanceof Response) return id;
+  const status = requireString(c, params, "status");
+  if (status instanceof Response) return status;
+  const allowed = new Set(["proposed", "approved", "rejected", "deferred", "revision_requested"]);
+  if (!allowed.has(status)) return jsonError(c, 400, "Invalid status", "Status must be proposed, approved, rejected, deferred, or revision_requested.");
+  const actor = c.get("apiKey");
+  const approver = adminActorLabel(c, params);
+  const source = approvalSource(params);
+  const before = await prisma.adminImprovementProposal.findUnique({ where: { id } });
+  if (!before) return jsonError(c, 404, "Not found", "Improvement proposal not found.", ErrorCode.RESOURCE_NOT_FOUND);
+  const proposal = await prisma.adminImprovementProposal.update({
+    where: { id },
+    data: {
+      status,
+      approvedBy: status === "approved" ? approver : before.approvedBy,
+      approvedAt: status === "approved" ? new Date() : before.approvedAt,
+      approvalSource: status === "approved" ? source : before.approvalSource,
+      rejectionReason: getString(params, "reason") || (status === "rejected" ? "rejected in admin" : before.rejectionReason),
+      updatedBy: `${actor.name || "admin"}:${actor.id}`,
+    },
+  });
+  const receipt = await writeAdminReceipt(c, {
+    action: "admin.improvement_proposal.update_status",
+    reason: getString(params, "reason") || `status -> ${status}`,
+    before: serializeImprovementProposal(before),
+    after: serializeImprovementProposal(proposal),
+    result: { proposal_id: proposal.id, status, approved_by: status === "approved" ? approver : undefined, approval_source: status === "approved" ? source : undefined },
+    riskLevel: "low",
+  });
+  return { improvement_proposal: serializeImprovementProposal(proposal), receipt: serializeReceipt(receipt) };
+}
+
+async function createTriageTaskFromProposalData(c: AdminContext, params: UnknownRecord) {
+  const id = requireString(c, params, "id", "proposal_id", "proposalId");
+  if (id instanceof Response) return id;
+  const dryRun = boolParam(params.dry_run ?? params.dryRun);
+  const proposal = await prisma.adminImprovementProposal.findUnique({ where: { id } });
+  if (!proposal) return jsonError(c, 404, "Not found", "Improvement proposal not found.", ErrorCode.RESOURCE_NOT_FOUND);
+  const taskSpec = taskSpecForProposal(proposal);
+  if (dryRun) return { dry_run: true, task_spec: taskSpec, improvement_proposal: serializeImprovementProposal(proposal) };
+  if (proposal.taskId) return { already_created: true, task_id: proposal.taskId, improvement_proposal: serializeImprovementProposal(proposal) };
+
+  const webhookUrl = process.env.HERMES_KANBAN_CREATE_URL || process.env.KANBAN_TASK_CREATE_URL || process.env.TRIAGE_TASK_WEBHOOK_URL;
+  let taskId: string | null = null;
+  let delivery: unknown = { mode: "local_receipt", note: "No HERMES_KANBAN_CREATE_URL/KANBAN_TASK_CREATE_URL/TRIAGE_TASK_WEBHOOK_URL configured; task_spec was recorded for triage pickup." };
+  if (webhookUrl) {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const secret = process.env.HERMES_KANBAN_CREATE_SECRET || process.env.KANBAN_TASK_CREATE_SECRET || process.env.TRIAGE_TASK_WEBHOOK_SECRET;
+    if (secret) headers.Authorization = `Bearer ${secret}`;
+    const res = await fetch(webhookUrl, { method: "POST", headers, body: JSON.stringify(taskSpec) });
+    const text = await res.text();
+    let parsed: any = {};
+    try { parsed = text ? JSON.parse(text) : {}; } catch { parsed = { raw: text }; }
+    if (!res.ok) return jsonError(c, 502, "Task creation failed", parsed.detail || parsed.error || parsed.title || res.statusText);
+    taskId = String(parsed.task_id || parsed.id || parsed.taskId || "");
+    delivery = parsed;
+  }
+
+  const actor = c.get("apiKey");
+  const approver = proposal.approvedBy || adminActorLabel(c, params);
+  const source = proposal.approvalSource || approvalSource(params);
+  const updated = await prisma.adminImprovementProposal.update({
+    where: { id },
+    data: {
+      status: "converted",
+      taskId: taskId || null,
+      taskCreatedAt: new Date(),
+      approvedBy: approver,
+      approvedAt: proposal.approvedAt || new Date(),
+      approvalSource: source,
+      updatedBy: `${actor.name || "admin"}:${actor.id}`,
+    },
+  });
+  const receipt = await writeAdminReceipt(c, {
+    action: "admin.improvement_proposal.create_triage_task",
+    reason: getString(params, "reason") || "admin one-click create implementation triage task",
+    before: serializeImprovementProposal(proposal),
+    after: serializeImprovementProposal(updated),
+    result: { proposal_id: proposal.id, task_id: taskId, approved_by: approver, approval_source: source, task_spec: taskSpec, delivery },
+    riskLevel: "medium",
+    approvalState: "approved",
+  });
+  return { improvement_proposal: serializeImprovementProposal(updated), task_id: taskId, task_spec: taskSpec, delivery, receipt: serializeReceipt(receipt) };
 }
 
 async function billingAnomalyScanData(params: ListParams) {
@@ -2130,6 +2395,10 @@ adminRoutes.get("/v1/admin/screening-events", async (c) => c.json(await listScre
 
 adminRoutes.get("/v1/admin/audit-events", async (c) => c.json(await listAuditEventsData(listParamsFromQuery(c))));
 
+adminRoutes.get("/v1/admin/improvement-proposals", async (c) =>
+  c.json(await listImprovementProposalsData({ ...listParamsFromQuery(c), category: c.req.query("category") })),
+);
+
 adminRoutes.post("/v1/admin/actions", async (c) => {
   const body = await readJsonObject(c);
   if (body instanceof Response) return body;
@@ -2201,6 +2470,23 @@ adminRoutes.post("/v1/admin/actions", async (c) => {
       const result = await createSupportTicketData(c, params);
       if (result instanceof Response) return result;
       return c.json(result, result.dry_run ? 200 : 201);
+    }
+    case "admin.improvement_proposal.list":
+      return c.json(await listImprovementProposalsData({ ...listParamsFromBody(params), category: getString(params, "category") }));
+    case "admin.improvement_proposal.create": {
+      const result = await createImprovementProposalData(c, params);
+      if (result instanceof Response) return result;
+      return c.json(result, result.dry_run || result.deduped ? 200 : 201);
+    }
+    case "admin.improvement_proposal.update_status": {
+      const result = await updateImprovementProposalStatusData(c, params);
+      if (result instanceof Response) return result;
+      return c.json(result);
+    }
+    case "admin.improvement_proposal.create_triage_task": {
+      const result = await createTriageTaskFromProposalData(c, params);
+      if (result instanceof Response) return result;
+      return c.json(result, result.dry_run || result.already_created ? 200 : 201);
     }
     case "admin.billing.anomaly.scan":
       return c.json(await billingAnomalyScanData(listParamsFromBody(params)));
