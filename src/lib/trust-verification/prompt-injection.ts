@@ -50,6 +50,8 @@ const INSTRUCTION_OVERRIDE_PATTERNS = [
   /clear your (memory|context|instructions)/i,
   /start over(?! with)/i,
   /new instructions?:/i,
+  /ignore (?:the )?(?:policy|policies|rules|safety policy|security policy)/i,
+  /disregard (?:the )?(?:policy|policies|rules|safety policy|security policy)/i,
   // Override attempts
   /override (your )?(programming|instructions|training|rules)/i,
   /your instructions? (are|have been) (updated|changed)/i,
@@ -171,6 +173,7 @@ const HIGH_RISK_KEYWORDS = [
   "developer mode",
   "admin mode",
   "ignore instructions",
+  "ignore policy",
   "disregard rules",
   "no limitations",
   "off-limits",

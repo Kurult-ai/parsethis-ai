@@ -22,6 +22,7 @@ const CREDENTIAL_PATTERNS = [
   /\b(what(?:'?s| is) your (API key|apikey|api-key|token|access token|bearer token))\b/i,
   /\b(show me|tell me|reveal|share) your (API key|token|access key|access token)\b/i,
   /\b(provide|send|give|share) your (API key|token|credentials|access token|login credentials)\b/i,
+  /\b(grant|give|provide|send|share) me (?:your |the )?(?:production |admin |privileged |root |system )?(credentials|access token|api key|secret key|access)\b/i,
   // Secret/key requests
   /\b(what(?:'?s| is) your (secret|private key|secret key|auth key))\b/i,
   /\b(reveal your (secret|private key|auth token))\b/i,
