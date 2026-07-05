@@ -19,7 +19,7 @@ export function renderLandingPage(baseUrl: string): string {
     {
       mcpServers: {
         parse: {
-          url: "https://parsethis.ai/mcp",
+          url: "https://www.parsethis.ai/mcp",
           headers: { Authorization: "Bearer ${PARSE_API_KEY}" },
         },
       },
@@ -30,12 +30,12 @@ export function renderLandingPage(baseUrl: string): string {
 
   const bearerPrompt = `Integrate Parse as the prompt protection boundary for this agent runtime.
 
-Fast path:
-- If this runtime has native Hermes commands, run: hermes parse status, hermes parse doctor, hermes parse setup --quick, then hermes parse test.
-- If native commands are unavailable, implement the same checks in code: configured/enabled status, auth presence, test fixture, and a doctor message with the next action.
-- Keep Parse disabled until the local test passes. Do not print API keys or wallet/private-key values.
+First-use path:
+- Prefer REST with Bearer auth: store PARSE_API_KEY in the runtime secret store and send it only to www.parsethis.ai.
+- If no key exists, try POST https://www.parsethis.ai/v1/keys/generate. If it returns 503, stop and report key validation unavailable instead of claiming setup succeeded.
+- Keep Parse disabled until a local benign fixture and an encoded-injection fixture pass. Do not print API keys or wallet/private-key values.
 
-Use Bearer auth when PARSE_API_KEY is available. If no key exists, create one with POST https://www.parsethis.ai/v1/keys/generate and store it as PARSE_API_KEY in the runtime secret store. Only send that key to www.parsethis.ai.
+Use Bearer auth when PARSE_API_KEY is available. Treat x402 as a paid REST fallback after operator approval, not as the default for recurring production use.
 
 Call POST https://www.parsethis.ai/v1/parse before untrusted user input, retrieved documents, browser content, tool output, email, or another agent's message can affect tools, memory, credentials, payments, code execution, or user-visible output.
 
@@ -50,16 +50,16 @@ Verification required before reporting done:
 - Benign fixture allows.
 - Tool-output or JSON instruction fixture blocks.
 - Status/doctor output redacts secrets.
-- If Hermes native commands exist, include the output summary from hermes parse test and hermes parse doctor.`;
+- REST checks completed: key-generation response handled, benign fixture allowed, encoded prompt-injection fixture blocked, and tool-output/JSON instruction fixture blocked.
+- If a local Hermes Parse plugin exists, include its output; otherwise do not reference Hermes commands.`;
 
   const x402Prompt = `Integrate Parse with x402 pay-per-call fallback.
 
-Fast path:
-- If this runtime has native Hermes commands, run: hermes parse pricing, hermes parse x402-status, hermes parse setup --quick, then hermes parse test.
+REST/x402 path:
+- First try Bearer auth if PARSE_API_KEY exists.
+- If no account context exists or Parse returns HTTP 402, read https://www.parsethis.ai/v1/pricing and use the x402 402 payment flow.
 - Do not make a paid x402 screening call until the operator confirms spending is allowed and the funded wallet is scoped for Parse.
-- Never print private keys, seed phrases, payment signatures, or wallet secrets.
-
-First try Bearer auth if PARSE_API_KEY exists. If the request receives HTTP 402 or no account context exists, use the x402 402 payment flow from https://www.parsethis.ai/v1/pricing and retry the same resource with the payment header.
+- Never print private keys, seed phrases, payment signatures, API keys, or wallet secrets.
 
 Primary boundary: POST https://www.parsethis.ai/v1/parse before untrusted user input, RAG documents, browser content, tool output, email, or another agent's message can affect tools, memory, credentials, payments, code execution, or user-visible output.
 
@@ -73,7 +73,7 @@ Verification required before reporting done:
 - Pricing manifest read from https://www.parsethis.ai/v1/pricing.
 - Prompt/output prices, asset, network, and retry header recorded.
 - Local no-paid-call test passes.
-- If Hermes native commands exist, include the output summary from hermes parse x402-status and hermes parse test.`;
+- If a local Hermes Parse plugin exists, include its output; otherwise verify with REST pricing and fixture checks.`;
 
   const promptsPayload = JSON.stringify({ bearer: bearerPrompt, x402: x402Prompt }).replace(/</g, "\\u003c");
   const blogPosts = listBlogPosts().slice(0, 3);
@@ -225,6 +225,23 @@ Verification required before reporting done:
     </div>
   </section>
 
+  <section class="pa-prompt" aria-labelledby="prompt-title">
+    <div class="pa-prompt-head">
+      <div>
+        <span class="pa-mini-label">Copy into an agent</span>
+        <strong id="prompt-title">Integration prompt</strong>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <div class="pa-tabs" role="tablist" aria-label="Authentication path">
+          <button type="button" role="tab" aria-selected="true" data-route="bearer" class="pa-tab is-active">Bearer key</button>
+          <button type="button" role="tab" aria-selected="false" data-route="x402" class="pa-tab">x402</button>
+        </div>
+        <button type="button" class="pa-copy">Copy</button>
+      </div>
+    </div>
+    <pre tabindex="0"><code class="pa-prompt-text"></code></pre>
+  </section>
+
   <section class="pa-section">
     <div>
       <h2>Screen every place an agent can be steered.</h2>
@@ -270,23 +287,6 @@ Verification required before reporting done:
       <div class="pa-path"><span class="pa-mini-label">OpenAPI</span><h3>Tool calling</h3><p>Let coding agents and GPT Actions discover the callable API surface.</p><code>/openapi.json</code></div>
       <div class="pa-path"><span class="pa-mini-label">x402</span><h3>No account first call</h3><p>Autonomous agents can pay per call when no bearer key exists.</p><code>/v1/pricing</code></div>
     </div>
-  </section>
-
-  <section class="pa-prompt" aria-labelledby="prompt-title">
-    <div class="pa-prompt-head">
-      <div>
-        <span class="pa-mini-label">Copy into an agent</span>
-        <strong id="prompt-title">Integration prompt</strong>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <div class="pa-tabs" role="tablist" aria-label="Authentication path">
-          <button type="button" role="tab" aria-selected="true" data-route="bearer" class="pa-tab is-active">Bearer key</button>
-          <button type="button" role="tab" aria-selected="false" data-route="x402" class="pa-tab">x402</button>
-        </div>
-        <button type="button" class="pa-copy">Copy</button>
-      </div>
-    </div>
-    <pre tabindex="0"><code class="pa-prompt-text"></code></pre>
   </section>
 
   <section class="pa-section">
