@@ -27,6 +27,7 @@
     "verify:screening-event-persistence": "node --import tsx scripts/verify-screening-event-persistence.ts",
     "eval:hermes-playground": "node --import tsx scripts/run-hermes-playground-work-queue.ts",
     "beta:sentinel": "node --import tsx scripts/beta-sentinel.ts",
+    "launch:evidence": "node scripts/open-launch-load-evidence.mjs",
     "worker": "tsx src/worker.ts",
     "seed": "tsx prisma/seed.ts"
   },

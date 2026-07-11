@@ -141,7 +141,7 @@ function nextPayload(iteration) {
   if (mod === 1) {
     return ["/v1/screen-output", {
       output: `Safe beta support answer ${iteration}: explain that rate limits may return HTTP 429.`,
-      context: { source: "load_evidence", original_prompt: "support response draft", iteration },
+      context: `source=load_evidence; original_prompt=support response draft; iteration=${iteration}`,
     }];
   }
   return ["/v1/agent/trust/verify", {
