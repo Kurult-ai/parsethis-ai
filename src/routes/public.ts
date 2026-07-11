@@ -1350,12 +1350,18 @@ async function handleKeygenCanary(c: Context) {
   const name = parseAndValidateKeyGenerationName(c, body);
   if (name instanceof Response) return name;
 
-  const ip =
-    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
-    c.req.header("x-real-ip") ||
-    "unknown";
-  if (!checkLocalKeygenRateLimit(`canary:${ip}`)) {
-    return c.json({ error: "Rate limit: max 5 keys per minute" }, 429);
+  // GET canary is non-secret, read-only launch health evidence. Do not let
+  // repeated smoke checks consume the self-service keygen rate-limit bucket.
+  // Keep POST canary rate-limited because it may be configured to create a
+  // disposable key in local/operator verification modes.
+  if (c.req.method !== "GET") {
+    const ip =
+      c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
+      c.req.header("x-real-ip") ||
+      "unknown";
+    if (!checkLocalKeygenRateLimit(`canary:${ip}`)) {
+      return c.json({ error: "Rate limit: max 5 keys per minute" }, 429);
+    }
   }
 
   const alerts = new Set<string>();

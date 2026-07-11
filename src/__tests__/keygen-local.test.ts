@@ -98,6 +98,18 @@ describe("local/test-only public key generation", () => {
     assert.equal(Array.isArray(body.alerts), true);
     assert.ok(body.alerts.includes("keygen_count_ok"));
   });
+  it("does not rate-limit repeated GET canary health checks", async () => {
+    process.env.KEY_GENERATION_LOCAL_TEST_MODE = "true";
+
+    for (let i = 0; i < 8; i += 1) {
+      const res = await app.request("/v1/keys/generate/canary", {
+        method: "GET",
+        headers: { "x-forwarded-for": "198.51.100.88" },
+      });
+      assert.notEqual(res.status, 429);
+    }
+  });
+
   it("supports GET for the production-safe canary smoke", async () => {
     process.env.KEY_GENERATION_LOCAL_TEST_MODE = "false";
     process.env.KEYGEN_CANARY_DISPOSABLE_CREATE = "false";
