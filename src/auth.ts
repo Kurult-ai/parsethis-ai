@@ -1,7 +1,7 @@
 import { Context, Next } from "hono";
 import { timingSafeEqual, createHash } from "node:crypto";
 import {
-  validateApiKey as validateApiKeyFromService,
+  validateApiKeyDetailed as validateApiKeyFromService,
   createApiKey as createApiKeyFromService,
   listApiKeys as listApiKeysFromService,
   revokeApiKey as revokeApiKeyFromService,
@@ -320,9 +320,34 @@ export function authMiddleware(requiredScope?: string) {
     }
 
     // Postgres-backed key validation via api-key-service (bcrypt + Redis cache)
-    let apiKeyRecord: ApiKeyRecord | null;
+    let apiKeyRecord: ApiKeyRecord;
     try {
-      apiKeyRecord = await validateApiKeyFromService(keyStr);
+      const validation = await validateApiKeyFromService(keyStr);
+      if (validation.status === "temporarily_unavailable") {
+        const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+        auditLog({ action: "auth_failure", detail: `API key validation temporarily unavailable: ${validation.reason}`, ip });
+        return problem(c, {
+          status: 503,
+          title: "Authentication service unavailable",
+          detail: "API key validation is temporarily unavailable.",
+          code: ErrorCode.SERVICE_UNAVAILABLE,
+          retryable: true,
+        });
+      }
+
+      if (validation.status !== "valid") {
+        const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+        auditLog({ action: "auth_failure", detail: validation.status === "expired" ? "Expired API key" : validation.status === "revoked" ? "Revoked API key" : "Invalid API key", ip });
+        return problem(c, {
+          status: 401,
+          title: "Invalid API key",
+          detail: validation.status === "expired" ? "The provided API key has expired." : validation.status === "revoked" ? "The provided API key has been revoked." : "The provided API key is invalid.",
+          code: ErrorCode.AUTH_INVALID_KEY,
+          retryable: false,
+        });
+      }
+
+      apiKeyRecord = validation.record;
     } catch (err) {
       console.error("[auth] Key validation error:", (err as Error).message);
       return problem(c, {
@@ -331,31 +356,6 @@ export function authMiddleware(requiredScope?: string) {
         detail: "API key validation is temporarily unavailable.",
         code: ErrorCode.SERVICE_UNAVAILABLE,
         retryable: true,
-      });
-    }
-
-    if (!apiKeyRecord) {
-      const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
-      auditLog({ action: "auth_failure", detail: "Invalid API key", ip });
-      return problem(c, {
-        status: 401,
-        title: "Invalid API key",
-        detail: "The provided API key is invalid.",
-        code: ErrorCode.AUTH_INVALID_KEY,
-        retryable: false,
-      });
-    }
-
-    // Check expiry
-    if (apiKeyRecord.expiresAt && new Date(apiKeyRecord.expiresAt) < new Date()) {
-      const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
-      auditLog({ action: "auth_failure", apiKeyId: apiKeyRecord.id, detail: "Expired API key", ip });
-      return problem(c, {
-        status: 401,
-        title: "Invalid API key",
-        detail: "The provided API key has expired.",
-        code: ErrorCode.AUTH_INVALID_KEY,
-        retryable: false,
       });
     }
 

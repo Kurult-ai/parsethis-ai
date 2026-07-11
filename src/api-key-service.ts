@@ -234,8 +234,18 @@ export async function createApiKey(
   };
 }
 
-export async function validateApiKey(bearerToken: string): Promise<ApiKeyRecord | null> {
-  if (!bearerToken || !bearerToken.startsWith("pfa_")) return null;
+export type ApiKeyValidationResult =
+  | { status: "valid"; record: ApiKeyRecord }
+  | { status: "invalid" }
+  | { status: "expired" }
+  | { status: "revoked" }
+  | { status: "temporarily_unavailable"; reason: "cache_lookup_failed" | "fallback_lookup_failed" | "db_lookup_failed" | "db_lookup_timeout" };
+
+export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKeyValidationResult> {
+  if (!bearerToken || !bearerToken.startsWith("pfa_")) return { status: "invalid" };
+  if (bearerToken.startsWith("pfa_live_") && !/^pfa_live_[0-9a-f]{48}$/.test(bearerToken)) return { status: "invalid" };
+  if (bearerToken.startsWith("pfa_test_") && !/^pfa_test_[0-9a-f]{48}$/.test(bearerToken)) return { status: "invalid" };
+  if (!bearerToken.startsWith("pfa_live_") && !bearerToken.startsWith("pfa_test_")) return { status: "invalid" };
 
   const prefix = bearerToken.slice(0, 12);
 
@@ -244,24 +254,29 @@ export async function validateApiKey(bearerToken: string): Promise<ApiKeyRecord 
     for (const candidate of candidates) {
       const valid = await bcrypt.compare(bearerToken, candidate.keyHash);
       if (!valid) continue;
-      if (candidate.revokedAt) return null;
-      if (candidate.expiresAt && new Date(candidate.expiresAt) < new Date()) return null;
+      if (candidate.revokedAt) return { status: "revoked" };
+      if (candidate.expiresAt && new Date(candidate.expiresAt) < new Date()) return { status: "expired" };
       candidate.lastUsedAt = new Date();
-      return candidate;
+      return { status: "valid", record: candidate };
     }
-    return null;
+    return { status: "invalid" };
   }
 
   // Check Redis cache first (keyed by prefix for fast lookup)
-  const cached = await getCachedApiKey(prefix);
+  let cached: unknown | null;
+  try {
+    cached = await getCachedApiKey(prefix);
+  } catch {
+    return { status: "temporarily_unavailable", reason: "cache_lookup_failed" };
+  }
   if (cached) {
     const record = cached as ApiKeyRecord & { keyHash: string };
     const valid = await bcrypt.compare(bearerToken, record.keyHash);
-    if (!valid) return null;
+    if (!valid) return { status: "invalid" };
 
     // Check expiry/revocation
-    if (record.revokedAt) return null;
-    if (record.expiresAt && new Date(record.expiresAt) < new Date()) return null;
+    if (record.revokedAt) return { status: "revoked" };
+    if (record.expiresAt && new Date(record.expiresAt) < new Date()) return { status: "expired" };
 
     // Update last_used_at asynchronously (fire-and-forget)
     prisma.apiKey.update({
@@ -269,21 +284,28 @@ export async function validateApiKey(bearerToken: string): Promise<ApiKeyRecord 
       data: { lastUsedAt: new Date() },
     }).catch(() => {});
 
-    return record;
+    return { status: "valid", record };
   }
 
   // Check Redis fallback keys before DB. This keeps newly issued self-service
   // keys usable during a Postgres binding outage without exposing secrets.
-  const fallbackRecord = await getFallbackRecord(prefix);
+  let fallbackRecord: FallbackApiKeyRecord | null;
+  try {
+    fallbackRecord = await getFallbackRecord(prefix);
+  } catch {
+    return { status: "temporarily_unavailable", reason: "fallback_lookup_failed" };
+  }
   if (fallbackRecord) {
     const valid = await bcrypt.compare(bearerToken, fallbackRecord.keyHash);
-    if (!valid) return null;
-    if (fallbackRecord.revokedAt) return null;
-    if (fallbackRecord.expiresAt && fallbackRecord.expiresAt < new Date()) return null;
-    return fallbackRecord;
+    if (!valid) return { status: "invalid" };
+    if (fallbackRecord.revokedAt) return { status: "revoked" };
+    if (fallbackRecord.expiresAt && fallbackRecord.expiresAt < new Date()) return { status: "expired" };
+    return { status: "valid", record: fallbackRecord };
   }
 
-  // Look up by prefix in the database
+  // Look up by prefix in the database. A timeout or unavailable DB is not the
+  // same thing as an invalid key; callers must map it to a retryable auth
+  // service error instead of a permanent 401.
   let candidates;
   try {
     candidates = await withTimeout(
@@ -293,9 +315,9 @@ export async function validateApiKey(bearerToken: string): Promise<ApiKeyRecord 
       dbFallbackTimeoutMs(),
       null
     );
-    if (!candidates) return null;
+    if (!candidates) return { status: "temporarily_unavailable", reason: "db_lookup_timeout" };
   } catch (err) {
-    if (redisFallbackEnabled()) return null;
+    if (redisFallbackEnabled()) return { status: "temporarily_unavailable", reason: "db_lookup_failed" };
     throw err;
   }
 
@@ -304,15 +326,16 @@ export async function validateApiKey(bearerToken: string): Promise<ApiKeyRecord 
     if (!valid) continue;
 
     // Check revocation
-    if (candidate.revokedAt) return null;
+    if (candidate.revokedAt) return { status: "revoked" };
 
     // Check expiry
-    if (candidate.expiresAt && candidate.expiresAt < new Date()) return null;
+    if (candidate.expiresAt && candidate.expiresAt < new Date()) return { status: "expired" };
 
     const record = toApiKeyRecord(candidate);
 
-    // Cache in Redis (include keyHash for future bcrypt compare)
-    await cacheApiKey(prefix, { ...record, keyHash: candidate.keyHash });
+    // Cache in Redis (include keyHash for future bcrypt compare). Cache write
+    // failure should not reject an otherwise valid key.
+    cacheApiKey(prefix, { ...record, keyHash: candidate.keyHash }).catch(() => {});
 
     // Update last_used_at
     prisma.apiKey.update({
@@ -320,10 +343,15 @@ export async function validateApiKey(bearerToken: string): Promise<ApiKeyRecord 
       data: { lastUsedAt: new Date() },
     }).catch(() => {});
 
-    return record;
+    return { status: "valid", record };
   }
 
-  return null;
+  return { status: "invalid" };
+}
+
+export async function validateApiKey(bearerToken: string): Promise<ApiKeyRecord | null> {
+  const result = await validateApiKeyDetailed(bearerToken);
+  return result.status === "valid" ? result.record : null;
 }
 
 export async function revokeApiKey(id: string): Promise<void> {
