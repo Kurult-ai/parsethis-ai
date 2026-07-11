@@ -35,10 +35,14 @@ describe("public key generation failure taxonomy", () => {
     process.env.KEY_GENERATION_ENABLED = "true";
     process.env.KEY_GENERATION_LOCAL_TEST_MODE = "true";
     delete process.env.KEYGEN_TEST_FORCE_FAILURE;
+    delete process.env.SELF_SERVICE_KEY_CAP;
+    delete process.env.KEYGEN_SELF_SERVICE_KEY_CAP;
   });
 
   after(() => {
     delete process.env.KEYGEN_TEST_FORCE_FAILURE;
+    delete process.env.SELF_SERVICE_KEY_CAP;
+    delete process.env.KEYGEN_SELF_SERVICE_KEY_CAP;
   });
 
   it("returns problem+json when self-service keygen is disabled", async () => {
@@ -56,6 +60,15 @@ describe("public key generation failure taxonomy", () => {
     const res = await generate("redis-check", "198.51.100.22");
     const body = await assertProblem(res, 503, "redis_unavailable");
     assert.equal(body.retryable, true);
+  });
+
+  it("uses a configurable self-service key cap in canary readiness", async () => {
+    process.env.SELF_SERVICE_KEY_CAP = "250";
+
+    const res = await app.request("/v1/keys/generate/canary", { method: "GET" });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.key_cap, 250);
   });
 
   it("returns distinct problem+json for key-count, cap, insert, and Prisma failures", async () => {

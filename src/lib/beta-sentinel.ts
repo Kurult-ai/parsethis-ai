@@ -152,6 +152,25 @@ async function readSmallBody(response: Response): Promise<unknown> {
   return truncated;
 }
 
+
+export function classifyKeygenFailure(status: number, body: unknown): { expected: boolean; severity: ProbeSeverity; summary: string } {
+  const problemBody = body && typeof body === "object" ? body as { reason?: unknown; code?: unknown; retryable?: unknown } : {};
+  const reason = typeof problemBody.reason === "string" ? problemBody.reason : undefined;
+  const code = typeof problemBody.code === "string" ? problemBody.code : undefined;
+  const retryable = problemBody.retryable === true;
+
+  if (reason === "local_rate_limit_exceeded" || reason === "redis_rate_limit_exceeded" || (status === 429 && code === "rate_limit.exceeded" && retryable)) {
+    return { expected: true, severity: "warn", summary: "intentional self-service key generation rate limit" };
+  }
+  if (reason === "key_cap_exceeded" || (status === 429 && code === "usage_cap.exceeded" && !retryable)) {
+    return { expected: false, severity: "block", summary: "self-service key cap reached; public onboarding capacity exhausted" };
+  }
+  if (status === 503) {
+    return { expected: true, severity: "warn", summary: "self-service key generation temporarily unavailable" };
+  }
+  return { expected: false, severity: "block", summary: "unexpected key generation failure" };
+}
+
 async function probeGet(baseUrl: string, path: string, timeoutMs: number, name = path): Promise<ProbeResult> {
   const { response, latencyMs, error } = await timedFetch(baseUrl, path, { method: "GET" }, timeoutMs);
   if (!response) {
@@ -188,7 +207,7 @@ async function generateKey(baseUrl: string, timeoutMs: number): Promise<{ probe:
     };
   }
 
-  const expected = response.status === 429 || response.status === 503;
+  const classification = classifyKeygenFailure(response.status, body);
   return {
     probe: {
       name: "keygen",
@@ -196,9 +215,9 @@ async function generateKey(baseUrl: string, timeoutMs: number): Promise<{ probe:
       ok: false,
       status: response.status,
       latency_ms: latencyMs,
-      expected,
-      severity: expected ? "warn" : "block",
-      summary: expected ? "self-service key generation unavailable or rate-limited" : "unexpected key generation failure",
+      expected: classification.expected,
+      severity: classification.severity,
+      summary: classification.summary,
       details: redactSecrets(body),
     },
   };

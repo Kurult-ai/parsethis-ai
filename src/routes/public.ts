@@ -46,6 +46,7 @@ const SUPPORT_ALLOWED_CATEGORIES = new Set(["support", "billing", "api", "accoun
 const API_KEY_SECRET_RE = /\bpfa_(?:live|test)_[A-Za-z0-9_-]{16,}\b/g;
 const LOCAL_KEYGEN_RATE_WINDOW_MS = 60_000;
 const LOCAL_KEYGEN_RATE_LIMIT = 5;
+const DEFAULT_SELF_SERVICE_KEY_CAP = 1_000;
 const localKeygenRateLimits = new Map<string, { count: number; resetAt: number }>();
 
 type KeyGenerationBody = {
@@ -91,7 +92,7 @@ const KEYGEN_FAILURES: Record<KeygenFailureReason, {
   key_cap_exceeded: {
     status: 429,
     title: "Self-service key cap reached",
-    detail: "The maximum number of self-service keys has been reached.",
+    detail: "The maximum number of self-service keys has been reached. This is an onboarding-capacity limit, not a per-minute rate limit; request support or retry after capacity is expanded.",
     code: ErrorCode.USAGE_CAP,
     retryable: false,
   },
@@ -137,6 +138,14 @@ function forcedKeygenFailure(): KeygenFailureReason | null {
   const value = process.env.KEYGEN_TEST_FORCE_FAILURE as KeygenFailureReason | undefined;
   if (!value) return null;
   return value in KEYGEN_FAILURES ? value : null;
+}
+
+function getSelfServiceKeyCap(): number {
+  const raw = process.env.SELF_SERVICE_KEY_CAP ?? process.env.KEYGEN_SELF_SERVICE_KEY_CAP;
+  if (!raw) return DEFAULT_SELF_SERVICE_KEY_CAP;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_SELF_SERVICE_KEY_CAP;
+  return parsed;
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutValue: T): Promise<T> {
@@ -1248,13 +1257,16 @@ publicRoutes.post("/v1/keys/generate", async (c) => {
     }
   }
 
-  // Global cap: max 100 self-service keys
+  // Global cap: configurable for launch-stage capacity without code changes.
+  // The cap remains fail-closed and machine-readable so Sentinel can distinguish
+  // capacity exhaustion from retryable per-minute rate limiting.
   try {
     if (forcedFailure === "key_count_failed" || forcedFailure === "prisma_unavailable") {
       return keygenProblem(c, forcedFailure);
     }
-    const totalKeys = forcedFailure === "key_cap_exceeded" ? 100 : await countSelfServiceKeys();
-    if (totalKeys >= 100) {
+    const selfServiceKeyCap = getSelfServiceKeyCap();
+    const totalKeys = forcedFailure === "key_cap_exceeded" ? selfServiceKeyCap : await countSelfServiceKeys();
+    if (totalKeys >= selfServiceKeyCap) {
       return keygenProblem(c, "key_cap_exceeded");
     }
   } catch (err) {
@@ -1364,10 +1376,13 @@ async function handleKeygenCanary(c: Context) {
   }
 
   if (localMode) {
+    const selfServiceKeyCap = getSelfServiceKeyCap();
     payload.redis_ok = true;
     payload.redis_reason = "local_test_mode_bypasses_redis";
     payload.keygen_count_ok = true;
     payload.keygen_count_reason = "local_test_mode_uses_in_memory_store";
+    payload.key_cap = selfServiceKeyCap;
+    payload.key_cap_remaining = selfServiceKeyCap;
   } else {
     try {
       const redisOk = await withTimeout(ensureRedisConnected(), 1_500, false);
@@ -1386,9 +1401,11 @@ async function handleKeygenCanary(c: Context) {
 
     try {
       const totalKeys = await countSelfServiceKeys();
+      const selfServiceKeyCap = getSelfServiceKeyCap();
       payload.keygen_count_ok = true;
       payload.key_count = totalKeys;
-      payload.key_cap_remaining = Math.max(0, 100 - totalKeys);
+      payload.key_cap = selfServiceKeyCap;
+      payload.key_cap_remaining = Math.max(0, selfServiceKeyCap - totalKeys);
     } catch {
       payload.keygen_count_ok = false;
       payload.keygen_count_reason = "key_count_failed";

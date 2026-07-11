@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  classifyKeygenFailure,
   classifyProbeResults,
   redactSecrets,
   summarizeReadiness,
@@ -42,6 +43,30 @@ describe("Parse Beta Sentinel helpers", () => {
     assert.equal(classified.counts.warn, 2);
     assert.equal(classified.counts.block, 0);
     assert.equal(classified.warnings.some((warning) => warning.includes("401")), true);
+  });
+
+  it("classifies keygen capacity exhaustion as an open-onboarding blocker", () => {
+    const classified = classifyKeygenFailure(429, {
+      code: "usage_cap.exceeded",
+      reason: "key_cap_exceeded",
+      retryable: false,
+    });
+
+    assert.equal(classified.expected, false);
+    assert.equal(classified.severity, "block");
+    assert.match(classified.summary, /capacity exhausted/i);
+  });
+
+  it("keeps intentional keygen per-minute throttles as warnings", () => {
+    const classified = classifyKeygenFailure(429, {
+      code: "rate_limit.exceeded",
+      reason: "redis_rate_limit_exceeded",
+      retryable: true,
+    });
+
+    assert.equal(classified.expected, true);
+    assert.equal(classified.severity, "warn");
+    assert.match(classified.summary, /rate limit/i);
   });
 
   it("summarizes controlled-beta readiness without overclaiming open launch", () => {
