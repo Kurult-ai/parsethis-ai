@@ -20,6 +20,7 @@ import { adminRoutes } from "./routes/admin.js";
 import { playgroundRoutes } from "./routes/playground.js";
 import { contentNegotiation } from "./lib/content-negotiation.js";
 import { problem, ErrorCode } from "./lib/problem-response.js";
+import { endpointPreflightFailure } from "./lib/exposure/numbat-preflight.js";
 
 export const app = new Hono();
 
@@ -88,7 +89,12 @@ app.use("/*", contentNegotiation());
 app.route("/", billingWebhookRoute);
 
 // Request body size limit (1MB)
-app.use("/*", bodyLimit({ maxSize: 1024 * 1024 }));
+app.use("/*", bodyLimit({
+  maxSize: 1024 * 1024,
+  onError: (c) => c.req.path === "/v1/exposure/numbat-preflight"
+    ? c.json(endpointPreflightFailure("body_too_large"), 400)
+    : c.text("Payload Too Large", 413),
+}));
 
 // Request ID + logging middleware
 app.use("/*", async (c, next) => {

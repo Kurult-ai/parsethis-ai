@@ -10,9 +10,10 @@ const LOCAL_TEST_BCRYPT_ROUNDS = 4;
 const LOCAL_KEYGEN_TEST_MODE_VALUES = new Set(["1", "true", "yes", "on"]);
 const REDIS_FALLBACK_KEY_PREFIX = "keygen:fallback:v1";
 const REDIS_FALLBACK_TTL_SECONDS = 30 * 24 * 60 * 60;
+const API_KEY_PREFIX_BUCKET_MAX_CANDIDATES = 16;
 
 type StoredLocalApiKey = ApiKeyRecord & { keyHash: string };
-type FallbackApiKeyRecord = ApiKeyRecord & { keyHash: string };
+export type FallbackApiKeyRecord = ApiKeyRecord & { keyHash: string };
 const localTestKeysByPrefix = new Map<string, StoredLocalApiKey[]>();
 
 export function isLocalKeyGenerationTestMode(): boolean {
@@ -80,18 +81,31 @@ function deserializeFallbackRecord(value: string): FallbackApiKeyRecord {
   };
 }
 
-async function getFallbackRecord(prefix: string): Promise<FallbackApiKeyRecord | null> {
-  if (!redisFallbackEnabled()) return null;
+export async function getFallbackRecords(prefix: string): Promise<FallbackApiKeyRecord[]> {
+  if (!redisFallbackEnabled()) return [];
   const connected = await withTimeout(ensureRedisConnected(), redisTimeoutMs(), false);
   if (!connected) {
     abandonRedisConnection();
-    return null;
+    return [];
   }
   const value = await withTimeout(getRedis().get(fallbackRecordKey(prefix)), redisTimeoutMs(), null);
-  return value ? deserializeFallbackRecord(value) : null;
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    const candidates = typeof parsed === "object" && parsed !== null && Array.isArray((parsed as { candidates?: unknown[] }).candidates)
+      ? (parsed as { candidates: unknown[] }).candidates
+      : [parsed];
+    return candidates
+      .filter((candidate): candidate is Record<string, unknown> => typeof candidate === "object" && candidate !== null
+        && typeof (candidate as { id?: unknown }).id === "string"
+        && typeof (candidate as { keyHash?: unknown }).keyHash === "string")
+      .map((candidate) => deserializeFallbackRecord(JSON.stringify(candidate)));
+  } catch {
+    return [];
+  }
 }
 
-async function storeFallbackRecord(record: FallbackApiKeyRecord): Promise<void> {
+export async function storeFallbackRecord(record: FallbackApiKeyRecord): Promise<void> {
   if (!redisFallbackEnabled()) throw new Error("Redis fallback key store is disabled");
   const connected = await withTimeout(ensureRedisConnected(), redisTimeoutMs(), false);
   if (!connected) {
@@ -100,7 +114,51 @@ async function storeFallbackRecord(record: FallbackApiKeyRecord): Promise<void> 
   }
   const redis = getRedis();
   const ttl = Math.max(60, Math.ceil(((record.expiresAt?.getTime() ?? (Date.now() + REDIS_FALLBACK_TTL_SECONDS * 1000)) - Date.now()) / 1000));
-  await withTimeout(redis.set(fallbackRecordKey(record.keyPrefix), serializeFallbackRecord(record), "EX", ttl), redisTimeoutMs(), null);
+  const mergeFallbackScript = `
+    local raw = redis.call("GET", KEYS[1])
+    local candidates = {}
+    if raw then
+      local ok, parsed = pcall(cjson.decode, raw)
+      if ok and type(parsed) == "table" then
+        local parsed_candidates = parsed["candidates"]
+        if type(parsed_candidates) == "table" then
+          for index = 1, #parsed_candidates do
+            local existing = parsed_candidates[index]
+            if type(existing) == "table" and type(existing["id"]) == "string" and type(existing["keyHash"]) == "string" then
+              table.insert(candidates, existing)
+            end
+          end
+        elseif type(parsed["id"]) == "string" and type(parsed["keyHash"]) == "string" then
+          table.insert(candidates, parsed)
+        end
+      end
+    end
+    local candidate = cjson.decode(ARGV[1])
+    if type(candidate) ~= "table" or type(candidate["id"]) ~= "string" or type(candidate["keyHash"]) ~= "string" then
+      return redis.error_reply("invalid fallback API-key candidate")
+    end
+    local replaced = false
+    for index, existing in ipairs(candidates) do
+      if existing["id"] == candidate["id"] then
+        candidates[index] = candidate
+        replaced = true
+        break
+      end
+    end
+    if not replaced then table.insert(candidates, candidate) end
+    local maximum = tonumber(ARGV[3])
+    while #candidates > maximum do table.remove(candidates, 1) end
+    redis.call("SET", KEYS[1], cjson.encode({ candidates = candidates }), "EX", tonumber(ARGV[2]))
+    return #candidates
+  `;
+  await withTimeout(redis.eval(
+    mergeFallbackScript,
+    1,
+    fallbackRecordKey(record.keyPrefix),
+    serializeFallbackRecord(record),
+    String(ttl),
+    String(API_KEY_PREFIX_BUCKET_MAX_CANDIDATES)
+  ), redisTimeoutMs(), null);
   await withTimeout(redis.sadd(fallbackIndexKey(), record.id), redisTimeoutMs(), 0);
   await withTimeout(redis.expire(fallbackIndexKey(), REDIS_FALLBACK_TTL_SECONDS), redisTimeoutMs(), 0);
 }
@@ -189,6 +247,7 @@ export async function createApiKey(
   const rateLimit = TIER_RATE_LIMITS[tier] ?? TIER_RATE_LIMITS.free;
 
   let record: ApiKeyRecord;
+  let createdInDatabase = false;
   try {
     const dbRecord = await withTimeout(
       prisma.apiKey.create({
@@ -209,6 +268,7 @@ export async function createApiKey(
     );
     if (!dbRecord) throw new Error("api_key_create_timeout");
     record = toApiKeyRecord(dbRecord);
+    createdInDatabase = true;
   } catch (err) {
     if (!redisFallbackEnabled() || userId !== "self-service") throw err;
     record = {
@@ -226,6 +286,13 @@ export async function createApiKey(
       revokedAt: null,
     };
     await storeFallbackRecord({ ...record, keyHash });
+  }
+
+  // Warm the validation cache before returning a newly issued key. Without this,
+  // a same-key burst can stampede the database before the first validation's
+  // fire-and-forget cache write completes.
+  if (createdInDatabase) {
+    await cacheApiKey(keyPrefix, { ...record, keyHash }).catch(() => {});
   }
 
   return {
@@ -270,38 +337,52 @@ export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKe
     return { status: "temporarily_unavailable", reason: "cache_lookup_failed" };
   }
   if (cached) {
-    const record = cached as ApiKeyRecord & { keyHash: string };
-    const valid = await bcrypt.compare(bearerToken, record.keyHash);
-    if (!valid) return { status: "invalid" };
+    const cachedCandidates = (
+      typeof cached === "object"
+      && cached !== null
+      && Array.isArray((cached as { candidates?: unknown[] }).candidates)
+    ) ? (cached as { candidates: unknown[] }).candidates : [cached];
 
-    // Check expiry/revocation
-    if (record.revokedAt) return { status: "revoked" };
-    if (record.expiresAt && new Date(record.expiresAt) < new Date()) return { status: "expired" };
+    for (const candidate of cachedCandidates) {
+      if (typeof candidate !== "object" || candidate === null || typeof (candidate as { keyHash?: unknown }).keyHash !== "string") continue;
+      const record = candidate as ApiKeyRecord & { keyHash: string };
+      const valid = await bcrypt.compare(bearerToken, record.keyHash);
+      if (!valid) continue;
 
-    // Update last_used_at asynchronously (fire-and-forget)
-    prisma.apiKey.update({
-      where: { id: record.id },
-      data: { lastUsedAt: new Date() },
-    }).catch(() => {});
+      // Check expiry/revocation only after the presented token matches this
+      // candidate. Multiple valid keys may share the intentionally short prefix.
+      if (record.revokedAt) return { status: "revoked" };
+      if (record.expiresAt && new Date(record.expiresAt) < new Date()) return { status: "expired" };
 
-    return { status: "valid", record };
+      // Update last_used_at asynchronously (fire-and-forget)
+      prisma.apiKey.update({
+        where: { id: record.id },
+        data: { lastUsedAt: new Date() },
+      }).catch(() => {});
+
+      return { status: "valid", record };
+    }
+    // A cache miss within a colliding prefix is not proof that the token is
+    // invalid. Continue to the fallback/database candidate lookup.
   }
 
   // Check Redis fallback keys before DB. This keeps newly issued self-service
   // keys usable during a Postgres binding outage without exposing secrets.
-  let fallbackRecord: FallbackApiKeyRecord | null;
+  let fallbackRecords: FallbackApiKeyRecord[];
   try {
-    fallbackRecord = await getFallbackRecord(prefix);
+    fallbackRecords = await getFallbackRecords(prefix);
   } catch {
     return { status: "temporarily_unavailable", reason: "fallback_lookup_failed" };
   }
-  if (fallbackRecord) {
+  for (const fallbackRecord of fallbackRecords) {
     const valid = await bcrypt.compare(bearerToken, fallbackRecord.keyHash);
-    if (!valid) return { status: "invalid" };
+    if (!valid) continue;
     if (fallbackRecord.revokedAt) return { status: "revoked" };
     if (fallbackRecord.expiresAt && fallbackRecord.expiresAt < new Date()) return { status: "expired" };
     return { status: "valid", record: fallbackRecord };
   }
+  // A non-matching fallback candidate sharing the short prefix is not proof of
+  // invalidity. Continue to the database candidate lookup.
 
   // Look up by prefix in the database. A timeout or unavailable DB is not the
   // same thing as an invalid key; callers must map it to a retryable auth

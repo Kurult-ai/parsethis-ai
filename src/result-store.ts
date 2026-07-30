@@ -82,12 +82,58 @@ export async function clearProgress(evalId: string): Promise<void> {
 
 // --- API Key Cache ---
 
+export const API_KEY_CACHE_MAX_CANDIDATES = 16;
+
 export async function cacheApiKey(keyHash: string, metadata: unknown): Promise<void> {
   if (!isRedisAvailable()) return;
   const connected = await ensureRedisConnected();
   if (!connected) return;
   const redis = getRedis();
-  await redis.set(apiKeyCacheKey(keyHash), JSON.stringify(metadata), "EX", 300); // 5 min
+  const mergeCandidateScript = `
+    local raw = redis.call("GET", KEYS[1])
+    local candidates = {}
+    if raw then
+      local ok, parsed = pcall(cjson.decode, raw)
+      if ok and type(parsed) == "table" then
+        local parsed_candidates = parsed["candidates"]
+        if type(parsed_candidates) == "table" then
+          for index = 1, #parsed_candidates do
+            local existing = parsed_candidates[index]
+            if type(existing) == "table" and type(existing["id"]) == "string" and type(existing["keyHash"]) == "string" then
+              table.insert(candidates, existing)
+            end
+          end
+        elseif type(parsed["id"]) == "string" and type(parsed["keyHash"]) == "string" then
+          table.insert(candidates, parsed)
+        end
+      end
+    end
+    local candidate = cjson.decode(ARGV[1])
+    if type(candidate) ~= "table" or type(candidate["id"]) ~= "string" or type(candidate["keyHash"]) ~= "string" then
+      return redis.error_reply("invalid API-key cache candidate")
+    end
+    local replaced = false
+    for index, existing in ipairs(candidates) do
+      if existing["id"] == candidate["id"] then
+        candidates[index] = candidate
+        replaced = true
+        break
+      end
+    end
+    if not replaced then table.insert(candidates, candidate) end
+    local maximum = tonumber(ARGV[3])
+    while #candidates > maximum do table.remove(candidates, 1) end
+    redis.call("SET", KEYS[1], cjson.encode({ candidates = candidates }), "EX", tonumber(ARGV[2]))
+    return #candidates
+  `;
+  await redis.eval(
+    mergeCandidateScript,
+    1,
+    apiKeyCacheKey(keyHash),
+    JSON.stringify(metadata),
+    "300",
+    String(API_KEY_CACHE_MAX_CANDIDATES)
+  );
 }
 
 export async function getCachedApiKey(keyHash: string): Promise<unknown | null> {

@@ -4,6 +4,7 @@ import { getAvailableModels } from "../model-client.js";
 import { getParseSkillPrompt } from "../skill.js";
 import { getContentMarkdown } from "../pages/docs.js";
 import { recordGeoSurfaceHit } from "../lib/geo-analytics.js";
+import { NUMBAT_IDENTIFIER_PRIVACY_PATTERNS } from "../lib/exposure/numbat-preflight.js";
 import {
   ACTION_ROUTER,
   DETECTION_FACTS,
@@ -17,6 +18,7 @@ import {
 } from "../lib/product-facts.js";
 
 export const discoveryRoutes = new Hono();
+const numbatIdentifierPrivacyNot = { anyOf: NUMBAT_IDENTIFIER_PRIVACY_PATTERNS.map((pattern) => ({ pattern })) };
 
 // ---------------------------------------------------------------------------
 // 1. robots.txt — AI-crawler-friendly
@@ -163,6 +165,11 @@ ${router}
 ## Free Bumblebee Exposure Features
 
 ${freeBumblebee}
+
+## Numbat Endpoint Preflight
+
+- POST ${baseUrl}/v1/exposure/numbat-preflight: Bearer-authenticated (evaluate scope), stateless preflight for locally minimized Numbat 0.1.1 findings using record schema 0.2.0.
+- Parse returns a recommendation only; it does not select Numbat deny or observe host enforcement. The local adapter validates raw records and performs no upload.
 
 ## x402 Prices
 
@@ -325,7 +332,16 @@ discoveryRoutes.get("/.well-known/ai-plugin.json", (c) => {
       "policy_management",
       "media_analysis",
       "agent_trust_verification",
+      "numbat_endpoint_preflight",
     ],
+    capability_details: {
+      numbat_endpoint_preflight: {
+        route: "/v1/exposure/numbat-preflight",
+        authentication: "bearer",
+        required_scope: "evaluate",
+        enforcement_state: "recommendation_only",
+      },
+    },
     health: { url: `${baseUrl}/health` },
     llms_txt: `${baseUrl}/llms.txt`,
   });
@@ -367,6 +383,16 @@ discoveryRoutes.get("/.well-known/agent-card.json", (c) => {
         name: "Screen Output",
         description:
           "Screen LLM output before presenting it to users, tools, memory stores, or other agents, including private disclosures that need owner approval.",
+      },
+      {
+        id: "numbat_endpoint_preflight",
+        name: "Numbat Endpoint Preflight",
+        description:
+          "Evaluate a locally minimized Numbat 0.1.1 finding batch with Bearer authentication and the evaluate scope. Returns a stateless recommendation only and does not claim local host enforcement.",
+        route: "/v1/exposure/numbat-preflight",
+        authentication: "bearer",
+        required_scope: "evaluate",
+        enforcement_state: "recommendation_only",
       },
     ],
   });
@@ -1249,6 +1275,44 @@ discoveryRoutes.get("/openapi.json", (c) => {
           },
         },
       },
+      "/v1/exposure/numbat-preflight": {
+        post: {
+          operationId: "numbatEndpointPreflight",
+          summary: "Evaluate a minimized Numbat finding batch before an endpoint action",
+          description: "Authenticated, stateless, deterministic preflight for locally minimized Numbat 0.1.1 finding records using record schema 0.2.0. Accepts only adapter v1, up to 100 findings and 256 KiB. Parse returns a recommendation only; it neither selects Numbat deny nor observes host enforcement.",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/NumbatFindingBatchV1" },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Stateless endpoint preflight recommendation",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/EndpointPreflightDecisionV1" },
+                },
+              },
+            },
+            "400": {
+              description: "Fail-closed review-required decision for malformed, unsupported, oversized, empty, unknown-field, or privacy-unsafe input",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/EndpointPreflightDecisionV1" },
+                },
+              },
+            },
+            "401": { description: "Bearer authentication required" },
+            "403": { description: "API key lacks evaluate scope" },
+            "429": { description: "API key rate limit exceeded" },
+            "503": { description: "Authentication backend temporarily unavailable; retryable" },
+          },
+        },
+      },
       "/v1/exposure/catalogs": {
         get: {
           operationId: "listExposureCatalogs",
@@ -1316,6 +1380,69 @@ discoveryRoutes.get("/openapi.json", (c) => {
             commit: { type: "string" },
             build_time: { type: "string" },
             runtime: { type: "string", enum: ["source", "dist"] },
+          },
+        },
+        NumbatFindingV1: {
+          type: "object",
+          additionalProperties: false,
+          required: ["rule_id", "rule_version", "severity", "confidence", "source_agent", "source_type", "observed_event_type", "local_minimization_confirmation"],
+          properties: {
+            rule_id: { type: "string", minLength: 3, maxLength: 128, pattern: "^[A-Za-z][A-Za-z0-9_-]{0,63}(\\.[A-Za-z0-9][A-Za-z0-9_-]{0,63})+$", not: numbatIdentifierPrivacyNot },
+            rule_version: { type: "string", minLength: 3, maxLength: 128, pattern: "^[0-9]+(\\.[0-9]+){1,3}(-[A-Za-z0-9.-]+)?$", not: numbatIdentifierPrivacyNot },
+            severity: { type: "string", enum: ["info", "low", "medium", "high", "critical"] },
+            confidence: { type: "string", enum: ["low", "medium", "high"] },
+            source_agent: { type: "string", enum: ["claude-code", "cowork", "codex", "gemini-cli", "cursor", "windsurf", "copilot", "vscode", "opencode", "openclaw", "antigravity", "factory", "grok", "devin-cli", "hermes", "kimi-code", "pi", "qwen-code", "cline", "amp", "auggie", "kiro", "goose", "kilo", "openhands", "crush", "junie", "unknown"] },
+            source_type: { type: "string", enum: ["artifact", "hook", "otel"] },
+            observed_event_type: { type: "string", enum: ["session.start", "session.end", "prompt.user", "message.assistant", "tool.call", "tool.result", "command.exec", "command.result", "file.read", "file.write", "file.delete", "permission.requested", "permission.approved", "permission.denied", "config.agent", "config.mcp", "network.indicator", "message.reasoning"] },
+            local_minimization_confirmation: { type: "boolean", const: true },
+          },
+        },
+        NumbatPreflightContextV1: {
+          type: "object",
+          additionalProperties: false,
+          required: ["intended_action_class", "impact_level", "requested_agent_privilege_mode"],
+          properties: {
+            intended_action_class: { type: "string", enum: ["read_only", "code_change", "command_execution", "network_access", "credential_access", "package_install", "configuration_change", "deployment", "data_export"] },
+            impact_level: { type: "string", enum: ["low", "medium", "high"] },
+            requested_agent_privilege_mode: { type: "string", enum: ["standard", "privileged", "unattended"] },
+          },
+        },
+        NumbatFindingBatchV1: {
+          type: "object",
+          additionalProperties: false,
+          required: ["adapter_schema_version", "producer", "numbat_version", "numbat_record_schema_version", "batch_id", "findings", "preflight_context"],
+          properties: {
+            adapter_schema_version: { type: "string", const: "v1" },
+            producer: { type: "string", const: "numbat" },
+            numbat_version: { type: "string", enum: ["0.1.1"], description: "Closed reviewed binary version set; 0.1.1 maps to upstream commit 3d20d782d45001fd3bb200bc5690ce4b9ce0f12b." },
+            numbat_record_schema_version: { type: "string", const: "0.2.0" },
+            batch_id: { type: "string", minLength: 12, maxLength: 102, pattern: "^batch_[A-Za-z0-9][A-Za-z0-9_-]{5,95}$", not: numbatIdentifierPrivacyNot },
+            endpoint_pseudonym: { type: "string", minLength: 16, maxLength: 72, pattern: "^install_[A-Za-z0-9]{8,64}$", not: numbatIdentifierPrivacyNot, description: "Optional installation-scoped opaque random pseudonym; never derive it from a path, hostname, username, UID, or device ID." },
+            findings: { type: "array", minItems: 1, maxItems: 100, items: { $ref: "#/components/schemas/NumbatFindingV1" } },
+            preflight_context: { $ref: "#/components/schemas/NumbatPreflightContextV1" },
+          },
+        },
+        EndpointPreflightDecisionV1: {
+          type: "object",
+          additionalProperties: false,
+          required: ["decision", "severity", "recommended_action", "matched_rules", "findings_digest", "policy_digest", "policy_version", "receipt_id", "stored", "enforcement_state", "source_schema", "numbat_deny_selection", "host_enforcement_state", "recheck_guidance", "recommendation_max_age_seconds"],
+          properties: {
+            decision: { type: "string", enum: ["allow", "warn", "block", "review_required"] },
+            severity: { type: "string", enum: ["unknown", "info", "low", "medium", "high", "critical"] },
+            recommended_action: { type: "string", enum: ["proceed_with_note", "require_human_review", "do_not_proceed", "correct_payload_and_recheck"] },
+            matched_rules: { type: "array", items: { type: "object", additionalProperties: false, required: ["rule_id", "rule_version"], properties: { rule_id: { type: "string" }, rule_version: { type: "string" } } } },
+            findings_digest: { type: "string", description: "Order-independent SHA-256 digest of the minimized finding set, or unavailable for rejected input." },
+            policy_digest: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+            policy_version: { type: "string", const: "numbat-endpoint-preflight-v1" },
+            receipt_id: { type: "string", pattern: "^nep_[a-f0-9]{32}$", description: "Deterministic for the same batch ID, endpoint pseudonym, minimized finding set, context, and policy." },
+            stored: { type: "boolean", const: false },
+            enforcement_state: { type: "string", const: "recommendation_only" },
+            source_schema: { type: "string", enum: ["numbat/minimized-adapter-v1@record-0.2.0", "unverified"], description: "Profile provenance declared by the minimized adapter request; not a hosted-service proof of the original raw record." },
+            numbat_deny_selection: { type: "string", const: "not_evaluated_by_parse" },
+            host_enforcement_state: { type: "string", const: "not_observed_by_parse" },
+            recheck_guidance: { type: "string", enum: ["recheck_before_action_or_after_local_rescan", "correct_payload_then_recheck"] },
+            recommendation_max_age_seconds: { type: "integer", const: 300, description: "Caller-side freshness guidance measured from response receipt; not a cryptographically anchored receipt expiry." },
+            validation_error_code: { type: "string", enum: ["malformed_json", "body_too_large", "invalid_type", "unknown_field", "unsupported_adapter_schema", "unsupported_record_schema", "unsupported_numbat_version", "invalid_producer", "invalid_field", "privacy_rejected", "empty_batch", "batch_too_large"] },
           },
         },
         ParseRequest: {

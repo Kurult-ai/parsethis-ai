@@ -16,6 +16,7 @@
     "eval:screening": "node --import tsx scripts/evaluate-screening-fixtures.ts",
     "smoke:parse": "node scripts/smoke-parse.mjs",
     "smoke:exposure": "node scripts/smoke-exposure.mjs",
+    "adapt:numbat": "node scripts/numbat-findings-adapter.mjs",
     "eval:public-screening": "node --import tsx scripts/evaluate-public-screening.ts",
     "docs:sync-screening-metrics": "node --import tsx scripts/sync-screening-metric-docs.ts",
     "prepare:screening-holdout-manifest": "node --import tsx scripts/prepare-screening-holdout-manifest.ts",
