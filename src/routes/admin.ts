@@ -904,24 +904,32 @@ async function updateApiKeyData(c: AdminContext, id: string, params: UnknownReco
     return jsonError(c, 400, "Invalid input", "At least one update field is required.");
   }
 
-  const updated = await prisma.apiKey.update({
-    where: { id },
-    data,
-    select: {
-      id: true,
-      userId: true,
-      orgId: true,
-      keyPrefix: true,
-      name: true,
-      tier: true,
-      scopes: true,
-      rateLimit: true,
-      lastUsedAt: true,
-      expiresAt: true,
-      createdAt: true,
-      revokedAt: true,
-    },
-  });
+  let updated: ApiKeyRecord;
+  try {
+    updated = await prisma.apiKey.update({
+      where: { id },
+      data,
+      select: {
+        id: true,
+        userId: true,
+        orgId: true,
+        keyPrefix: true,
+        name: true,
+        tier: true,
+        scopes: true,
+        rateLimit: true,
+        lastUsedAt: true,
+        expiresAt: true,
+        createdAt: true,
+        revokedAt: true,
+      },
+    });
+  } catch (err) {
+    if (typeof err === "object" && err !== null && "code" in err && err.code === "P2025") {
+      return jsonError(c, 404, "Not found", "API key not found.", ErrorCode.RESOURCE_NOT_FOUND);
+    }
+    throw err;
+  }
   await invalidateApiKeyCache(updated.keyPrefix);
   await logAdminEvent(c, "admin.api_key.update", {
     fields: Object.keys(data),
@@ -2505,4 +2513,13 @@ adminRoutes.post("/v1/admin/actions", async (c) => {
     default:
       return jsonError(c, 400, "Unknown action", `Unsupported admin action: ${action}.`);
   }
+});
+
+// Funnel metrics endpoint — conversion rates by stage
+adminRoutes.get("/v1/admin/funnel", async (c) => {
+  const startDate = c.req.query("start") || new Date().toISOString().slice(0, 10);
+  const endDate = c.req.query("end") || new Date().toISOString().slice(0, 10);
+  const { getFunnelMetrics } = await import("../lib/funnel.js");
+  const metrics = await getFunnelMetrics(startDate, endDate);
+  return c.json({ start_date: startDate, end_date: endDate, ...metrics });
 });

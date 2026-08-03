@@ -26,9 +26,11 @@
     "audit:hermes-playground-report": "node --import tsx scripts/audit-hermes-playground-report.ts",
     "verify:screening-event-persistence": "node --import tsx scripts/verify-screening-event-persistence.ts",
     "eval:hermes-playground": "node --import tsx scripts/run-hermes-playground-work-queue.ts",
+    "dogfood:prompt-guard": "node --import tsx scripts/dogfood-parse-prompt-guard.ts",
     "beta:sentinel": "node --import tsx scripts/beta-sentinel.ts",
     "worker": "tsx src/worker.ts",
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts",
+    "launch:evidence": "node scripts/open-launch-load-evidence.mjs"
   },
   "keywords": [
     "agents",
@@ -51,6 +53,7 @@
     "@x402/core": "^2.5.0",
     "@x402/evm": "^2.5.0",
     "@x402/hono": "^2.5.0",
+    "axios": "^1.19.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.70.4",
     "cheerio": "^1.2.0",
@@ -74,5 +77,8 @@
     "@types/pg": "^8.18.0",
     "@types/uuid": "^10.0.0",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "axios": "^1.19.0"
   }
 }

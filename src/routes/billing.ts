@@ -96,6 +96,12 @@ billingWebhookRoute.post("/v1/billing/webhook", async (c) => {
         // Upgrade the API key tier and remove expiry
         await upgradeApiKeyTier(apiKeyId, tier);
         console.log(`[billing] Activated ${tier} subscription for apiKey=${apiKeyId}`);
+
+        // Record funnel event for completed checkout
+        try {
+          const { recordFunnelEvent } = await import("../lib/funnel.js");
+          await recordFunnelEvent("checkout_completed", apiKeyId);
+        } catch { /* telemetry must not break webhook */ }
         break;
       }
 
@@ -238,6 +244,10 @@ billingRoutes.post("/v1/billing/signup-checkout", async (c) => {
   const baseUrl = process.env.PUBLIC_BASE_URL || "https://www.parsethis.ai";
   try {
     const checkoutUrl = await createCheckoutSession(apiKey.id, tier as PaidTier, baseUrl);
+    // Record funnel event for signup
+    const { recordFunnelEvent } = await import("../lib/funnel.js");
+    await recordFunnelEvent("signup", ip);
+    await recordFunnelEvent("checkout_started", apiKey.id);
     return c.json(
       {
         key: apiKey.key,

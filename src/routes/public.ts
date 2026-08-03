@@ -30,8 +30,8 @@ import { renderScreeningDashboardPage } from "../pages/screening-dashboard.js";
 import { renderBillingDashboardPage } from "../pages/billing.js";
 import { renderPromptGuardLandingPage } from "../pages/prompt-guard-landing.js";
 import { renderPromptGuardPlaygroundPage } from "../pages/prompt-guard-playground.js";
-import { problem, ErrorCode, type ErrorCodeValue } from "../lib/problem-response.js";
-import { renderBlogListingPage, renderBlogPostPage } from "../pages/blog.js";
+import { problem, ErrorCode, serviceDependencyProblem, type ErrorCodeValue } from "../lib/problem-response.js";
+import { renderBlogListingPage, renderBlogPostPage, renderBlogPostPageBySlug } from "../pages/blog.js";
 import { PRODUCT, PLAN_LIMITS, DETECTION_FACTS, X402_PAYMENT } from "../lib/product-facts.js";
 import { recordGeoSurfaceHit } from "../lib/geo-analytics.js";
 
@@ -46,6 +46,7 @@ const SUPPORT_ALLOWED_CATEGORIES = new Set(["support", "billing", "api", "accoun
 const API_KEY_SECRET_RE = /\bpfa_(?:live|test)_[A-Za-z0-9_-]{16,}\b/g;
 const LOCAL_KEYGEN_RATE_WINDOW_MS = 60_000;
 const LOCAL_KEYGEN_RATE_LIMIT = 5;
+const DEFAULT_SELF_SERVICE_KEY_CAP = 1_000;
 const localKeygenRateLimits = new Map<string, { count: number; resetAt: number }>();
 
 type KeyGenerationBody = {
@@ -91,7 +92,7 @@ const KEYGEN_FAILURES: Record<KeygenFailureReason, {
   key_cap_exceeded: {
     status: 429,
     title: "Self-service key cap reached",
-    detail: "The maximum number of self-service keys has been reached.",
+    detail: "The maximum number of self-service keys has been reached. This is an onboarding-capacity limit, not a per-minute rate limit; request support or retry after capacity is expanded.",
     code: ErrorCode.USAGE_CAP,
     retryable: false,
   },
@@ -137,6 +138,14 @@ function forcedKeygenFailure(): KeygenFailureReason | null {
   const value = process.env.KEYGEN_TEST_FORCE_FAILURE as KeygenFailureReason | undefined;
   if (!value) return null;
   return value in KEYGEN_FAILURES ? value : null;
+}
+
+function getSelfServiceKeyCap(): number {
+  const raw = process.env.SELF_SERVICE_KEY_CAP ?? process.env.KEYGEN_SELF_SERVICE_KEY_CAP;
+  if (!raw) return DEFAULT_SELF_SERVICE_KEY_CAP;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_SELF_SERVICE_KEY_CAP;
+  return parsed;
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutValue: T): Promise<T> {
@@ -694,7 +703,12 @@ publicRoutes.get("/faq", (c) => {
 });
 
 // Pricing
-publicRoutes.get("/pricing", (c) => c.html(renderPricingPage(getBaseUrl(c))));
+publicRoutes.get("/pricing", async (c) => {
+  const { recordFunnelEvent } = await import("../lib/funnel.js");
+  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+  await recordFunnelEvent("pricing_view", ip);
+  return c.html(renderPricingPage(getBaseUrl(c)));
+});
 
 // Technology
 publicRoutes.get("/technology", (c) => {
@@ -761,6 +775,19 @@ publicRoutes.get("/security/:slug", (c) => {
 // Blog listing
 publicRoutes.get("/blog", (c) => {
   return c.html(renderBlogListingPage(getBaseUrl(c)));
+});
+
+// Blog post canonical URLs in frontmatter omit category for stable public links.
+publicRoutes.get("/blog/:slug", (c) => {
+  const wantsMarkdown = (c.req.header("Accept") || "").includes("text/markdown");
+  const result = renderBlogPostPageBySlug(c.req.param("slug"), getBaseUrl(c), wantsMarkdown);
+  if (!result) return c.json({ error: "Not found" }, 404);
+  if ("markdown" in result) {
+    c.header("Content-Type", "text/markdown; charset=utf-8");
+    c.header("Vary", "Accept");
+    return c.body(result.markdown);
+  }
+  return c.html(result.html);
 });
 
 // Blog post (supports Accept: text/markdown)
@@ -980,6 +1007,459 @@ publicRoutes.get("/privacy", (c) => {
   }));
 });
 
+// Terms of Service page
+publicRoutes.get("/terms", (c) => {
+  const baseUrl = getBaseUrl(c);
+  const content = `
+<h1>Terms of Service</h1>
+
+<p class="answer-capsule"><strong>Last updated:</strong> August 2, 2026</p>
+
+<h2>Agreement to Terms</h2>
+
+<p class="answer-capsule">These Terms of Service ("Terms") govern your access to and use of Parse, the prompt security API and related services provided by Parse ("we," "our," or "us"). By using our API, website, or any of our services, you agree to be bound by these Terms. If you do not agree, you may not access or use the Service.</p>
+
+<h2>1. Description of Service</h2>
+
+<p class="answer-capsule">Parse provides an API security platform that screens AI agent prompts for prompt injection, jailbreak attempts, and other adversarial threats. Our services include:</p>
+
+<ul>
+  <li><strong>Prompt risk analysis</strong> via POST /v1/parse with regex, LLM, and sandbox-based detection</li>
+  <li><strong>Output screening</strong> via POST /v1/screen-output</li>
+  <li><strong>Agent trust verification</strong> via POST /v1/agent/trust/verify</li>
+  <li><strong>Media credibility analysis</strong> and evaluation endpoints</li>
+  <li><strong>API key management, policy configuration, and usage analytics</strong></li>
+</ul>
+
+<p class="answer-capsule">We offer multiple plans including Free, Pro ($49/mo), Team ($199/mo), Enterprise, and x402 pay-per-call pricing. See our <a href="/pricing">pricing page</a> for current details.</p>
+
+<h2>2. Account Registration and API Keys</h2>
+
+<h3>2.1 API Keys</h3>
+
+<ul>
+  <li>You may generate API keys via POST /v1/keys/generate</li>
+  <li>You are solely responsible for the security and use of your API keys</li>
+  <li>You must keep your keys confidential and not share them with unauthorized parties</li>
+  <li>You are responsible for all activity conducted using your keys</li>
+  <li>You must notify us immediately of any unauthorized use or security breach</li>
+</ul>
+
+<h3>2.2 Acceptable Use</h3>
+
+<p class="answer-capsule">Your use of the Service is also governed by our <a href="/acceptable-use">Acceptable Use Policy</a>, which is incorporated into these Terms by reference.</p>
+
+<h2>3. Payment and Billing</h2>
+
+<h3>3.1 Subscription Plans</h3>
+
+<ul>
+  <li>Paid plans (Pro, Team, Enterprise) are billed monthly via Stripe</li>
+  <li>Subscriptions automatically renew each billing cycle until cancelled</li>
+  <li>You may cancel at any time through the customer portal or by contacting support</li>
+  <li>Cancellation takes effect at the end of the current billing period</li>
+  <li>See our <a href="/refund">Refund Policy</a> for details on refund eligibility</li>
+</ul>
+
+<h3>3.2 x402 Pay-Per-Call</h3>
+
+<ul>
+  <li>For pay-per-call usage, payments are made in USDC via the x402 protocol on the Base L2 blockchain</li>
+  <li>Each API call requires a separate on-chain payment</li>
+  <li>Failed payments will result in the request being denied</li>
+</ul>
+
+<h3>3.3 Taxes</h3>
+
+<p class="answer-capsule">You are responsible for any applicable taxes associated with your use of the Service, other than taxes on our net income.</p>
+
+<h2>4. Acceptable Use and Prohibited Conduct</h2>
+
+<p class="answer-capsule">You agree not to:</p>
+
+<ul>
+  <li>Use the Service for any unlawful purpose or in violation of any applicable law</li>
+  <li>Attempt to probe, scan, or test the vulnerability of the Service or breach security measures</li>
+  <li>Reverse engineer, decompile, or disassemble any part of the Service</li>
+  <li>Use the Service to develop competing security products without authorization</li>
+  <li>Resell, sublicense, or redistribute access to the Service without written consent</li>
+  <li>Exceed rate limits or attempt to circumvent usage restrictions</li>
+  <li>Submit content that infringes the intellectual property rights of others</li>
+</ul>
+
+<p class="answer-capsule">Violations may result in immediate suspension or termination of your account. Full details are in our <a href="/acceptable-use">Acceptable Use Policy</a>.</p>
+
+<h2>5. Intellectual Property</h2>
+
+<h3>5.1 Our Rights</h3>
+
+<p class="answer-capsule">The Service, including its software, algorithms, detection patterns, documentation, and branding, is owned by Parse and protected by intellectual property laws. These Terms do not grant you any right to our trademarks, service marks, or trade names.</p>
+
+<h3>5.2 Your Content</h3>
+
+<p class="answer-capsule">You retain ownership of the prompts and content you submit to the API. By submitting content, you grant us a limited license to process it solely for providing the security analysis you requested, as described in our <a href="/privacy">Privacy Policy</a>.</p>
+
+<h3>5.3 Analysis Results</h3>
+
+<p class="answer-capsule">Risk scores, flags, and other analysis output returned by the Service are provided for your internal use. You may use them in your applications and systems.</p>
+
+<h2>6. Disclaimers</h2>
+
+<p class="answer-capsule"><strong>THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, WHETHER EXPRESS OR IMPLIED. WE DO NOT WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED, ERROR-FREE, OR THAT IT WILL DETECT ALL SECURITY THREATS. SECURITY ANALYSIS RESULTS ARE PROVIDED FOR INFORMATIONAL PURPOSES AND SHOULD NOT BE YOUR SOLE SECURITY MEASURE. YOU ARE RESPONSIBLE FOR IMPLEMENTING YOUR OWN SECURITY CONTROLS.</strong></p>
+
+<h2>7. Limitation of Liability</h2>
+
+<p class="answer-capsule">To the maximum extent permitted by law:</p>
+
+<ul>
+  <li>Parse shall not be liable for any indirect, incidental, special, consequential, or punitive damages</li>
+  <li>Parse's total liability for any claim arising from these Terms shall not exceed the amount you paid for the Service in the 12 months preceding the claim</li>
+  <li>Parse shall not be liable for any loss of data, business interruption, or failure to detect a security threat</li>
+</ul>
+
+<h2>8. Indemnification</h2>
+
+<p class="answer-capsule">You agree to indemnify and hold harmless Parse and its affiliates from any claims, damages, losses, or expenses (including reasonable attorneys' fees) arising from your misuse of the Service, your violation of these Terms, or your infringement of any third-party rights.</p>
+
+<h2>9. Termination</h2>
+
+<p class="answer-capsule">We may suspend or terminate your access to the Service at any time, with or without cause, including for violation of these Terms. Upon termination, all API keys will be revoked and your right to use the Service ceases immediately. Provisions that by their nature should survive termination (intellectual property, disclaimers, limitation of liability, indemnification) shall remain in effect.</p>
+
+<h2>10. Modifications to Terms</h2>
+
+<p class="answer-capsule">We may update these Terms from time to time. We will notify you of material changes by posting the new Terms on our website and updating the "Last updated" date. Your continued use of the Service after changes constitutes acceptance of the revised Terms.</p>
+
+<h2>11. Governing Law and Dispute Resolution</h2>
+
+<p class="answer-capsule">These Terms shall be governed by the laws of the jurisdiction in which Parse operates, without regard to conflict of law principles. Any disputes shall be resolved through good-faith negotiations first, and if unresolved, through binding arbitration or the appropriate courts.</p>
+
+<h2>12. General Provisions</h2>
+
+<ul>
+  <li><strong>Entire Agreement:</strong> These Terms, along with the <a href="/privacy">Privacy Policy</a>, <a href="/acceptable-use">Acceptable Use Policy</a>, and <a href="/refund">Refund Policy</a>, constitute the entire agreement between you and Parse</li>
+  <li><strong>Severability:</strong> If any provision is found unenforceable, the remaining provisions remain in effect</li>
+  <li><strong>Waiver:</strong> Our failure to enforce any right does not constitute a waiver</li>
+  <li><strong>Assignment:</strong> You may not assign these Terms without our consent; we may assign them freely</li>
+</ul>
+
+<h2>Contact Us</h2>
+
+<p class="answer-capsule">For questions about these Terms, please contact us:</p>
+
+<ul>
+  <li><strong>Email:</strong> hello@parsethis.ai</li>
+  <li><strong>Website:</strong> <a href="https://www.parsethis.ai">https://www.parsethis.ai</a></li>
+</ul>
+`;
+  return c.html(renderPage({
+    title: "Terms of Service",
+    description: "Parse Terms of Service — the terms and conditions governing your use of our prompt security API.",
+    path: "/terms",
+    content,
+    baseUrl,
+    jsonLd: [organizationSchema(baseUrl)],
+    lastUpdated: "2026-08-02",
+  }));
+});
+
+// Acceptable Use Policy page
+publicRoutes.get("/acceptable-use", (c) => {
+  const baseUrl = getBaseUrl(c);
+  const content = `
+<h1>Acceptable Use Policy</h1>
+
+<p class="answer-capsule"><strong>Last updated:</strong> August 2, 2026</p>
+
+<h2>Overview</h2>
+
+<p class="answer-capsule">This Acceptable Use Policy ("AUP") sets forth the rules and guidelines for using Parse's prompt security API and related services (the "Service"). This AUP is incorporated into and governed by our <a href="/terms">Terms of Service</a>. By using the Service, you agree to comply with this policy.</p>
+
+<h2>1. Permitted Use</h2>
+
+<p class="answer-capsule">The Service is designed to help you:</p>
+
+<ul>
+  <li>Screen AI agent prompts for prompt injection, jailbreaks, and adversarial attacks</li>
+  <li>Analyze LLM outputs for safety risks</li>
+  <li>Verify agent-to-agent trust</li>
+  <li>Assess media credibility and content authenticity</li>
+  <li>Build safer AI-powered applications</li>
+</ul>
+
+<p class="answer-capsule">You may use the Service for legitimate security analysis, research, development, and operational purposes consistent with these goals.</p>
+
+<h2>2. Prohibited Activities</h2>
+
+<h3>2.1 Illegal or Harmful Conduct</h3>
+
+<p class="answer-capsule">You must not use the Service to:</p>
+
+<ul>
+  <li>Violate any applicable local, national, or international law</li>
+  <li>Facilitate fraud, identity theft, or financial crimes</li>
+  <li>Distribute malware, ransomware, or other malicious software</li>
+  <li>Engage in phishing, social engineering, or deceptive practices targeting third parties</li>
+  <li>Promote, facilitate, or encourage violence, terrorism, or harm to any person</li>
+  <li>Exploit or harm minors in any way</li>
+</ul>
+
+<h3>2.2 Abuse of the Service</h3>
+
+<p class="answer-capsule">You must not:</p>
+
+<ul>
+  <li>Exceed API rate limits or attempt to circumvent usage quotas</li>
+  <li>Use automated means to scrape, harvest, or extract data beyond what the API provides</li>
+  <li>Resell, sublicense, or redistribute API access without written authorization</li>
+  <li>Share API keys publicly or with unauthorized parties</li>
+  <li>Submit intentionally malformed requests designed to overload or crash the Service</li>
+  <li>Attempt to reverse engineer, decompile, or discover our detection algorithms or proprietary source code</li>
+  <li>Use the Service to develop competing security screening products</li>
+</ul>
+
+<h3>2.3 Security and Integrity</h3>
+
+<p class="answer-capsule">You must not:</p>
+
+<ul>
+  <li>Probe, scan, or test the vulnerability of our infrastructure or systems</li>
+  <li>Bypass or circumvent any security or authentication measures</li>
+  <li>Attempt to gain unauthorized access to other users' data, API keys, or accounts</li>
+  <li>Interfere with or disrupt the Service, including servers, networks, or databases</li>
+  <li>Submit content containing malicious payloads designed to exploit the Service's sandbox or analysis pipeline</li>
+  <li>Use the Service as part of a botnet, DDoS attack, or other coordinated attack infrastructure</li>
+</ul>
+
+<h3>2.4 Intellectual Property</h3>
+
+<p class="answer-capsule">You must not:</p>
+
+<ul>
+  <li>Submit content that infringes copyrights, trademarks, patents, or trade secrets of others</li>
+  <li>Distribute unauthorized copies of copyrighted material through the Service</li>
+  <li>Use the Service to analyze or reverse engineer third-party proprietary content without authorization</li>
+</ul>
+
+<h2>3. Sandbox Usage</h2>
+
+<p class="answer-capsule">When using the execution sandbox feature (execute: true), additional rules apply:</p>
+
+<ul>
+  <li>The sandbox is for analyzing prompt behavior only — not for running production workloads</li>
+  <li>Do not attempt to escape the sandbox or access internal infrastructure</li>
+  <li>Do not use the sandbox to execute cryptocurrency mining or other resource-intensive tasks</li>
+  <li>Sandbox environments are isolated with no network access — attempts to establish outbound connections will be blocked</li>
+</ul>
+
+<h2>4. Content Restrictions</h2>
+
+<p class="answer-capsule">While the Service is designed to analyze potentially harmful content for security purposes, you must not:</p>
+
+<ul>
+  <li>Submit illegal content, including child sexual abuse material (CSAM), non-consensual intimate imagery, or content promoting terrorism</li>
+  <li>Submit content containing personal information of third parties obtained without consent</li>
+  <li>Use the Service to generate, refine, or optimize harmful content for deployment</li>
+</ul>
+
+<h2>5. Enforcement</h2>
+
+<h3>5.1 Monitoring</h3>
+
+<p class="answer-capsule">We monitor usage of the Service to ensure compliance with this AUP. We may investigate suspected violations and take appropriate action.</p>
+
+<h3>5.2 Actions We May Take</h3>
+
+<p class="answer-capsule">If we determine that you have violated this AUP, we may:</p>
+
+<ul>
+  <li><strong>Warning:</strong> Issue a formal warning and request corrective action</li>
+  <li><strong>Rate Limiting:</strong> Reduce your API rate limits temporarily</li>
+  <li><strong>Suspension:</strong> Suspend your API keys and access pending investigation</li>
+  <li><strong>Termination:</strong> Permanently terminate your account and revoke all keys</li>
+  <li><strong>Legal Action:</strong> Report illegal activity to law enforcement and pursue legal remedies</li>
+</ul>
+
+<h3>5.3 Reporting Violations</h3>
+
+<p class="answer-capsule">We reserve the right to report violations of this AUP to relevant authorities, affected third parties, and law enforcement when we believe such disclosure is legally required or necessary to protect rights, property, or safety.</p>
+
+<h2>6. Reporting Abuse</h2>
+
+<p class="answer-capsule">If you become aware of any violation of this AUP, or if you believe your account has been compromised, please report it immediately:</p>
+
+<ul>
+  <li><strong>Email:</strong> abuse@parsethis.ai</li>
+  <li><strong>Include:</strong> Affected API key hint, description of the issue, and relevant timestamps</li>
+</ul>
+
+<h2>7. Changes to This Policy</h2>
+
+<p class="answer-capsule">We may update this AUP from time to time. Material changes will be posted on our website with an updated "Last updated" date. Your continued use of the Service after changes constitutes acceptance.</p>
+
+<h2>Related Documents</h2>
+
+<ul>
+  <li><a href="/terms">Terms of Service</a> — Main agreement governing use of the Service</li>
+  <li><a href="/privacy">Privacy Policy</a> — How we collect, use, and protect your data</li>
+  <li><a href="/refund">Refund Policy</a> — Subscription and payment refund terms</li>
+  <li><a href="/pricing">Pricing</a> — Current plans and pricing</li>
+</ul>
+
+<h2>Contact Us</h2>
+
+<p class="answer-capsule">For questions about this Acceptable Use Policy:</p>
+
+<ul>
+  <li><strong>Email:</strong> hello@parsethis.ai</li>
+  <li><strong>Website:</strong> <a href="https://www.parsethis.ai">https://www.parsethis.ai</a></li>
+</ul>
+`;
+  return c.html(renderPage({
+    title: "Acceptable Use Policy",
+    description: "Parse Acceptable Use Policy — guidelines for permitted and prohibited use of our prompt security API.",
+    path: "/acceptable-use",
+    content,
+    baseUrl,
+    jsonLd: [organizationSchema(baseUrl)],
+    lastUpdated: "2026-08-02",
+  }));
+});
+
+// Refund Policy page
+publicRoutes.get("/refund", (c) => {
+  const baseUrl = getBaseUrl(c);
+  const content = `
+<h1>Refund Policy</h1>
+
+<p class="answer-capsule"><strong>Last updated:</strong> August 2, 2026</p>
+
+<h2>Overview</h2>
+
+<p class="answer-capsule">We want you to be confident in your Parse subscription. This Refund Policy explains our approach to refunds, cancellations, and billing disputes for our prompt security API service. This policy supplements our <a href="/terms">Terms of Service</a>.</p>
+
+<h2>1. Subscription Plans (Stripe)</h2>
+
+<h3>1.1 Monthly Billing</h3>
+
+<p class="answer-capsule">Our Pro ($49/mo) and Team ($199/mo) plans are billed monthly via Stripe. Subscriptions renew automatically each billing cycle until cancelled.</p>
+
+<h3>1.2 Cancellation</h3>
+
+<ul>
+  <li>You can cancel your subscription at any time through the <a href="/billing">customer portal</a> or by contacting support</li>
+  <li>Cancellation takes effect at the end of your current billing period</li>
+  <li>You will retain full access to the Service until the end of the paid period</li>
+  <li>No further charges will be made after cancellation</li>
+</ul>
+
+<h3>1.3 Refund Eligibility</h3>
+
+<p class="answer-capsule">We offer the following refund options for subscription plans:</p>
+
+<ul>
+  <li><strong>Within 7 days of initial subscription:</strong> Full refund if you have not exceeded 1,000 API requests during the period</li>
+  <li><strong>Annual plans:</strong> Pro-rated refund for unused full months, minus the first month, if cancelled within 30 days</li>
+  <li><strong>Billing errors:</strong> Full refund for charges resulting from duplicate billing, system errors, or unauthorized charges reported within 60 days</li>
+</ul>
+
+<h3>1.4 Non-Refundable Scenarios</h3>
+
+<ul>
+  <li>Renewal charges for subscriptions not cancelled before the renewal date</li>
+  <li>Usage-based overages or metered charges already incurred</li>
+  <li>Subscriptions cancelled after the 7-day window for monthly plans (unless a billing error occurred)</li>
+  <li>Accounts terminated due to violations of our <a href="/acceptable-use">Acceptable Use Policy</a></li>
+</ul>
+
+<h2>2. x402 Pay-Per-Call Payments</h2>
+
+<h3>2.1 How It Works</h3>
+
+<p class="answer-capsule">For pay-per-call usage, each API request is paid individually in USDC via the x402 protocol on the Base L2 blockchain. Payment is verified on-chain before the response is returned.</p>
+
+<h3>2.2 Refund Policy for x402</h3>
+
+<ul>
+  <li><strong>Successful calls:</strong> Individual successful API calls are non-refundable, as the computational resources (LLM analysis, sandbox execution) are consumed at the time of the request</li>
+  <li><strong>Failed calls:</strong> If the API returns an error (5xx) or fails to deliver a response due to a service-side issue, you will not be charged for that call. If payment was collected before the failure, we will issue a credit for the equivalent amount</li>
+  <li><strong>On-chain transaction fees:</strong> Gas fees and network transaction costs are not refundable, as these are paid to the blockchain network, not to Parse</li>
+</ul>
+
+<h2>3. How to Request a Refund</h2>
+
+<h3>3.1 Subscription Refunds</h3>
+
+<p class="answer-capsule">To request a subscription refund:</p>
+
+<ul>
+  <li>Email <a href="mailto:hello@parsethis.ai">hello@parsethis.ai</a> with the subject "Refund Request"</li>
+  <li>Include your account email or API key hint and the reason for the request</li>
+  <li>Submit within the applicable refund window (see Section 1.3)</li>
+  <li>Refunds are processed back to the original payment method within 5–10 business days</li>
+</ul>
+
+<h3>3.2 x402 Credits</h3>
+
+<p class="answer-capsule">To request a credit for failed x402 calls:</p>
+
+<ul>
+  <li>Email <a href="mailto:hello@parsethis.ai">hello@parsethis.ai</a> with the transaction hash and timestamp</li>
+  <li>We will verify the failed call on-chain and issue a credit to your account</li>
+  <li>Credits are applied to future x402 payments automatically</li>
+</ul>
+
+<h2>4. Enterprise and Custom Plans</h2>
+
+<p class="answer-capsule">Enterprise and custom contract terms supersede this policy where they conflict. Refund terms for enterprise plans are governed by the applicable master service agreement (MSA) or statement of work (SOW).</p>
+
+<h2>5. Chargebacks and Disputes</h2>
+
+<p class="answer-capsule">We encourage you to contact us at <a href="mailto:hello@parsethis.ai">hello@parsethis.ai</a> before initiating a chargeback with your bank or credit card company. We are committed to resolving billing issues promptly. Please note:</p>
+
+<ul>
+  <li>Filing a chargeback without first contacting us may result in account suspension pending resolution</li>
+  <li>Frivolous or fraudulent chargebacks may result in permanent account termination</li>
+  <li>We will provide transaction records and evidence to your bank or card issuer to dispute unwarranted chargebacks</li>
+</ul>
+
+<h2>6. Service Credits</h2>
+
+<p class="answer-capsule">If the Service experiences downtime that breaches our service level commitment, you may be eligible for service credits. Service credits are applied to your next billing cycle and are not issued as cash refunds. Contact support with details of any qualifying outage.</p>
+
+<h2>7. Changes to This Policy</h2>
+
+<p class="answer-capsule">We may update this Refund Policy from time to time. Changes will be posted on our website with an updated "Last updated" date. Refund eligibility is determined by the policy in effect at the time of your purchase.</p>
+
+<h2>Related Documents</h2>
+
+<ul>
+  <li><a href="/terms">Terms of Service</a> — Main agreement governing use of the Service</li>
+  <li><a href="/privacy">Privacy Policy</a> — How we collect, use, and protect your data</li>
+  <li><a href="/acceptable-use">Acceptable Use Policy</a> — Permitted and prohibited use guidelines</li>
+  <li><a href="/pricing">Pricing</a> — Current plans and pricing</li>
+</ul>
+
+<h2>Contact Us</h2>
+
+<p class="answer-capsule">For questions about refunds or billing:</p>
+
+<ul>
+  <li><strong>Email:</strong> hello@parsethis.ai</li>
+  <li><strong>Billing Portal:</strong> <a href="/billing">Manage your subscription</a></li>
+  <li><strong>Website:</strong> <a href="https://www.parsethis.ai">https://www.parsethis.ai</a></li>
+</ul>
+`;
+  return c.html(renderPage({
+    title: "Refund Policy",
+    description: "Parse Refund Policy — refund terms for subscriptions, x402 pay-per-call payments, and billing disputes.",
+    path: "/refund",
+    content,
+    baseUrl,
+    jsonLd: [organizationSchema(baseUrl)],
+    lastUpdated: "2026-08-02",
+  }));
+});
+
 // Status page redirect
 publicRoutes.get("/status", (c) => c.redirect("/health"));
 
@@ -1172,6 +1652,11 @@ publicRoutes.post("/v1/support/tickets", async (c) => {
   return handleSupportTicketIntake(c, input, "json");
 });
 
+// Public API key generation canary must be registered before the generic
+// /v1/keys/generate route because Hono also routes subpaths through the
+// earlier handler.
+publicRoutes.post("/v1/keys/generate/canary", handleKeygenCanary);
+
 // Public API key generation (Phase 1: Redis rate limiting, global cap, expiry, env toggle)
 publicRoutes.post("/v1/keys/generate", async (c) => {
   // Check if key generation is enabled
@@ -1248,13 +1733,16 @@ publicRoutes.post("/v1/keys/generate", async (c) => {
     }
   }
 
-  // Global cap: max 100 self-service keys
+  // Global cap: configurable for launch-stage capacity without code changes.
+  // The cap remains fail-closed and machine-readable so Sentinel can distinguish
+  // capacity exhaustion from retryable per-minute rate limiting.
   try {
     if (forcedFailure === "key_count_failed" || forcedFailure === "prisma_unavailable") {
       return keygenProblem(c, forcedFailure);
     }
-    const totalKeys = forcedFailure === "key_cap_exceeded" ? 100 : await countSelfServiceKeys();
-    if (totalKeys >= 100) {
+    const selfServiceKeyCap = getSelfServiceKeyCap();
+    const totalKeys = forcedFailure === "key_cap_exceeded" ? selfServiceKeyCap : await countSelfServiceKeys();
+    if (totalKeys >= selfServiceKeyCap) {
       return keygenProblem(c, "key_cap_exceeded");
     }
   } catch (err) {
@@ -1386,9 +1874,11 @@ async function handleKeygenCanary(c: Context) {
 
     try {
       const totalKeys = await countSelfServiceKeys();
+      const selfServiceKeyCap = getSelfServiceKeyCap();
       payload.keygen_count_ok = true;
       payload.key_count = totalKeys;
-      payload.key_cap_remaining = Math.max(0, 100 - totalKeys);
+      payload.key_cap = selfServiceKeyCap;
+      payload.key_cap_remaining = Math.max(0, selfServiceKeyCap - totalKeys);
     } catch {
       payload.keygen_count_ok = false;
       payload.keygen_count_reason = "key_count_failed";
@@ -1443,13 +1933,20 @@ async function handleKeygenCanary(c: Context) {
 }
 
 publicRoutes.get("/v1/keys/generate/canary", handleKeygenCanary);
-publicRoutes.post("/v1/keys/generate/canary", handleKeygenCanary);
 
 // Payment Stats (admin)
-publicRoutes.get("/v1/payments/stats", authMiddleware("admin"), (c) => {
-  return c.json({
-    x402_enabled: isX402Enabled(),
-    ...getPaymentStats(),
-    recent: getRecentPayments(10),
-  });
+publicRoutes.get("/v1/payments/stats", authMiddleware("admin"), async (c) => {
+  try {
+    const [stats, recent] = await Promise.all([
+      getPaymentStats(),
+      getRecentPayments(10),
+    ]);
+    return c.json({
+      x402_enabled: isX402Enabled(),
+      ...stats,
+      recent,
+    });
+  } catch (err) {
+    return serviceDependencyProblem(c, err);
+  }
 });
