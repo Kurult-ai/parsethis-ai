@@ -704,7 +704,7 @@ The field of multi-agent security is nascent. Several research areas require att
 
 4. **Segment your shared resources**: Implement agent-specific views, integrity verification, and anomaly detection on all shared databases, caches, and message queues.
 
-5. **Test your trust boundaries**: Run adversarial scenarios that specifically target inter-agent communication. Use [Parse for Agents](https://parsethis.ai) pipeline evaluation to automate cross-agent attack detection and identify privilege escalation paths in your multi-agent architecture.
+5. **Test your trust boundaries**: Run adversarial scenarios that specifically target inter-agent communication. Use [Parse for Agents](https://www.parsethis.ai) pipeline evaluation to automate cross-agent attack detection and identify privilege escalation paths in your multi-agent architecture.
 
 ## The Bottom Line
 
@@ -712,7 +712,7 @@ Multi-agent systems are more than the sum of their parts. The attack surface lie
 
 Audit your interactions. Verify your trust assumptions. Compartmentalize your architecture.
 
-[Identify cross-agent vulnerabilities in your multi-agent system. Try Parse for Agents free.](https://parsethis.ai)
+[Identify cross-agent vulnerabilities in your multi-agent system. Try Parse for Agents free.](https://www.parsethis.ai)
 
 ---
 

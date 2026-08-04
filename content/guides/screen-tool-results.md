@@ -17,7 +17,7 @@ Call `POST /v1/parse` before tool output is inserted into an LLM prompt or used 
 
 ```ts
 const toolOutput = await browser.readPage(url);
-const screen = await fetch("https://parsethis.ai/v1/parse", {
+const screen = await fetch("https://www.parsethis.ai/v1/parse", {
   method: "POST",
   headers: {
     Authorization: `Bearer ${process.env.PARSE_API_KEY}`,

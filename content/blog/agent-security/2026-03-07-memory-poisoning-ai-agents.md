@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["ai agent memory poisoning", "long-running agents", "persistent context security", "parse-for-agents"]
 description: "Memory poisoning corrupts AI agents through their persistent storage. Learn how attackers inject malicious data and defend your long-running agents."
-canonical_url: "https://parsethis.ai/blog/memory-poisoning-ai-agents"
+canonical_url: "https://www.parsethis.ai/blog/memory-poisoning-ai-agents"
 reading_time: "8 min read"
 ---
 
@@ -270,7 +270,7 @@ def secure_retrieve(query):
 Parse for Agents provides memory poisoning detection through our multi-layer analysis pipeline:
 
 ```typescript
-const scan = await fetch('https://parsethis.ai/api/v1/agents/memory-scan', {
+const scan = await fetch('https://www.parsethis.ai/api/v1/agents/memory-scan', {
   method: 'POST',
   headers: { 'Authorization': `Bearer ${API_KEY}` },
   body: JSON.stringify({
@@ -309,7 +309,7 @@ Memory poisoning transforms your agent's greatest capability—learning and reta
 
 The defense starts with recognizing that memory is not trusted storage—it's an attack surface requiring the same rigor as your input validation, output filtering, and access controls combined.
 
-**Scan your agent's memory for poisoning vulnerabilities before attackers plant their seeds.** [Try Parse for Agents free](https://parsethis.ai).
+**Scan your agent's memory for poisoning vulnerabilities before attackers plant their seeds.** [Try Parse for Agents free](https://www.parsethis.ai).
 
 ---
 

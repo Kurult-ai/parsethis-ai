@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["autonomous agent payment security", "x402 protocol", "agent identity", "parse-for-agents"]
 description: "Understanding the security implications of autonomous agent payments via x402 protocol. Learn threat models, attack scenarios, and security controls for agent-based financial transactions."
-canonical_url: "https://parsethis.ai/blog/autonomous-agent-payment-security"
+canonical_url: "https://www.parsethis.ai/blog/autonomous-agent-payment-security"
 reading_time: "10 min read"
 ---
 
@@ -185,7 +185,7 @@ class X402SecurityLayer:
 ### Integration with Parse
 
 ```typescript
-const response = await fetch('https://parsethis.ai/api/v1/agents/prompt-injection-detect', {
+const response = await fetch('https://www.parsethis.ai/api/v1/agents/prompt-injection-detect', {
   method: 'POST',
   headers: {
     'Authorization': 'Bearer YOUR_PARSE_API_KEY',
@@ -551,4 +551,4 @@ if (!validation.safe) {
 
 ---
 
-Secure your autonomous agent payments before they become a liability. [Try Parse for Agents free](https://parsethis.ai).
+Secure your autonomous agent payments before they become a liability. [Try Parse for Agents free](https://www.parsethis.ai).

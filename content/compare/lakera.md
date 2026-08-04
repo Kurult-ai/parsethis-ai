@@ -28,5 +28,5 @@ Do not treat this page as a benchmark. Use published vendor docs and your own ev
 
 - [Lakera Guard API endpoint](https://docs.lakera.ai/docs/api/guard)
 - [Lakera Guard guardrails documentation](https://docs.lakera.ai/docs/defenses)
-- [Parse OpenAPI](https://parsethis.ai/openapi.json)
-- [Parse MCP manifest](https://parsethis.ai/mcp.json)
+- [Parse OpenAPI](https://www.parsethis.ai/openapi.json)
+- [Parse MCP manifest](https://www.parsethis.ai/mcp.json)

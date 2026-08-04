@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["sandbox prompt injection detection", "behavioral analysis", "agent security testing", "prompt injection defense", "parse-for-agents"]
 description: "Pattern matching catches 30-40% of prompt injections. Behavioral sandboxing catches the rest by observing what agents do, not what inputs look like."
-canonical_url: "https://parsethis.ai/blog/sandbox-prompt-injection-detection-behavioral-approach"
+canonical_url: "https://www.parsethis.ai/blog/sandbox-prompt-injection-detection-behavioral-approach"
 reading_time: "10 min read"
 series: "Agent Security Fundamentals"
 ---
@@ -182,7 +182,7 @@ If you're running agents in production, here's a minimal behavioral sandbox you 
 Or skip the build and use Parse's detection pipeline, which runs all four phases — pattern matching, structural analysis, LLM risk analysis, and behavioral sandboxing — in a single API call:
 
 ```typescript
-const result = await fetch('https://parsethis.ai/api/v1/parse', {
+const result = await fetch('https://www.parsethis.ai/api/v1/parse', {
   method: 'POST',
   headers: { 'Authorization': 'Bearer YOUR_API_KEY' },
   body: JSON.stringify({
@@ -219,4 +219,4 @@ The defense is layered: pattern matching + structural analysis + LLM evaluation 
 
 ---
 
-Scan your agent prompts with all four detection layers. [Try Parse for Agents free](https://parsethis.ai).
+Scan your agent prompts with all four detection layers. [Try Parse for Agents free](https://www.parsethis.ai).

@@ -71,7 +71,7 @@ type ParseDecision = {
 };
 
 export async function screenUntrustedText(text: string, source: string): Promise<ParseDecision> {
-  const res = await fetch("https://parsethis.ai/v1/parse", {
+  const res = await fetch("https://www.parsethis.ai/v1/parse", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.PARSE_API_KEY}`,
@@ -99,7 +99,7 @@ import requests
 
 def screen_untrusted_text(text: str, source: str) -> dict:
     response = requests.post(
-        "https://parsethis.ai/v1/parse",
+        "https://www.parsethis.ai/v1/parse",
         headers={"Authorization": f"Bearer {os.environ['PARSE_API_KEY']}"},
         json={"prompt": text, "metadata": {"source": source}},
         timeout=8,

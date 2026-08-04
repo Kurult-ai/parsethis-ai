@@ -7,6 +7,7 @@ import { getAvailableModels } from "../model-client.js";
 import { interpolatePrompt } from "../lib/prompt-utils.js";
 import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 import { problem, ErrorCode } from "../lib/problem-response.js";
+import { redactPrompt } from "../lib/prompt-privacy.js";
 import { EvaluateRequestSchema } from "../schemas.js";
 import type { EvaluationResult, TestCaseResult, EvalSummary } from "../types.js";
 import type { ValidatedEvaluateRequest } from "../schemas.js";
@@ -232,4 +233,9 @@ async function runSpecEvaluation(
   result.summary = summary;
   result.results = testCaseResults;
   delete result.progress;
+
+  // ── Privacy: redact the raw prompt now that analysis is complete ──
+  // The full prompt was available during evaluation; overwrite it with a
+  // truncated prefix + SHA-256 hash so PII/credentials are not retained.
+  result.prompt = redactPrompt(result.prompt);
 }

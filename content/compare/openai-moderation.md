@@ -26,5 +26,5 @@ Use both when needed: moderation for content policy and Parse for prompt-injecti
 
 - [OpenAI Moderation guide](https://platform.openai.com/docs/guides/moderation)
 - [OpenAI Moderations API reference](https://platform.openai.com/docs/api-reference/moderations)
-- [Parse OpenAPI](https://parsethis.ai/openapi.json)
-- [Parse MCP manifest](https://parsethis.ai/mcp.json)
+- [Parse OpenAPI](https://www.parsethis.ai/openapi.json)
+- [Parse MCP manifest](https://www.parsethis.ai/mcp.json)

@@ -2,10 +2,50 @@ import Stripe from "stripe";
 import { PLAN_LIMITS } from "./lib/product-facts.js";
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const STRIPE_MOCK_SIGNATURE = "stripe-mock-signature";
 
 let stripeInstance: Stripe | null = null;
 
+export function isStripeMockMode(): boolean {
+  // Keep mock billing test-only so a production env var typo cannot bypass Stripe.
+  return process.env.NODE_ENV === "test" && process.env.STRIPE_MOCK_MODE === "true";
+}
+
+function mockStripe(): Stripe {
+  const now = Math.floor(Date.now() / 1000);
+  return {
+    webhooks: {
+      constructEvent(rawBody: string | Buffer, signature: string | undefined) {
+        if (signature !== STRIPE_MOCK_SIGNATURE) {
+          throw new Error("Invalid mock Stripe signature");
+        }
+        const body = typeof rawBody === "string" ? rawBody : rawBody.toString("utf8");
+        return JSON.parse(body) as Stripe.Event;
+      },
+    },
+    subscriptions: {
+      async retrieve(id: string) {
+        return {
+          id,
+          status: "active",
+          cancel_at_period_end: false,
+          items: {
+            data: [
+              {
+                current_period_start: now,
+                current_period_end: now + 30 * 86400,
+                price: { id: "price_mock_pro" },
+              },
+            ],
+          },
+        };
+      },
+    },
+  } as unknown as Stripe;
+}
+
 export function getStripe(): Stripe {
+  if (isStripeMockMode()) return mockStripe();
   if (!stripeInstance) {
     if (!STRIPE_SECRET_KEY) throw new Error("STRIPE_SECRET_KEY not configured");
     stripeInstance = new Stripe(STRIPE_SECRET_KEY);
@@ -14,7 +54,7 @@ export function getStripe(): Stripe {
 }
 
 export function isStripeEnabled(): boolean {
-  return !!STRIPE_SECRET_KEY;
+  return isStripeMockMode() || !!STRIPE_SECRET_KEY;
 }
 
 export const TIER_CONFIG = {
@@ -25,6 +65,15 @@ export const TIER_CONFIG = {
 export type PaidTier = keyof typeof TIER_CONFIG;
 
 export async function createCheckoutSession(apiKeyId: string, tier: PaidTier, baseUrl: string): Promise<string> {
+  if (isStripeMockMode()) {
+    const url = new URL("https://stripe.mock/checkout/session");
+    url.searchParams.set("client_reference_id", apiKeyId);
+    url.searchParams.set("tier", tier);
+    url.searchParams.set("success_url", `${baseUrl}/dashboard/billing?session_id={CHECKOUT_SESSION_ID}`);
+    url.searchParams.set("cancel_url", `${baseUrl}/pricing`);
+    return url.toString();
+  }
+
   const stripe = getStripe();
   const config = TIER_CONFIG[tier];
   const priceId = process.env[config.priceEnvVar];
@@ -43,6 +92,13 @@ export async function createCheckoutSession(apiKeyId: string, tier: PaidTier, ba
 }
 
 export async function createPortalSession(stripeCustomerId: string, baseUrl: string): Promise<string> {
+  if (isStripeMockMode()) {
+    const url = new URL("https://stripe.mock/billing-portal/session");
+    url.searchParams.set("customer", stripeCustomerId);
+    url.searchParams.set("return_url", `${baseUrl}/dashboard/billing`);
+    return url.toString();
+  }
+
   const stripe = getStripe();
   const session = await stripe.billingPortal.sessions.create({
     customer: stripeCustomerId,

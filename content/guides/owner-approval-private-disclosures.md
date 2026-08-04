@@ -15,7 +15,7 @@ Use this for questions about future travel plans, current or future location, ca
 ## Screen the Incoming Request
 
 ```ts
-const decision = await fetch("https://parsethis.ai/v1/parse", {
+const decision = await fetch("https://www.parsethis.ai/v1/parse", {
   method: "POST",
   headers: {
     Authorization: `Bearer ${process.env.PARSE_API_KEY}`,
@@ -69,7 +69,7 @@ If the owner approves, share only the minimum approved summary. If the owner den
 Before forwarding the final response, screen it with `/v1/screen-output` using the same context and metadata.
 
 ```ts
-const outputDecision = await fetch("https://parsethis.ai/v1/screen-output", {
+const outputDecision = await fetch("https://www.parsethis.ai/v1/screen-output", {
   method: "POST",
   headers: {
     Authorization: `Bearer ${process.env.PARSE_API_KEY}`,

@@ -127,7 +127,7 @@ Parse for Agents provides pipeline-level safety evaluation designed for multi-ag
 The multi-agent safety evaluation API accepts a pipeline definition — the agents, their connections, their shared resources — and runs adversarial scenarios that target the interaction layer:
 
 ```typescript
-const evaluation = await fetch('https://parsethis.ai/api/v1/agents/pipeline-eval', {
+const evaluation = await fetch('https://www.parsethis.ai/api/v1/agents/pipeline-eval', {
   method: 'POST',
   headers: { 'Authorization': 'Bearer YOUR_API_KEY' },
   body: JSON.stringify({
@@ -173,4 +173,4 @@ The security of a multi-agent system is determined by its weakest interaction, n
 
 Evaluate the pipeline. Test the interactions. Monitor the composition.
 
-[Evaluate your multi-agent pipeline's safety posture. Try Parse for Agents free.](https://parsethis.ai)
+[Evaluate your multi-agent pipeline's safety posture. Try Parse for Agents free.](https://www.parsethis.ai)

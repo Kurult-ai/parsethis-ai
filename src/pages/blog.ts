@@ -154,3 +154,17 @@ export function renderBlogPostPage(
     contentType: "text/html",
   };
 }
+
+export function renderBlogPostPageBySlug(
+  slug: string,
+  baseUrl: string,
+  wantsMarkdown?: boolean
+):
+  | { html: string; contentType: "text/html" }
+  | { markdown: string; contentType: "text/markdown" }
+  | null {
+  const post = listBlogPosts().find((candidate) => candidate.frontmatter.slug === slug);
+  const category = post?.frontmatter.category;
+  if (typeof category !== "string") return null;
+  return renderBlogPostPage(category, slug, baseUrl, wantsMarkdown);
+}

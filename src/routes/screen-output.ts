@@ -60,6 +60,15 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
       retryable: false,
     });
   }
+  if (body.context !== undefined && typeof body.context !== "string") {
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "context must be a string when provided",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
+  }
   if (body.metadata !== undefined && (typeof body.metadata !== "object" || Array.isArray(body.metadata))) {
     return problem(c, {
       status: 400,

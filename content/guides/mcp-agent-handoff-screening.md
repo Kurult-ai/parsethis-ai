@@ -16,7 +16,7 @@ Agent handoffs are trust boundaries. A peer agent, plugin, or MCP server can spo
 Call `POST /v1/agent/trust/verify` before accepting delegation from an unknown agent, plugin, or service. Screen the handoff text with `POST /v1/parse` when it contains instructions or external content.
 
 ```ts
-const verify = await fetch("https://parsethis.ai/v1/agent/trust/verify", {
+const verify = await fetch("https://www.parsethis.ai/v1/agent/trust/verify", {
   method: "POST",
   headers: {
     Authorization: `Bearer ${process.env.PARSE_API_KEY}`,

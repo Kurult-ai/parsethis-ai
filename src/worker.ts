@@ -5,6 +5,7 @@ import { prisma } from "./db.js";
 import { executePrompt } from "./executor.js";
 import { runSpecEvaluators } from "./evaluators.js";
 import { storeResult, updateProgress, clearProgress } from "./result-store.js";
+import { redactEvaluationAfterCompletion, redactPrompt } from "./lib/prompt-privacy.js";
 import type { EvaluationJobData } from "./queue.js";
 import type { TestCaseResult, EvalSummary, EvaluationResult } from "./types.js";
 
@@ -139,7 +140,7 @@ const worker = new Worker<EvaluationJobData>(
       created_at: runningResult.created_at,
       started_at: startedAt.toISOString(),
       completed_at: completedAt.toISOString(),
-      prompt: data.prompt,
+      prompt: redactPrompt(data.prompt),
       model: data.model,
       summary,
       results: testCaseResults,
@@ -159,6 +160,14 @@ const worker = new Worker<EvaluationJobData>(
       },
     }).catch((err: Error) => {
       console.error(`[worker] Failed to persist eval ${id}:`, err.message);
+    });
+
+    // ── Privacy: redact the raw prompt after analysis is complete ──
+    // The full prompt was needed for evaluation; now that results are stored,
+    // overwrite the prompt with a truncated prefix + SHA-256 hash so PII /
+    // credentials are not retained permanently.
+    redactEvaluationAfterCompletion(prisma, id).catch((err: Error) => {
+      console.error(`[worker] Failed to redact prompt for eval ${id}:`, err.message);
     });
 
     // Record usage

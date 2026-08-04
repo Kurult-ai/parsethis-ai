@@ -5,6 +5,7 @@ import { cachePolicyData, getCachedPolicyData, invalidatePolicyCache } from "../
 import type { AppEnv, ScreeningPolicy } from "../types.js";
 import { auditLog } from "../lib/audit-log.js";
 import { formatBypassPolicy, hashBypassCodeword } from "../lib/bypass-codeword.js";
+import { serviceDependencyProblem } from "../lib/problem-response.js";
 
 export const policyRoutes = new Hono<AppEnv>();
 
@@ -222,7 +223,7 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
     return c.json(formatPolicyResponse(policy, tier));
   } catch (err) {
     console.error("[policy] PUT error:", (err as Error).message);
-    return c.json({ error: "Failed to update policy" }, 500);
+    return serviceDependencyProblem(c, err);
   }
 });
 
@@ -246,6 +247,6 @@ policyRoutes.delete("/v1/policy", authMiddleware("evaluate"), async (c) => {
     return c.json({ message: "Policy reset to defaults", ...DEFAULT_POLICY });
   } catch (err) {
     console.error("[policy] DELETE error:", (err as Error).message);
-    return c.json({ error: "Failed to delete policy" }, 500);
+    return serviceDependencyProblem(c, err);
   }
 });

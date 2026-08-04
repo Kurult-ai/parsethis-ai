@@ -17,7 +17,7 @@ Call `POST /v1/parse` before page content can influence tool use, memory writes,
 
 ```ts
 const pageText = await browser.extractText(url);
-const screen = await fetch("https://parsethis.ai/v1/parse", {
+const screen = await fetch("https://www.parsethis.ai/v1/parse", {
   method: "POST",
   headers: {
     Authorization: `Bearer ${process.env.PARSE_API_KEY}`,

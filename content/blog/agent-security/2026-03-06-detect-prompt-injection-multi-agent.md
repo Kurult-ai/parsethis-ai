@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["detect prompt injection", "multi-agent security", "prompt injection detection", "ai agent pipeline", "parse-for-agents"]
 description: "Learn how to detect prompt injection across multi-agent pipelines with pattern matching, structural analysis, and behavioral sandboxing."
-canonical_url: "https://parsethis.ai/blog/detect-prompt-injection-multi-agent"
+canonical_url: "https://www.parsethis.ai/blog/detect-prompt-injection-multi-agent"
 reading_time: "9 min read"
 series: "Agent Security Fundamentals"
 ---
@@ -140,7 +140,7 @@ Log and proceed. Accumulate signals — three low-confidence flags from the same
 Parse for Agents implements this layered detection architecture natively. The safety evaluator runs deterministic pattern matching across 12 injection categories and 4 harmful output categories at every evaluation checkpoint:
 
 ```typescript
-const result = await fetch('https://parsethis.ai/api/v1/agents/evaluate', {
+const result = await fetch('https://www.parsethis.ai/api/v1/agents/evaluate', {
   method: 'POST',
   headers: { 'Authorization': 'Bearer YOUR_API_KEY' },
   body: JSON.stringify({
@@ -179,4 +179,4 @@ The system also checks for system prompt leakage — if an agent's output contai
 
 ---
 
-Detect injection across your entire agent pipeline, not just at the front door. [Try Parse for Agents free](https://parsethis.ai).
+Detect injection across your entire agent pipeline, not just at the front door. [Try Parse for Agents free](https://www.parsethis.ai).

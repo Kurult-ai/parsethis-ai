@@ -58,7 +58,7 @@ export async function callLLMFull(
         headers: {
           Authorization: `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": "https://parsethis.ai",
+          "HTTP-Referer": "https://www.parsethis.ai",
           "X-Title": "Parse for Agents",
         },
         body: JSON.stringify({
@@ -158,7 +158,7 @@ export async function* streamLLM(
       headers: {
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://parsethis.ai",
+        "HTTP-Referer": "https://www.parsethis.ai",
         "X-Title": "Parse for Agents",
       },
       body: JSON.stringify({

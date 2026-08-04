@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Thought Leadership"
 tags: ["multi-agent evaluation", "llm eval", "agent orchestration", "parse-for-agents", "ai agent testing"]
 description: "Your eval framework tests one model at a time. Your production system runs ten. Here's why that gap costs you accuracy, money, and safety."
-canonical_url: "https://parsethis.ai/blog/single-llm-eval-breaks-multi-agent-systems"
+canonical_url: "https://www.parsethis.ai/blog/single-llm-eval-breaks-multi-agent-systems"
 reading_time: "5 min read"
 series: "Multi-Agent Architecture"
 ---
@@ -90,4 +90,4 @@ This architecture is not bolted on. It is a consequence of building for multi-ag
 
 **The eval tools we have were built for a world where one model answers one question. That world is ending.** Multi-agent systems are becoming the default architecture for anything beyond a chatbot. The eval frameworks need to catch up — or teams building multi-agent products need to build evaluation into their workflow architecture from the start.
 
-Parse is a bet that workflow-native evaluation is the right default. If you're building with multiple agents, [try Parse for Agents](https://parsethis.ai) and see what eval looks like when it's designed for the system you're actually running.
+Parse is a bet that workflow-native evaluation is the right default. If you're building with multiple agents, [try Parse for Agents](https://www.parsethis.ai) and see what eval looks like when it's designed for the system you're actually running.

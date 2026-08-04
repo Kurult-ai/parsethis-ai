@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["indirect prompt injection", "ai agent security", "data poisoning", "prompt injection detection", "parse-for-agents"]
 description: "Indirect prompt injection hides attack payloads in the data your agent processes — websites, emails, documents. Learn how it works and how to detect it."
-canonical_url: "https://parsethis.ai/blog/indirect-prompt-injection-agent-data"
+canonical_url: "https://www.parsethis.ai/blog/indirect-prompt-injection-agent-data"
 reading_time: "7 min read"
 series: "Agent Security Fundamentals"
 ---
@@ -123,7 +123,7 @@ Parse for Agents runs a multi-phase analysis pipeline that catches indirect inje
 
 ```typescript
 // Scan a retrieved document for indirect injection before it enters agent context
-const scanResult = await fetch('https://parsethis.ai/api/v1/agents/parse', {
+const scanResult = await fetch('https://www.parsethis.ai/api/v1/agents/parse', {
   method: 'POST',
   headers: { 'Authorization': 'Bearer YOUR_API_KEY' },
   body: JSON.stringify({
@@ -147,7 +147,7 @@ Each scan returns a 0-10 risk score, a verdict (safe / low_risk / medium_risk / 
 - **Scan all data entering the agent context**, not just user messages. Retrieved documents, API responses, emails, and scraped content are all attack surfaces.
 - **Layer your defenses**: pattern matching + structural analysis + LLM behavioral analysis + output monitoring. No single technique catches everything.
 - **Limit agent permissions aggressively.** Assume injection will eventually succeed. Minimize what the attacker gains when it does.
-- **Integrate Parse at your data ingestion points** to catch indirect injection payloads before they reach your agent's context window. [Start scanning free](https://parsethis.ai).
+- **Integrate Parse at your data ingestion points** to catch indirect injection payloads before they reach your agent's context window. [Start scanning free](https://www.parsethis.ai).
 
 ---
 

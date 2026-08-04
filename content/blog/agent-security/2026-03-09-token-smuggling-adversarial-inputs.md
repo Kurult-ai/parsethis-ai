@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["token smuggling adversarial input", "ai safety bypass", "prompt injection", "adversarial ml", "parse-for-agents"]
 description: "Token smuggling hides malicious prompts within benign text using encoding tricks, invisible characters, and tokenization artifacts. Here's how it works and how to detect it."
-canonical_url: "https://parsethis.ai/blog/token-smuggling-adversarial-inputs"
+canonical_url: "https://www.parsethis.ai/blog/token-smuggling-adversarial-inputs"
 reading_time: "7 min read"
 series: "Agent Security Deep Dives"
 ---
@@ -147,7 +147,7 @@ Parse for Agents uses **behavioral sandbox testing** to detect token smuggling:
 4. **Entropy Analysis**: Calculate character-level entropy. High entropy in otherwise natural text suggests encoding or obfuscation.
 
 ```typescript
-const smugglingCheck = await fetch('https://parsethis.ai/api/v1/agents/smuggling-detect', {
+const smugglingCheck = await fetch('https://www.parsethis.ai/api/v1/agents/smuggling-detect', {
   method: 'POST',
   headers: { 'Authorization': 'Bearer YOUR_API_KEY' },
   body: JSON.stringify({
@@ -227,8 +227,8 @@ The smugglers are constantly innovating. Your defenses must too.
 **Actionable Steps:**
 
 1. Implement input normalization (Unicode NFC, invisible character removal)
-2. Run your agent through [Parse for Agents smuggling detection suite](https://parsethis.ai)
+2. Run your agent through [Parse for Agents smuggling detection suite](https://www.parsethis.ai)
 3. Validate inputs through multiple models with different tokenizers
 4. Enforce least-privilege agent design to limit damage from bypasses
 
-Test your agents against 500+ token smuggling variants. [Try Parse for Agents free](https://parsethis.ai).
+Test your agents against 500+ token smuggling variants. [Try Parse for Agents free](https://www.parsethis.ai).

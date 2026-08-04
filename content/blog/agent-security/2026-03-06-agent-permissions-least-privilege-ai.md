@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["ai agent permissions", "least privilege", "agent access control", "parse-for-agents"]
 description: "AI agents routinely operate with far more permissions than they need. Learn how to apply least privilege to agent systems before an attacker inherits your agent's full access."
-canonical_url: "https://parsethis.ai/blog/agent-permissions-least-privilege-ai"
+canonical_url: "https://www.parsethis.ai/blog/agent-permissions-least-privilege-ai"
 reading_time: "7 min read"
 series: "Agent Security Fundamentals"
 ---
@@ -121,7 +121,7 @@ Parse's prompt analysis detects `privilege_escalation` as one of eight risk cate
 
 ```typescript
 // Parse evaluates incoming prompts for privilege escalation attempts
-const result = await fetch('https://parsethis.ai/api/v1/parse', {
+const result = await fetch('https://www.parsethis.ai/api/v1/parse', {
   method: 'POST',
   headers: { 'Authorization': 'Bearer YOUR_API_KEY' },
   body: JSON.stringify({ prompt: agentInput })
@@ -150,13 +150,13 @@ These gaps represent the next frontier of agent security engineering.
 2. **Scope every key to its minimum required access.** If an agent only calls `/v1/analyze`, its key should only have the `analyze` scope. Remove `admin` from every agent-facing credential.
 3. **Set expiration on all agent keys.** 24-hour keys for development. 30-day keys for production with automated rotation.
 4. **Add rate limits as damage caps.** Set the lowest rate limit your agent can function with. Monitor for agents consistently hitting their limits — it may indicate compromise.
-5. **Scan for privilege escalation attempts.** Run agent inputs through [Parse's prompt analysis](https://parsethis.ai) to detect escalation payloads before they execute.
+5. **Scan for privilege escalation attempts.** Run agent inputs through [Parse's prompt analysis](https://www.parsethis.ai) to detect escalation payloads before they execute.
 
 ## The principle has not changed
 
 Least privilege is a 50-year-old security principle. What has changed is the enforcement surface. When the entity making access decisions is a language model that can be manipulated through its input data, static permission grants are not enough. Agent systems need dynamic, scoped, time-bounded, and independently authorized access — or they need to accept that every permission they grant to an agent is a permission they grant to every attacker who can reach that agent's input.
 
-Scan your agent prompts for privilege escalation attempts. [Try Parse for Agents free](https://parsethis.ai).
+Scan your agent prompts for privilege escalation attempts. [Try Parse for Agents free](https://www.parsethis.ai).
 
 ---
 

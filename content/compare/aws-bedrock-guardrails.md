@@ -26,5 +26,5 @@ Choose Parse for model-neutral agent workflows, marketplace agents, or x402 pay-
 
 - [Amazon Bedrock Guardrails documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails.html)
 - [How Amazon Bedrock Guardrails works](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-how.html)
-- [Parse OpenAPI](https://parsethis.ai/openapi.json)
-- [Parse MCP manifest](https://parsethis.ai/mcp.json)
+- [Parse OpenAPI](https://www.parsethis.ai/openapi.json)
+- [Parse MCP manifest](https://www.parsethis.ai/mcp.json)

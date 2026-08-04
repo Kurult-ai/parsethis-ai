@@ -242,5 +242,5 @@ Honest assessment of what current defenses do not cover:
 ## Further Reading
 
 - [OWASP Agentic Applications Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) — ASI04 (Data Exfiltration), ASI08 (Prompt Injection)
-- [Parse Security Evaluator API](https://parsethis.ai/docs) — Automated injection and exfiltration detection
+- [Parse Security Evaluator API](https://www.parsethis.ai/docs) — Automated injection and exfiltration detection
 - Previous in this series: [Indirect Prompt Injection: When the Attack Hides in Your Agent's Data](/blog/agent-security/indirect-prompt-injection-agent-data)

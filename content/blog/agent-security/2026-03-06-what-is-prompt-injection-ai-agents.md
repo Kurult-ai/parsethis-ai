@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["prompt injection", "ai agent security", "llm vulnerabilities", "parse-for-agents"]
 description: "Prompt injection is the #1 vulnerability in AI agent systems. Learn how attacks work, why agents are uniquely exposed, and how to detect them before damage is done."
-canonical_url: "https://parsethis.ai/blog/what-is-prompt-injection-ai-agents"
+canonical_url: "https://www.parsethis.ai/blog/what-is-prompt-injection-ai-agents"
 reading_time: "8 min read"
 series: "Agent Security Fundamentals"
 ---
@@ -104,7 +104,7 @@ The sandbox catches novel attacks because it tests behavior, not syntax. A never
 Parse for Agents implements behavioral prompt injection detection as a first-class agent service. The `prompt-injection-detect` endpoint runs incoming prompts through an isolated sandbox — an LLM instance with mock tools and monitored outputs — and returns a structured risk assessment:
 
 ```typescript
-const response = await fetch('https://parsethis.ai/api/v1/agents/prompt-injection-detect', {
+const response = await fetch('https://www.parsethis.ai/api/v1/agents/prompt-injection-detect', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -147,7 +147,7 @@ Cost per scan: approximately $0.0001. Latency: under 2 seconds. The trade-off be
 
 Prompt injection is the defining security challenge of the agent era. Pattern matching was a reasonable first attempt. Behavioral detection is what actually works. The agents that survive will be the ones that test every input for what it does, not just what it looks like.
 
-Scan your agent prompts for injection vulnerabilities. [Start with Parse for Agents](https://parsethis.ai).
+Scan your agent prompts for injection vulnerabilities. [Start with Parse for Agents](https://www.parsethis.ai).
 
 ---
 

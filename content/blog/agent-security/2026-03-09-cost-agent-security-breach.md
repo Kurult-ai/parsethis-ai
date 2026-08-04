@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["ai agent security breach cost", "agent security risks", "data breach cost", "parse-for-agents"]
 description: "AI agent security breaches cost $670K more than standard incidents due to autonomous propagation. Here's what operators miss when calculating their risk exposure."
-canonical_url: "https://parsethis.ai/blog/cost-agent-security-breach"
+canonical_url: "https://www.parsethis.ai/blog/cost-agent-security-breach"
 reading_time: "6 min read"
 series: "Agent Security Deep Dives"
 ---
@@ -138,7 +138,7 @@ The most cost-effective agent security measures target the biggest cost drivers:
 Deploy behavioral monitoring that detects agent anomalies in real-time:
 
 ```typescript
-const anomalyCheck = await fetch('https://parsethis.ai/api/v1/agents/behavior-anomaly', {
+const anomalyCheck = await fetch('https://www.parsethis.ai/api/v1/agents/behavior-anomaly', {
   method: 'POST',
   headers: { 'Authorization': 'Bearer YOUR_API_KEY' },
   body: JSON.stringify({
@@ -185,7 +185,7 @@ Security spend that prevents one breach pays for itself 50x over. The question i
 
 1. Calculate your agent breach exposure using the cascade formula above
 2. Audit your agents for privilege inflation and scope reduction opportunities
-3. Deploy behavioral anomaly detection with [Parse for Agents](https://parsethis.ai)
+3. Deploy behavioral anomaly detection with [Parse for Agents](https://www.parsethis.ai)
 4. Establish a shadow AI discovery program before an unsanctioned agent causes a breach
 
-Quantify your agent breach risk. [Try Parse for Agents free](https://parsethis.ai).
+Quantify your agent breach risk. [Try Parse for Agents free](https://www.parsethis.ai).

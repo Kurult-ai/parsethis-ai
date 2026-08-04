@@ -34,6 +34,7 @@ const AUTHORITY_PATTERNS = [
   /\b(verified by|certified by|approved by|authorized by)\b/i,
   // Position claims
   /\b(I am your (boss|manager|supervisor|admin|IT|CEO|CFO|CTO|director))\b/i,
+  /\b(I am (?:the )?(admin|administrator|orchestrator|admin orchestrator|system administrator))\b/i,
   /\b(speaking on behalf of|representing|contact from)\b/i,
   // Legal threats
   /\b(legal action|lawsuit|court|subpoena|warrant|arrest|federal|criminal)\b/i,

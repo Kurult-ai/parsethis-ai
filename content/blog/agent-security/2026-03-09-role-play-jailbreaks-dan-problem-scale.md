@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["role play jailbreak ai agent", "jailbreaking", "prompt injection", "ai agent bypass", "parse-for-agents"]
 description: "Role-play jailbreaks bypass AI agent guardrails by framing malicious requests as fictional scenarios. Here's how DAN-style attacks work at scale and what to do about them."
-canonical_url: "https://parsethis.ai/blog/role-play-jailbreaks-dan-problem-scale"
+canonical_url: "https://www.parsethis.ai/blog/role-play-jailbreaks-dan-problem-scale"
 reading_time: "8 min read"
 series: "Agent Security Deep Dives"
 ---
@@ -104,7 +104,7 @@ The Parse for Agents platform analyzes these signals through behavioral pattern 
 Validate the underlying intent of every request, regardless of framing:
 
 ```typescript
-const intentAnalysis = await fetch('https://parsethis.ai/api/v1/agents/intent-validate', {
+const intentAnalysis = await fetch('https://www.parsethis.ai/api/v1/agents/intent-validate', {
   method: 'POST',
   headers: { 'Authorization': 'Bearer YOUR_API_KEY' },
   body: JSON.stringify({
@@ -158,9 +158,9 @@ Role-play jailbreaks exploit the gap between "what the user says" and "what the 
 
 **Actionable Steps:**
 
-1. Audit your agents for susceptibility to role-play frames using [Parse for Agents sandbox testing](https://parsethis.ai)
+1. Audit your agents for susceptibility to role-play frames using [Parse for Agents sandbox testing](https://www.parsethis.ai)
 2. Implement intent-based validation on all agent inputs
 3. Separate conversational capabilities from execution permissions
 4. Require explicit confirmation that breaks fictional context for high-impact operations
 
-Scan your agent prompts for role-play jailbreak vulnerabilities. [Try Parse for Agents free](https://parsethis.ai).
+Scan your agent prompts for role-play jailbreak vulnerabilities. [Try Parse for Agents free](https://www.parsethis.ai).

@@ -26,7 +26,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "How do I install the Parse skill?",
     answer:
-      'Run curl -s parsethis.ai/skill > ~/.claude/skills/parse.md to install the skill file for Claude Code. The skill teaches the agent when to screen prompts (user input, tool output, forwarded messages) and how to call POST /v1/parse. On first use, the agent self-provisions an API key via POST /v1/keys/generate \u2014 no manual setup required.',
+      'Run curl -s https://www.parsethis.ai/skill > ~/.claude/skills/parse.md to install the skill file for Claude Code. The skill teaches the agent when to screen prompts (user input, tool output, forwarded messages) and how to call POST /v1/parse. On first use, the agent self-provisions an API key via POST /v1/keys/generate \u2014 no manual setup required.',
   },
   {
     question: "What models does Parse support?",
@@ -70,7 +70,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "How do I integrate with Claude Code?",
     answer:
-      "Run curl -s parsethis.ai/skill > ~/.claude/skills/parse.md to install the skill file. Claude Code reads this file and learns when to call POST /v1/parse before executing user prompts, tool outputs, or forwarded messages. The agent should store generated keys in its normal secret store, not in source control.",
+      "Run curl -s https://www.parsethis.ai/skill > ~/.claude/skills/parse.md to install the skill file. Claude Code reads this file and learns when to call POST /v1/parse before executing user prompts, tool outputs, or forwarded messages. The agent should store generated keys in its normal secret store, not in source control.",
   },
   {
     question: "Does Parse support MCP?",

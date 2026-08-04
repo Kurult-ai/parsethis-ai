@@ -21,9 +21,9 @@ Payment facts:
 - Pricing manifest: ${baseUrl}/v1/pricing.
 - Retry header: ${X402_PAYMENT.header}; legacy clients may send ${X402_PAYMENT.legacyHeader}.
 
-Hermes fast path:
-1. If native Hermes commands are available, run: hermes parse pricing, hermes parse x402-status, hermes parse setup --quick, hermes parse test, and hermes parse doctor.
-2. Do not make a paid x402 call unless the operator explicitly approves spending.
+First-use path:
+1. Prefer Bearer auth when PARSE_API_KEY exists; use x402 as the no-account/pay-per-call fallback.
+2. Read ${baseUrl}/v1/pricing, make the unauthenticated request, then retry the identical request with the advertised x402 payment header only after operator spending approval.
 3. Do not print private keys, seed phrases, payment signatures, API keys, or wallet secrets.
 
 Generic implementation steps:
@@ -451,10 +451,10 @@ ${x402Rows}
   <pre><code># pip install x402
 from x402 import wrap_requests
 session = wrap_requests(requests.Session(), wallet)
-res = session.post("https://parsethis.ai/v1/parse", json={"prompt": "..."})</code></pre>
+res = session.post("https://www.parsethis.ai/v1/parse", json={"prompt": "..."})</code></pre>
 
   <h3>CLI</h3>
-  <pre><code>npx @x402/purl POST https://parsethis.ai/v1/parse -d '{"prompt":"..."}'</code></pre>
+  <pre><code>npx @x402/purl POST https://www.parsethis.ai/v1/parse -d '{"prompt":"..."}'</code></pre>
 </div>
 
 <!-- Chunk 6: Decision guide -->

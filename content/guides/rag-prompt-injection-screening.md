@@ -23,7 +23,7 @@ RAG turns documents into instructions-adjacent context. A retrieved chunk can sa
 
 ```ts
 async function screenChunk(text: string, id: string) {
-  const res = await fetch("https://parsethis.ai/v1/parse", {
+  const res = await fetch("https://www.parsethis.ai/v1/parse", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.PARSE_API_KEY}`,

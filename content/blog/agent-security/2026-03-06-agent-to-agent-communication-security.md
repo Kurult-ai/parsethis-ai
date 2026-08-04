@@ -240,4 +240,4 @@ Agent-to-agent communication is the next frontier of AI security. The industry h
 
 ---
 
-*Parse provides multi-agent security analysis for AI agent operators. Our 12-agent pipeline uses phased execution, typed interfaces, and provider isolation to analyze content while containing potential compromise. [Learn more about the Parse API](https://parsethis.ai/developers).*
+*Parse provides multi-agent security analysis for AI agent operators. Our 12-agent pipeline uses phased execution, typed interfaces, and provider isolation to analyze content while containing potential compromise. [Learn more about the Parse API](https://www.parsethis.ai/developers).*

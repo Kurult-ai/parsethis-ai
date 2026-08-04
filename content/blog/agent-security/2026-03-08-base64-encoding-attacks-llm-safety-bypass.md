@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["encoding attacks", "base64 prompt injection", "llm bypass", "safety filters", "parse-for-agents"]
 description: "Base64 and Unicode encoding attacks bypass text-based safety filters. Learn how attackers hide malicious instructions in plain sight and how to detect encoded payloads before execution."
-canonical_url: "https://parsethis.ai/blog/base64-encoding-attacks-llm-safety-bypass"
+canonical_url: "https://www.parsethis.ai/blog/base64-encoding-attacks-llm-safety-bypass"
 reading_time: "9 min read"
 series: "Agent Security Fundamentals"
 ---
@@ -345,4 +345,4 @@ A Base64-encoded payload that causes the LLM to output its system prompt is caug
 
 Encoding attacks will remain effective as long as LLMs decode content that safety filters haven't inspected. The defense is to treat all encodings as potentially malicious, decode everything before allowing it near your agent's tools, and test empirically for injection behavior.
 
-Parse's agent security framework includes encoding-aware scanning as a core layer. [Learn more about securing your agent pipeline](https://parsethis.ai).
+Parse's agent security framework includes encoding-aware scanning as a core layer. [Learn more about securing your agent pipeline](https://www.parsethis.ai).

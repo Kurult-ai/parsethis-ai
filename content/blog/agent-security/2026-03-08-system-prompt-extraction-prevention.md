@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["system prompt extraction prevention", "llm prompt security", "agent injection attacks", "parse-for-agents"]
 description: "Your agent's system prompt contains proprietary logic, API keys, and security boundaries. Here's how attackers extract it—and how to stop them."
-canonical_url: "https://parsethis.ai/blog/system-prompt-extraction-prevention"
+canonical_url: "https://www.parsethis.ai/blog/system-prompt-extraction-prevention"
 reading_time: "12 min read"
 series: "Agent Security Fundamentals"
 ---
@@ -333,4 +333,4 @@ analytics = scanner.get_extraction_analytics(
 
 ---
 
-Scan your agent prompts for extraction vulnerabilities. [Try Parse for Agents free](https://parsethis.ai).
+Scan your agent prompts for extraction vulnerabilities. [Try Parse for Agents free](https://www.parsethis.ai).

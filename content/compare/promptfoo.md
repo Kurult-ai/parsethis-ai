@@ -26,5 +26,5 @@ Use Promptfoo to evaluate whether your agent can be attacked. Use Parse when the
 
 - [Promptfoo red teaming guide](https://www.promptfoo.dev/docs/guides/llm-redteaming/)
 - [Promptfoo GitHub repository](https://github.com/promptfoo/promptfoo)
-- [Parse OpenAPI](https://parsethis.ai/openapi.json)
-- [Parse MCP manifest](https://parsethis.ai/mcp.json)
+- [Parse OpenAPI](https://www.parsethis.ai/openapi.json)
+- [Parse MCP manifest](https://www.parsethis.ai/mcp.json)

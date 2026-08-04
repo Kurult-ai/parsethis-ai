@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://parsethis.ai/schemas/public-screening-holdout-manifest.schema.json",
+  "$id": "https://www.parsethis.ai/schemas/public-screening-holdout-manifest.schema.json",
   "title": "Public Screening Holdout Manifest",
   "description": "Manifest contract for public prompt-screening evidence. Claimable manifests require frozen independent holdout separation and metric flags.",
   "type": "object",

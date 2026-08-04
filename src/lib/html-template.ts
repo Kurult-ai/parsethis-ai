@@ -615,6 +615,9 @@ export function renderPage(options: PageOptions): string {
           <a href="/pricing">Pricing</a>
           <a href="/status">Status</a>
           <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          <a href="/acceptable-use">Acceptable Use</a>
+          <a href="/refund">Refunds</a>
         </div>
       </nav>
     </div>

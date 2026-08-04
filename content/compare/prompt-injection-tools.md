@@ -7,7 +7,7 @@ author: "Parse"
 category: "compare"
 tags: ["comparison", "prompt injection", "tools", "agent security"]
 description: "A factual comparison of prompt injection detection and prompt protection tools for AI agents."
-canonical_url: "https://parsethis.ai/compare/prompt-injection-tools"
+canonical_url: "https://www.parsethis.ai/compare/prompt-injection-tools"
 reading_time: 6
 ---
 

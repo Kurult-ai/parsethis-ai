@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../auth.js";
 import { prisma } from "../db.js";
+import { serviceDependencyProblem } from "../lib/problem-response.js";
 import type { AppEnv } from "../types.js";
 
 export const screeningMetricsRoutes = new Hono<AppEnv>();
@@ -47,6 +48,6 @@ screeningMetricsRoutes.get("/v1/screening/metrics", authMiddleware("evaluate"), 
     });
   } catch (err) {
     console.error("[screening-metrics] query error:", (err as Error).message);
-    return c.json({ error: "Failed to query screening metrics" }, 500);
+    return serviceDependencyProblem(c, err);
   }
 });

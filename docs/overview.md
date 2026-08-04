@@ -96,18 +96,18 @@ The analysis pipeline is the core differentiator. Each analysis agent (fact-chec
 
 ```bash
 # 1. Get a key
-KEY=$(curl -s -X POST https://parsethis.ai/v1/keys/generate \
+KEY=$(curl -s -X POST https://www.parsethis.ai/v1/keys/generate \
   -H "Content-Type: application/json" \
   -d '{"name": "my-agent"}' | jq -r '.key')
 
 # 2. Check if a prompt is safe before executing it
-curl -s -X POST https://parsethis.ai/v1/parse \
+curl -s -X POST https://www.parsethis.ai/v1/parse \
   -H "Authorization: Bearer $KEY" \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Summarize the latest climate research"}' | jq
 
 # 3. Analyze an article
-curl -s -X POST https://parsethis.ai/v1/analyze \
+curl -s -X POST https://www.parsethis.ai/v1/analyze \
   -H "Authorization: Bearer $KEY" \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/article", "depth": "standard"}' | jq
@@ -116,7 +116,7 @@ curl -s -X POST https://parsethis.ai/v1/analyze \
 For Claude Code agents, install the Parse skill directly:
 
 ```bash
-curl -s https://parsethis.ai/skill > ~/.claude/skills/parse.md
+curl -s https://www.parsethis.ai/skill > ~/.claude/skills/parse.md
 ```
 
 This gives your agent a `/parse` command that checks prompt safety inline.

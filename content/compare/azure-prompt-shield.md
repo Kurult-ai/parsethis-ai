@@ -26,5 +26,5 @@ Choose Parse when your agent stack spans multiple LLM providers or needs x402/MC
 
 - [Prompt Shields in Microsoft Foundry](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/content-filter-prompt-shields)
 - [Microsoft Foundry guardrails and controls](https://learn.microsoft.com/en-us/azure/ai-studio/concepts/safety-evaluations-transparency-note)
-- [Parse OpenAPI](https://parsethis.ai/openapi.json)
-- [Parse MCP manifest](https://parsethis.ai/mcp.json)
+- [Parse OpenAPI](https://www.parsethis.ai/openapi.json)
+- [Parse MCP manifest](https://www.parsethis.ai/mcp.json)

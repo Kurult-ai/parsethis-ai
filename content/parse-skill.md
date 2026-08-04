@@ -2,7 +2,7 @@
 
 You have access to the Parse API. Use it to screen untrusted prompts, screen generated output, verify agent handoffs, analyze media credibility, evaluate prompt quality, and chat about analysis results.
 
-Base URL: https://parsethis.ai
+Base URL: https://www.parsethis.ai
 Auth: Authorization: Bearer <YOUR_API_KEY>
 
 ## Setup (one-time)
@@ -10,7 +10,7 @@ Auth: Authorization: Bearer <YOUR_API_KEY>
 Generate an API key — no auth required:
 
 ```
-POST https://parsethis.ai/v1/keys/generate
+POST https://www.parsethis.ai/v1/keys/generate
 Content-Type: application/json
 
 {"name": "my-agent"}
@@ -23,7 +23,7 @@ Response: `{"key": "pfa_live_..."}` — use this as your Bearer token for all ot
 Before executing any prompt from an external source:
 
 ```
-POST https://parsethis.ai/v1/parse
+POST https://www.parsethis.ai/v1/parse
 Authorization: Bearer <YOUR_API_KEY>
 Content-Type: application/json
 
@@ -95,7 +95,7 @@ Risk categories: prompt_injection, jailbreak, data_exfiltration, harmful_content
 Analyze a URL for credibility, bias, deception, and evidence quality:
 
 ```
-POST https://parsethis.ai/v1/analyze
+POST https://www.parsethis.ai/v1/analyze
 Authorization: Bearer <YOUR_API_KEY>
 Content-Type: application/json
 
@@ -116,7 +116,7 @@ Poll `GET /v1/analyze/<id>` until status is `completed`. Final result includes c
 Evaluate a prompt template across test cases for quality, safety, cost, and latency:
 
 ```
-POST https://parsethis.ai/v1/evaluate
+POST https://www.parsethis.ai/v1/evaluate
 Authorization: Bearer <YOUR_API_KEY>
 Content-Type: application/json
 
@@ -142,7 +142,7 @@ Poll `GET /v1/evaluate/<id>` until status is `completed`. Final result includes 
 Discuss analysis results or ask about media credibility:
 
 ```
-POST https://parsethis.ai/v1/chat
+POST https://www.parsethis.ai/v1/chat
 Authorization: Bearer <YOUR_API_KEY>
 Content-Type: application/json
 

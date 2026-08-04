@@ -17,7 +17,7 @@ Call `POST /v1/parse` on tool output before the agent runs shell commands, write
 
 ```ts
 const toolResult = await runReadOnlyDiagnostic();
-const screen = await fetch("https://parsethis.ai/v1/parse", {
+const screen = await fetch("https://www.parsethis.ai/v1/parse", {
   method: "POST",
   headers: {
     Authorization: `Bearer ${process.env.PARSE_API_KEY}`,

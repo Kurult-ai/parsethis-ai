@@ -184,8 +184,11 @@ export const HARMFUL_OUTPUT_PATTERNS: Array<{
   severity: number;
   label: string;
 }> = [
-  { pattern: /\b(?:here(?:'s|\s+is)|this\s+is)\s+(?:the\s+)?(?:system\s+prompt|system\s+message|developer\s+instructions?|instructions?)\s+(?:I\s+was\s+given|I\s+received|that\s+I\s+was\s+given)\b/i, category: "system_prompt_leak", severity: 8, label: "System prompt reflection" },
-  { pattern: /\bmy\s+(?:system\s+prompt|system\s+message|developer\s+instructions?|instructions?)\s+(?:are|were|say|said|state)\b/i, category: "system_prompt_leak", severity: 8, label: "System instructions reflection" },
+  { pattern: /\b(?:here(?:'s|\s+is|\s+are)|this\s+is)\s+(?:the\s+)?(?:system\s+prompt|system\s+message|developer\s+instructions?|instructions?)\s+(?:I\s+was\s+given|I\s+received|that\s+I\s+was\s+given)\b/i, category: "system_prompt_leak", severity: 8, label: "System prompt reflection" },
+  { pattern: /(?:^|[\r\n])\s*(?:system\s+prompt|developer\s+message)\s*:\s*\S/i, category: "system_prompt_leak", severity: 8, label: "Direct prompt block reflection" },
+  { pattern: /\b(?:my\s+(?:system\s+prompt|system\s+message|developer\s+instructions?|instructions?)|the\s+developer\s+message)\s+(?:is|are|were|says?|said|states?)\b/i, category: "system_prompt_leak", severity: 8, label: "System instructions reflection" },
+  { pattern: /\b(?:system\s+prompt|developer\s+message|system\s+message)\s*:\s*.{0,160}\b(?:reveal|disclose|secret|api\s*keys?|credentials?|do\s+not|never|ignore)\b/i, category: "system_prompt_leak", severity: 8, label: "Protected prompt transcript in output" },
+  { pattern: /\b(?:the\s+)?(?:developer\s+message|system\s+prompt|system\s+message)\s+(?:says|states|said)\s*:?\s*.{0,160}\b(?:never|do\s+not|don't|reveal|disclose|ignore|secret|instruction)\b/i, category: "system_prompt_leak", severity: 8, label: "Protected instruction transcript in output" },
   { pattern: /\bI\s+(?:am|was)\s+instructed\s+to\b.{0,160}\b(?:never|always|must|do\s+not|don't|avoid|refuse|reveal|assistant)\b/i, category: "system_prompt_leak", severity: 7, label: "Instruction reflection" },
   { pattern: /\b(?:here\s+is|here's)\s+my\s+(?:prompt|system\s+message|instructions?)\b/i, category: "system_prompt_leak", severity: 8, label: "Prompt reflection" },
   { pattern: /\b(?:estas\s+son|este\s+es)\s+mis\s+(?:instrucciones|mensaje|prompt)\s+(?:del\s+sistema|de\s+sistema)\b/i, category: "system_prompt_leak", severity: 8, label: "System prompt reflection (Spanish)" },

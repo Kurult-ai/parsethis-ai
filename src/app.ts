@@ -18,8 +18,9 @@ import { exposureRoutes } from "./routes/exposure.js";
 import { billingRoutes, billingWebhookRoute } from "./routes/billing.js";
 import { adminRoutes } from "./routes/admin.js";
 import { playgroundRoutes } from "./routes/playground.js";
+import { approvalRoutes } from "./routes/approvals.js";
 import { contentNegotiation } from "./lib/content-negotiation.js";
-import { problem, ErrorCode } from "./lib/problem-response.js";
+import { problem, ErrorCode, isServiceDependencyError, serviceDependencyProblem } from "./lib/problem-response.js";
 
 export const app = new Hono();
 
@@ -33,6 +34,10 @@ app.onError((err, c) => {
       code: ErrorCode.VALIDATION_INVALID_INPUT,
       retryable: false,
     });
+  }
+  if (isServiceDependencyError(err)) {
+    console.error(`[ERROR] ${c.req.method} ${c.req.path}:`, err.message);
+    return serviceDependencyProblem(c, err);
   }
   console.error(`[ERROR] ${c.req.method} ${c.req.path}:`, err.message);
   return problem(c, {
@@ -126,4 +131,5 @@ app.route("/", agentTrustRoutes);
 app.route("/", screeningMetricsRoutes);
 app.route("/", billingRoutes);
 app.route("/", adminRoutes);
+app.route("/", approvalRoutes);
 app.route("/", playgroundRoutes);

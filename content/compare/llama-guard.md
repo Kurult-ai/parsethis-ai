@@ -26,5 +26,5 @@ Choose Parse when autonomous integration speed matters. Choose self-hosted Llama
 
 - [Meta Prompt Guard documentation](https://meta-llama.github.io/PurpleLlama/CyberSecEval/docs/prompt_guard/overview)
 - [Meta Prompt Guard model card](https://meta-llama.github.io/PurpleLlama/CyberSecEval/docs/prompt_guard/model_card)
-- [Parse OpenAPI](https://parsethis.ai/openapi.json)
-- [Parse MCP manifest](https://parsethis.ai/mcp.json)
+- [Parse OpenAPI](https://www.parsethis.ai/openapi.json)
+- [Parse MCP manifest](https://www.parsethis.ai/mcp.json)

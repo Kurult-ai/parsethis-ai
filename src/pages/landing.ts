@@ -179,7 +179,7 @@ Verification required before reporting done:
       <h1>Prompt protection for agents that touch the world.</h1>
       <p class="pa-hero-copy">Parse screens untrusted text before it reaches tools, memory, credentials, payments, code execution, or users. It is built for independent AI developers who need agent-native security without vendor lock-in.</p>
       <div class="pa-hero-actions">
-        <a href="/playground" class="btn btn-primary">Run test lab</a>
+        <a href="/playground" class="btn btn-primary">Get started for free</a>
         <a href="/docs/quickstart" class="btn btn-outline">Get API key</a>
       </div>
       <div class="pa-signal-row" aria-label="Product signals">
@@ -259,7 +259,7 @@ Verification required before reporting done:
     <div>
       <h2>Make the risk visible before you buy.</h2>
       <p class="pa-section-intro">The public test lab generates safe test resources so developers can see whether a target model or tool-using agent resisted, partially followed, or completed a harmless callback.</p>
-      <p><a href="/playground" class="btn btn-primary">Open the test lab</a></p>
+      <p><a href="/playground" class="btn btn-primary">Get started for free</a></p>
     </div>
     <div class="pa-lab">
       <div class="pa-lab-main">
@@ -318,7 +318,7 @@ Verification required before reporting done:
       <p>Start with the public test lab, then wire the same decision into your agent runtime.</p>
     </div>
     <div class="pa-hero-actions" style="margin:0;">
-      <a href="/playground" class="btn btn-primary">Run test lab</a>
+      <a href="/playground" class="btn btn-primary">Get started for free</a>
       <a href="/docs/quickstart" class="btn btn-outline">Get API key</a>
     </div>
   </section>

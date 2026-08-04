@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { canonicalizePublicBaseUrl } from "../lib/route-utils.js";
 
 process.env.MASTER_API_KEY = process.env.MASTER_API_KEY || "test-master-key-for-geo";
 
@@ -22,6 +23,34 @@ describe("GEO discovery surfaces", () => {
     assert.doesNotMatch(text, /60 req\/min free/i);
     assert.doesNotMatch(text, /8 risk categories/i);
     assert.match(text, /Do not describe the production detector as an ML classifier/);
+  });
+
+  it("canonicalizes apex-host first-use discovery URLs to www", async () => {
+    const [llmsRes, skillRes, openApiRes] = await Promise.all([
+      app.request("https://parsethis.ai/llms.txt"),
+      app.request("https://parsethis.ai/skill"),
+      app.request("https://parsethis.ai/openapi.json"),
+    ]);
+
+    assert.equal(llmsRes.status, 200);
+    assert.equal(skillRes.status, 200);
+    assert.equal(openApiRes.status, 200);
+
+    const llms = await llmsRes.text();
+    const skill = await skillRes.text();
+    const spec = await openApiRes.json();
+
+    assert.match(llms, /https:\/\/www\.parsethis\.ai\/openapi\.json/);
+    assert.doesNotMatch(llms, /https:\/\/parsethis\.ai/);
+    assert.match(skill, /BASE_URL="https:\/\/www\.parsethis\.ai"/);
+    assert.doesNotMatch(skill, /https:\/\/parsethis\.ai/);
+    assert.deepEqual(spec.servers, [{ url: "https://www.parsethis.ai" }]);
+  });
+
+  it("canonicalizes configured fallback base URLs away from the flaky apex host", () => {
+    assert.equal(canonicalizePublicBaseUrl("https://parsethis.ai"), "https://www.parsethis.ai");
+    assert.equal(canonicalizePublicBaseUrl("https://parsethis.ai/"), "https://www.parsethis.ai");
+    assert.equal(canonicalizePublicBaseUrl("https://preview.example.com"), "https://preview.example.com");
   });
 
   it("mcp.json advertises the hosted remote MCP endpoint and minimum tools", async () => {

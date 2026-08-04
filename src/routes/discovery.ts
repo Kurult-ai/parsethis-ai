@@ -88,6 +88,7 @@ discoveryRoutes.get("/sitemap.xml", (c) => {
     { loc: "/guides/owner-approval-private-disclosures", priority: "0.85", changefreq: "weekly", lastmod: "2026-05-04" },
     { loc: "/guides/prompt-injection-detection", priority: "0.9", changefreq: "weekly", lastmod: "2026-05-03" },
     { loc: "/guides/agent-security", priority: "0.8", changefreq: "weekly", lastmod: "2026-05-03" },
+    { loc: "/guides/agent-trust-boundary-audit", priority: "0.85", changefreq: "weekly", lastmod: "2026-06-01" },
     { loc: "/compare/prompt-injection-tools", priority: "0.8", changefreq: "weekly", lastmod: "2026-05-03" },
     { loc: "/llms.txt", priority: "0.9", changefreq: "daily", lastmod: "2026-05-03" },
     { loc: "/llms-full.txt", priority: "0.9", changefreq: "daily", lastmod: "2026-05-03" },

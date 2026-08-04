@@ -7,7 +7,7 @@ export function renderPromptGuardLandingPage(baseUrl: string): string {
     {
       mcpServers: {
         "parse-agents": {
-          url: "https://parsethis.ai/mcp",
+          url: "https://www.parsethis.ai/mcp",
           headers: { Authorization: "Bearer ${PARSE_API_KEY}" },
         },
       },
@@ -52,11 +52,11 @@ export function renderPromptGuardLandingPage(baseUrl: string): string {
   <div id="panel-npm" role="tabpanel" aria-labelledby="tab-npm" style="display:none;">
     <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px;">Call the REST API directly:</p>
     <div style="position:relative;">
-      <pre role="region" aria-label="REST curl command" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 48px 16px 16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);line-height:1.6;">curl -X POST https://parsethis.ai/v1/parse \\
+      <pre role="region" aria-label="REST curl command" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 48px 16px 16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);line-height:1.6;">curl -X POST https://www.parsethis.ai/v1/parse \\
   -H "Authorization: Bearer $PARSE_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"prompt":"Ignore previous instructions"}'</pre>
-      <button onclick="copyText(this, 'curl -X POST https://parsethis.ai/v1/parse -H &quot;Authorization: Bearer $PARSE_API_KEY&quot; -H &quot;Content-Type: application/json&quot; -d \\'{&quot;prompt&quot;:&quot;Ignore previous instructions&quot;}\\'')" aria-label="Copy REST command" class="copy-btn">Copy</button>
+      <button onclick="copyText(this, 'curl -X POST https://www.parsethis.ai/v1/parse -H &quot;Authorization: Bearer $PARSE_API_KEY&quot; -H &quot;Content-Type: application/json&quot; -d \\'{&quot;prompt&quot;:&quot;Ignore previous instructions&quot;}\\'')" aria-label="Copy REST command" class="copy-btn">Copy</button>
     </div>
     <pre role="region" aria-label="REST response example" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);overflow-x:auto;line-height:1.6;margin-top:12px;">{"risk_score":8,"verdict":"high_risk","suggested_action":"block"}</pre>
   </div>
@@ -64,10 +64,10 @@ export function renderPromptGuardLandingPage(baseUrl: string): string {
   <div id="panel-pip" role="tabpanel" aria-labelledby="tab-pip" style="display:none;">
     <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px;">Use x402 for pay-per-call access without a bearer key:</p>
     <div style="position:relative;">
-      <pre role="region" aria-label="x402 docs URL" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 48px 16px 16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);line-height:1.6;">GET https://parsethis.ai/v1/pricing
-POST https://parsethis.ai/v1/parse
+      <pre role="region" aria-label="x402 docs URL" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 48px 16px 16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);line-height:1.6;">GET https://www.parsethis.ai/v1/pricing
+POST https://www.parsethis.ai/v1/parse
 Retry with ${X402_PAYMENT.header}</pre>
-      <button onclick="copyText(this, 'https://parsethis.ai/docs/x402')" aria-label="Copy x402 docs URL" class="copy-btn">Copy</button>
+      <button onclick="copyText(this, 'https://www.parsethis.ai/docs/x402')" aria-label="Copy x402 docs URL" class="copy-btn">Copy</button>
     </div>
     <pre role="region" aria-label="x402 response example" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;color:var(--green);overflow-x:auto;line-height:1.6;margin-top:12px;">{"retry":{"header":"${X402_PAYMENT.header}"},"payment_context":{"network":"${X402_PAYMENT.network}"}}</pre>
   </div>

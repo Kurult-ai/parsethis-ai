@@ -28,7 +28,7 @@ This guide maps each OWASP LLM risk to the realities of agent operations. What d
 
 A state-sponsored operation in September 2025 used prompt injection through Claude Code to compromise approximately 30 organizations across technology, finance, government, and manufacturing sectors. The AI carried out 80-90% of the operation autonomously.
 
-**What to do:** Treat every external input as potentially hostile. Parse implements layered detection — [28 pattern-matching rules](https://parsethis.ai) covering prompt injection, jailbreak, data exfiltration, privilege escalation, social engineering, and code execution categories, plus structural analysis for obfuscation techniques (base64 encoding, mixed scripts, padding attacks), plus LLM-based deep analysis for borderline cases that pattern matching misses.
+**What to do:** Treat every external input as potentially hostile. Parse implements layered detection — [28 pattern-matching rules](https://www.parsethis.ai) covering prompt injection, jailbreak, data exfiltration, privilege escalation, social engineering, and code execution categories, plus structural analysis for obfuscation techniques (base64 encoding, mixed scripts, padding attacks), plus LLM-based deep analysis for borderline cases that pattern matching misses.
 
 ---
 
@@ -163,4 +163,4 @@ Your agents are already running. The question is whether you know what they are 
 - [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/)
 - [OWASP Agentic Security Initiative](https://genai.owasp.org/)
 - [NIST AI Agent Standards Initiative (Feb 2026)](https://www.nist.gov)
-- [Parse — Agent Prompt Safety Shield](https://parsethis.ai)
+- [Parse — Agent Prompt Safety Shield](https://www.parsethis.ai)

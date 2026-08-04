@@ -75,6 +75,26 @@ describe("Public Routes", () => {
     assert.ok(html.includes("Protect Nango action functions"), "Docs index should name the integration use case");
   });
 
+  it("links and serves the Agent Trust Boundary Audit offer", async () => {
+    const docsRes = await req("/docs");
+    assert.equal(docsRes.status, 200);
+    const docsHtml = await docsRes.text();
+    assert.ok(docsHtml.includes('/guides/agent-trust-boundary-audit'), "Docs index should link the audit offer");
+
+    const htmlRes = await req("/guides/agent-trust-boundary-audit");
+    assert.equal(htmlRes.status, 200);
+    const html = await htmlRes.text();
+    assert.ok(html.includes("Agent Trust Boundary Audit"));
+    assert.ok(html.includes("Your agent does not need more tools"));
+    assert.ok(html.includes("No exploit payload dumping"));
+
+    const mdRes = await req("/guides/agent-trust-boundary-audit", { headers: { Accept: "text/markdown" } });
+    assert.equal(mdRes.status, 200);
+    assert.match(mdRes.headers.get("content-type") || "", /text\/markdown/);
+    const markdown = await mdRes.text();
+    assert.ok(markdown.includes("trust boundary"));
+  });
+
   it("serves a copy-pasteable Nango action-functions guide as HTML and Markdown", async () => {
     const htmlRes = await req("/guides/nango-action-functions");
     assert.equal(htmlRes.status, 200);
@@ -115,6 +135,22 @@ describe("Public Routes", () => {
     assert.equal(res.status, 200);
     const contentType = res.headers.get("content-type");
     assert.ok(contentType?.includes("text/html"));
+  });
+
+  it("serves blog posts through category and canonical categoryless URLs", async () => {
+    const categoryRes = await req("/blog/agent-security/agent-permissions-least-privilege-ai");
+    assert.equal(categoryRes.status, 200);
+    assert.match(await categoryRes.text(), /Least Privilege for AI Systems/);
+
+    const canonicalRes = await req("/blog/agent-permissions-least-privilege-ai");
+    assert.equal(canonicalRes.status, 200);
+    assert.match(await canonicalRes.text(), /Least Privilege for AI Systems/);
+
+    const markdownRes = await req("/blog/agent-permissions-least-privilege-ai", {
+      headers: { Accept: "text/markdown" },
+    });
+    assert.equal(markdownRes.status, 200);
+    assert.match(markdownRes.headers.get("content-type") || "", /text\/markdown/);
   });
 
   it("GET /nonexistent returns 404", async () => {

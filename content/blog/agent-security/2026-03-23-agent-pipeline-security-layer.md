@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["agent pipeline security", "AI agent architecture", "multi-agent security", "parse-for-agents"]
 description: "Learn how to build a security layer for your AI agent pipeline. Covers threat modeling, common vulnerabilities, and implementation patterns with code examples."
-canonical_url: "https://parsethis.ai/blog/agent-pipeline-security-layer"
+canonical_url: "https://www.parsethis.ai/blog/agent-pipeline-security-layer"
 reading_time: "12 min read"
 ---
 
@@ -128,7 +128,7 @@ class SecurityGateway:
 ### Integration with Parse for Agents
 
 ```typescript
-const response = await fetch('https://parsethis.ai/api/v1/agents/prompt-injection-detect', {
+const response = await fetch('https://www.parsethis.ai/api/v1/agents/prompt-injection-detect', {
   method: 'POST',
   headers: {
     'Authorization': 'Bearer YOUR_PARSE_API_KEY',
@@ -476,4 +476,4 @@ if (!sanitized.safe) {
 
 ---
 
-Scan your agent pipeline for prompt injection vulnerabilities. [Try Parse for Agents free](https://parsethis.ai).
+Scan your agent pipeline for prompt injection vulnerabilities. [Try Parse for Agents free](https://www.parsethis.ai).

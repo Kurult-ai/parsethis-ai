@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["prompt injection detection methods", "regex prompt injection", "ai agent security", "parse-for-agents"]
 description: "Pattern matching catches 12 known injection phrases. Attackers use thousands more. Learn why regex-based detection fails and what to use instead."
-canonical_url: "https://parsethis.ai/blog/why-pattern-matching-fails-prompt-injection"
+canonical_url: "https://www.parsethis.ai/blog/why-pattern-matching-fails-prompt-injection"
 reading_time: "7 min read"
 series: "Agent Security Fundamentals"
 ---
@@ -125,7 +125,7 @@ Even if the injection passes all input checks, monitor the agent's output for an
 Parse for Agents runs all four layers on every agent interaction. The safety evaluator starts with deterministic pattern matching for speed, then escalates to a dedicated deception detection agent that uses LLM-based analysis to catch what patterns miss.
 
 ```typescript
-const result = await fetch('https://parsethis.ai/api/v1/agents/evaluate', {
+const result = await fetch('https://www.parsethis.ai/api/v1/agents/evaluate', {
   method: 'POST',
   headers: { 'Authorization': 'Bearer YOUR_API_KEY' },
   body: JSON.stringify({
@@ -168,4 +168,4 @@ The multi-agent analysis pipeline runs up to 10 specialized agents — including
 
 ---
 
-Scan your agent pipeline for the injection attacks your regex misses. [Try Parse for Agents free](https://parsethis.ai).
+Scan your agent pipeline for the injection attacks your regex misses. [Try Parse for Agents free](https://www.parsethis.ai).

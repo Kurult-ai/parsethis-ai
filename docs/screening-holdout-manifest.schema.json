@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://parsethis.ai/schemas/screening-holdout-manifest.schema.json",
+  "$id": "https://www.parsethis.ai/schemas/screening-holdout-manifest.schema.json",
   "title": "Internal/Hermes Screening Holdout Manifest",
   "description": "Manifest contract for internal/Hermes runtime evidence. Claimable manifests require frozen independent holdout separation, generated_count=0, and metric flags.",
   "type": "object",

@@ -37,7 +37,7 @@ Generated output is handled separately: use `POST /v1/screen-output` before forw
 
 ```ts
 async function guardedToolBoundary(text: string, source: string) {
-  const res = await fetch("https://parsethis.ai/v1/parse", {
+  const res = await fetch("https://www.parsethis.ai/v1/parse", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.PARSE_API_KEY}`,

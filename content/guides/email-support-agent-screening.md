@@ -17,7 +17,7 @@ Screen the inbound message before drafting, routing, clicking links, updating CR
 
 ```ts
 const inbound = await inbox.readMessage(messageId);
-const screen = await fetch("https://parsethis.ai/v1/parse", {
+const screen = await fetch("https://www.parsethis.ai/v1/parse", {
   method: "POST",
   headers: {
     Authorization: `Bearer ${process.env.PARSE_API_KEY}`,

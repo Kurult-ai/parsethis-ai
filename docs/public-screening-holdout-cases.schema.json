@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://parsethis.ai/schemas/public-screening-holdout-cases.schema.json",
+  "$id": "https://www.parsethis.ai/schemas/public-screening-holdout-cases.schema.json",
   "title": "Public Screening Holdout Cases",
   "description": "Future independent public prompt-screening holdout input. JSONL inputs must use the row schema for each line.",
   "oneOf": [

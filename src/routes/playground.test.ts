@@ -35,10 +35,10 @@ describe("Prompt safety playground", () => {
     assert.match(html, /Grade pasted output/);
     assert.match(html, /Live agent simulation/);
     assert.match(html, /Front-end simulation only/);
-    assert.match(html, /parsePlaygroundBridge/);
-    assert.match(html, /parseThreadBridge/);
+    assert.match(html, /messageThreadBridge/);
+    assert.match(html, /threadBridge/);
     assert.match(html, /Agent queue/);
-    assert.match(html, /window\.parseOpsQueue\.ready/);
+    assert.match(html, /window\.opsQueue\.ready/);
     assert.match(html, /Copy work-queue prompt/);
     assert.match(html, /Copy JSON queue/);
     assert.match(html, /Copy result report/);
@@ -48,10 +48,10 @@ describe("Prompt safety playground", () => {
     assert.match(html, /items/);
     assert.match(html, /threads/);
     assert.match(html, /replyToThread/);
-    assert.match(html, /parseOpsQueue/);
-    assert.match(html, /parseWorkQueue = window\.parseOpsQueue/);
-    assert.match(html, /Open https:\/\/www\.parsethis\.ai\/playground/);
-    assert.match(html, /queueApi = window\.parseOpsQueue \|\| window\.parseWorkQueue/);
+    assert.match(html, /opsQueue/);
+    assert.match(html, /workQueue/);
+    assert.doesNotMatch(html, /Open https:\/\/www\.parsethis\.ai\/playground/);
+    assert.match(html, /queueApi = window\.opsQueue \|\| window\.workQueue/);
     assert.match(html, /Open thread\.source_url first when present/);
     assert.match(html, /Use thread\.local_context as the available background/);
     assert.match(html, /const report = await queueApi\.report/);
@@ -68,6 +68,22 @@ describe("Prompt safety playground", () => {
     assert.doesNotMatch(html, /primary_work_item/);
     assert.doesNotMatch(html, /submitPrimaryResult/);
     assert.match(html, /Export redacted report/);
+  });
+
+
+  it("keeps copied agent-facing prompts neutral", async () => {
+    const res = await app.request("/playground");
+    assert.equal(res.status, 200);
+    const html = await res.text();
+
+    const agentPromptSource =
+      html.match(new RegExp(String.raw`agentPromptText\(\) \{[\s\S]*?\n    \},\n    async copyAgentPrompt`))?.[0] || "";
+    assert.ok(agentPromptSource.length > 0, "agent prompt source should be present");
+    assert.match(agentPromptSource, /window\.opsQueue \|\| window\.workQueue/);
+    assert.doesNotMatch(agentPromptSource, /\bparse(?:this)?\b|parsethis\.ai|playground|test|simulation|eval|benchmark/i);
+
+    assert.match(html, /Submit each reply by calling: window\.threadBridge\.submitAgentReply/);
+    assert.doesNotMatch(html, /Submit each reply by calling: window\.parseThreadBridge\.submitAgentReply/);
   });
 
   it("records playground funnel events without accepting arbitrary event names", async () => {

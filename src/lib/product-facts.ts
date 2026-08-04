@@ -5,7 +5,7 @@ export const PRODUCT = {
   name: "Parse",
   shortName: "Parse",
   domain: "parsethis.ai",
-  canonicalBaseUrl: "https://parsethis.ai",
+  canonicalBaseUrl: "https://www.parsethis.ai",
   modelFacingName: "Parse prompt protection API for AI agents",
   category: "prompt protection API for AI agents",
   description:

@@ -6,7 +6,7 @@ author: "Parse Team"
 category: "Agent Security"
 tags: ["ai agent tool access security", "agent permissions", "tool use security", "parse-for-agents"]
 description: "A practical guide to securing your AI agent's tool access with scoped credentials, rate limits, and runtime detection of privilege escalation attempts."
-canonical_url: "https://parsethis.ai/blog/how-to-secure-ai-agent-tool-access"
+canonical_url: "https://www.parsethis.ai/blog/how-to-secure-ai-agent-tool-access"
 reading_time: "8 min read"
 series: "Agent Security Fundamentals"
 ---
@@ -158,7 +158,7 @@ The combined risk score determines the verdict: `safe`, `low_risk`, `medium_risk
 
 6. **Monitor for escalation patterns.** Watch your agent logs for privilege escalation attempts: keywords like `bypass`, `disable`, `--no-verify`, `sudo`, `admin access`. These are signals that someone is probing your agent's tool boundaries.
 
-7. **Use x402 for zero-standing-privilege.** For sensitive operations, the [x402 payment protocol](https://parsethis.ai/docs/x402) enables per-request authorization without persistent API keys. Each request carries its own payment proof — no stored credentials to steal.
+7. **Use x402 for zero-standing-privilege.** For sensitive operations, the [x402 payment protocol](https://www.parsethis.ai/docs/x402) enables per-request authorization without persistent API keys. Each request carries its own payment proof — no stored credentials to steal.
 
 ## What This Looks Like in Practice
 
@@ -194,4 +194,4 @@ No single layer is sufficient. All of them together make tool abuse substantiall
 
 ---
 
-Scan your agent's prompts for privilege escalation and tool misuse. [Try Parse for Agents free](https://parsethis.ai).
+Scan your agent's prompts for privilege escalation and tool misuse. [Try Parse for Agents free](https://www.parsethis.ai).
