@@ -30,6 +30,14 @@ import {
   testSIEMConnection,
   type PrismaSIEMConfig,
 } from "./siem-forwarder.js";
+import {
+  evaluateAlertRules,
+  resolveDestinations,
+  screeningEventToAlertInput,
+  dbRowToAlertRule,
+  type AlertRule,
+  type AlertRuleDBRow,
+} from "./alert-rules.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -169,6 +177,24 @@ async function forwardEventToAllConfigs(
   return results.every((r) => r);
 }
 
+// ─── Alert rule helpers ─────────────────────────────────────────────────
+
+/**
+ * Fetch all alert rules from the database.
+ * Returns an empty array if the table doesn't exist yet.
+ */
+async function fetchAlertRules(): Promise<AlertRule[]> {
+  try {
+    const rows = await prisma.$queryRaw<AlertRuleDBRow[]>`
+      SELECT * FROM alert_rules WHERE enabled = true ORDER BY priority ASC
+    `;
+    return rows.map(dbRowToAlertRule);
+  } catch {
+    // Table may not exist yet — no alert rules
+    return [];
+  }
+}
+
 // ─── Main poll handler ───────────────────────────────────────────────────
 
 /**
@@ -198,6 +224,9 @@ export async function pollAndForward(): Promise<{
     return { forwarded: 0, failed: 0, lastForwarded: lastTS.toISOString() };
   }
 
+  // Fetch alert routing rules (empty if table doesn't exist — backward compatible)
+  const alertRules = await fetchAlertRules();
+
   // Fetch ScreeningEvents since lastTS
   const events = await prisma.screeningEvent.findMany({
     where: { createdAt: { gt: lastTS } },
@@ -214,44 +243,58 @@ export async function pollAndForward(): Promise<{
   let failedCount = 0;
   let newestForwarded = lastTS;
 
-  // Group configs by org for batch awareness
-  // Process events sequentially to maintain ordering and watermark accuracy
-  // If batch_size is configured per config (from metadata column), we batch
-  for (const config of configs) {
-    // Forward screening events to configs that subscribe to "screening"
-    const relevantEvents = config.eventTypes.includes("screening") ? events : [];
+  // Active config IDs for destination resolution
+  const activeConfigIds = configs
+    .filter((c) => c.active && c.eventTypes.includes("screening"))
+    .map((c) => c.id);
+  const configMap = new Map(configs.map((c) => [c.id, c]));
 
-    if (relevantEvents.length === 0) continue;
+  // Process each event: evaluate alert rules to determine target destinations
+  for (const evt of events) {
+    const meta = (evt.metadata ?? {}) as Record<string, unknown>;
+    const agentId = meta.agent_id as string | undefined;
 
-    // Determine batch size from config metadata (if available)
-    const batchSize = 1; // Default: one at a time (forwardToSIEM handles retries internally)
+    // Build alert input from raw screening event
+    const alertInput = screeningEventToAlertInput({
+      verdict: evt.verdict,
+      riskScore: evt.riskScore,
+      categories: evt.categories,
+      metadata: evt.metadata,
+    });
 
-    // Process in chunks
-    for (let i = 0; i < relevantEvents.length; i += batchSize) {
-      const chunk = relevantEvents.slice(i, i + batchSize);
-      const siemEvents = chunk.map((evt: typeof chunk[number]) => {
-        const meta = (evt.metadata ?? {}) as Record<string, unknown>;
-        return screeningEventToSIEM({
-          ...evt,
-          apiKey: { orgId: evt.apiKey?.orgId ?? null },
-        }, meta.agent_id as string | undefined);
-      });
+    // Evaluate alert rules to determine destination IDs
+    const ruleDestinations = evaluateAlertRules(alertInput, alertRules);
+    const targetConfigIds = resolveDestinations(ruleDestinations, activeConfigIds);
 
-      const success = await forwardBatchWithRetry(config, siemEvents);
+    // Convert event to SIEM format
+    const siemEvent = screeningEventToSIEM({
+      ...evt,
+      apiKey: { orgId: evt.apiKey?.orgId ?? null },
+    }, agentId);
+
+    let eventSuccess = true;
+
+    for (const configId of targetConfigIds) {
+      const config = configMap.get(configId);
+      if (!config) continue;
+
+      const success = await forwardBatchWithRetry(config, [siemEvent]);
       if (success) {
-        forwardedCount += chunk.length;
-        // Track newest successfully forwarded event
-        const chunkNewest = chunk[chunk.length - 1].createdAt;
-        if (chunkNewest > newestForwarded) {
-          newestForwarded = chunkNewest;
-        }
+        forwardedCount++;
       } else {
-        failedCount += chunk.length;
-        await incrementFailedCount(redis, chunk.length);
+        failedCount++;
+        eventSuccess = false;
+        await incrementFailedCount(redis, 1);
       }
 
-      // Update destination health
-      await setDestinationHealth(redis, config.id, success);
+      await setDestinationHealth(redis, configId, success);
+    }
+
+    // Track newest successfully forwarded event (per-event, not per-destination)
+    if (eventSuccess && targetConfigIds.length > 0) {
+      if (evt.createdAt > newestForwarded) {
+        newestForwarded = evt.createdAt;
+      }
     }
   }
 

@@ -179,6 +179,110 @@ export function x402EndpointForPath(method: string, path: string) {
   );
 }
 
+/**
+ * FEATURE_STATUS — single source of truth for which features are shipped,
+ * in development, planned, or deprecated.
+ *
+ * The claims-lint CI gate (scripts/claims-lint.ts) greps page templates for
+ * feature name strings and fails the build if a page references a feature
+ * marked "planned" or "building" without the "in development" qualifier.
+ *
+ * Rules:
+ * - "shipped":    Feature is live and can be claimed without qualification.
+ * - "building":   Feature is in active development; marketing pages may
+ *                 reference it ONLY with "in development" qualifier.
+ * - "planned":    Feature is on the roadmap but not started; same qualifier rule.
+ * - "deprecated": Feature is being removed; should not appear in new copy.
+ */
+export type FeatureStatus = "shipped" | "building" | "planned" | "deprecated";
+
+export interface FeatureStatusEntry {
+  /** Canonical feature name used in marketing copy and page templates. */
+  name: string;
+  /** Current build status. */
+  status: FeatureStatus;
+  /** Additional aliases / keywords that also count as a reference in lint. */
+  aliases?: string[];
+}
+
+export const FEATURE_STATUS: FeatureStatusEntry[] = [
+  // ── Core screening pipeline ──────────────────────────────────────────────
+  { name: "Prompt Screening", status: "shipped", aliases: ["prompt screening", "screen_prompt"] },
+  { name: "Pattern Matching", status: "shipped", aliases: ["pattern matching", "regex detection"] },
+  { name: "LLM Semantic Analysis", status: "shipped", aliases: ["LLM analysis", "semantic analysis"] },
+  { name: "Sandbox Execution", status: "shipped", aliases: ["sandbox execution", "isolated execution"] },
+  { name: "Output Screening", status: "shipped", aliases: ["screen_output", "LLM output screening"] },
+  { name: "Agent Trust Verification", status: "shipped", aliases: ["agent trust", "verify_agent_trust"] },
+  { name: "Risk Scoring", status: "shipped", aliases: ["risk score", "risk scoring"] },
+
+  // ── Detection categories ─────────────────────────────────────────────────
+  { name: "Prompt Injection Detection", status: "shipped", aliases: ["prompt injection detection"] },
+  { name: "Jailbreak Detection", status: "shipped", aliases: ["jailbreak detection"] },
+  { name: "Data Exfiltration Detection", status: "shipped", aliases: ["data exfiltration detection"] },
+  { name: "Indirect Injection Detection", status: "shipped", aliases: ["indirect injection"] },
+  { name: "Social Engineering Detection", status: "shipped", aliases: ["social engineering detection"] },
+  { name: "Code Execution Detection", status: "shipped", aliases: ["code execution detection"] },
+  { name: "System Prompt Leak Detection", status: "shipped", aliases: ["system prompt leak detection"] },
+
+  // ── Infrastructure ────────────────────────────────────────────────────────
+  { name: "x402 Payment", status: "shipped", aliases: ["x402", "pay-per-call", "micropayments"] },
+  { name: "MCP Server", status: "shipped", aliases: ["MCP", "MCP server", "MCP prompt protection"] },
+  { name: "Stripe Billing", status: "shipped", aliases: ["Stripe", "subscription billing"] },
+  { name: "API Key Management", status: "shipped", aliases: ["API keys", "key management"] },
+  { name: "SDK", status: "shipped", aliases: ["Parse SDK", "parse-sdk"] },
+  { name: "Coverage Attestation", status: "shipped", aliases: ["coverage attestation", "screening coverage"] },
+
+  // ── Compliance ────────────────────────────────────────────────────────────
+  { name: "Compliance Dashboard", status: "shipped", aliases: ["compliance dashboard"] },
+  { name: "SIEM Forwarding", status: "shipped", aliases: ["SIEM", "SIEM forwarding", "SIEM integration"] },
+  { name: "Delegation Chain", status: "shipped", aliases: ["delegation chain", "agent delegation"] },
+  { name: "Policy Engine", status: "shipped", aliases: ["policy engine", "custom rules"] },
+  { name: "Evidence Pack", status: "shipped", aliases: ["evidence pack"] },
+
+  // ── Data governance ───────────────────────────────────────────────────────
+  { name: "Data Governance", status: "shipped", aliases: ["data governance"] },
+  { name: "Approval Matrix", status: "shipped", aliases: ["approval matrix"] },
+  { name: "Volume Tracker", status: "shipped", aliases: ["volume tracker"] },
+  { name: "Egress Control", status: "shipped", aliases: ["egress control"] },
+
+  // ── Building / planned ────────────────────────────────────────────────────
+  { name: "SOC 2 Certification", status: "planned", aliases: ["SOC 2", "SOC2"] },
+  { name: "FedRAMP Authorization", status: "planned", aliases: ["FedRAMP"] },
+  { name: "HIPAA Compliance", status: "planned", aliases: ["HIPAA"] },
+  { name: "ISO 27001 Certification", status: "planned", aliases: ["ISO 27001", "ISO27001"] },
+  { name: "Multi-Tenant Isolation Hardening", status: "building", aliases: ["multi-tenant isolation", "tenant hardening"] },
+  { name: "Real-time Alerting", status: "building", aliases: ["real-time alerts", "real-time alerting"] },
+  { name: "Custom LLM Fine-Tuning", status: "planned", aliases: ["fine-tuning", "custom model training"] },
+  { name: "Agent Registry", status: "building", aliases: ["agent registry", "agent inventory"] },
+];
+
+/**
+ * Return all names + aliases for features that are NOT shipped.
+ * Used by the claims-lint script to find prohibited references.
+ */
+export function nonShippedFeatureTerms(): string[] {
+  const terms: string[] = [];
+  for (const entry of FEATURE_STATUS) {
+    if (entry.status === "planned" || entry.status === "building" || entry.status === "deprecated") {
+      terms.push(entry.name);
+      if (entry.aliases) terms.push(...entry.aliases);
+    }
+  }
+  return terms;
+}
+
+/**
+ * Return all names + aliases for ALL features (shipped + non-shipped).
+ */
+export function allFeatureTerms(): string[] {
+  const terms: string[] = [];
+  for (const entry of FEATURE_STATUS) {
+    terms.push(entry.name);
+    if (entry.aliases) terms.push(...entry.aliases);
+  }
+  return terms;
+}
+
 export function riskCategoryList(): string {
   return DETECTION_FACTS.riskCategories.join(", ");
 }

@@ -9,5 +9,5 @@
     "noEmit": true,
     "lib": ["ES2022", "DOM"]
   },
-  "include": ["index.ts"]
+  "include": ["index.ts", "adapters/**/*.ts"]
 }

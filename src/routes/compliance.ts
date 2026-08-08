@@ -34,6 +34,12 @@ import {
   testSIEMConnection,
   type PrismaSIEMConfig,
 } from "../lib/compliance/siem-forwarder.js";
+import {
+  DEFAULT_ALERT_RULE_TEMPLATES,
+  instantiateTemplate,
+  type AlertRuleDBRow,
+  type AlertRuleTemplate,
+} from "../lib/compliance/alert-rules.js";
 import { getSIEMStatus, checkDestinationHealth } from "../lib/compliance/siem-worker.js";
 import { requireRole } from "../lib/rbac.js";
 
@@ -402,6 +408,199 @@ complianceRoutes.delete("/v1/compliance/siem/:id", authMiddleware("evaluate"), r
     return c.json({ status: "deleted", id: configId });
   } catch (err) {
     return c.json({ error: "Failed to delete", detail: (err as Error).message }, 500);
+  }
+});
+
+// ─── Alert Routing Rules ─────────────────────────────────────────────────
+//
+// GET    /v1/siem/alert-rules          — List all alert rules for this org
+// POST   /v1/siem/alert-rules          — Create a new alert rule
+// PUT    /v1/siem/alert-rules/:id      — Update an alert rule
+// DELETE /v1/siem/alert-rules/:id      — Delete an alert rule
+// POST   /v1/siem/alert-rules/templates/:template_id — Instantiate from template
+
+complianceRoutes.get("/v1/siem/alert-rules", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst", "auditor"), async (c) => {
+  const apiKey = c.get("apiKey");
+  try {
+    const rows = await prisma.$queryRaw<AlertRuleDBRow[]>`
+      SELECT * FROM alert_rules WHERE org_id = ${apiKey.id} ORDER BY priority ASC, created_at DESC
+    `;
+    return c.json({ rules: rows });
+  } catch {
+    return c.json({ rules: [], note: "Alert rules table not yet migrated." });
+  }
+});
+
+complianceRoutes.post("/v1/siem/alert-rules", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst"), async (c) => {
+  const apiKey = c.get("apiKey");
+  const body = await c.req.json().catch(() => ({}));
+
+  const { name, destination_id, condition, enabled, priority } = body;
+
+  if (!name) {
+    return c.json({ error: "name is required" }, 400);
+  }
+
+  const id = crypto.randomUUID();
+  const destId = destination_id ?? "*";
+  const isEnabled = enabled !== false;
+  const prio = typeof priority === "number" ? priority : 50;
+  const verdict = condition?.verdict ?? null;
+  const riskThreshold = typeof condition?.risk_score_threshold === "number" ? condition.risk_score_threshold : null;
+  const patternCategory = condition?.pattern_category ?? null;
+  const agentId = condition?.agent_id ?? null;
+
+  try {
+    await prisma.$executeRaw`
+      INSERT INTO alert_rules (id, org_id, name, destination_id, enabled, priority, verdict, risk_score_threshold, pattern_category, agent_id, created_at, updated_at)
+      VALUES (${id}, ${apiKey.id}, ${name}, ${destId}, ${isEnabled}, ${prio}, ${verdict}, ${riskThreshold}, ${patternCategory}, ${agentId}, NOW(), NOW())
+    `;
+
+    auditLog({
+      action: "alert_rule_created",
+      apiKeyId: apiKey.id,
+      detail: `Alert rule created: ${name} → ${destId}`,
+    });
+
+    return c.json({
+      id,
+      name,
+      destination_id: destId,
+      condition: { verdict, risk_score_threshold: riskThreshold, pattern_category: patternCategory, agent_id: agentId },
+      enabled: isEnabled,
+      priority: prio,
+    });
+  } catch (err) {
+    console.error("[compliance] alert-rule create error:", (err as Error).message);
+    return c.json({ error: "Failed to create alert rule", detail: (err as Error).message }, 500);
+  }
+});
+
+complianceRoutes.put("/v1/siem/alert-rules/:id", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst"), async (c) => {
+  const apiKey = c.get("apiKey");
+  const ruleId = c.req.param("id");
+  const body = await c.req.json().catch(() => ({}));
+
+  const { name, destination_id, condition, enabled, priority } = body;
+
+  // Build SET clause dynamically for partial updates
+  const updates: string[] = ['updated_at = NOW()'];
+  const params: unknown[] = [];
+  let paramIdx = 1;
+
+  if (name !== undefined) { updates.push(`name = $${paramIdx++}`); params.push(name); }
+  if (destination_id !== undefined) { updates.push(`destination_id = $${paramIdx++}`); params.push(destination_id); }
+  if (enabled !== undefined) { updates.push(`enabled = $${paramIdx++}`); params.push(enabled); }
+  if (typeof priority === "number") { updates.push(`priority = $${paramIdx++}`); params.push(priority); }
+  if (condition) {
+    if (condition.verdict !== undefined) { updates.push(`verdict = $${paramIdx++}`); params.push(condition.verdict); }
+    if (typeof condition.risk_score_threshold === "number") { updates.push(`risk_score_threshold = $${paramIdx++}`); params.push(condition.risk_score_threshold); }
+    if (condition.pattern_category !== undefined) { updates.push(`pattern_category = $${paramIdx++}`); params.push(condition.pattern_category); }
+    if (condition.agent_id !== undefined) { updates.push(`agent_id = $${paramIdx++}`); params.push(condition.agent_id); }
+  }
+
+  params.push(apiKey.id, ruleId);
+
+  try {
+    const result = await prisma.$executeRawUnsafe(
+      `UPDATE alert_rules SET ${updates.join(", ")} WHERE org_id = $${paramIdx++} AND id = $${paramIdx++}`,
+      ...params,
+    );
+
+    if (result === 0) {
+      return c.json({ error: "Alert rule not found" }, 404);
+    }
+
+    auditLog({
+      action: "alert_rule_updated",
+      apiKeyId: apiKey.id,
+      detail: `Alert rule ${ruleId} updated`,
+    });
+
+    return c.json({ status: "updated", id: ruleId });
+  } catch (err) {
+    console.error("[compliance] alert-rule update error:", (err as Error).message);
+    return c.json({ error: "Failed to update alert rule", detail: (err as Error).message }, 500);
+  }
+});
+
+complianceRoutes.delete("/v1/siem/alert-rules/:id", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst"), async (c) => {
+  const apiKey = c.get("apiKey");
+  const ruleId = c.req.param("id");
+
+  try {
+    const result = await prisma.$executeRaw`
+      DELETE FROM alert_rules WHERE id = ${ruleId} AND org_id = ${apiKey.id}
+    `;
+
+    if (result === 0) {
+      return c.json({ error: "Alert rule not found" }, 404);
+    }
+
+    auditLog({
+      action: "alert_rule_deleted",
+      apiKeyId: apiKey.id,
+      detail: `Alert rule ${ruleId} deleted`,
+    });
+
+    return c.json({ status: "deleted", id: ruleId });
+  } catch (err) {
+    return c.json({ error: "Failed to delete alert rule", detail: (err as Error).message }, 500);
+  }
+});
+
+// GET /v1/siem/alert-rules/templates — List available default rule templates
+complianceRoutes.get("/v1/siem/alert-rules/templates", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst", "auditor"), async (c) => {
+  return c.json({ templates: DEFAULT_ALERT_RULE_TEMPLATES });
+});
+
+// POST /v1/siem/alert-rules/templates/:template_id — Instantiate a rule from a template
+complianceRoutes.post("/v1/siem/alert-rules/templates/:template_id", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst"), async (c) => {
+  const apiKey = c.get("apiKey");
+  const templateId = c.req.param("template_id");
+  const body = await c.req.json().catch(() => ({}));
+
+  const template = (DEFAULT_ALERT_RULE_TEMPLATES as readonly AlertRuleTemplate[]).find(
+    (t) => t.template_id === templateId,
+  );
+
+  if (!template) {
+    return c.json({ error: `Unknown template: ${templateId}. Available: ${DEFAULT_ALERT_RULE_TEMPLATES.map((t) => t.template_id).join(", ")}` }, 400);
+  }
+
+  const rule = instantiateTemplate(template, body.destination_id);
+
+  const id = crypto.randomUUID();
+  const destId = rule.destination_id;
+  const verdict = rule.condition.verdict ?? null;
+  const riskThreshold = rule.condition.risk_score_threshold ?? null;
+  const patternCategory = rule.condition.pattern_category ?? null;
+  const agentId = rule.condition.agent_id ?? null;
+
+  try {
+    await prisma.$executeRaw`
+      INSERT INTO alert_rules (id, org_id, name, destination_id, enabled, priority, verdict, risk_score_threshold, pattern_category, agent_id, created_at, updated_at)
+      VALUES (${id}, ${apiKey.id}, ${rule.name}, ${destId}, ${rule.enabled}, ${rule.priority}, ${verdict}, ${riskThreshold}, ${patternCategory}, ${agentId}, NOW(), NOW())
+    `;
+
+    auditLog({
+      action: "alert_rule_created",
+      apiKeyId: apiKey.id,
+      detail: `Alert rule instantiated from template: ${templateId}`,
+    });
+
+    return c.json({
+      id,
+      template_id: templateId,
+      name: rule.name,
+      destination_id: destId,
+      condition: rule.condition,
+      enabled: rule.enabled,
+      priority: rule.priority,
+    });
+  } catch (err) {
+    console.error("[compliance] alert-rule template error:", (err as Error).message);
+    return c.json({ error: "Failed to instantiate alert rule", detail: (err as Error).message }, 500);
   }
 });
 

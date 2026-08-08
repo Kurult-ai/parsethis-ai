@@ -9,6 +9,16 @@
       "types": "./index.ts",
       "import": "./index.ts",
       "require": "./index.ts"
+    },
+    "./adapters/hermes-middleware": {
+      "types": "./adapters/hermes-middleware.ts",
+      "import": "./adapters/hermes-middleware.ts",
+      "require": "./adapters/hermes-middleware.ts"
+    },
+    "./adapters/openclaw-plugin": {
+      "types": "./adapters/openclaw-plugin.ts",
+      "import": "./adapters/openclaw-plugin.ts",
+      "require": "./adapters/openclaw-plugin.ts"
     }
   },
   "scripts": {
@@ -27,7 +37,9 @@
   "author": "Kurultai",
   "license": "ISC",
   "files": [
-    "index.ts"
+    "index.ts",
+    "adapters/hermes-middleware.ts",
+    "adapters/openclaw-plugin.ts"
   ],
   "devDependencies": {
     "typescript": "^5.5.0"
