@@ -1,8 +1,8 @@
 # Parse Enterprise Agent Compliance + GTM Enablement — Unified Kanban Board v5.0
 
-**Source:** Implementation Plan v2.1 (Aug 8, 2026) + GTM Enablement Plan (Aug 8, 2026) + GTM Enhancement Review (Aug 8, 2026) + Traffic Secrets Framework Mapping (Aug 8, 2026) · **74 tasks** · 19 phases (0–18)
+**Source:** Implementation Plan v2.1 (Aug 8, 2026) + GTM Enablement Plan (Aug 8, 2026) + GTM Enhancement Review (Aug 8, 2026) + Traffic Secrets Framework Mapping (Aug 8, 2026) · **73 tasks** · 19 phases (0–18)
 **Repo:** `parse-for-agents-live`
-**Tracks:** Compliance (41 tasks, Phases 0–12) · GTM Enablement (18 tasks, Phases 13–15) · Deferred (7 items, Phase 16) · GTM Enhancements (9 tasks, Phase 17) · Demand Generation (6 tasks, Phase 18)
+**Tracks:** Compliance (41 tasks, Phases 0–12) · GTM Enablement (18 tasks, Phases 13–15) · Deferred (7 items, Phase 16) · GTM Enhancements (9 tasks, Phase 17) · Demand Generation (5 tasks, Phase 18)
 **Generated:** Aug 8, 2026 (v5.0 — updated with Traffic Secrets demand-generation tasks)
 
 ---
@@ -120,8 +120,7 @@
 
 | Task | Track | Phase | Title | Assignee | Depends On | Est. Days | Blocks (directly) |
 |------|-------|-------|-------|----------|------------|-----------|-------------------|
-| 18.1 | DG | 18 | ★ Dream 100 List (Gatekeeper Mapping) | Batu | — | 2 | 18.2, 18.3 |
-| 18.2 | DG | 18 | ★ Interview Show — "Agent Security" Podcast/Video Series | Chagatai | 18.1 | 3 | — |
+| 18.1 | DG | 18 | ★ Dream 100 List (Gatekeeper Mapping) | Batu | — | 2 | 18.3 |
 | 18.3 | DG | 18 | ★ Shadow Funnel Capture Architecture | Chagatai | 18.1, 13.1 | 2 | — |
 | 18.4 | DG | 18 | Dual-Messaging Framework (Pain + Pleasure) | Chagatai | 13.7 | 1 | — |
 | 18.5 | DG | 18 | Value Ladder Rung — $47 Self-Serve Audit Product | Kublai | 7.1 | 2 | — |
@@ -139,8 +138,8 @@
 | 16.6 | D | Referral Mechanics (formal incentive structure) | First partner-referred deal |
 | 16.7 | D | Pricing Validation Survey (willingness-to-pay test) | First 10 scoping submissions |
 
-**Total estimated effort:** Compliance ~106 person-days · GTM ~28 person-days · GTM Enhancements ~11 person-days · Demand Generation ~11 person-days · **Combined ~156 person-days.**
-**Already complete:** 33 of 74 tasks (✅).
+**Total estimated effort:** Compliance ~106 person-days · GTM ~28 person-days · GTM Enhancements ~11 person-days · Demand Generation ~8 person-days · **Combined ~153 person-days.**
+**Already complete:** 33 of 73 tasks (✅).
 
 ---
 
@@ -188,9 +187,9 @@
 
 > **Note:** Tasks 9.1–9.5 and 10.1–10.4 are interleaved by dependency; the ordering above respects all edges.
 
-### 🟩 Chagatai (Frontend/Content) — 16 tasks (5 C + 4 G + 3 E + 4 DG)
+### 🟩 Chagatai (Frontend/Content) — 15 tasks (5 C + 4 G + 3 E + 3 DG)
 
-**Role:** Frontend builds, dashboards, documentation, landing page, public-facing copy, developer activation, SEO content, demand-generation media (interview show, shadow funnel).
+**Role:** Frontend builds, dashboards, documentation, landing page, public-facing copy, developer activation, SEO content, demand-generation (shadow funnel, messaging framework).
 
 | Order | Task | Title | Track | Deps (cross-lane) |
 |-------|------|-------|-------|-------------------|
@@ -206,10 +205,9 @@
 | 10 | **17.1** | **★ Developer Self-Serve Activation Loop** | E | 13.1 |
 | 11 | **17.2** | **Public No-Login Demo (`/demo`)** | E | 17.1, 13.5 |
 | 12 | **17.3** | **Comparison / Competitive SEO Pages** | E | 13.7 |
-| 13 | **18.2** | **★ Interview Show — "Agent Security" Series** | DG | 18.1 (Batu) |
-| 14 | **18.3** | **★ Shadow Funnel Capture Architecture** | DG | 18.1 (Batu), 13.1 |
-| 15 | **18.4** | **Dual-Messaging Framework (Pain + Pleasure)** | DG | 13.7 (Ogedei) |
-| 16 | 14.1 content | Content production (HSO framework) | G | 13.1 self |
+| 13 | **18.3** | **★ Shadow Funnel Capture Architecture** | DG | 18.1 (Batu), 13.1 |
+| 14 | **18.4** | **Dual-Messaging Framework (Pain + Pleasure)** | DG | 13.7 (Ogedei) |
+| 15 | 14.1 content | Content production (HSO framework) | G | 13.1 self |
 
 ### 🟧 Ogedei (Ops / GTM Build) — 12 tasks (2 C + 6 G + 4 E)
 
@@ -502,7 +500,7 @@ These are the edges where GTM tasks depend on compliance deliverables (or vice v
 | Swimlane | WIP Limit | Rationale |
 |----------|-----------|-----------|
 | **Temujin** | **2** | 28 tasks, all on critical path. Unchanged — GTM/enhancements add zero tasks. |
-| **Chagatai** | **3** | 16 tasks (5 C + 4 G + 3 E + 4 DG). Can parallelize a compliance build with a GTM/enhancement/demand-gen task. |
+| **Chagatai** | **3** | 15 tasks (5 C + 4 G + 3 E + 3 DG). Can parallelize a compliance build with a GTM/enhancement/demand-gen task. |
 | **Ogedei** | **3** | 11 tasks (2 C + 6 G + 3 E). GTM/enhancement work is mostly independent of compliance. |
 | **Kublai** | **2** | 9 tasks (3 C + 2 G + 2 E + 2 DG). Decision/verify tasks + CRM + lifecycle + value ladder + affiliate. |
 | **Jochi** | **1** | 1 task. Unchanged. |
@@ -588,7 +586,6 @@ These are the edges where GTM tasks depend on compliance deliverables (or vice v
 | **15.1 → 13.1 → 13.7 → 13.6** (GTM) | DNS → landing → claims gate → public copy |
 | **15.2 → 13.3 → 13.4** (GTM) | Email infra → nurture → automation |
 | **13.5 → 13.8** (GTM) | Demo tenant before delivery kit |
-| **18.1 → 18.2** (DG) | Dream 100 before interview show (need guests) |
 | **18.1 → 18.3** (DG) | Dream 100 keywords before shadow funnel SEO |
 | **18.4 → all copy surfaces** (DG) | Messaging framework before applying to landing, nurture, content |
 
@@ -599,7 +596,7 @@ These are the edges where GTM tasks depend on compliance deliverables (or vice v
 | **14.1** Content Pipeline | **One platform discipline:** Focus 100% on X/Twitter for first 12 months. Blog is secondary (repurposed from X content, not primary). LinkedIn is tertiary. YouTube is reserved for 18.2 interview show only. Do not spread across all four platforms simultaneously. | Traffic Secrets conclusion: "pick one platform, double down, hit $1M before adding a second" |
 | **14.1** Content Pipeline | **Hook/Story/Offer (HSO) framework:** Every blog post, X thread, and nurture email must pass an HSO checklist: (1) Hook — pattern interrupt that stops the scroll; (2) Story — emotional narrative or case study that builds desire; (3) Offer — specific next-step CTA. Content without all three is information, not marketing. | Traffic Secrets Secret #3 |
 | **14.4** Funnel Math | **List valuation KPI:** Add $1/name/month as the baseline benchmark for email list health. If the list isn't generating $1/name/month, the follow-up funnel (13.3) or offer (value ladder) needs work, not more traffic. Track this monthly alongside 14.3 conversion metrics. | Traffic Secrets Secret #5 |
-| **14.4** Funnel Math | **Kill criteria expanded:** If < 5 scoping submissions by week 8, shift to Dream 100 outreach (18.1) and interview show distribution (18.2) instead of just "direct outreach volume." The demand-gen engine is the recovery path. | Traffic Secrets organic growth model |
+| **14.4** Funnel Math | **Kill criteria expanded:** If < 5 scoping submissions by week 8, shift to Dream 100 outreach (18.1) and shadow funnel SEO (18.3) instead of just "direct outreach volume." The demand-gen engine is the recovery path. | Traffic Secrets organic growth model |
 | **16.1** Paid Ads Trigger | **Break-even trigger:** Change from "≥ 50 qualified leads/mo organic" to "funnel breaks even (CAC ≤ LTV)." The moment your funnel pays for itself, scale paid ads without limit. Do NOT wait for an arbitrary lead count — that leaves money on the table. | Traffic Secrets Secret #6: "When your funnel breaks even, you don't have an advertising budget" |
 
 ---
@@ -619,14 +616,14 @@ Ogedei picks up 6 GTM tasks (13.3, 13.4, 13.7, 13.8, 14.1, 14.3) on top of his 2
 | Assignee | Compliance | GTM | Enhancement | Demand Gen | Total | Est. Days | On Critical Path? |
 |----------|-----------|-----|-------------|------------|-------|-----------|-------------------|
 | **Temujin** | 28 | **0** | **0** | **0** | **28** | ~58d | ✅ Compliance CP |
-| **Chagatai** | 5 | 4 | 3 | 4 | **16** | ~31d | ✅ GTM public-facing CP + demand-gen CP |
+| **Chagatai** | 5 | 4 | 3 | 3 | **15** | ~28d | ✅ GTM public-facing CP + demand-gen CP |
 | **Ogedei** | 2 | 6 | 3 | 0 | **11** | ~21d | ✅ GTM nurture CP + attribution |
 | **Kublai** | 3 | 2 | 2 | 2 | **9** | ~16d | Partial (7.1 deploy) |
 | **Jochi** | 1 | 0 | 0 | 0 | **1** | 5d | No (parallel spike) |
 | **Mongke** | 0 | 0 | 1 | 0 | **0** (+review) | — | Review gate (13.7, 17.9) |
 | **Batu** | 0 | 1 | 0 | 1 | **2** | 5d | ✅ Demand-gen foundation (18.1 gates 18.2, 18.3) |
 | **Operator** | 0 | 5 | 0 | 0 | **5** | 2.5d | ✅ GTM week-1 gates |
-| **Total** | **41** | **18** | **9** | **6** | **74** | ~156d | |
+| **Total** | **41** | **18** | **9** | **5** | **73** | ~153d | |
 
 ### Bottleneck Visualization
 
@@ -1083,32 +1080,6 @@ KEY GATES:
 
 ---
 
-### Task 18.2: ★ Interview Show — "Agent Security" Podcast/Video Series
-**Assignee:** Chagatai · **Track:** DG · **Depends on:** 18.1 · **Est:** 3d setup + ongoing
-
-**Framework:** Traffic Secrets Secret #8 — "Fill Your Funnel Organically (Working Your Way In)." The core organic growth strategy: create a show where you interview Dream 100 members. This builds relationships with gatekeepers, creates content, and gets you promoted to their audience.
-
-**Problem:** 14.1's content pipeline produces blog drafts via cron — informational but not relational. An interview show does three things at once: (1) builds personal relationships with Dream 100 gatekeepers, (2) creates high-quality content, and (3) each guest promotes their episode to their own audience (free distribution).
-
-**Deliverables:**
-- Show concept: "How Agencies Ship AI Agents Safely" (or similar working title)
-  - Format: 30–45 min interview, video (YouTube) + audio (podcast)
-  - Target cadence: 1 episode/week
-  - Platform: YouTube as primary (per Brunson's "one platform" discipline), audio extraction for podcast distribution
-- Episode 1–5 guest list: top 5 from Dream 100 (18.1)
-- Interview template: agent security challenges, compliance stories, tool stack, advice for other agencies
-- Each episode: CTA to Parse scoping form + dream-customer magnet (13.4)
-- Production pipeline: record → edit → publish → promote → repurpose as blog (14.1) + X threads (14.1)
-- RSS feed for podcast distribution (Apple Podcasts, Spotify)
-
-**Acceptance:**
-- First 3 episodes recorded and published
-- At least 1 guest shared their episode to their audience (distribution proof)
-- Show appears in podcast directories
-- Episode performance tracked in 14.3 dashboard (downloads, scoping form attribution)
-
----
-
 ### Task 18.3: ★ Shadow Funnel Capture Architecture
 **Assignee:** Chagatai · **Track:** DG · **Depends on:** 18.1, 13.1 · **Est:** 2d
 
@@ -1261,4 +1232,4 @@ For each high-criticality task, the number of tasks it **blocks** (downstream de
 
 *Generated from Parse Enterprise Agent Compliance Implementation Plan v2.1 + GTM Enablement Plan + GTM Enhancement Review + Traffic Secrets Framework Mapping*
 *Unified Kanban Board v5.0 · August 8, 2026*
-*74 tasks · 8 swimlanes · 7 milestone gates (M1–M4 + G1–G3) · 19 phases (0–18)*
+*73 tasks · 8 swimlanes · 7 milestone gates (M1–M4 + G1–G3) · 19 phases (0–18)*
