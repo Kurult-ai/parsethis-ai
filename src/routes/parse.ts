@@ -128,6 +128,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   }
 
   // ── Input validation ──
+  // Task 11.1: max prompt length raised to 100K chars per platform hardening spec
   if (!body.prompt || typeof body.prompt !== "string") {
     return problem(c, {
       status: 400,
@@ -137,11 +138,11 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
       retryable: false,
     });
   }
-  if (body.prompt.length > 50_000) {
+  if (body.prompt.length > 100_000) {
     return problem(c, {
       status: 400,
       title: "Validation failure",
-      detail: "prompt must be less than 50,000 characters",
+      detail: "prompt must be less than 100,000 characters",
       code: ErrorCode.VALIDATION_TOO_LARGE,
       retryable: false,
     });

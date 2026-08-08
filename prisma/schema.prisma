@@ -372,6 +372,7 @@ model Organization {
   exports     ComplianceExport[]
   policyHistory PolicyRevision[]
   egressRules  EgressRule[]
+  ssoProviders SSOProvider[]
 
   @@map("organizations")
 }
@@ -607,4 +608,26 @@ model DelegationChain {
   @@index([childAgentId], name: "idx_delegation_chain_child")
   @@index([parentAgentId], name: "idx_delegation_chain_parent")
   @@map("delegation_chains")
+}
+
+/// SSO Provider (Task 6.1): stores per-org identity provider configuration
+/// for OAuth2 Authorization Code flow (Okta, Azure AD, Google Workspace, WorkOS).
+model SSOProvider {
+  id           String   @id @default(cuid())
+  orgId        String   @map("org_id")
+  providerType String   @map("provider_type")  // okta | azure | google | workos
+  clientId     String   @map("client_id")
+  clientSecret String   @map("client_secret")   // encrypted at rest (AES-256-GCM)
+  redirectUri  String   @map("redirect_uri")
+  domains      String[] @default([])             // email domains this provider covers
+  metadata     Json?                              // IdP-specific endpoints (auth_url, token_url, userinfo_url)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt      @map("updated_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId], name: "idx_sso_providers_org")
+  @@index([providerType], name: "idx_sso_providers_type")
+  @@map("sso_providers")
 }

@@ -34,7 +34,8 @@
     "claims-lint": "node --import tsx scripts/claims-lint.ts",
     "worker": "tsx src/worker.ts",
     "seed": "tsx prisma/seed.ts",
-    "launch:evidence": "node scripts/open-launch-load-evidence.mjs"
+    "launch:evidence": "node scripts/open-launch-load-evidence.mjs",
+    "fleet-provision": "node --import tsx scripts/fleet-provision.ts"
   },
   "keywords": [
     "agents",

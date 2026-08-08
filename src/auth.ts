@@ -256,6 +256,9 @@ export function authMiddleware(requiredScope?: string) {
       if (!rateCheck.allowed) {
         const retryAfter = Math.ceil(rateCheck.resetMs / 1000);
         c.header("Retry-After", String(retryAfter));
+        const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+        // Task 11.1: audit-log all rate limit hits
+        auditLog({ action: "rate_limit_exceeded", apiKeyId: undefined, detail: `Demo key rate limit (${30}/min)`, ip });
         return problem(c, {
           status: 429,
           title: "Rate limit exceeded",
@@ -304,6 +307,9 @@ export function authMiddleware(requiredScope?: string) {
       if (!rateCheck.allowed) {
         const retryAfter = Math.ceil(rateCheck.resetMs / 1000);
         c.header("Retry-After", String(retryAfter));
+        const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+        // Task 11.1: audit-log all rate limit hits
+        auditLog({ action: "rate_limit_exceeded", apiKeyId: OWNER_TEAM_KEY_ID, detail: `Owner team key rate limit (200/min)`, ip });
         return problem(c, {
           status: 429,
           title: "Rate limit exceeded",
@@ -399,6 +405,9 @@ export function authMiddleware(requiredScope?: string) {
     if (!rateCheck.allowed) {
       const retryAfter = Math.ceil(rateCheck.resetMs / 1000);
       c.header("Retry-After", String(retryAfter));
+      const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+      // Task 11.1: audit-log all rate limit hits
+      auditLog({ action: "rate_limit_exceeded", apiKeyId: apiKeyRecord.id, detail: `API key rate limit (${apiKeyRecord.rateLimit}/min) exceeded`, ip });
       return problem(c, {
         status: 429,
         title: "Rate limit exceeded",

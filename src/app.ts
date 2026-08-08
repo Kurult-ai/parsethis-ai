@@ -26,6 +26,9 @@ import { dataGovernanceRoutes } from "./routes/data-governance.js";
 import { playgroundRoutes } from "./routes/playground.js";
 import { organizationRoutes } from "./routes/organizations.js";
 import { identityRoutes } from "./routes/identity.js";
+import { policyPackRoutes } from "./routes/policy-packs.js";
+import { ssoRoutes } from "./routes/sso.js";
+import { securityRoutes } from "./routes/security.js";
 import { contentNegotiation } from "./lib/content-negotiation.js";
 import { problem, ErrorCode, isServiceDependencyError, serviceDependencyProblem } from "./lib/problem-response.js";
 import { endpointPreflightFailure } from "./lib/exposure/numbat-preflight.js";
@@ -65,14 +68,31 @@ app.notFound((c) => {
   );
 });
 
-// CORS — restricted to allowed origins; defaults to open for public API
+// CORS — restricted to allowed origins (Task 11.1: hardened)
+// When ALLOWED_ORIGINS is set, only those exact origins receive CORS headers.
+// Unrecognized origins receive no Access-Control-Allow-Origin header, which
+// causes browsers to block cross-origin requests. When not set, we emit a
+// deprecation warning and allow "*" (to be removed in a future release).
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",").map(s => s.trim()).filter(Boolean);
 if (!allowedOrigins?.length) {
   console.warn("[DEPRECATION] ALLOWED_ORIGINS not set — currently allows all origins. " +
     "This will change to deny-all in the next release. Set ALLOWED_ORIGINS now.");
 }
+const allowedOriginSet = new Set(allowedOrigins ?? []);
+
 app.use("/*", cors({
-  origin: allowedOrigins?.length ? allowedOrigins : "*",
+  origin: (origin: string) => {
+    // If ALLOWED_ORIGINS is configured, strictly validate the Origin header.
+    if (allowedOriginSet.size > 0) {
+      return allowedOriginSet.has(origin) ? origin : null;
+    }
+    // No config — legacy allow-all (deprecated).
+    return "*";
+  },
+  // Reject credential-bearing requests from non-allowlisted origins
+  allowHeaders: ["Content-Type", "Authorization", "X-Request-ID", "X-Agent-Signature", "X-Parse-Environment"],
+  allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  exposeHeaders: ["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "Retry-After"],
 }));
 
 // Security headers (Phase 1 + Phase 2)
@@ -153,3 +173,6 @@ app.route("/", receiptRoutes);
 app.route("/", playgroundRoutes);
 app.route("/", organizationRoutes);
 app.route("/", identityRoutes);
+app.route("/", ssoRoutes);
+app.route("/", securityRoutes);
+app.route("/", policyPackRoutes);
