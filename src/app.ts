@@ -17,8 +17,9 @@ import { screeningMetricsRoutes } from "./routes/screening-metrics.js";
 import { exposureRoutes } from "./routes/exposure.js";
 import { billingRoutes, billingWebhookRoute } from "./routes/billing.js";
 import { adminRoutes } from "./routes/admin.js";
-import { playgroundRoutes } from "./routes/playground.js";
 import { approvalRoutes } from "./routes/approvals.js";
+import { complianceRoutes } from "./routes/compliance.js";
+import { playgroundRoutes } from "./routes/playground.js";
 import { contentNegotiation } from "./lib/content-negotiation.js";
 import { problem, ErrorCode, isServiceDependencyError, serviceDependencyProblem } from "./lib/problem-response.js";
 
@@ -132,4 +133,5 @@ app.route("/", screeningMetricsRoutes);
 app.route("/", billingRoutes);
 app.route("/", adminRoutes);
 app.route("/", approvalRoutes);
+app.route("/", complianceRoutes);
 app.route("/", playgroundRoutes);

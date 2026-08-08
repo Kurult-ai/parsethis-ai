@@ -31,6 +31,7 @@ model ApiKey {
   entitlementGrants EntitlementGrant[]
   supportTickets   SupportTicket[]
   adminReceipts    AdminActionReceipt[]
+  organization     Organization? @relation(fields: [orgId], references: [id])
 
   @@map("api_keys")
 }
@@ -318,4 +319,112 @@ model AdminImprovementProposal {
 
   @@index([status, priority, createdAt], name: "idx_admin_improvement_proposals_status_priority_created")
   @@map("admin_improvement_proposals")
+}
+
+// ─── Compliance Expansion Layer ─────────────────────────────────────────
+// Audit-first design: every agent action is traceable to an org, an agent,
+// a policy, and a framework control.
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  ownerId     String   @map("owner_id")
+  planTier    String   @default("free") @map("plan_tier")
+  ssoEnabled  Boolean  @default(false) @map("sso_enabled")
+  ssoConfig   Json?    @map("sso_config")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt      @map("updated_at")
+
+  apiKeys     ApiKey[]
+  agents      AgentRegistry[]
+  siemConfigs SIEMConfig[]
+  exports     ComplianceExport[]
+  policyHistory PolicyRevision[]
+
+  @@map("organizations")
+}
+
+model AgentRegistry {
+  id            String   @id @default(cuid())
+  orgId         String   @map("org_id")
+  agentName     String   @map("agent_name")
+  agentVersion  String?  @map("agent_version")
+  framework     String?  // langchain, crewai, autogen, openai-assistants, custom
+  description   String?
+  tools         String[] @default([])    // MCP servers, APIs, plugins this agent can use
+  dataAccess    String[] @default([])    // data classifications: public, internal, confidential, restricted
+  riskLevel     String   @default("medium") @map("risk_level")  // low, medium, high, critical
+  status        String   @default("active")  // active, suspended, decommissioned
+  ownerEmail    String?  @map("owner_email")
+  deployedAt    DateTime? @map("deployed_at")
+  lastSeenAt    DateTime? @map("last_seen_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt      @map("updated_at")
+
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status], name: "idx_agent_registry_org_status")
+  @@index([orgId, riskLevel], name: "idx_agent_registry_org_risk")
+  @@map("agent_registry")
+}
+
+model PolicyRevision {
+  id            String   @id @default(cuid())
+  orgId         String   @map("org_id")
+  version       Int      @default(1)
+  policySnapshot Json    @map("policy_snapshot")
+  changedBy     String   @map("changed_by")
+  changeReason  String?  @map("change_reason")
+  diff          Json?    // structured diff from previous version
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt(sort: Desc)], name: "idx_policy_revisions_org_created")
+  @@unique([orgId, version], name: "idx_policy_revisions_org_version")
+  @@map("policy_revisions")
+}
+
+model SIEMConfig {
+  id            String   @id @default(cuid())
+  orgId         String   @map("org_id")
+  platform      String   // splunk, datadog, elastic, sentinel, generic_webhook
+  endpoint      String
+  authHeader    String?  @map("auth_header")  // stored encrypted at rest
+  format        String   @default("cef")  // cef, json, leef, raw
+  eventTypes    String[] @default(["screening", "audit", "policy_change", "approval"])
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt      @map("updated_at")
+
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, active], name: "idx_siem_configs_org_active")
+  @@map("siem_configs")
+}
+
+model ComplianceExport {
+  id            String   @id @default(cuid())
+  orgId         String   @map("org_id")
+  requestedBy   String   @map("requested_by")
+  status        String   @default("pending")  // pending, generating, ready, failed, expired
+  framework     String   @default("all")  // owasp-llm, nist-ai-rmf, eu-ai-act, soc2, iso-42001, all
+  dateFrom      DateTime @map("date_from")
+  dateTo        DateTime @map("date_to")
+  format        String   @default("json")  // json, csv, pdf
+  artifactUrl   String?  @map("artifact_url")
+  artifactHash  String?  @map("artifact_hash")  // SHA-256 of the export for tamper evidence
+  eventCount    Int?     @map("event_count")
+  sizeBytes     Int?     @map("size_bytes")
+  error         String?
+  expiresAt     DateTime? @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  completedAt   DateTime? @map("completed_at")
+
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt(sort: Desc)], name: "idx_compliance_exports_org_created")
+  @@index([status], name: "idx_compliance_exports_status")
+  @@map("compliance_exports")
 }

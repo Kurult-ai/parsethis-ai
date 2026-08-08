@@ -27,7 +27,7 @@ export const DEFAULT_POLICY: ScreeningPolicy = {
 };
 
 // Tier-enforced maximum autoBlockThreshold
-const MAX_THRESHOLD_BY_TIER: Record<string, number> = {
+export const MAX_THRESHOLD_BY_TIER: Record<string, number> = {
   free: 5,
   pro: 7,
   team: 9,

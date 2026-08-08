@@ -27,6 +27,7 @@ import { renderGeoPage } from "../pages/geo.js";
 import { getFaviconSvg } from "../pages/favicon.js";
 import { getOgImageSvg } from "../pages/og-image.js";
 import { renderScreeningDashboardPage } from "../pages/screening-dashboard.js";
+import { renderComplianceDashboardPage } from "../pages/compliance-dashboard.js";
 import { renderBillingDashboardPage } from "../pages/billing.js";
 import { renderPromptGuardLandingPage } from "../pages/prompt-guard-landing.js";
 import { renderPromptGuardPlaygroundPage } from "../pages/prompt-guard-playground.js";
@@ -489,6 +490,14 @@ publicRoutes.get("/dashboard", (c) => {
 publicRoutes.get("/dashboard/screening", async (c) => {
   const baseUrl = getBaseUrl(c);
   const html = await renderScreeningDashboardPage(baseUrl);
+  return c.html(html);
+});
+
+// Compliance control panel dashboard
+publicRoutes.get("/dashboard/compliance", authMiddleware("evaluate"), async (c) => {
+  const baseUrl = getBaseUrl(c);
+  const apiKey = c.get("apiKey");
+  const html = await renderComplianceDashboardPage(baseUrl, apiKey.id, apiKey.name, apiKey.tier ?? "free");
   return c.html(html);
 });
 
