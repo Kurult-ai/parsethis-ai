@@ -406,6 +406,12 @@ publicRoutes.get("/", (c) => {
         models: "GET /v1/models",
         parse_poll: "GET /v1/parse/:id",
         policy: "GET/PUT/DELETE /v1/policy",
+        agents: "POST /v1/agents",
+        agent_list: "GET /v1/agents",
+        agent_detail: "GET /v1/agents/:id",
+        agent_update: "PUT /v1/agents/:id",
+        agent_decommission: "DELETE /v1/agents/:id",
+        agent_heartbeat: "POST /v1/agents/:id/heartbeat",
       },
       auth: "Bearer token via Authorization header",
       public_facts: {
