@@ -109,6 +109,13 @@ model ScreeningPolicy {
   // block   = dangerous content is actually blocked (current behavior)
   enforcementMode        String   @default("block") @map("enforcement_mode")
 
+  // Tool Allowlist Enforcement: when true, screening requests are checked
+  // against the agent's registered tools (AgentRegistry.tools[]). Tools
+  // referenced in metadata.tool_permissions or body.tools that aren't in the
+  // agent's registered list produce a tool_violation flag, enforced via the
+  // enforcement dial.
+  enforceToolAllowlist   Boolean  @default(false)  @map("enforce_tool_allowlist")
+
   // Custom compliance rules (JSON Rule DSL v1) — array of CustomRule objects
   customRules            Json?    @default("[]") @map("custom_rules")
 

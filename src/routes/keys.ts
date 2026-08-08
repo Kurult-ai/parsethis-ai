@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { authMiddleware, createApiKey, listApiKeys, deleteApiKey } from "../auth.js";
+import { prisma } from "../db.js";
 import { problem, ErrorCode } from "../lib/problem-response.js";
 import { auditLog } from "../lib/audit-log.js";
 
@@ -11,7 +12,7 @@ keysRoutes.get("/v1/keys", authMiddleware("admin"), async (c) => {
 });
 
 keysRoutes.post("/v1/keys", authMiddleware("admin"), async (c) => {
-  const body = await c.req.json<{ name: string; scopes?: string[] }>();
+  const body = await c.req.json<{ name: string; scopes?: string[]; orgId?: string }>();
 
   if (!body.name || typeof body.name !== "string") {
     return c.json({ error: "name is required and must be a string" }, 400);
@@ -32,7 +33,26 @@ keysRoutes.post("/v1/keys", authMiddleware("admin"), async (c) => {
     }
   }
 
-  const key = await createApiKey(body.name, body.scopes || ["analyze", "evaluate", "chat"]);
+  // Optionally link the new key to an organization.
+  let orgId: string | undefined;
+  if (body.orgId) {
+    const org = await prisma.organization.findUnique({
+      where: { id: body.orgId },
+      select: { id: true },
+    });
+    if (!org) {
+      return problem(c, {
+        status: 404,
+        title: "Not found",
+        detail: `Organization ${body.orgId} not found`,
+        code: ErrorCode.RESOURCE_NOT_FOUND,
+        retryable: false,
+      });
+    }
+    orgId = org.id;
+  }
+
+  const key = await createApiKey(body.name, body.scopes || ["analyze", "evaluate", "chat"], undefined, orgId);
   return c.json(key, 201);
 });
 

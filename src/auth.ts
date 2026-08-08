@@ -36,6 +36,7 @@ const DEFAULT_POLICY: ScreeningPolicy = {
   approvalRequiredForFuturePlans: true,
   approvalDefaultAction: "deny",
   enforcementMode: "block",
+  enforceToolAllowlist: false,
 };
 
 // Valid environments for policy pinning
@@ -447,6 +448,7 @@ export function authMiddleware(requiredScope?: string) {
               approvalRequiredForFuturePlans: true,
               approvalDefaultAction: "deny",
               enforcementMode: (dbPolicy.enforcementMode as "monitor" | "warn" | "block") ?? "block",
+              enforceToolAllowlist: dbPolicy.enforceToolAllowlist ?? false,
               environment: dbPolicy.environment,
             }
           : DEFAULT_POLICY;
@@ -467,9 +469,10 @@ export function authMiddleware(requiredScope?: string) {
 export async function createApiKey(
   name: string,
   scopes: string[],
-  expiresAt?: Date
+  expiresAt?: Date,
+  orgId?: string
 ): Promise<{ id: string; key: string; name: string; scopes: string[]; created_at: string }> {
-  const result = await createApiKeyFromService("self-service", name, "free", undefined, scopes, expiresAt);
+  const result = await createApiKeyFromService("self-service", name, "free", orgId, scopes, expiresAt);
   return {
     id: result.record.id,
     key: result.key,

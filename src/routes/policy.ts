@@ -32,6 +32,7 @@ export const DEFAULT_POLICY: ScreeningPolicy = {
   approvalRequiredForFuturePlans: true,
   approvalDefaultAction: "deny",
   enforcementMode: "block",
+  enforceToolAllowlist: false,
   environment: "production",
 };
 
@@ -58,6 +59,7 @@ function formatPolicyResponse(policy: ScreeningPolicy, tier: string) {
     approvalRequiredForFuturePlans: policy.approvalRequiredForFuturePlans ?? true,
     approvalDefaultAction: policy.approvalDefaultAction ?? "deny",
     enforcementMode: policy.enforcementMode ?? "block",
+    enforceToolAllowlist: policy.enforceToolAllowlist ?? false,
     environment: policy.environment ?? "production",
     tier,
     max_threshold: MAX_THRESHOLD_BY_TIER[tier] ?? MAX_THRESHOLD_BY_TIER.free,
@@ -81,6 +83,7 @@ function dbPolicyToScreeningPolicy(dbPolicy: any): ScreeningPolicy {
     approvalRequiredForFuturePlans: true,
     approvalDefaultAction: "deny",
     enforcementMode: (dbPolicy.enforcementMode as "monitor" | "warn" | "block") ?? "block",
+    enforceToolAllowlist: dbPolicy.enforceToolAllowlist ?? false,
     environment: dbPolicy.environment,
   };
 }
@@ -245,6 +248,7 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
   if (body.autoBlockThreshold !== undefined) updateData.autoBlockThreshold = Number(body.autoBlockThreshold);
   if (body.executeInSandbox !== undefined) updateData.executeInSandbox = Boolean(body.executeInSandbox);
   if (body.enforcementMode !== undefined) updateData.enforcementMode = body.enforcementMode;
+  if (body.enforceToolAllowlist !== undefined) updateData.enforceToolAllowlist = Boolean(body.enforceToolAllowlist);
   if (body.bypassCodeword !== undefined) {
     if (body.bypassCodeword === null || body.bypassCodeword === "") {
       updateData.bypassCodewordHash = null;
@@ -322,6 +326,7 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
           approvalRequiredForFuturePlans: true,
           approvalDefaultAction: "deny",
           enforcementMode: (existingDb.enforcementMode as "monitor" | "warn" | "block") ?? "block",
+          enforceToolAllowlist: existingDb.enforceToolAllowlist ?? false,
         })
       : {};
 
@@ -339,6 +344,7 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
         bypassEnabled: DEFAULT_POLICY.bypassEnabled ?? false,
         bypassCodewordHash: DEFAULT_POLICY.bypassCodewordHash ?? null,
         bypassExpiresAt: DEFAULT_POLICY.bypassExpiresAt ? new Date(DEFAULT_POLICY.bypassExpiresAt) : null,
+        enforceToolAllowlist: DEFAULT_POLICY.enforceToolAllowlist ?? false,
         ...updateData,
       },
       update: updateData,

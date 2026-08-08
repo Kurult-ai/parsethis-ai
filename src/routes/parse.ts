@@ -501,6 +501,76 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     }
   }
 
+  // ── Tool Allowlist Enforcement (Task 8.2) ──
+  // When policy.enforceToolAllowlist is true, compare the tools requested in
+  // the screening request (metadata.tool_permissions or body.tools) against
+  // the agent's registered tools in AgentRegistry.tools[].
+  // Tools outside the allowlist produce a tool_violation flag, enforced
+  // through the enforcement dial (same as data governance):
+  //   monitor → recorded only
+  //   warn    → warning annotation added
+  //   block   → request blocked
+  if (policy?.enforceToolAllowlist) {
+    const toolAgentId = body.metadata?.agent_id;
+    // Gather requested tools from metadata.tool_permissions or body.tools
+    const bodyTools = (body as any).tools;
+    const requestedTools: string[] = Array.isArray(body.metadata?.tool_permissions)
+      ? body.metadata!.tool_permissions!
+      : Array.isArray(bodyTools)
+        ? (bodyTools as string[])
+        : [];
+
+    if (
+      toolAgentId &&
+      typeof toolAgentId === "string" &&
+      requestedTools.length > 0
+    ) {
+      try {
+        const agent = await prisma.agentRegistry.findUnique({
+          where: { id: toolAgentId },
+          select: { tools: true, status: true, agentName: true },
+        });
+
+        // "Discovered" agents: enforcement starts OFF — just prompt to review
+        if (agent?.status === "discovered") {
+          (result as unknown as Record<string, unknown>).tool_allowlist_review_prompt = true;
+        } else if (agent) {
+          const allowlist = new Set(agent.tools);
+          const violations = requestedTools.filter((t) => !allowlist.has(t));
+
+          if (violations.length > 0) {
+            for (const vTool of violations) {
+              result.flags.push({
+                category: "tool_violation",
+                severity: 6,
+                label: `Unregistered tool: ${vTool}`,
+                detail: `Tool "${vTool}" is not in agent "${agent.agentName}"'s registered tool list (${agent.tools.length} tools)`,
+                source: "tool_allowlist",
+              });
+            }
+            if (!result.categories.includes("tool_violation")) {
+              result.categories.push("tool_violation");
+            }
+            (result as unknown as Record<string, unknown>).tool_violations = violations;
+
+            // Enforcement: under "block" mode, escalate risk and block
+            if (enforcementMode === "block") {
+              result.risk_score = Math.max(result.risk_score, 7);
+              result.verdict = "critical";
+              result.safe = false;
+              result.suggested_action = "block";
+              result.recommended_action = "block";
+              result.wouldBlock = true;
+            }
+          }
+        }
+      } catch (taErr) {
+        console.error("[tool-allowlist] check failed:", (taErr as Error).message);
+        // Fail open — don't block screening on allowlist check failure
+      }
+    }
+  }
+
   // ── Gate score_components to team+ tier (prevents free-tier scoring oracle) ──
   if (tier !== "team" && tier !== "enterprise" && apiKey.id !== "master") {
     delete result.score_components;

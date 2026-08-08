@@ -242,66 +242,31 @@ complianceRoutes.get("/v1/compliance/coverage", authMiddleware("evaluate"), asyn
   return c.json({ frameworks: generateCoverageReport() });
 });
 
-// ─── POST /v1/compliance/export — Generate evidence export ──────────────
+// ─── POST /v1/compliance/export — Generate structured evidence pack ─────
 
 complianceRoutes.post("/v1/compliance/export", authMiddleware("evaluate"), async (c) => {
   const apiKey = c.get("apiKey");
   const body = await c.req.json().catch(() => ({}));
 
-  const framework = body.framework ?? "all";
+  const framework = body.framework ?? body.fw ?? "all";
   const dateFrom = body.date_from ? new Date(body.date_from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const dateTo = body.date_to ? new Date(body.date_to) : new Date();
   const format = body.format ?? "json";
+  const download = body.download === true || c.req.query("download") === "true";
 
   try {
-    // Gather all evidence
-    const [screenings, auditEvents] = await Promise.all([
-      prisma.screeningEvent.findMany({
-        where: { apiKeyId: apiKey.id, createdAt: { gte: dateFrom, lte: dateTo } },
-        orderBy: { createdAt: "asc" },
-      }),
-      prisma.auditEvent.findMany({
-        where: { apiKeyId: apiKey.id, createdAt: { gte: dateFrom, lte: dateTo } },
-        orderBy: { createdAt: "asc" },
-      }),
-    ]);
-
-    const crosswalk = generateFullCrosswalk();
-
-    const evidence = {
-      export_metadata: {
-        generated_at: new Date().toISOString(),
-        api_key_id: apiKey.id,
-        api_key_name: apiKey.name,
-        date_range: { from: dateFrom.toISOString(), to: dateTo.toISOString() },
-        framework,
-        format,
-      },
-      summary: {
-        total_screening_events: screenings.length,
-        total_audit_events: auditEvents.length,
-        blocked_events: screenings.filter(s => s.blocked).length,
-        risk_distribution: screenings.reduce((acc, s) => {
-          acc[s.verdict] = (acc[s.verdict] ?? 0) + 1;
-          return acc;
-        }, {} as Record<string, number>),
-        categories_observed: [...new Set(screenings.flatMap(s => s.categories))],
-      },
-      framework_crosswalk: framework === "all" ? crosswalk : {
-        [framework]: (crosswalk.frameworks as Record<string, unknown[]>)[framework] ?? [],
-      },
-      screening_events: screenings,
-      audit_events: auditEvents,
-    };
-
-    const jsonStr = JSON.stringify(evidence, null, 2);
-    const hash = createHash("sha256").update(jsonStr).digest("hex");
+    const evidencePack = await generateEvidencePack(
+      apiKey.id,
+      framework,
+      dateFrom,
+      dateTo,
+    );
 
     // Store export record (best effort — table might not exist yet)
     try {
       await prisma.$executeRaw`
         INSERT INTO compliance_exports (id, org_id, requested_by, status, framework, date_from, date_to, format, artifact_hash, event_count, size_bytes, completed_at, created_at)
-        VALUES (${randomUUID()}, ${apiKey.id}, ${apiKey.id}, 'ready', ${framework}, ${dateFrom}, ${dateTo}, ${format}, ${hash}, ${screenings.length + auditEvents.length}, ${Buffer.byteLength(jsonStr)}, NOW(), NOW())
+        VALUES (${randomUUID()}, ${apiKey.id}, ${apiKey.id}, 'ready', ${evidencePack.framework}, ${dateFrom}, ${dateTo}, ${format}, ${evidencePack.integrityHash}, ${evidencePack.summary.totalEvents}, ${Buffer.byteLength(JSON.stringify(evidencePack))}, NOW(), NOW())
       `;
     } catch {
       // Table might not exist yet — non-blocking
@@ -310,30 +275,30 @@ complianceRoutes.post("/v1/compliance/export", authMiddleware("evaluate"), async
     auditLog({
       action: "compliance_export_generated",
       apiKeyId: apiKey.id,
-      detail: `Evidence export: ${screenings.length} screening events, ${auditEvents.length} audit events, framework=${framework}`,
+      detail: `Evidence pack: ${evidencePack.summary.totalEvents} events, framework=${evidencePack.framework}, controls=${evidencePack.controlMappings.length}`,
     });
 
-    // Return the export directly (for smaller exports) or with download URL
-    if (Buffer.byteLength(jsonStr) < 5_000_000) {
-      return c.json({
-        ...evidence,
-        export_integrity: {
-          sha256: hash,
-          note: "Verify this hash to ensure the export has not been tampered with.",
-        },
-      });
+    // Return with Content-Disposition for download
+    const headers: Record<string, string> = {
+      "X-Evidence-Pack-Hash": evidencePack.integrityHash,
+      "X-Evidence-Pack-Framework": evidencePack.framework,
+    };
+
+    if (download) {
+      const filename = `evidence-pack-${evidencePack.framework}-${dateFrom.toISOString().slice(0, 10)}_to_${dateTo.toISOString().slice(0, 10)}.json`;
+      headers["Content-Disposition"] = `attachment; filename="${filename}"`;
+      headers["Content-Type"] = "application/json";
     }
 
-    return c.json({
-      status: "ready",
-      sha256: hash,
-      event_count: screenings.length + auditEvents.length,
-      size_bytes: Buffer.byteLength(jsonStr),
-      note: "Export too large for inline response. Implement storage-backed delivery.",
-    });
+    // Set headers on the response
+    for (const [k, v] of Object.entries(headers)) {
+      c.header(k, v);
+    }
+
+    return c.json(evidencePack);
   } catch (err) {
     console.error("[compliance] export error:", (err as Error).message);
-    return c.json({ error: "Failed to generate export", detail: (err as Error).message }, 500);
+    return c.json({ error: "Failed to generate evidence pack", detail: (err as Error).message }, 500);
   }
 });
 

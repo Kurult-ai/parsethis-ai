@@ -14,6 +14,7 @@ export interface ScreeningPolicy {
   bypassCodewordHash?: string | null;
   bypassExpiresAt?: Date | string | null;
   enforcementMode?: "monitor" | "warn" | "block";
+  enforceToolAllowlist?: boolean;
   environment?: string;
 }
 
