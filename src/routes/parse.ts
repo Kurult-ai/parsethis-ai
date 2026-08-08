@@ -17,6 +17,7 @@ import {
 } from "../lib/screening-event-log.js";
 import { codewordBypassAllowed } from "../lib/bypass-codeword.js";
 import { autoRegisterAgentFromScreening } from "../lib/agent-auto-register.js";
+import { recordScreening } from "../lib/compliance/coverage-attestation.js";
 import { isAgentFrozen } from "../lib/freeze-cache.js";
 import { checkDataAccess } from "../lib/data-governance/check-access.js";
 import { checkEgress, type EgressRuleInput } from "../lib/data-governance/check-egress.js";
@@ -489,6 +490,13 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   // If the request includes an agent_id that doesn't exist in the registry,
   // create it with status "discovered". Non-blocking — never affects the response.
   autoRegisterAgentFromScreening(apiKey.id, body).catch(() => {});
+
+  // ── Coverage attestation: record this screening (fire-and-forget) ──
+  // Tracks which agents are being screened by Parse for coverage reporting.
+  const coverageAgentId = body.metadata?.agent_id;
+  if (coverageAgentId && typeof coverageAgentId === "string") {
+    recordScreening(apiKey.id, coverageAgentId).catch(() => {});
+  }
 
   // ── Attach policy recommendation ──
   const policy = c.get("policy");

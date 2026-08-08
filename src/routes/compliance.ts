@@ -24,10 +24,17 @@ import {
 } from "../lib/compliance/framework-crosswalk.js";
 import { generateEvidencePack } from "../lib/compliance/evidence-pack.js";
 import {
+  getCoverageReport as getAttestationReport,
+  getAgentCoverageRows,
+  coverageRowsToCSV,
+  resolveOrgIdForCoverage,
+} from "../lib/compliance/coverage-attestation.js";
+import {
   forwardToSIEM,
   testSIEMConnection,
   type PrismaSIEMConfig,
 } from "../lib/compliance/siem-forwarder.js";
+import { getSIEMStatus, checkDestinationHealth } from "../lib/compliance/siem-worker.js";
 import { requireRole } from "../lib/rbac.js";
 
 export const complianceRoutes = new Hono<AppEnv>();
@@ -414,5 +421,140 @@ complianceRoutes.get("/v1/compliance/policy-history", authMiddleware("evaluate")
     return c.json({ revisions });
   } catch {
     return c.json({ revisions: [], note: "Policy revision table not yet migrated." });
+  }
+});
+
+// ─── GET /v1/coverage — Coverage attestation report ────────────────────
+//
+// Returns what percentage of an org's AI agent LLM calls are actually
+// being screened by Parse. Identifies agents making calls that are NOT
+// being screened (the SDK reports calls but Parse isn't seeing screening
+// requests for them).
+
+complianceRoutes.get("/v1/coverage", authMiddleware("evaluate"), async (c) => {
+  const apiKey = c.get("apiKey");
+
+  const orgId = await resolveOrgIdForCoverage(apiKey.id);
+
+  // Parse date range from query params (default: last 7 days)
+  const fromStr = c.req.query("from");
+  const toStr = c.req.query("to");
+  const daysParam = Number(c.req.query("days") ?? "7");
+
+  let from: Date;
+  let to: Date;
+
+  if (fromStr) {
+    from = new Date(fromStr);
+    if (isNaN(from.getTime())) {
+      return c.json({ error: "Invalid 'from' date. Use YYYY-MM-DD." }, 400);
+    }
+  } else {
+    const d = Math.min(Math.max(daysParam, 1), 90);
+    from = new Date(Date.now() - (d - 1) * 24 * 60 * 60 * 1000);
+    from.setUTCHours(0, 0, 0, 0);
+  }
+
+  if (toStr) {
+    to = new Date(toStr);
+    if (isNaN(to.getTime())) {
+      return c.json({ error: "Invalid 'to' date. Use YYYY-MM-DD." }, 400);
+    }
+    to.setUTCHours(23, 59, 59, 999);
+  } else {
+    to = new Date();
+    to.setUTCHours(23, 59, 59, 999);
+  }
+
+  if (from > to) {
+    return c.json({ error: "'from' date must be before 'to' date." }, 400);
+  }
+
+  try {
+    const report = await getAttestationReport(orgId, { from, to });
+    return c.json(report);
+  } catch (err) {
+    console.error("[coverage] report error:", (err as Error).message);
+    return c.json(
+      {
+        org_id: orgId,
+        date_range: { from: from.toISOString(), to: to.toISOString() },
+        total_agent_calls: 0,
+        total_screened: 0,
+        coverage_pct: 0,
+        uncovered_agents: [],
+        daily_breakdown: [],
+        generated_at: new Date().toISOString(),
+        note: "Coverage data unavailable — Redis may be down or no data collected yet.",
+      },
+      200,
+    );
+  }
+});
+
+// ─── GET /v1/coverage/export — CSV export for compliance evidence ──────
+//
+// Returns a CSV with per-agent coverage data suitable for compliance
+// evidence and audit attestation.
+// Columns: agent_id, total_calls, screened_calls, coverage_pct, last_seen
+
+complianceRoutes.get("/v1/coverage/export", authMiddleware("evaluate"), async (c) => {
+  const apiKey = c.get("apiKey");
+
+  const orgId = await resolveOrgIdForCoverage(apiKey.id);
+
+  // Parse date range from query params (default: last 7 days)
+  const fromStr = c.req.query("from");
+  const toStr = c.req.query("to");
+  const daysParam = Number(c.req.query("days") ?? "7");
+
+  let from: Date;
+  let to: Date;
+
+  if (fromStr) {
+    from = new Date(fromStr);
+    if (isNaN(from.getTime())) {
+      return c.json({ error: "Invalid 'from' date. Use YYYY-MM-DD." }, 400);
+    }
+  } else {
+    const d = Math.min(Math.max(daysParam, 1), 90);
+    from = new Date(Date.now() - (d - 1) * 24 * 60 * 60 * 1000);
+    from.setUTCHours(0, 0, 0, 0);
+  }
+
+  if (toStr) {
+    to = new Date(toStr);
+    if (isNaN(to.getTime())) {
+      return c.json({ error: "Invalid 'to' date. Use YYYY-MM-DD." }, 400);
+    }
+    to.setUTCHours(23, 59, 59, 999);
+  } else {
+    to = new Date();
+    to.setUTCHours(23, 59, 59, 999);
+  }
+
+  if (from > to) {
+    return c.json({ error: "'from' date must be before 'to' date." }, 400);
+  }
+
+  try {
+    const rows = await getAgentCoverageRows(orgId, { from, to });
+    const csv = coverageRowsToCSV(rows);
+
+    const filename = `coverage-${orgId}-${from.toISOString().slice(0, 10)}_to_${to.toISOString().slice(0, 10)}.csv`;
+
+    c.header("Content-Type", "text/csv");
+    c.header("Content-Disposition", `attachment; filename="${filename}"`);
+
+    auditLog({
+      action: "coverage_export_generated",
+      apiKeyId: apiKey.id,
+      detail: `Coverage CSV export: ${rows.length} agents, ${from.toISOString().slice(0, 10)} to ${to.toISOString().slice(0, 10)}`,
+    });
+
+    return c.body(csv);
+  } catch (err) {
+    console.error("[coverage] export error:", (err as Error).message);
+    return c.json({ error: "Failed to generate coverage export", detail: (err as Error).message }, 500);
   }
 });

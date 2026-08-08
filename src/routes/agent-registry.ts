@@ -19,6 +19,12 @@ import type { AppEnv } from "../types.js";
 import { auditLog } from "../lib/audit-log.js";
 import { problem, ErrorCode, serviceDependencyProblem } from "../lib/problem-response.js";
 import { invalidateFreezeCache } from "../lib/freeze-cache.js";
+import {
+  registerDelegation,
+  getDelegationChain,
+  getEffectivePolicy,
+  validateDelegation,
+} from "../lib/compliance/delegation-chain.js";
 
 export const agentRegistryRoutes = new Hono<AppEnv>();
 
@@ -654,6 +660,228 @@ agentRegistryRoutes.post(
       });
     } catch (err) {
       console.error("[agent-registry] unfreeze error:", (err as Error).message);
+      return serviceDependencyProblem(c, err);
+    }
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════
+// Delegation-Chain Policy Propagation (Task 10.4)
+// ═══════════════════════════════════════════════════════════════════════
+
+// ─── POST /v1/agents/:id/delegate — Register a delegation ──────────────
+
+agentRegistryRoutes.post(
+  "/v1/agents/:id/delegate",
+  authMiddleware("evaluate"),
+  async (c) => {
+    const apiKey = c.get("apiKey");
+    const parentAgentId = c.req.param("id")!;
+
+    let orgId: string | null;
+    try {
+      orgId = await resolveOrgId(apiKey.id);
+    } catch (err) {
+      return serviceDependencyProblem(c, err);
+    }
+
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+
+    // Validate required fields
+    if (!body.child_agent_id || typeof body.child_agent_id !== "string") {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "child_agent_id is required and must be a string",
+        code: ErrorCode.VALIDATION_REQUIRED,
+        retryable: false,
+      });
+    }
+
+    const childAgentId: string = body.child_agent_id;
+
+    // Parse scope
+    const scopeDataClassifications = Array.isArray(body.scope?.data_classifications)
+      ? (body.scope.data_classifications as string[])
+      : [];
+    const scopeTools = Array.isArray(body.scope?.tools)
+      ? (body.scope.tools as string[])
+      : undefined;
+
+    // Verify parent exists and belongs to org
+    try {
+      const parentAgent = await prisma.agentRegistry.findFirst({
+        where: { id: parentAgentId, orgId: orgId ?? undefined },
+      });
+      if (!parentAgent) {
+        return problem(c, {
+          status: 404,
+          title: "Not found",
+          detail: "Parent agent not found or does not belong to your organization",
+          code: ErrorCode.RESOURCE_NOT_FOUND,
+          retryable: false,
+        });
+      }
+
+      // Verify child exists and belongs to org
+      const childAgent = await prisma.agentRegistry.findFirst({
+        where: { id: childAgentId, orgId: orgId ?? undefined },
+      });
+      if (!childAgent) {
+        return problem(c, {
+          status: 404,
+          title: "Not found",
+          detail: "Child agent not found or does not belong to your organization",
+          code: ErrorCode.RESOURCE_NOT_FOUND,
+          retryable: false,
+        });
+      }
+
+      // Validate delegation
+      const validation = await validateDelegation(parentAgentId, childAgentId);
+      if (!validation.valid) {
+        return problem(c, {
+          status: 422,
+          title: "Delegation validation failed",
+          detail: validation.errors.join("; "),
+          code: ErrorCode.AUTH_INSUFFICIENT_SCOPE,
+          retryable: false,
+        });
+      }
+
+      // Register the delegation
+      const delegation = await registerDelegation(parentAgentId, childAgentId, {
+        dataClassifications: scopeDataClassifications,
+        tools: scopeTools,
+      });
+
+      auditLog({
+        action: "agent.delegation.registered",
+        apiKeyId: apiKey.id,
+        detail: JSON.stringify({
+          parentAgentId,
+          childAgentId,
+          scope: delegation.scope,
+          inheritedTools: delegation.inheritedTools,
+          inheritedEnforcement: delegation.inheritedEnforcement,
+        }),
+      });
+
+      return c.json({
+        id: delegation.id,
+        parent_agent_id: delegation.parentAgentId,
+        child_agent_id: delegation.childAgentId,
+        scope: delegation.scope,
+        inherited_tools: delegation.inheritedTools,
+        inherited_data_access: delegation.inheritedDataAccess,
+        inherited_enforcement: delegation.inheritedEnforcement,
+      }, 201);
+    } catch (err) {
+      console.error("[agent-registry] delegate error:", (err as Error).message);
+      return serviceDependencyProblem(c, err);
+    }
+  },
+);
+
+// ─── GET /v1/agents/:id/delegation-chain — Get full chain ──────────────
+
+agentRegistryRoutes.get(
+  "/v1/agents/:id/delegation-chain",
+  authMiddleware("evaluate"),
+  async (c) => {
+    const apiKey = c.get("apiKey");
+    const agentId = c.req.param("id")!;
+
+    let orgId: string | null;
+    try {
+      orgId = await resolveOrgId(apiKey.id);
+    } catch (err) {
+      return serviceDependencyProblem(c, err);
+    }
+
+    try {
+      // Verify agent exists and belongs to org
+      const agent = await prisma.agentRegistry.findFirst({
+        where: { id: agentId, orgId: orgId ?? undefined },
+      });
+      if (!agent) {
+        return problem(c, {
+          status: 404,
+          title: "Not found",
+          detail: "Agent not found or does not belong to your organization",
+          code: ErrorCode.RESOURCE_NOT_FOUND,
+          retryable: false,
+        });
+      }
+
+      const chain = await getDelegationChain(agentId);
+
+      return c.json({
+        agent_id: agentId,
+        chain: chain.map((entry) => ({
+          agent_id: entry.agentId,
+          agent_name: entry.agentName,
+          is_root: entry.isRoot,
+          depth: entry.depth,
+          scope: entry.scope,
+          inherited_tools: entry.inheritedTools,
+          inherited_data_access: entry.inheritedDataAccess,
+          inherited_enforcement: entry.inheritedEnforcement,
+        })),
+        chain_length: chain.length,
+        root_agent_id: chain.length > 0 ? chain[0].agentId : null,
+      });
+    } catch (err) {
+      console.error("[agent-registry] delegation-chain error:", (err as Error).message);
+      return serviceDependencyProblem(c, err);
+    }
+  },
+);
+
+// ─── GET /v1/agents/:id/effective-policy — Get resolved policy ─────────
+
+agentRegistryRoutes.get(
+  "/v1/agents/:id/effective-policy",
+  authMiddleware("evaluate"),
+  async (c) => {
+    const apiKey = c.get("apiKey");
+    const agentId = c.req.param("id")!;
+
+    let orgId: string | null;
+    try {
+      orgId = await resolveOrgId(apiKey.id);
+    } catch (err) {
+      return serviceDependencyProblem(c, err);
+    }
+
+    try {
+      // Verify agent exists and belongs to org
+      const agent = await prisma.agentRegistry.findFirst({
+        where: { id: agentId, orgId: orgId ?? undefined },
+      });
+      if (!agent) {
+        return problem(c, {
+          status: 404,
+          title: "Not found",
+          detail: "Agent not found or does not belong to your organization",
+          code: ErrorCode.RESOURCE_NOT_FOUND,
+          retryable: false,
+        });
+      }
+
+      const policy = await getEffectivePolicy(agentId);
+
+      return c.json({
+        agent_id: policy.agentId,
+        root_agent_id: policy.rootAgentId,
+        tools: policy.tools,
+        data_access: policy.dataAccess,
+        enforcement_mode: policy.enforcementMode,
+        inherited_grants: policy.inheritedGrants,
+        depth: policy.depth,
+      });
+    } catch (err) {
+      console.error("[agent-registry] effective-policy error:", (err as Error).message);
       return serviceDependencyProblem(c, err);
     }
   },

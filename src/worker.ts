@@ -8,6 +8,7 @@ import { storeResult, updateProgress, clearProgress } from "./result-store.js";
 import { redactEvaluationAfterCompletion, redactPrompt } from "./lib/prompt-privacy.js";
 import type { EvaluationJobData } from "./queue.js";
 import type { TestCaseResult, EvalSummary, EvaluationResult } from "./types.js";
+import { createSIEMWorker } from "./lib/compliance/siem-worker.js";
 
 function interpolatePrompt(
   template: string,
@@ -218,13 +219,20 @@ worker.on("failed", async (job, err) => {
   }).catch(() => {});
 });
 
+// ─── SIEM Real-Time Forwarding Worker ────────────────────────────────────
+
+const siemWorker = createSIEMWorker();
+
 worker.on("ready", () => {
   console.log("[worker] Evaluation worker ready, waiting for jobs...");
 });
 
 function shutdown(signal: string) {
   console.log(`\n[worker] ${signal} received, shutting down...`);
-  worker.close().then(() => {
+  Promise.all([
+    worker.close(),
+    siemWorker.close(),
+  ]).then(() => {
     prisma.$disconnect().then(() => process.exit(0));
   });
   setTimeout(() => process.exit(1), 10_000).unref();

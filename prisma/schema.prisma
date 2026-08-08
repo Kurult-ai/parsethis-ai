@@ -585,3 +585,26 @@ model SignedIdentity {
   @@index([agentId, status], name: "idx_signed_identity_agent_status")
   @@map("signed_identities")
 }
+
+/// Delegation Chain (Task 10.4): records parent→child agent delegation
+/// with inherited policy scope. A child can restrict but never expand
+/// the parent's data grants, tool allowlist, or enforcement mode.
+model DelegationChain {
+  id            String   @id @default(cuid())
+  parentAgentId String   @map("parent_agent_id")
+  childAgentId  String   @map("child_agent_id")
+  orgId         String   @map("org_id")
+  // scope constrains which data classifications the child may access
+  // e.g. ["public", "internal"] — subset of parent's dataAccess
+  scope         String[] @default([])
+  // inherited policy snapshot at delegation time
+  inheritedTools        String[] @default([]) @map("inherited_tools")
+  inheritedDataAccess   String[] @default([]) @map("inherited_data_access")
+  inheritedEnforcement  String   @default("block") @map("inherited_enforcement")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@unique([parentAgentId, childAgentId], name: "idx_delegation_parent_child")
+  @@index([childAgentId], name: "idx_delegation_chain_child")
+  @@index([parentAgentId], name: "idx_delegation_chain_parent")
+  @@map("delegation_chains")
+}
