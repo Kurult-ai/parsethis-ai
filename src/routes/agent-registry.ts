@@ -18,6 +18,7 @@ import { prisma } from "../db.js";
 import type { AppEnv } from "../types.js";
 import { auditLog } from "../lib/audit-log.js";
 import { problem, ErrorCode, serviceDependencyProblem } from "../lib/problem-response.js";
+import { invalidateFreezeCache } from "../lib/freeze-cache.js";
 
 export const agentRegistryRoutes = new Hono<AppEnv>();
 
@@ -493,6 +494,166 @@ agentRegistryRoutes.post(
       });
     } catch (err) {
       console.error("[agent-registry] heartbeat error:", (err as Error).message);
+      return serviceDependencyProblem(c, err);
+    }
+  },
+);
+
+// ─── POST /v1/agents/:id/freeze — Kill switch: freeze an agent ──────────
+
+agentRegistryRoutes.post(
+  "/v1/agents/:id/freeze",
+  authMiddleware("evaluate"),
+  async (c) => {
+    const apiKey = c.get("apiKey");
+    const agentId = c.req.param("id");
+
+    let orgId: string | null;
+    try {
+      orgId = await resolveOrgId(apiKey.id);
+    } catch (err) {
+      return serviceDependencyProblem(c, err);
+    }
+
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+
+    if (!body.reason || typeof body.reason !== "string" || body.reason.trim() === "") {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "reason is required and must be a non-empty string",
+        code: ErrorCode.VALIDATION_REQUIRED,
+        retryable: false,
+      });
+    }
+
+    const reason = body.reason.trim();
+
+    try {
+      const existing = await prisma.agentRegistry.findFirst({
+        where: { id: agentId, orgId: orgId ?? undefined },
+      });
+
+      if (!existing) {
+        return problem(c, {
+          status: 404,
+          title: "Not found",
+          detail: "Agent not found or does not belong to your organization",
+          code: ErrorCode.RESOURCE_NOT_FOUND,
+          retryable: false,
+        });
+      }
+
+      const updated = await prisma.agentRegistry.update({
+        where: { id: agentId },
+        data: {
+          frozen: true,
+          frozenReason: reason,
+          frozenAt: new Date(),
+        },
+      });
+
+      // Invalidate cache so the next screening call sees the freeze immediately
+      invalidateFreezeCache(agentId!);
+
+      auditLog({
+        action: "agent.frozen",
+        apiKeyId: apiKey.id,
+        detail: JSON.stringify({
+          agentId,
+          agentName: existing.agentName,
+          reason,
+        }),
+      });
+
+      return c.json({
+        id: updated.id,
+        frozen: updated.frozen,
+        frozenReason: updated.frozenReason,
+        frozenAt: updated.frozenAt,
+      });
+    } catch (err) {
+      console.error("[agent-registry] freeze error:", (err as Error).message);
+      return serviceDependencyProblem(c, err);
+    }
+  },
+);
+
+// ─── POST /v1/agents/:id/unfreeze — Kill switch: unfreeze an agent ──────
+
+agentRegistryRoutes.post(
+  "/v1/agents/:id/unfreeze",
+  authMiddleware("evaluate"),
+  async (c) => {
+    const apiKey = c.get("apiKey");
+    const agentId = c.req.param("id");
+
+    let orgId: string | null;
+    try {
+      orgId = await resolveOrgId(apiKey.id);
+    } catch (err) {
+      return serviceDependencyProblem(c, err);
+    }
+
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+
+    if (!body.reason || typeof body.reason !== "string" || body.reason.trim() === "") {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "reason is required and must be a non-empty string",
+        code: ErrorCode.VALIDATION_REQUIRED,
+        retryable: false,
+      });
+    }
+
+    const unfreezeReason = body.reason.trim();
+
+    try {
+      const existing = await prisma.agentRegistry.findFirst({
+        where: { id: agentId, orgId: orgId ?? undefined },
+      });
+
+      if (!existing) {
+        return problem(c, {
+          status: 404,
+          title: "Not found",
+          detail: "Agent not found or does not belong to your organization",
+          code: ErrorCode.RESOURCE_NOT_FOUND,
+          retryable: false,
+        });
+      }
+
+      const updated = await prisma.agentRegistry.update({
+        where: { id: agentId },
+        data: {
+          frozen: false,
+          frozenReason: null,
+          frozenAt: null,
+        },
+      });
+
+      // Invalidate cache so the next screening call sees the unfreeze immediately
+      invalidateFreezeCache(agentId!);
+
+      auditLog({
+        action: "agent.unfrozen",
+        apiKeyId: apiKey.id,
+        detail: JSON.stringify({
+          agentId,
+          agentName: existing.agentName,
+          reason: unfreezeReason,
+        }),
+      });
+
+      return c.json({
+        id: updated.id,
+        frozen: updated.frozen,
+        frozenReason: updated.frozenReason,
+        frozenAt: updated.frozenAt,
+      });
+    } catch (err) {
+      console.error("[agent-registry] unfreeze error:", (err as Error).message);
       return serviceDependencyProblem(c, err);
     }
   },

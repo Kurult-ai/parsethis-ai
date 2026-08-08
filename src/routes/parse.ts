@@ -16,6 +16,8 @@ import {
   screeningRuleIds,
 } from "../lib/screening-event-log.js";
 import { codewordBypassAllowed } from "../lib/bypass-codeword.js";
+import { autoRegisterAgentFromScreening } from "../lib/agent-auto-register.js";
+import { isAgentFrozen } from "../lib/freeze-cache.js";
 
 export const parseRoutes = new Hono<AppEnv>();
 
@@ -42,6 +44,29 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   if (contentTypeProblem) return contentTypeProblem;
 
   const body = await c.req.json<ParseRequest>();
+
+  // ── Kill Switch: fast-path check for frozen agents ──
+  // If the request includes a metadata.agent_id and that agent is frozen,
+  // return an immediate block verdict — skip the entire pipeline.
+  const freezeAgentId = body.metadata?.agent_id;
+  if (freezeAgentId && typeof freezeAgentId === "string") {
+    const frozen = await isAgentFrozen(freezeAgentId);
+    if (frozen) {
+      return c.json({
+        id: crypto.randomUUID(),
+        verdict: "block",
+        reason: "agent_frozen",
+        risk_score: 100,
+        safe: false,
+        categories: ["agent_frozen"],
+        flags: [],
+        suggested_action: "block",
+        recommended_action: "block",
+        frozen: true,
+        analyzed_at: new Date().toISOString(),
+      });
+    }
+  }
 
   // ── Input validation ──
   if (!body.prompt || typeof body.prompt !== "string") {
@@ -314,6 +339,11 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     policyMode: body.policy_mode ?? "balanced",
     ip: c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown",
   });
+
+  // ── Auto-register discovered agents (fire-and-forget) ──
+  // If the request includes an agent_id that doesn't exist in the registry,
+  // create it with status "discovered". Non-blocking — never affects the response.
+  autoRegisterAgentFromScreening(apiKey.id, body).catch(() => {});
 
   // ── Attach policy recommendation ──
   const policy = c.get("policy");

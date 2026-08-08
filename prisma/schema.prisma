@@ -362,16 +362,21 @@ model AgentRegistry {
   description   String?
   tools         String[] @default([])    // MCP servers, APIs, plugins this agent can use
   dataAccess    String[] @default([])    // data classifications: public, internal, confidential, restricted
-  riskLevel     String   @default("medium") @map("risk_level")  // low, medium, high, critical
-  status        String   @default("active")  // active, suspended, decommissioned
+  riskLevel     String   @default("medium") @map("risk_level")  // low, medium, high, critical, unscored
+  status        String   @default("active")  // active, suspended, decommissioned, discovered
+  frozen        Boolean  @default(false)     // kill switch: frozen agents receive immediate block
+  frozenReason  String?  @map("frozen_reason")
+  frozenAt      DateTime? @map("frozen_at")
   ownerEmail    String?  @map("owner_email")
   deployedAt    DateTime? @map("deployed_at")
+  firstSeenAt   DateTime? @map("first_seen_at")
   lastSeenAt    DateTime? @map("last_seen_at")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt      @map("updated_at")
 
   org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
+  @@unique([orgId, agentName], name: "idx_agent_registry_org_name")
   @@index([orgId, status], name: "idx_agent_registry_org_status")
   @@index([orgId, riskLevel], name: "idx_agent_registry_org_risk")
   @@map("agent_registry")
