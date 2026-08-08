@@ -18,6 +18,8 @@ import {
 import { codewordBypassAllowed } from "../lib/bypass-codeword.js";
 import { autoRegisterAgentFromScreening } from "../lib/agent-auto-register.js";
 import { isAgentFrozen } from "../lib/freeze-cache.js";
+import { evaluateCustomRules, parseCustomRules } from "../lib/policy-engine/custom-rules.js";
+import { prisma } from "../db.js";
 
 export const parseRoutes = new Hono<AppEnv>();
 
@@ -304,6 +306,57 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   const parseStart = Date.now();
   const result = await parsePrompt(body);
   const parseLatencyMs = Date.now() - parseStart;
+
+  // ── Custom Rules Engine (Layer 4: org-specific compliance rules) ──
+  // Evaluate customer-defined regex rules against the prompt after the 3
+  // built-in layers (regex, LLM, sandbox) but BEFORE the ScreeningEvent write
+  // and enforcement dial. Matched rules modify the result before persistence.
+  let customRuleMatchedIds: string[] = [];
+  try {
+    const dbPolicy = await prisma.screeningPolicy.findUnique({
+      where: { apiKeyId: apiKey.id },
+      select: { customRules: true },
+    });
+    if (dbPolicy?.customRules) {
+      const rules = parseCustomRules(dbPolicy.customRules);
+      if (rules.length > 0) {
+        const ruleResult = evaluateCustomRules(body.prompt, undefined, rules);
+        customRuleMatchedIds = ruleResult.matchedIds;
+
+        // Add matched rule findings as flags
+        for (const matched of ruleResult.matched) {
+          result.flags.push({
+            category: "custom_rule",
+            severity: matched.action === "block" ? 10 : matched.action === "warn" ? 6 : 3,
+            label: `[Custom Rule] ${matched.name}`,
+            detail: matched.reason,
+            id: matched.id,
+            source: "custom_rule_engine",
+          });
+        }
+
+        // If any custom rule says block, escalate risk score and verdict
+        if (ruleResult.verdict === "block") {
+          result.risk_score = Math.max(result.risk_score, 10);
+          result.verdict = "critical";
+          result.safe = false;
+          result.attack_detected = true;
+        } else if (ruleResult.verdict === "warn") {
+          result.risk_score = Math.max(result.risk_score, 5);
+          if (result.verdict === "safe" || result.verdict === "low_risk") {
+            result.verdict = "medium_risk";
+          }
+        }
+
+        if (ruleResult.matched.length > 0 && !result.categories.includes("custom_rule")) {
+          result.categories.push("custom_rule");
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[custom-rules] evaluation failed:", (err as Error).message);
+  }
+
   const ruleIds = screeningRuleIds(result);
   const decisionAction = screeningDecisionAction(result);
 
@@ -332,7 +385,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     recommendedAction: decisionAction,
     approvalRequired: Boolean(result.approval_request),
     categories: result.categories,
-    ruleIds,
+    ruleIds: [...ruleIds, ...customRuleMatchedIds],
     sourceKind: body.metadata?.source_kind,
     trustLevel: body.metadata?.trust_level,
     intendedAction: body.metadata?.intended_action,

@@ -106,6 +106,9 @@ model ScreeningPolicy {
   // block   = dangerous content is actually blocked (current behavior)
   enforcementMode        String   @default("block") @map("enforcement_mode")
 
+  // Custom compliance rules (JSON Rule DSL v1) — array of CustomRule objects
+  customRules            Json?    @default("[]") @map("custom_rules")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
 

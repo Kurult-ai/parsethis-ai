@@ -50,6 +50,7 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), async
       recentAudit,
       policyChanges,
       topAgentsByRisk,
+      policyRow,
     ] = await Promise.all([
       prisma.screeningEvent.count({ where: { apiKeyId: apiKey.id } }),
       prisma.screeningEvent.count({ where: { apiKeyId: apiKey.id, createdAt: { gte: since24h } } }),
@@ -105,7 +106,23 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), async
         ORDER BY avg_risk DESC
         LIMIT 5
       `,
+      prisma.screeningPolicy.findUnique({ where: { apiKeyId: apiKey.id } }),
     ]);
+
+    // Compute active enforcement holes count
+    let holeCount = 0;
+    if (policyRow) {
+      const now = Date.now();
+      // Bypass codeword (active or expired-but-not-cleaned)
+      if (policyRow.bypassEnabled && policyRow.bypassCodewordHash) holeCount++;
+      // Monitor enforcement mode
+      if (policyRow.enforcementMode === "monitor") holeCount++;
+      // Disabled screening toggles
+      if (!policyRow.screenUserInput) holeCount++;
+      if (!policyRow.screenToolOutputs) holeCount++;
+      if (!policyRow.screenForwardedMessages) holeCount++;
+      if (!policyRow.executeInSandbox) holeCount++;
+    }
 
     return c.json({
       kpis: {
@@ -126,6 +143,7 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), async
         screenings: Number(r.count),
         avg_risk: Number(r.avg_risk?.toFixed(2) ?? 0),
       })),
+      enforcement_holes: holeCount,
       generated_at: new Date().toISOString(),
     });
   } catch (err) {
@@ -137,6 +155,7 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), async
       recent_screenings: [],
       recent_audit: [],
       top_agents_by_risk: [],
+      enforcement_holes: 0,
       generated_at: new Date().toISOString(),
     });
   }
