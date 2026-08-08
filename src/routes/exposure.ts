@@ -3,7 +3,14 @@ import type { AppEnv } from "../types.js";
 import { EXPOSURE_CATALOGS } from "../lib/exposure/catalog.js";
 import { evaluateExposurePayload } from "../lib/exposure/evaluate.js";
 import { sanitizeExposurePayload } from "../lib/exposure/sanitize.js";
+import {
+  endpointPreflightFailure,
+  evaluateNumbatPreflight,
+  NUMBAT_PREFLIGHT_MAX_BODY_BYTES,
+  validateNumbatFindingBatch,
+} from "../lib/exposure/numbat-preflight.js";
 import { problem, ErrorCode, jsonContentTypeProblem } from "../lib/problem-response.js";
+import { authMiddleware } from "../auth.js";
 
 export const exposureRoutes = new Hono<AppEnv>();
 
@@ -41,6 +48,38 @@ exposureRoutes.post("/v1/exposure/ingest", async (c) => {
     stored: false,
     storage_mode: "stateless_phase_1",
   });
+});
+
+exposureRoutes.post("/v1/exposure/numbat-preflight", authMiddleware("evaluate"), async (c) => {
+  const contentType = c.req.header("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (contentType !== "application/json") {
+    return c.json(endpointPreflightFailure("invalid_type"), 400);
+  }
+
+  const declaredLength = Number(c.req.header("content-length") ?? 0);
+  if (Number.isFinite(declaredLength) && declaredLength > NUMBAT_PREFLIGHT_MAX_BODY_BYTES) {
+    return c.json(endpointPreflightFailure("body_too_large"), 400);
+  }
+
+  let rawBody: string;
+  try {
+    rawBody = await c.req.text();
+  } catch {
+    return c.json(endpointPreflightFailure("body_too_large"), 400);
+  }
+  if (Buffer.byteLength(rawBody, "utf8") > NUMBAT_PREFLIGHT_MAX_BODY_BYTES) {
+    return c.json(endpointPreflightFailure("body_too_large"), 400);
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return c.json(endpointPreflightFailure("malformed_json"), 400);
+  }
+  const validation = validateNumbatFindingBatch(body);
+  if (!validation.ok) return c.json(endpointPreflightFailure(validation.code), 400);
+  return c.json(evaluateNumbatPreflight(validation.value));
 });
 
 exposureRoutes.get("/v1/exposure/catalogs", (c) => {

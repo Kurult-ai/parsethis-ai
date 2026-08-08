@@ -2,7 +2,7 @@
 
 Parse Exposure is an optional endpoint-exposure evidence layer for Parse. It lets agents and AI platform teams evaluate sanitized findings from read-only local scanners before allowing sensitive agent actions.
 
-The first supported payload shape is Bumblebee-compatible findings-only output: package, editor-extension, browser-extension, and MCP exposure findings that have already been matched locally against a catalog.
+The first supported payload shape is Bumblebee-compatible findings-only output: package, editor-extension, browser-extension, and MCP exposure findings that have already been matched locally against a catalog. Parse also exposes a separate, strict Numbat endpoint-preflight profile pinned to binary `0.1.1` at commit `3d20d782d45001fd3bb200bc5690ce4b9ce0f12b` and finding record schema `0.2.0`; see [Numbat Agent Endpoint Preflight](numbat-endpoint-preflight.md).
 
 ## What it is
 
@@ -20,10 +20,11 @@ The first supported payload shape is Bumblebee-compatible findings-only output: 
 
 ## Phase 1 endpoints
 
-These Bumblebee-compatible exposure features are free and available on every tier. They do not require an API key, subscription entitlement, or x402 payment.
+The Bumblebee-compatible exposure features below are free and available on every tier. They do not require an API key, subscription entitlement, or x402 payment. The separate Numbat endpoint requires an existing Bearer API key with `evaluate` scope.
 
 - `POST /v1/exposure/evaluate` — evaluate sanitized findings and return a stateless verdict.
 - `POST /v1/exposure/ingest` — phase-1 stateless receipt wrapper; persistence comes later.
+- `POST /v1/exposure/numbat-preflight` — authenticated, strict, stateless recommendation endpoint for locally minimized Numbat `0.1.1` findings using record schema `0.2.0`; this endpoint is not part of the unauthenticated Bumblebee precedent.
 - `GET /v1/exposure/catalogs` — catalog/privacy metadata.
 
 ## Example request

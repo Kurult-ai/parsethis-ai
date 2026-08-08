@@ -32,6 +32,10 @@ Parse rejects payloads containing raw or secret-bearing fields such as:
 - common API-key/token shapes
 - connection strings
 
+## Numbat endpoint-preflight profile
+
+The authenticated Numbat profile is stricter than the legacy Bumblebee-compatible profile above. It accepts only rule/version, severity, confidence, source-agent/type, observed-event type, minimization confirmation, and closed preflight context. It rejects endpoint identity, all paths and path hashes, commands, URLs, previews, evidence refs, session/model/subagent identifiers, raw events, metadata, free text, env, credentials, secrets, and source content. Rejected payloads are never echoed and are not used to derive a findings digest. See [Numbat Agent Endpoint Preflight](numbat-endpoint-preflight.md).
+
 ## Path handling
 
 If `source_file` is present, Parse keeps only the basename. If `project_path` is present, Parse stores only a SHA-256 digest. Full local paths are not returned in the sanitized finding.

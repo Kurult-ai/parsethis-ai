@@ -1835,12 +1835,18 @@ async function handleKeygenCanary(c: Context) {
   const name = parseAndValidateKeyGenerationName(c, body);
   if (name instanceof Response) return name;
 
-  const ip =
-    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
-    c.req.header("x-real-ip") ||
-    "unknown";
-  if (!checkLocalKeygenRateLimit(`canary:${ip}`)) {
-    return c.json({ error: "Rate limit: max 5 keys per minute" }, 429);
+  // GET canary is non-secret, read-only launch health evidence. Do not let
+  // repeated smoke checks consume the self-service keygen rate-limit bucket.
+  // Keep POST canary rate-limited because it may be configured to create a
+  // disposable key in local/operator verification modes.
+  if (c.req.method !== "GET") {
+    const ip =
+      c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
+      c.req.header("x-real-ip") ||
+      "unknown";
+    if (!checkLocalKeygenRateLimit(`canary:${ip}`)) {
+      return c.json({ error: "Rate limit: max 5 keys per minute" }, 429);
+    }
   }
 
   const alerts = new Set<string>();
@@ -1861,10 +1867,13 @@ async function handleKeygenCanary(c: Context) {
   }
 
   if (localMode) {
+    const selfServiceKeyCap = getSelfServiceKeyCap();
     payload.redis_ok = true;
     payload.redis_reason = "local_test_mode_bypasses_redis";
     payload.keygen_count_ok = true;
     payload.keygen_count_reason = "local_test_mode_uses_in_memory_store";
+    payload.key_cap = selfServiceKeyCap;
+    payload.key_cap_remaining = selfServiceKeyCap;
   } else {
     try {
       const redisOk = await withTimeout(ensureRedisConnected(), 1_500, false);

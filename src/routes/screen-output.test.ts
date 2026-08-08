@@ -104,22 +104,24 @@ describe("POST /v1/screen-output", () => {
       assert.equal(body.suggested_action, "allow");
     });
   }
-
-  it("returns problem+json instead of 500 when context is not a string", async () => {
+it("returns problem+json instead of 500 for non-string context", async () => {
     const res = await app.request("/v1/screen-output", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.MASTER_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ output: "safe output", context: { source: "load_evidence" } }),
+body: JSON.stringify({
+        output: "safe output",
+        context: { source: "load_evidence" },
+      }),
     });
 
     assert.equal(res.status, 400);
     assert.match(res.headers.get("content-type") || "", /application\/problem\+json/);
     const body = await res.json();
     assert.equal(body.code, "validation.invalid_type");
-    assert.match(body.detail, /context must be a string/i);
+assert.equal(body.detail, "context must be a string when provided");
   });
 
 });
