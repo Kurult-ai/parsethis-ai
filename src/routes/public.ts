@@ -29,6 +29,8 @@ import { getOgImageSvg } from "../pages/og-image.js";
 import { renderScreeningDashboardPage } from "../pages/screening-dashboard.js";
 import { renderComplianceDashboardPage } from "../pages/compliance-dashboard.js";
 import { renderBillingDashboardPage } from "../pages/billing.js";
+import { renderAgentDashboardPage } from "../pages/agent-dashboard.js";
+import { renderTrustPage } from "../pages/trust-page.js";
 import { renderPromptGuardLandingPage } from "../pages/prompt-guard-landing.js";
 import { renderPromptGuardPlaygroundPage } from "../pages/prompt-guard-playground.js";
 import { problem, ErrorCode, serviceDependencyProblem, type ErrorCodeValue } from "../lib/problem-response.js";
@@ -515,6 +517,21 @@ publicRoutes.get("/dashboard/billing", authMiddleware("evaluate"), async (c) => 
   return c.html(html);
 });
 
+// Agent dashboard
+publicRoutes.get("/dashboard/agents", authMiddleware("evaluate"), async (c) => {
+  const baseUrl = getBaseUrl(c);
+  const apiKey = c.get("apiKey");
+  const html = await renderAgentDashboardPage(baseUrl, apiKey.id);
+  return c.html(html);
+});
+
+// Trust & Security page
+publicRoutes.get("/trust", (c) => {
+  const baseUrl = getBaseUrl(c);
+  recordGeoSurfaceHit(c, "trust.page");
+  return c.html(renderTrustPage(baseUrl));
+});
+
 // Docs hub page (HTML index to all documentation)
 publicRoutes.get("/docs", (c) => {
   const baseUrl = getBaseUrl(c);
@@ -642,6 +659,7 @@ publicRoutes.get("/docs", (c) => {
 <h2>Compliance &amp; Governance</h2>
 
 <ul>
+  <li><a href="/trust">Trust &amp; Security</a> — Architecture, security controls, subprocessors, vulnerability disclosure, SOC 2 alignment, and pre-answered vendor security questionnaire</li>
   <li><a href="/docs/compliance-guide">Compliance Guide</a> — Framework mapping, SIEM integration, evidence export, agent registry, data governance, and enforcement dials</li>
   <li><a href="/dashboard/compliance">Compliance Dashboard</a> — Real-time overview, audit trail, policy levers, and evidence packs (requires API key)</li>
   <li><a href="/pricing">Compliance Tier</a> — SIEM forwarding, custom rules, evidence packs, org model, RBAC, and data governance for $999/mo</li>
@@ -671,6 +689,7 @@ publicRoutes.get("/docs", (c) => {
 <h2>Resources</h2>
 
 <ul>
+  <li><a href="/trust">Trust &amp; Security</a> — Security posture, SOC 2 alignment, and vendor questionnaire</li>
   <li><a href="/faq">FAQ</a> — 20+ common questions</li>
   <li><a href="/technology">Technology</a> — Public architecture and non-claimable evidence state</li>
   <li><a href="/pricing">Pricing</a> — x402 USDC payments and tier information</li>

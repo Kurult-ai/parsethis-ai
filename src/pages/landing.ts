@@ -300,6 +300,7 @@ Verification required before reporting done:
       <div class="pa-trust-item"><strong>Private source</strong><p>Production source, issue tracking, and evidence intake are maintained privately while public docs disclose behavior and limits.</p></div>
       <div class="pa-trust-item"><strong>Agent-native billing</strong><p>Free keys start at ${PLAN_LIMITS.free.requestsPerMinute} req/min; x402 uses ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}.</p></div>
     </div>
+    <p style="margin-top:18px;font-size:14px;"><a href="/trust">Trust &amp; Security →</a> Architecture, security controls, SOC 2 alignment, and pre-answered vendor questionnaire.</p>
   </section>
 
   <section class="pa-section">

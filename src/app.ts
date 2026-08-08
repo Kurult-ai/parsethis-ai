@@ -29,6 +29,7 @@ import { identityRoutes } from "./routes/identity.js";
 import { policyPackRoutes } from "./routes/policy-packs.js";
 import { ssoRoutes } from "./routes/sso.js";
 import { securityRoutes } from "./routes/security.js";
+import { gatewayRoutes } from "./routes/gateway.js";
 import { contentNegotiation } from "./lib/content-negotiation.js";
 import { problem, ErrorCode, isServiceDependencyError, serviceDependencyProblem } from "./lib/problem-response.js";
 import { endpointPreflightFailure } from "./lib/exposure/numbat-preflight.js";
@@ -92,7 +93,7 @@ app.use("/*", cors({
   // Reject credential-bearing requests from non-allowlisted origins
   allowHeaders: ["Content-Type", "Authorization", "X-Request-ID", "X-Agent-Signature", "X-Parse-Environment"],
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  exposeHeaders: ["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "Retry-After"],
+  exposeHeaders: ["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "Retry-After", "X-Parse-Verdict", "X-Parse-Risk-Score", "X-Parse-Screening-Id", "X-Parse-Output-Risk-Score"],
 }));
 
 // Security headers (Phase 1 + Phase 2)
@@ -175,4 +176,5 @@ app.route("/", organizationRoutes);
 app.route("/", identityRoutes);
 app.route("/", ssoRoutes);
 app.route("/", securityRoutes);
+app.route("/", gatewayRoutes);
 app.route("/", policyPackRoutes);
