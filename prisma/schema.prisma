@@ -541,3 +541,47 @@ model EgressRule {
   @@index([orgId, priority], name: "idx_egress_rules_org_priority")
   @@map("egress_rules")
 }
+
+/// Compliance Receipt: tamper-evident record for every screening event.
+/// integrity_hash = SHA-256 of all data fields; chain_hash links to previous
+/// receipt creating an append-only hash chain for audit trail integrity.
+model ComplianceReceipt {
+  id                String   @id @default(cuid())
+  receiptId         String   @unique @map("receipt_id")     // UUID
+  timestamp         DateTime @map("timestamp")
+  agentId           String   @map("agent_id")
+  policyVersion     String   @map("policy_version")
+  verdict           String
+  riskScore         Float    @map("risk_score")
+  patternsMatched   String[] @default([]) @map("patterns_matched")
+  screeningEventId  String?  @map("screening_event_id")
+  orgId             String?  @map("org_id")
+  integrityHash     String   @map("integrity_hash")
+  chainHash         String   @map("chain_hash")
+  seqNum            Int      @default(0) @map("seq_num")    // position in hash chain
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, createdAt(sort: Desc)], name: "idx_compliance_receipts_org_created")
+  @@index([agentId], name: "idx_compliance_receipts_agent")
+  @@index([verdict], name: "idx_compliance_receipts_verdict")
+  @@index([timestamp(sort: Desc)], name: "idx_compliance_receipts_timestamp")
+  @@map("compliance_receipts")
+}
+
+/// Signed Agent Identity (Task 10.1)
+/// Cryptographic signing of agent requests so downstream systems can verify
+/// who made a screening call. Agents register an Ed25519 public key, then sign
+/// each request payload with the corresponding private key.
+model SignedIdentity {
+  id         String   @id @default(cuid())
+  agentId    String   @map("agent_id")
+  publicKey  String   @map("public_key")   // base64-encoded Ed25519 public key
+  keyVersion Int      @default(1) @map("key_version")
+  status     String   @default("active")   // active | revoked | rotated
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt           @map("updated_at")
+
+  @@unique([agentId, keyVersion], name: "idx_signed_identity_agent_version")
+  @@index([agentId, status], name: "idx_signed_identity_agent_status")
+  @@map("signed_identities")
+}

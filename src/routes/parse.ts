@@ -30,6 +30,7 @@ import {
   isValidClassification,
 } from "../lib/data-governance/approval-matrix.js";
 import { prisma } from "../db.js";
+import { verifySignature } from "../lib/identity/signed-identity.js";
 
 export const parseRoutes = new Hono<AppEnv>();
 
@@ -56,6 +57,51 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   if (contentTypeProblem) return contentTypeProblem;
 
   const body = await c.req.json<ParseRequest>();
+
+  // ── Signed Agent Identity (Task 10.1) ──
+  // If the request includes an X-Agent-Signature header, verify it against the
+  // agent's registered public key. The result is attached as verified_identity
+  // in the response metadata.
+  let verifiedIdentity: Record<string, unknown> | undefined;
+  const agentSignature = c.req.header("x-agent-signature");
+  const sigAgentId = body.metadata?.agent_id;
+  if (agentSignature && sigAgentId && typeof sigAgentId === "string") {
+    try {
+      const identity = await prisma.signedIdentity.findFirst({
+        where: { agentId: sigAgentId, status: "active" },
+        orderBy: { keyVersion: "desc" },
+      });
+      if (identity) {
+        // The signed payload is the request body (without the metadata that
+        // the server controls). We verify against the prompt as the canonical
+        // payload that both client and server see.
+        const valid = verifySignature(
+          identity.publicKey,
+          body.prompt,
+          agentSignature,
+        );
+        verifiedIdentity = {
+          verified: valid,
+          agent_id: sigAgentId,
+          key_id: identity.id,
+          key_version: identity.keyVersion,
+        };
+      } else {
+        verifiedIdentity = {
+          verified: false,
+          agent_id: sigAgentId,
+          reason: "no_registered_identity",
+        };
+      }
+    } catch (sigErr) {
+      console.error("[identity] signature verification failed:", (sigErr as Error).message);
+      verifiedIdentity = {
+        verified: false,
+        agent_id: sigAgentId,
+        reason: "verification_error",
+      };
+    }
+  }
 
   // ── Kill Switch: fast-path check for frozen agents ──
   // If the request includes a metadata.agent_id and that agent is frozen,
@@ -952,6 +998,11 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   const observeExec = body.execute === "auto" && result.risk_score >= 7;
   const explicitExec = body.execute === true;
   const shouldExecute = autoExec || observeExec || explicitExec;
+
+  // ── Attach verified_identity to response metadata (Task 10.1) ──
+  if (verifiedIdentity) {
+    (result as unknown as Record<string, unknown>).verified_identity = verifiedIdentity;
+  }
 
   // ── If no execution will run, return immediately ──
   if (!shouldExecute) {
