@@ -344,6 +344,26 @@ Required verification:
       <a href="mailto:${PRODUCT.contactEmail}?subject=Team%20Plan" class="btn btn-outline" style="width:100%;text-align:center;">Contact Sales</a>
     </div>
 
+    <!-- Compliance -->
+    <div class="card" style="display:flex;flex-direction:column;gap:12px;border-color:var(--accent2);position:relative;">
+      <span class="badge badge-accent" style="position:absolute;top:-10px;right:16px;">Compliance</span>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Compliance</div>
+        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$999<span style="font-size:14px;font-weight:400;color:var(--text-dim);">/mo</span></div>
+        <div style="font-size:13px;color:var(--text-dim);">SIEM, evidence packs, data governance</div>
+      </div>
+      <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.compliance.requestsPerMinute} req/min</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">SIEM forwarding (Splunk/Datadog)</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Custom rules &amp; framework mapping</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Evidence packs (OWASP/NIST/SOC&nbsp;2)</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Org model &amp; RBAC</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Data governance (grants, egress, budgets)</li>
+        <li style="padding:6px 0;">${PLAN_LIMITS.compliance.sandboxExecutionsPerHour} sandbox/hr</li>
+      </ul>
+      <a href="/v1/billing/checkout" class="btn btn-primary" style="width:100%;text-align:center;" onclick="event.preventDefault();(async()=>{try{const k=localStorage.getItem('pfa_key');if(k){const r=await fetch('/v1/billing/checkout',{method:'POST',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'},body:JSON.stringify({tier:'compliance'})});if(r.ok){const d=await r.json();if(d.url){window.location=d.url;return;}}}const r2=await fetch('/v1/billing/signup-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier:'compliance'})});if(!r2.ok){const err=await r2.json().catch(()=>({}));alert(err.error||'Signup failed');return;}const d2=await r2.json();if(d2.key)localStorage.setItem('pfa_key',d2.key);if(d2.checkout_url){window.location=d2.checkout_url;}else{window.location='mailto:${PRODUCT.contactEmail}?subject=Compliance%20Plan';}}catch{window.location='mailto:${PRODUCT.contactEmail}?subject=Compliance%20Plan';}})();">Start Compliance</a>
+    </div>
+
     <!-- Enterprise -->
     <div class="card" style="display:flex;flex-direction:column;gap:12px;">
       <div>
@@ -512,9 +532,9 @@ res = session.post("https://www.parsethis.ai/v1/parse", json={"prompt": "..."})<
 `;
 
   return renderPage({
-    title: "Pricing — Free Tier, Pro $49/mo, Team $199/mo",
+    title: "Pricing — Free Tier, Pro $49/mo, Team $199/mo, Compliance $999/mo",
     description:
-      `${PRODUCT.name} pricing: x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}. Free, Pro, Team, and Enterprise keys available.`,
+      `${PRODUCT.name} pricing: x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}. Free, Pro, Team, Compliance, and Enterprise keys available.`,
     path: "/pricing",
     content,
     baseUrl,

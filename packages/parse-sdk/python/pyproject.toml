@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parse-agents"
+version = "0.1.0"
+description = "Drop-in interceptor that screens every OpenAI/Anthropic client call with Parse prompt security."
+readme = "README.md"
+license = { text = "ISC" }
+authors = [{ name = "Kurultai" }]
+requires-python = ">=3.9"
+keywords = [
+    "parse",
+    "prompt-injection",
+    "prompt-security",
+    "ai-safety",
+    "openai",
+    "anthropic",
+    "llm",
+    "agents",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: ISC License (ISCL)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+
+[project.urls]
+Homepage = "https://parsethis.ai"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["parse_agents*"]

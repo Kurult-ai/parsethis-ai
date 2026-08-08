@@ -1,0 +1,35 @@
+{
+  "name": "@parse-agents/sdk",
+  "version": "0.1.0",
+  "description": "Drop-in interceptor that screens every OpenAI/Anthropic client call with Parse prompt security.",
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "import": "./index.ts",
+      "require": "./index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "parse",
+    "prompt-injection",
+    "prompt-security",
+    "ai-safety",
+    "openai",
+    "anthropic",
+    "llm",
+    "agents"
+  ],
+  "author": "Kurultai",
+  "license": "ISC",
+  "files": [
+    "index.ts"
+  ],
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

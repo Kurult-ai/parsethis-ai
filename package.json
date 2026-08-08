@@ -5,7 +5,8 @@
   "type": "module",
   "workspaces": [
     "packages/prompt-guard",
-    "packages/mcp-prompt-guard"
+    "packages/mcp-prompt-guard",
+    "packages/parse-sdk/ts"
   ],
   "scripts": {
     "dev": "tsx watch src/index.ts",

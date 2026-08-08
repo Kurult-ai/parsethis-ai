@@ -639,6 +639,14 @@ publicRoutes.get("/docs", (c) => {
   <li><a href="/compare/prompt-injection-tools">Tool Comparison</a> — Sourced tradeoff comparison</li>
 </ul>
 
+<h2>Compliance &amp; Governance</h2>
+
+<ul>
+  <li><a href="/docs/compliance-guide">Compliance Guide</a> — Framework mapping, SIEM integration, evidence export, agent registry, data governance, and enforcement dials</li>
+  <li><a href="/dashboard/compliance">Compliance Dashboard</a> — Real-time overview, audit trail, policy levers, and evidence packs (requires API key)</li>
+  <li><a href="/pricing">Compliance Tier</a> — SIEM forwarding, custom rules, evidence packs, org model, RBAC, and data governance for $999/mo</li>
+</ul>
+
 <h2>Agent Integration</h2>
 
 <ul>

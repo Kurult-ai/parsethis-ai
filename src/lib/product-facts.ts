@@ -17,6 +17,7 @@ export const PLAN_LIMITS = {
   free: { requestsPerMinute: 10, sandboxExecutionsPerHour: 5, label: "Free" },
   pro: { requestsPerMinute: 60, sandboxExecutionsPerHour: 50, label: "Pro" },
   team: { requestsPerMinute: 200, sandboxExecutionsPerHour: 200, label: "Team" },
+  compliance: { requestsPerMinute: 500, sandboxExecutionsPerHour: 500, label: "Compliance" },
   enterprise: { requestsPerMinute: 1000, sandboxExecutionsPerHour: 1000, label: "Enterprise" },
 } as const;
 
