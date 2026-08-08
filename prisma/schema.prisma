@@ -120,6 +120,12 @@ model ScreeningPolicy {
   // Custom compliance rules (JSON Rule DSL v1) — array of CustomRule objects
   customRules            Json?    @default("[]") @map("custom_rules")
 
+  // Action Approval Matrix (Task 8.5): actionType × dataClassification → allow|require_approval|block
+  // Key format: "{actionType}_{classification}" — e.g. "delete_data_confidential"
+  // Action types: send_external, write_data, delete_data, execute_code, financial
+  // Classifications: public, internal, confidential, restricted
+  approvalMatrix         Json?    @default("{}") @map("approval_matrix")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
 

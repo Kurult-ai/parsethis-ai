@@ -254,6 +254,7 @@ export interface ParseRequest {
     egress_destination?: string; // external destination for egress control check
     records_accessed?: number; // number of records accessed in this request (volume budget tracking)
     bytes_accessed?: number; // number of bytes accessed in this request (volume budget tracking)
+    action_type?: string; // action being performed for approval matrix (send_external, write_data, delete_data, execute_code, financial)
     requester_trust?: RequesterTrust;
     requester_id?: string;
     channel?: string;

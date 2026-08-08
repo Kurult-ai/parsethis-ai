@@ -13,8 +13,12 @@ export interface ScreeningEventMetadata {
   source_kind?: Metadata["source_kind"];
   trust_level?: Metadata["trust_level"];
   intended_action?: Metadata["intended_action"];
+  action_type?: string;
+  data_classification?: string[];
   policy_mode: NonNullable<ParseRequest["policy_mode"]>;
   rule_ids: string[];
+  approval_matrix_decision?: string;
+  approval_matrix_cell?: string;
 }
 
 export interface ScreeningEventData {
@@ -49,6 +53,30 @@ export function screeningDecisionAction(result: Pick<ParseResponse, "recommended
 
 function compactMetadata(metadata: ScreeningEventMetadata): ScreeningEventMetadata {
   return Object.fromEntries(Object.entries(metadata).filter(([, value]) => value !== undefined)) as ScreeningEventMetadata;
+}
+
+/**
+ * Extract approval matrix decision from a ParseResponse result.
+ * The parse route sets `approval_matrix_block` or `approval_matrix_request`
+ * as dynamic properties on the result.
+ */
+function getMatrixDecisionFromResult(result: ParseResponse): string | undefined {
+  const r = result as unknown as Record<string, unknown>;
+  if (r.approval_matrix_block) return "block";
+  if (r.approval_matrix_request) return "require_approval";
+  return undefined;
+}
+
+/**
+ * Extract approval matrix cell coordinate from a ParseResponse result.
+ * Returns the cell key (e.g. "delete_data_confidential") if a matrix
+ * decision was made.
+ */
+function getMatrixCellFromResult(result: ParseResponse): string | undefined {
+  const r = result as unknown as Record<string, { cell?: string } | undefined>;
+  if (r.approval_matrix_block?.cell) return r.approval_matrix_block.cell;
+  if (r.approval_matrix_request?.cell) return r.approval_matrix_request.cell;
+  return undefined;
 }
 
 export function buildScreeningEventData(input: {
@@ -90,8 +118,12 @@ export function buildScreeningEventData(input: {
       source_kind: input.request.metadata?.source_kind,
       trust_level: input.request.metadata?.trust_level,
       intended_action: input.request.metadata?.intended_action,
+      action_type: input.request.metadata?.action_type,
+      data_classification: input.request.metadata?.data_classification,
       policy_mode: input.request.policy_mode ?? "balanced",
       rule_ids: ruleIds,
+      approval_matrix_decision: getMatrixDecisionFromResult(input.result),
+      approval_matrix_cell: getMatrixCellFromResult(input.result),
     }),
   };
 }

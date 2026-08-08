@@ -13,6 +13,15 @@ import {
   MAX_RULES_PER_KEY,
   type CustomRule,
 } from "../lib/policy-engine/custom-rules.js";
+import {
+  normalizeMatrix,
+  getEffectiveMatrix,
+  getUserOverrides,
+  validateMatrix,
+  VALID_ACTION_TYPES,
+  VALID_CLASSIFICATIONS,
+  type ApprovalMatrix,
+} from "../lib/data-governance/approval-matrix.js";
 
 export const policyRoutes = new Hono<AppEnv>();
 
@@ -675,8 +684,7 @@ policyRoutes.delete("/v1/policy/rules/:id", authMiddleware("evaluate"), async (c
 
     await invalidatePolicyCache(apiKey.id, environment);
 
-    auditLog({
-      action: "custom_rule_deleted",
+    auditLog({ action: "custom_rule_deleted",
       apiKeyId: apiKey.id,
       detail: `Custom rule deleted (${environment}): ${deletedRule.name} (${deletedRule.id})`,
     });
@@ -684,6 +692,117 @@ policyRoutes.delete("/v1/policy/rules/:id", authMiddleware("evaluate"), async (c
     return c.json({ deleted: deletedRule, total_rules: updatedRules.length });
   } catch (err) {
     console.error("[policy] DELETE /rules error:", (err as Error).message);
+    return serviceDependencyProblem(c, err);
+  }
+});
+
+// ─── Action Approval Matrix: /v1/policy/approval-matrix (Task 8.5) ──────
+
+/**
+ * GET /v1/policy/approval-matrix — view the effective approval matrix.
+ * Returns both the full effective matrix (defaults + overrides) and the
+ * user-configured overrides only.
+ */
+policyRoutes.get("/v1/policy/approval-matrix", authMiddleware("evaluate"), async (c) => {
+  const apiKey = c.get("apiKey");
+  const environment = c.get("environment") || "production";
+
+  try {
+    const policy = await prisma.screeningPolicy.findUnique({
+      where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment } },
+      select: { approvalMatrix: true },
+    });
+
+    const userMatrix = normalizeMatrix(policy?.approvalMatrix);
+    const effectiveMatrix = getEffectiveMatrix(userMatrix);
+    const overrides = getUserOverrides(effectiveMatrix);
+
+    return c.json({
+      effective_matrix: effectiveMatrix,
+      user_overrides: overrides,
+      action_types: VALID_ACTION_TYPES,
+      classifications: VALID_CLASSIFICATIONS,
+      decisions: ["allow", "require_approval", "block"],
+      environment,
+    });
+  } catch (err) {
+    console.error("[policy] GET /approval-matrix error:", (err as Error).message);
+    return serviceDependencyProblem(c, err);
+  }
+});
+
+/**
+ * PUT /v1/policy/approval-matrix — update the approval matrix.
+ *
+ * Body: { approval_matrix: { "{actionType}_{classification}": "allow|require_approval|block", ... } }
+ * The matrix is merged with defaults; only non-default cells are stored.
+ * Set a cell to its default value to effectively "reset" it.
+ */
+policyRoutes.put("/v1/policy/approval-matrix", authMiddleware("evaluate"), async (c) => {
+  const apiKey = c.get("apiKey");
+  const environment = c.get("environment") || "production";
+  const body = await c.req.json();
+
+  const submitted = body.approval_matrix ?? body.matrix ?? body;
+
+  // Validate
+  const errors = validateMatrix(submitted);
+  if (errors.length > 0) {
+    return c.json({ error: "Invalid approval matrix", details: errors }, 400);
+  }
+
+  const newMatrix = submitted as ApprovalMatrix;
+
+  // Merge with existing user overrides so partial updates work
+  try {
+    const existing = await prisma.screeningPolicy.findUnique({
+      where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment } },
+      select: { approvalMatrix: true },
+    });
+
+    const existingUserMatrix = normalizeMatrix(existing?.approvalMatrix);
+    const existingOverrides = getUserOverrides(existingUserMatrix);
+
+    // Merge: new overrides take precedence
+    const merged: ApprovalMatrix = { ...existingOverrides, ...newMatrix };
+
+    // Re-compute overrides against defaults to keep storage clean
+    const effectiveMerged = getEffectiveMatrix(merged);
+    const finalOverrides = getUserOverrides(effectiveMerged);
+
+    await prisma.screeningPolicy.upsert({
+      where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment } },
+      create: {
+        apiKeyId: apiKey.id,
+        environment,
+        screenUserInput: DEFAULT_POLICY.screenUserInput,
+        screenToolOutputs: DEFAULT_POLICY.screenToolOutputs,
+        screenForwardedMessages: DEFAULT_POLICY.screenForwardedMessages,
+        screenAllPrompts: DEFAULT_POLICY.screenAllPrompts,
+        autoBlockThreshold: DEFAULT_POLICY.autoBlockThreshold,
+        executeInSandbox: DEFAULT_POLICY.executeInSandbox,
+        approvalMatrix: finalOverrides as any,
+      },
+      update: {
+        approvalMatrix: finalOverrides as any,
+      },
+    });
+
+    await invalidatePolicyCache(apiKey.id, environment);
+
+    auditLog({
+      action: "approval_matrix_updated",
+      apiKeyId: apiKey.id,
+      detail: `Approval matrix updated (${environment}): ${Object.keys(finalOverrides).length} override(s)`,
+    });
+
+    return c.json({
+      effective_matrix: getEffectiveMatrix(finalOverrides),
+      user_overrides: finalOverrides,
+      environment,
+    });
+  } catch (err) {
+    console.error("[policy] PUT /approval-matrix error:", (err as Error).message);
     return serviceDependencyProblem(c, err);
   }
 });

@@ -22,6 +22,13 @@ import { checkDataAccess } from "../lib/data-governance/check-access.js";
 import { checkEgress, type EgressRuleInput } from "../lib/data-governance/check-egress.js";
 import { trackUsage, checkBudget } from "../lib/data-governance/volume-tracker.js";
 import { evaluateCustomRules, parseCustomRules } from "../lib/policy-engine/custom-rules.js";
+import {
+  evaluateMatrix,
+  normalizeMatrix,
+  matrixKey,
+  isValidActionType,
+  isValidClassification,
+} from "../lib/data-governance/approval-matrix.js";
 import { prisma } from "../db.js";
 
 export const parseRoutes = new Hono<AppEnv>();
@@ -242,6 +249,15 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
         status: 400,
         title: "Validation failure",
         detail: "metadata.bytes_accessed must be a non-negative integer",
+        code: ErrorCode.VALIDATION_INVALID_TYPE,
+        retryable: false,
+      });
+    }
+    if (body.metadata.action_type !== undefined && typeof body.metadata.action_type !== "string") {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "metadata.action_type must be a string",
         code: ErrorCode.VALIDATION_INVALID_TYPE,
         retryable: false,
       });
@@ -795,6 +811,118 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     } catch (volErr) {
       console.error("[volume-tracker] check failed:", (volErr as Error).message);
       // Fail open — don't block screening on volume check failure
+    }
+  }
+
+  // ── Action Approval Matrix (Task 8.5) ──
+  // When request metadata includes action_type and data_classification,
+  // evaluate the pair against the configured approval matrix.
+  //   require_approval → add approval_request flag (existing approval flow handles routing)
+  //   block            → add approval_matrix_block flag, enforce through dial
+  //   allow            → no action
+  const matrixActionType = body.metadata?.action_type;
+  const matrixClassifications = body.metadata?.data_classification;
+
+  if (
+    matrixActionType &&
+    typeof matrixActionType === "string" &&
+    matrixClassifications &&
+    Array.isArray(matrixClassifications) &&
+    matrixClassifications.length > 0
+  ) {
+    try {
+      // Load the approval matrix from the policy
+      const matrixPolicy = await prisma.screeningPolicy.findUnique({
+        where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment: "production" } },
+        select: { approvalMatrix: true },
+      });
+      const matrix = normalizeMatrix(matrixPolicy?.approvalMatrix);
+
+      // Evaluate against the highest classification present (most restrictive check)
+      for (const cls of matrixClassifications) {
+        if (typeof cls !== "string") continue;
+
+        // Skip invalid action types or classifications gracefully
+        if (!isValidActionType(matrixActionType) || !isValidClassification(cls)) continue;
+
+        const cellKey = matrixKey(matrixActionType, cls);
+        const decision = evaluateMatrix(matrix, matrixActionType, cls);
+
+        if (decision === "require_approval") {
+          result.flags.push({
+            category: "approval_matrix",
+            severity: 6,
+            label: `Approval required: ${matrixActionType} × ${cls}`,
+            detail: `Action "${matrixActionType}" on "${cls}" data requires approval per the approval matrix (cell: ${cellKey})`,
+            source: "approval_matrix",
+          });
+          if (!result.categories.includes("approval_matrix")) {
+            result.categories.push("approval_matrix");
+          }
+          (result as unknown as Record<string, unknown>).approval_matrix_request = {
+            action_type: matrixActionType,
+            classification: cls,
+            cell: cellKey,
+            decision: "require_approval",
+            default_action: "deny",
+            expires_in_seconds: 900,
+          };
+
+          // Route through existing approval flow
+          if (!result.approval_request) {
+            result.approval_request = {
+              type: "approval_matrix" as any,
+              sensitivity: cls === "restricted" ? "confidential" : "personal",
+              data_requested: [`${matrixActionType} on ${cls} data`],
+              requester_trust: "unknown" as any,
+              owner_prompt: `Approval required for action "${matrixActionType}" on "${cls}" data. Default is deny if you do not respond within 15 minutes.`,
+              default_action: "deny" as const,
+              expires_in_seconds: 900,
+              allowed_response_modes: ["deny", "share_approved_summary"] as const,
+            } as any;
+          }
+
+          if (result.suggested_action === "allow") {
+            result.suggested_action = "request_owner_approval" as any;
+          }
+          if (result.recommended_action === "allow" || !result.recommended_action) {
+            result.recommended_action = "request_owner_approval" as any;
+          }
+        } else if (decision === "block") {
+          result.flags.push({
+            category: "approval_matrix_block",
+            severity: 9,
+            label: `Blocked by approval matrix: ${matrixActionType} × ${cls}`,
+            detail: `Action "${matrixActionType}" on "${cls}" data is blocked per the approval matrix (cell: ${cellKey})`,
+            source: "approval_matrix",
+          });
+          if (!result.categories.includes("approval_matrix_block")) {
+            result.categories.push("approval_matrix_block");
+          }
+          (result as unknown as Record<string, unknown>).approval_matrix_block = {
+            action_type: matrixActionType,
+            classification: cls,
+            cell: cellKey,
+            decision: "block",
+          };
+
+          // Enforcement: under "block" mode, escalate risk and block
+          if (enforcementMode === "block") {
+            result.risk_score = Math.max(result.risk_score, 9);
+            result.verdict = "critical";
+            result.safe = false;
+            result.suggested_action = "block";
+            result.recommended_action = "block";
+            result.wouldBlock = true;
+          } else if (enforcementMode === "warn") {
+            c.header("X-Approval-Matrix-Block", `Action "${matrixActionType}" on "${cls}" data would be blocked under "block" mode`);
+          }
+        }
+        // decision === "allow" → no action
+      }
+    } catch (matrixErr) {
+      console.error("[approval-matrix] evaluation failed:", (matrixErr as Error).message);
+      // Fail open — don't block screening on matrix check failure
     }
   }
 
