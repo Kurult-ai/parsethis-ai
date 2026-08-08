@@ -1,13 +1,16 @@
 /**
  * Agent Dashboard — SSR page at /dashboard/agents
  *
- * Visualises the agent registry and compliance status:
- *   1. Agent registry table with color-coded status badges
- *   2. Compliance summary cards (total, active, frozen, coverage %, screenings 24h)
- *   3. Enforcement dial status per environment (monitor/warn/block)
- *   4. Recent screening events (last 10)
- *   5. Data governance summary (active grants, egress rules, volume budgets)
- *   6. SIEM forwarding status (connected/disconnected, last forwarded)
+ * Layout follows Miller's law: content is chunked into a small number of
+ * scannable zones, each holding at most ~5-7 items:
+ *   1. Dashboard switcher (4 destinations) — replaces the marketing-only nav gap
+ *   2. Posture strip — one segmented card with 5 fleet-level facts
+ *   3. Agent registry — the core object; filter chips + search, 6 columns
+ *   4. Recent screening activity — 4 columns, agent ids resolved to names
+ *   5. Controls band — enforcement / data governance / SIEM as 3 compact cards
+ *
+ * Rendering is read-only: this page must never write to the database
+ * (org provisioning belongs to the API routes, not a GET).
  */
 
 import { renderPage } from "../lib/html-template.js";
@@ -61,18 +64,18 @@ interface StatusBadge {
 }
 
 function statusBadge(status: string, frozen: boolean): StatusBadge {
-  if (frozen) return { class: "badge-blue", label: "❄ Frozen" };
+  if (frozen) return { class: "st-frozen", label: "Frozen" };
   switch (status) {
     case "active":
-      return { class: "badge-green", label: "● Active" };
+      return { class: "st-active", label: "Active" };
     case "suspended":
-      return { class: "badge-yellow", label: "⏸ Suspended" };
+      return { class: "st-suspended", label: "Suspended" };
     case "decommissioned":
-      return { class: "badge-muted", label: "✖ Decommissioned" };
+      return { class: "st-retired", label: "Retired" };
     case "discovered":
-      return { class: "badge-accent", label: "✦ Discovered" };
+      return { class: "st-discovered", label: "Discovered" };
     default:
-      return { class: "badge-default", label: escapeHtml(status) };
+      return { class: "st-other", label: escapeHtml(status) };
   }
 }
 
@@ -94,34 +97,43 @@ function riskBadge(risk: string): StatusBadge {
 function enforcementModeClass(mode: string): string {
   switch (mode) {
     case "block":
-      return "badge-destructive";
+      return "mode-block";
     case "warn":
-      return "badge-yellow";
+      return "mode-warn";
     case "monitor":
-      return "badge-blue";
+      return "mode-monitor";
     default:
-      return "badge-default";
+      return "mode-other";
   }
 }
 
-function verdictColor(verdict: string): string {
+function verdictBadge(verdict: string): StatusBadge {
+  const label = escapeHtml(verdict.replace(/_/g, " "));
   switch (verdict) {
     case "safe":
-      return "badge-green";
     case "low_risk":
-      return "badge-green";
+      return { class: "st-active", label };
     case "medium_risk":
-      return "badge-yellow";
+      return { class: "st-suspended", label };
     case "high_risk":
-      return "badge-destructive";
     case "critical":
-      return "badge-destructive";
+      return { class: "st-danger", label };
     default:
-      return "badge-default";
+      return { class: "st-other", label };
   }
 }
 
-// ─── Org resolution (same pattern as routes) ──────────────────────────
+// "Needs attention" = anything an operator should look at first.
+function needsAttention(a: { status: string; frozen: boolean; riskLevel: string }): boolean {
+  return (
+    a.frozen ||
+    a.status === "suspended" ||
+    a.riskLevel === "high" ||
+    a.riskLevel === "critical"
+  );
+}
+
+// ─── Org resolution (read-only; API routes own org provisioning) ──────
 
 async function resolveOrgId(apiKeyId: string): Promise<string | null> {
   try {
@@ -133,19 +145,11 @@ async function resolveOrgId(apiKeyId: string): Promise<string | null> {
   } catch {
     // fall through
   }
-  const existingOrg = await prisma.organization.findFirst({
-    where: { ownerId: apiKeyId },
-  });
-  if (existingOrg) return existingOrg.id;
   try {
-    const org = await prisma.organization.create({
-      data: {
-        name: "Default Organization",
-        slug: `org-${apiKeyId.slice(-12)}`,
-        ownerId: apiKeyId,
-      },
+    const existingOrg = await prisma.organization.findFirst({
+      where: { ownerId: apiKeyId },
     });
-    return org.id;
+    return existingOrg?.id ?? null;
   } catch {
     return null;
   }
@@ -163,7 +167,6 @@ export async function renderAgentDashboardPage(
   let totalAgents = 0;
   let activeAgents = 0;
   let frozenAgents = 0;
-  let decommissionedAgents = 0;
   let agentRows: Array<{
     id: string;
     agentName: string;
@@ -175,7 +178,7 @@ export async function renderAgentDashboardPage(
     ownerEmail: string | null;
   }> = [];
   let screenings24h = 0;
-  let coveragePct = 0;
+  let coveragePct: number | null = null;
   let enforcementModes: Array<{ environment: string; mode: string }> = [];
   let recentEvents: Array<Record<string, unknown>> = [];
   let activeGrantsCount = 0;
@@ -226,11 +229,13 @@ export async function renderAgentDashboardPage(
         framework: a.framework,
         ownerEmail: a.ownerEmail,
       }));
-      totalAgents = agents.length;
+
+      // True total from groupBy — findMany is capped at 100 rows.
+      totalAgents = counts.reduce((sum, c) => sum + (c._count ?? 0), 0);
+      if (totalAgents < agents.length) totalAgents = agents.length;
 
       for (const c of counts) {
         if (c.status === "active") activeAgents = c._count;
-        if (c.status === "decommissioned") decommissionedAgents = c._count;
       }
 
       // Frozen count is separate from status
@@ -270,7 +275,7 @@ export async function renderAgentDashboardPage(
     // non-fatal
   }
 
-  // ─── Coverage attestation (best-effort) ────────────────────────────
+  // ─── Coverage attestation (best-effort; null = no data, not 0%) ────
   if (orgId) {
     try {
       const { getCoverageReport } = await import(
@@ -279,7 +284,8 @@ export async function renderAgentDashboardPage(
       const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const to = new Date();
       const report = await getCoverageReport(orgId, { from, to });
-      coveragePct = Math.round((report as { coverage_pct?: number }).coverage_pct ?? 0);
+      const pct = (report as { coverage_pct?: number }).coverage_pct;
+      coveragePct = typeof pct === "number" ? Math.round(pct) : null;
     } catch {
       // coverage may be unavailable
     }
@@ -302,34 +308,35 @@ export async function renderAgentDashboardPage(
     enforcementModes = [{ environment: "production", mode: "block" }];
   }
 
-  // ─── Data governance summary ───────────────────────────────────────
+  // ─── Data governance summary (scoped to this org's agents) ─────────
   if (orgId) {
-    try {
-      activeGrantsCount = await prisma.agentDataGrant.count({
-        where: {
-          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-        },
-      });
-    } catch {
-      // non-fatal
+    const orgAgentIds = agentRows.map((a) => a.id);
+
+    if (orgAgentIds.length > 0) {
+      try {
+        activeGrantsCount = await prisma.agentDataGrant.count({
+          where: {
+            agentId: { in: orgAgentIds },
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          },
+        });
+      } catch {
+        // non-fatal
+      }
+
+      try {
+        volumeBudgetsCount = await prisma.volumeBudget.count({
+          where: { agentId: { in: orgAgentIds } },
+        });
+      } catch {
+        // non-fatal
+      }
     }
 
     try {
       egressRulesCount = await prisma.egressRule.count({
         where: { orgId },
       });
-    } catch {
-      // non-fatal
-    }
-
-    try {
-      // VolumeBudget has no orgId — count all that belong to org agents
-      const orgAgentIds = agentRows.map((a) => a.id);
-      if (orgAgentIds.length > 0) {
-        volumeBudgetsCount = await prisma.volumeBudget.count({
-          where: { agentId: { in: orgAgentIds } },
-        });
-      }
     } catch {
       // non-fatal
     }
@@ -352,82 +359,135 @@ export async function renderAgentDashboardPage(
 
   // ─── Build HTML ────────────────────────────────────────────────────
 
-  // Summary cards
-  const coverageColor =
-    coveragePct >= 85 ? "var(--green)" : coveragePct >= 50 ? "var(--yellow)" : "var(--destructive)";
+  const attentionCount = agentRows.filter(needsAttention).length;
+  const agentNameById = new Map(agentRows.map((a) => [a.id, a.agentName]));
+  const prodMode =
+    enforcementModes.find((e) => e.environment === "production")?.mode ??
+    enforcementModes[0]?.mode ??
+    "block";
 
-  const summaryCards = `
-    <div class="ad-summary-grid">
-      <div class="ad-stat-card">
-        <div class="ad-stat-label">Total Agents</div>
-        <div class="ad-stat-value">${totalAgents}</div>
-      </div>
-      <div class="ad-stat-card ad-stat-green">
-        <div class="ad-stat-label">Active</div>
-        <div class="ad-stat-value">${activeAgents}</div>
-      </div>
-      <div class="ad-stat-card ad-stat-blue">
-        <div class="ad-stat-label">Frozen</div>
-        <div class="ad-stat-value">${frozenAgents}</div>
-      </div>
-      <div class="ad-stat-card">
-        <div class="ad-stat-label">Coverage</div>
-        <div class="ad-stat-value" style="color:${coverageColor};">${coveragePct}%</div>
-      </div>
-      <div class="ad-stat-card">
-        <div class="ad-stat-label">Screenings (24h)</div>
-        <div class="ad-stat-value">${screenings24h}</div>
-      </div>
-    </div>`;
+  // Posture strip — one segmented card, five facts.
+  const coverageCell =
+    coveragePct === null
+      ? `<div class="ad-cell-value ad-num ad-value-dim">—</div>
+         <div class="ad-cell-foot">no data yet</div>`
+      : `<div class="ad-cell-value ad-num" style="color:${
+          coveragePct >= 85 ? "var(--green)" : coveragePct >= 50 ? "var(--yellow)" : "var(--destructive)"
+        };">${coveragePct}%</div>
+         <div class="ad-cell-foot">last 7 days</div>`;
 
-  // Enforcement dial section
-  const enforcementItems = enforcementModes
-    .map(
-      (e) => `
-      <div class="ad-enforcement-item">
-        <span class="badge ${enforcementModeClass(e.mode)}">${escapeHtml(e.mode.toUpperCase())}</span>
-        <span class="ad-env-label">${escapeHtml(e.environment)}</span>
-      </div>`,
-    )
-    .join("");
-
-  const enforcementSection = `
-    <div class="ad-enforcement-row">
-      ${enforcementItems}
+  const postureStrip = `
+    <div class="ad-strip" role="group" aria-label="Fleet posture">
+      <a class="ad-cell" href="#registry">
+        <div class="ad-cell-label">Agents</div>
+        <div class="ad-cell-value ad-num">${totalAgents}</div>
+        <div class="ad-cell-foot"><span class="ad-dot ad-dot-green"></span>${activeAgents} active${frozenAgents > 0 ? ` · <span class="ad-dot ad-dot-blue"></span>${frozenAgents} frozen` : ""}</div>
+      </a>
+      <a class="ad-cell" href="#registry">
+        <div class="ad-cell-label">Needs attention</div>
+        <div class="ad-cell-value ad-num" style="color:${attentionCount > 0 ? "var(--yellow)" : "var(--text)"};">${attentionCount}</div>
+        <div class="ad-cell-foot">${attentionCount === 0 ? "all clear" : "frozen · suspended · high risk"}</div>
+      </a>
+      <a class="ad-cell" href="#activity">
+        <div class="ad-cell-label">Screenings 24h</div>
+        <div class="ad-cell-value ad-num">${screenings24h}</div>
+        <div class="ad-cell-foot">across this key</div>
+      </a>
+      <div class="ad-cell">
+        <div class="ad-cell-label">Coverage</div>
+        ${coverageCell}
+      </div>
+      <a class="ad-cell" href="#controls">
+        <div class="ad-cell-label">Production dial</div>
+        <div class="ad-cell-value"><span class="ad-mode ${enforcementModeClass(prodMode)}">${escapeHtml(prodMode)}</span></div>
+        <div class="ad-cell-foot">SIEM ${siemConnected ? '<span class="ad-dot ad-dot-green"></span>connected' : '<span class="ad-dot ad-dot-dim"></span>off'}</div>
+      </a>
     </div>`;
 
   // Agent table rows
-  const agentTableRows =
-    agentRows.length === 0
-      ? `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:32px;">No agents registered yet. Use <code>POST /v1/agents</code> to register your first agent.</td></tr>`
-      : agentRows
-          .map((a) => {
-            const sb = statusBadge(a.status, a.frozen);
-            const rb = riskBadge(a.riskLevel);
-            return `
-        <tr>
-          <td><code class="ad-agent-id">${escapeHtml(a.id.slice(0, 12))}…</code></td>
-          <td><strong>${escapeHtml(a.agentName)}</strong>${a.framework ? `<br><span style="font-size:12px;color:var(--text-dim);">${escapeHtml(a.framework)}</span>` : ""}</td>
-          <td><span class="badge ${sb.class}">${sb.label}</span></td>
-          <td><span class="badge ${rb.class}">${rb.label}</span></td>
-          <td style="font-size:13px;color:var(--text-dim);">${timeAgo(a.lastSeenAt)}</td>
-          <td style="font-size:13px;color:var(--text-dim);">${safeStr(a.ownerEmail)}</td>
-          <td><a href="/v1/agents/${encodeURIComponent(a.id)}" class="btn btn-outline ad-btn-sm">View</a></td>
-        </tr>`;
-          })
-          .join("\n");
+  const registerSnippet = `curl -X POST ${escapeHtml(baseUrl)}/v1/agents \\
+  -H "Authorization: Bearer $PARSE_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"agent_name": "my-first-agent", "framework": "langgraph"}'`;
 
-  // Recent screening events
+  const emptyRegistry = `
+    <div class="ad-empty">
+      <div class="ad-empty-title">No agents registered yet</div>
+      <p>Register your first agent and it will show up here with live status, risk level, and screening history.</p>
+      <pre class="ad-snippet"><code>${registerSnippet}</code></pre>
+      <a href="/docs" class="btn btn-outline" style="margin-top:12px;">Read the docs</a>
+    </div>`;
+
+  const agentTableRows = agentRows
+    .map((a) => {
+      const sb = statusBadge(a.status, a.frozen);
+      const rb = riskBadge(a.riskLevel);
+      const attention = needsAttention(a);
+      const searchable = escapeHtml(
+        `${a.agentName} ${a.id} ${a.ownerEmail ?? ""} ${a.framework ?? ""}`.toLowerCase(),
+      );
+      return `
+        <tr data-status="${escapeHtml(a.status)}" data-frozen="${a.frozen}" data-attention="${attention}" data-search="${searchable}">
+          <td>
+            <div class="ad-agent-name">${escapeHtml(a.agentName)}</div>
+            <div class="ad-agent-meta"><code class="ad-agent-id">${escapeHtml(a.id.slice(0, 12))}…</code>${a.framework ? ` · ${escapeHtml(a.framework)}` : ""}</div>
+          </td>
+          <td><span class="ad-badge ${sb.class}">${sb.label}</span></td>
+          <td><span class="ad-badge ${rb.class}">${rb.label}</span></td>
+          <td class="ad-num-cell" title="${a.lastSeenAt ? escapeHtml(formatTimestamp(a.lastSeenAt)) : "never"}">${timeAgo(a.lastSeenAt)}</td>
+          <td class="ad-dim-cell">${safeStr(a.ownerEmail)}</td>
+          <td style="text-align:right;"><a href="/v1/agents/${encodeURIComponent(a.id)}" class="ad-detail-link" title="Raw agent record (JSON)">Details →</a></td>
+        </tr>`;
+    })
+    .join("\n");
+
+  const registrySection =
+    agentRows.length === 0
+      ? emptyRegistry
+      : `
+    <div class="ad-toolbar">
+      <div class="ad-chips" role="tablist" aria-label="Filter agents">
+        <button class="ad-chip ad-chip-on" data-filter="all">All <span class="ad-chip-n">${totalAgents}</span></button>
+        <button class="ad-chip" data-filter="active">Active <span class="ad-chip-n">${activeAgents}</span></button>
+        <button class="ad-chip" data-filter="frozen">Frozen <span class="ad-chip-n">${frozenAgents}</span></button>
+        <button class="ad-chip" data-filter="attention">Needs attention <span class="ad-chip-n">${attentionCount}</span></button>
+      </div>
+      <input type="search" id="ad-search" class="ad-search" placeholder="Search name, id, owner…" aria-label="Search agents">
+    </div>
+    <div class="table-wrapper">
+      <table id="ad-table">
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th>Status</th>
+            <th>Risk</th>
+            <th>Last seen</th>
+            <th>Owner</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${agentTableRows}
+        </tbody>
+      </table>
+    </div>
+    <div class="ad-table-foot" id="ad-table-foot">${agentRows.length < totalAgents ? `Showing newest ${agentRows.length} of ${totalAgents} agents.` : ""}</div>`;
+
+  // Recent screening events — 4 columns, agent ids resolved to names.
   const eventRows =
     recentEvents.length === 0
-      ? `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:32px;">No screening events yet.</td></tr>`
+      ? `<tr><td colspan="4" class="ad-empty-row">No screening events yet. Calls to <code>POST /v1/parse</code> and <code>POST /v1/screen-output</code> will appear here.</td></tr>`
       : recentEvents
           .map((e) => {
             const verdict = String(e.verdict ?? "unknown");
+            const vb = verdictBadge(verdict);
             const riskScore = e.riskScore as number | undefined;
             const blocked = e.blocked as boolean;
             const metadata = e.metadata as Record<string, unknown> | null;
-            const agentId = metadata?.agent_id ? String(metadata.agent_id) : "—";
+            const agentId = metadata?.agent_id ? String(metadata.agent_id) : null;
+            const agentLabel = agentId
+              ? agentNameById.get(agentId) ?? `${agentId.slice(0, 12)}…`
+              : "—";
             const riskColor =
               riskScore === undefined
                 ? "var(--text-dim)"
@@ -438,229 +498,302 @@ export async function renderAgentDashboardPage(
                     : "var(--green)";
             return `
         <tr>
-          <td><span class="badge ${verdictColor(verdict)}">${escapeHtml(verdict)}</span>${blocked ? ' <span class="badge badge-destructive">BLOCKED</span>' : ""}</td>
-          <td><strong style="color:${riskColor};">${riskScore !== undefined ? riskScore.toFixed(1) : "—"}</strong></td>
-          <td style="font-size:13px;"><code>${escapeHtml(agentId.slice(0, 16))}</code></td>
-          <td style="font-size:13px;color:var(--text-dim);">${formatTimestamp(e.createdAt as Date)}</td>
-          <td style="font-size:13px;color:var(--text-dim);">${timeAgo(e.createdAt as Date)}</td>
+          <td><span class="ad-badge ${vb.class}">${vb.label}</span>${blocked ? ' <span class="ad-badge st-danger">blocked</span>' : ""}</td>
+          <td class="ad-num-cell"><strong style="color:${riskColor};">${riskScore !== undefined ? riskScore.toFixed(1) : "—"}</strong></td>
+          <td class="ad-dim-cell">${escapeHtml(agentLabel)}</td>
+          <td class="ad-num-cell" title="${escapeHtml(formatTimestamp(e.createdAt as Date))}">${timeAgo(e.createdAt as Date)}</td>
         </tr>`;
           })
           .join("\n");
 
-  // Data governance summary
-  const dgSection = `
-    <div class="ad-dg-grid">
-      <div class="ad-dg-card">
-        <div class="ad-dg-label">Active Data Grants</div>
-        <div class="ad-dg-value">${activeGrantsCount}</div>
-      </div>
-      <div class="ad-dg-card">
-        <div class="ad-dg-label">Egress Rules</div>
-        <div class="ad-dg-value">${egressRulesCount}</div>
-      </div>
-      <div class="ad-dg-card">
-        <div class="ad-dg-label">Volume Budgets</div>
-        <div class="ad-dg-value">${volumeBudgetsCount}</div>
-      </div>
-    </div>`;
+  // Controls band — enforcement / governance / SIEM as three compact cards.
+  const enforcementItems = enforcementModes
+    .map(
+      (e) => `
+      <div class="ad-ctl-row">
+        <span class="ad-env">${escapeHtml(e.environment)}</span>
+        <span class="ad-mode ${enforcementModeClass(e.mode)}">${escapeHtml(e.mode)}</span>
+      </div>`,
+    )
+    .join("");
 
-  // SIEM status
-  const siemBadgeClass = siemConnected ? "badge-green" : "badge-muted";
-  const siemBadgeLabel = siemConnected ? "● Connected" : "○ Disconnected";
-  const siemSection = `
-    <div class="ad-siem-card">
-      <div class="ad-siem-header">
-        <span class="badge ${siemBadgeClass}" style="font-size:14px;padding:5px 14px;">${siemBadgeLabel}</span>
-        <span class="ad-siem-detail">Last forwarded: <strong>${siemLastForwarded ? formatTimestamp(siemLastForwarded) : "never"}</strong></span>
+  const controlsBand = `
+    <div class="ad-controls" id="controls">
+      <div class="ad-ctl-card">
+        <div class="ad-ctl-title">Enforcement dial</div>
+        <div class="ad-ctl-sub">block stops it · warn annotates · monitor logs only</div>
+        ${enforcementItems}
       </div>
-      <div class="ad-siem-stats">
-        <div class="ad-siem-stat"><span class="ad-dg-label">Destinations</span><strong>${siemDestinations}</strong></div>
-        <div class="ad-siem-stat"><span class="ad-dg-label">Queued</span><strong>${siemEventsQueued}</strong></div>
-        <div class="ad-siem-stat"><span class="ad-dg-label">Failed</span><strong style="color:${siemFailedCount > 0 ? "var(--destructive)" : "inherit"};">${siemFailedCount}</strong></div>
+      <div class="ad-ctl-card">
+        <div class="ad-ctl-title">Data governance</div>
+        <div class="ad-ctl-sub">what your agents may touch and move</div>
+        <div class="ad-ctl-row"><span class="ad-env">active data grants</span><span class="ad-num ad-ctl-n">${activeGrantsCount}</span></div>
+        <div class="ad-ctl-row"><span class="ad-env">egress rules</span><span class="ad-num ad-ctl-n">${egressRulesCount}</span></div>
+        <div class="ad-ctl-row"><span class="ad-env">volume budgets</span><span class="ad-num ad-ctl-n">${volumeBudgetsCount}</span></div>
+      </div>
+      <div class="ad-ctl-card">
+        <div class="ad-ctl-title">SIEM forwarding</div>
+        <div class="ad-ctl-sub">${siemConnected ? '<span class="ad-dot ad-dot-green"></span>connected' : '<span class="ad-dot ad-dot-dim"></span>not connected'} · last forwarded ${siemLastForwarded ? escapeHtml(formatTimestamp(siemLastForwarded)) : "never"}</div>
+        <div class="ad-ctl-row"><span class="ad-env">destinations</span><span class="ad-num ad-ctl-n">${siemDestinations}</span></div>
+        <div class="ad-ctl-row"><span class="ad-env">queued</span><span class="ad-num ad-ctl-n">${siemEventsQueued}</span></div>
+        <div class="ad-ctl-row"><span class="ad-env">failed</span><span class="ad-num ad-ctl-n" style="color:${siemFailedCount > 0 ? "var(--destructive)" : "inherit"};">${siemFailedCount}</span></div>
       </div>
     </div>`;
 
   const content = `
 <style>
-  .ad-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 16px;
-    margin-bottom: 32px;
-  }
-  .ad-stat-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px;
-    text-align: center;
-    box-shadow: 0 1px 0 rgba(24,36,50,0.02);
-  }
-  .ad-stat-green { border-color: var(--green); border-width: 2px; }
-  .ad-stat-blue { border-color: var(--accent); border-width: 2px; }
-  .ad-stat-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 8px;
-  }
-  .ad-stat-value {
-    font-size: 32px;
+  /* ── layout & type ─────────────────────────────────────────────── */
+  .ad-num, .ad-num-cell { font-variant-numeric: tabular-nums; }
+  .ad-kicker {
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: -0.03em;
-    line-height: 1;
-  }
-  .ad-enforcement-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    align-items: center;
-    margin-bottom: 8px;
-  }
-  .ad-enforcement-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-  }
-  .ad-env-label {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text);
-  }
-  .badge-blue {
-    background: var(--accent-dim);
-    color: var(--accent2);
-  }
-  .badge-muted {
-    background: var(--surface2);
-    color: var(--text-soft);
-    border: 1px solid var(--border);
-  }
-  .risk-low { background: var(--green-dim); color: var(--green); }
-  .risk-medium { background: var(--yellow-dim); color: var(--yellow); }
-  .risk-high { background: var(--destructive-dim); color: var(--destructive); }
-  .risk-critical { background: var(--destructive-dim); color: var(--destructive); font-weight: 700; }
-  .risk-unscored { background: var(--surface2); color: var(--text-soft); border: 1px solid var(--border); }
-  .ad-agent-id { font-size: 12px; }
-  .ad-btn-sm { padding: 4px 12px; font-size: 12px; }
-  .ad-dg-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 12px;
-  }
-  .ad-dg-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px 20px;
-    text-align: center;
-  }
-  .ad-dg-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-dim);
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    color: var(--accent2);
     margin-bottom: 4px;
   }
-  .ad-dg-value {
-    font-size: 24px;
-    font-weight: 700;
+  .ad-section { margin-bottom: 48px; }
+  .ad-section h2 { margin: 0 0 2px; }
+  .ad-section-sub { color: var(--text-dim); font-size: 14px; margin: 0 0 16px; }
+
+  /* ── dashboard switcher ────────────────────────────────────────── */
+  .ad-tabs {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+    margin-bottom: 28px;
   }
-  .ad-siem-card {
+  .ad-tab {
+    padding: 9px 14px 11px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .ad-tab:hover { color: var(--text); text-decoration: none; }
+  .ad-tab-on {
+    color: var(--accent2);
+    border-bottom-color: var(--accent);
+  }
+  .ad-tabs-right { margin-left: auto; font-size: 13px; color: var(--text-soft); padding-bottom: 8px; }
+
+  /* ── posture strip ─────────────────────────────────────────────── */
+  .ad-strip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 20px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 0 rgba(24,36,50,0.02);
   }
-  .ad-siem-header {
+  .ad-cell {
+    padding: 18px 20px 14px;
+    border-left: 1px solid var(--border);
+    color: inherit;
+    display: block;
+  }
+  .ad-cell:first-child { border-left: none; }
+  a.ad-cell:hover { background: var(--surface2); text-decoration: none; color: inherit; }
+  .ad-cell-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+  }
+  .ad-cell-value { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+  .ad-value-dim { color: var(--text-soft); }
+  .ad-cell-foot { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+  @media (max-width: 900px) {
+    .ad-strip { grid-template-columns: 1fr 1fr; }
+    .ad-cell { border-top: 1px solid var(--border); }
+    .ad-cell:nth-child(-n+2) { border-top: none; }
+    .ad-cell:nth-child(odd) { border-left: none; }
+  }
+
+  /* ── dots & badges ─────────────────────────────────────────────── */
+  .ad-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: 1px;
+  }
+  .ad-dot-green { background: var(--green); }
+  .ad-dot-blue { background: var(--accent); }
+  .ad-dot-dim { background: var(--text-soft); }
+  .ad-badge {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .st-active { background: var(--green-dim); color: var(--green); }
+  .st-frozen { background: var(--accent-dim); color: var(--accent2); }
+  .st-suspended { background: var(--yellow-dim); color: var(--yellow); }
+  .st-retired, .st-other { background: var(--surface2); color: var(--text-soft); }
+  .st-discovered { background: var(--accent-dim); color: var(--accent2); }
+  .st-danger { background: var(--destructive-dim); color: var(--destructive); }
+  .risk-low { background: var(--green-dim); color: var(--green); }
+  .risk-medium { background: var(--yellow-dim); color: var(--yellow); }
+  .risk-high, .risk-critical { background: var(--destructive-dim); color: var(--destructive); }
+  .risk-critical { font-weight: 700; }
+  .risk-unscored { background: var(--surface2); color: var(--text-soft); }
+  .ad-mode {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 3px 10px;
+    border-radius: 6px;
+  }
+  .mode-block { background: var(--destructive-dim); color: var(--destructive); }
+  .mode-warn { background: var(--yellow-dim); color: var(--yellow); }
+  .mode-monitor { background: var(--accent-dim); color: var(--accent2); }
+  .mode-other { background: var(--surface2); color: var(--text-soft); }
+
+  /* ── registry toolbar & table ──────────────────────────────────── */
+  .ad-toolbar {
     display: flex;
     align-items: center;
-    gap: 20px;
-    margin-bottom: 16px;
+    gap: 16px;
     flex-wrap: wrap;
+    margin-bottom: 14px;
   }
-  .ad-siem-detail {
-    font-size: 14px;
+  .ad-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ad-chip {
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
     color: var(--text-dim);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 12px;
+    cursor: pointer;
   }
-  .ad-siem-stats {
+  .ad-chip:hover { color: var(--text); background: var(--surface2); }
+  .ad-chip-on {
+    color: var(--accent2);
+    background: var(--accent-dim);
+    border-color: transparent;
+  }
+  .ad-chip-n { opacity: 0.65; font-weight: 700; margin-left: 2px; }
+  .ad-search {
+    font: inherit;
+    font-size: 13px;
+    margin-left: auto;
+    min-width: 220px;
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+  }
+  .ad-search:focus { outline: none; border-color: var(--accent); }
+  .ad-agent-name { font-weight: 600; }
+  .ad-agent-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  .ad-agent-id { font-size: 11px; }
+  .ad-num-cell { font-size: 13px; color: var(--text-dim); white-space: nowrap; }
+  .ad-dim-cell { font-size: 13px; color: var(--text-dim); }
+  .ad-detail-link { font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .ad-table-foot { font-size: 12px; color: var(--text-soft); margin-top: 8px; min-height: 15px; }
+  #ad-table tbody tr:hover { background: var(--surface2); }
+  .ad-empty-row { text-align: center; color: var(--text-dim); padding: 32px !important; }
+
+  /* ── empty state ───────────────────────────────────────────────── */
+  .ad-empty {
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    max-width: 720px;
+  }
+  .ad-empty-title { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+  .ad-empty p { color: var(--text-dim); font-size: 14px; margin: 0 0 14px; }
+  .ad-snippet {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    font-size: 12.5px;
+    overflow-x: auto;
+    margin: 0;
+  }
+
+  /* ── controls band ─────────────────────────────────────────────── */
+  .ad-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .ad-ctl-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+  .ad-ctl-title { font-size: 14px; font-weight: 700; }
+  .ad-ctl-sub { font-size: 12px; color: var(--text-dim); margin: 3px 0 12px; }
+  .ad-ctl-row {
     display: flex;
-    gap: 32px;
-    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 0;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
   }
-  .ad-siem-stat {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .ad-siem-stat strong {
-    font-size: 20px;
-  }
-  .ad-nav-back {
-    margin-bottom: 16px;
-    display: inline-block;
-    font-size: 14px;
-  }
+  .ad-env { color: var(--text-dim); }
+  .ad-ctl-n { font-weight: 700; font-size: 15px; }
 </style>
 
-<a href="/dashboard/compliance" class="ad-nav-back">← Back to Compliance Dashboard</a>
+<!-- Dashboard switcher -->
+<nav class="ad-tabs" aria-label="Dashboards">
+  <a class="ad-tab ad-tab-on" href="/dashboard/agents" aria-current="page">Agents</a>
+  <a class="ad-tab" href="/dashboard/screening">Screening</a>
+  <a class="ad-tab" href="/dashboard/compliance">Compliance</a>
+  <a class="ad-tab" href="/dashboard/billing">Billing</a>
+  <span class="ad-tabs-right"><a href="/docs">API docs</a></span>
+</nav>
 
-<!-- Summary Cards -->
-<div class="section-chunk">
-  <h1 style="margin-top:0;">Agent Dashboard</h1>
-  <p class="answer-capsule">Agent registry overview, enforcement posture, and data governance status for your organization.</p>
-  ${summaryCards}
+<!-- Header + posture strip -->
+<div class="ad-section">
+  <div class="ad-kicker">Fleet</div>
+  <h1 style="margin:0 0 2px;">Agents</h1>
+  <p class="ad-section-sub">Registry, enforcement posture, and data governance for your organization.</p>
+  ${postureStrip}
 </div>
 
-<!-- Enforcement Dial -->
-<div class="section-chunk">
-  <h2 style="margin-top:0;">Enforcement Mode</h2>
-  <p class="answer-capsule" style="font-size:14px;">Current enforcement dial per environment. <code>block</code> = dangerous content is actively blocked, <code>warn</code> = annotated but not blocked, <code>monitor</code> = counterfactual logging only.</p>
-  ${enforcementSection}
+<!-- Agent registry -->
+<div class="ad-section" id="registry">
+  <h2>Registry</h2>
+  <p class="ad-section-sub">Every agent Parse knows about, newest first.</p>
+  ${registrySection}
 </div>
 
-<!-- Agent Registry Table -->
-<div class="section-chunk">
-  <h2 style="margin-top:0;">Agent Registry <span style="font-size:14px;font-weight:400;color:var(--text-dim);">(${totalAgents} agents)</span></h2>
-  <div class="table-wrapper">
-    <table>
-      <thead>
-        <tr>
-          <th>Agent ID</th>
-          <th>Name</th>
-          <th>Status</th>
-          <th>Risk Level</th>
-          <th>Last Seen</th>
-          <th>Owner</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        ${agentTableRows}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- Recent Screening Events -->
-<div class="section-chunk">
-  <h2 style="margin-top:0;">Recent Screening Events</h2>
+<!-- Recent screening activity -->
+<div class="ad-section" id="activity">
+  <h2>Recent screening activity</h2>
+  <p class="ad-section-sub">Last 10 screening verdicts for this key.</p>
   <div class="table-wrapper">
     <table>
       <thead>
         <tr>
           <th>Verdict</th>
-          <th>Risk Score</th>
+          <th>Risk score</th>
           <th>Agent</th>
-          <th>Timestamp</th>
-          <th>Time Ago</th>
+          <th>When</th>
         </tr>
       </thead>
       <tbody>
@@ -670,17 +803,58 @@ export async function renderAgentDashboardPage(
   </div>
 </div>
 
-<!-- Data Governance Summary -->
-<div class="section-chunk">
-  <h2 style="margin-top:0;">Data Governance</h2>
-  ${dgSection}
+<!-- Controls band -->
+<div class="ad-section">
+  <h2>Controls</h2>
+  <p class="ad-section-sub">Enforcement, governance, and forwarding at a glance.</p>
+  ${controlsBand}
 </div>
 
-<!-- SIEM Forwarding Status -->
-<div class="section-chunk">
-  <h2 style="margin-top:0;">SIEM Forwarding</h2>
-  ${siemSection}
-</div>
+<script>
+(function () {
+  var table = document.getElementById('ad-table');
+  if (!table) return;
+  var rows = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
+  var chips = Array.prototype.slice.call(document.querySelectorAll('.ad-chip'));
+  var search = document.getElementById('ad-search');
+  var foot = document.getElementById('ad-table-foot');
+  var footBase = foot ? foot.textContent : '';
+  var filter = 'all';
+
+  function rowMatches(row) {
+    if (filter === 'active' && row.getAttribute('data-status') !== 'active') return false;
+    if (filter === 'frozen' && row.getAttribute('data-frozen') !== 'true') return false;
+    if (filter === 'attention' && row.getAttribute('data-attention') !== 'true') return false;
+    var q = (search && search.value || '').trim().toLowerCase();
+    if (q && (row.getAttribute('data-search') || '').indexOf(q) === -1) return false;
+    return true;
+  }
+
+  function apply() {
+    var shown = 0;
+    rows.forEach(function (row) {
+      var ok = rowMatches(row);
+      row.style.display = ok ? '' : 'none';
+      if (ok) shown++;
+    });
+    if (foot) {
+      foot.textContent = shown === rows.length
+        ? footBase
+        : 'Showing ' + shown + ' of ' + rows.length + ' loaded agents.';
+    }
+  }
+
+  chips.forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      filter = chip.getAttribute('data-filter') || 'all';
+      chips.forEach(function (c) { c.classList.remove('ad-chip-on'); });
+      chip.classList.add('ad-chip-on');
+      apply();
+    });
+  });
+  if (search) search.addEventListener('input', apply);
+})();
+</script>
 `;
 
   return renderPage({
