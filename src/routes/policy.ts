@@ -6,6 +6,7 @@ import type { AppEnv, ScreeningPolicy } from "../types.js";
 import { auditLog } from "../lib/audit-log.js";
 import { formatBypassPolicy, hashBypassCodeword } from "../lib/bypass-codeword.js";
 import { serviceDependencyProblem } from "../lib/problem-response.js";
+import { createPolicyRevision, snapshotFromScreeningPolicy } from "../lib/policy-revision.js";
 
 export const policyRoutes = new Hono<AppEnv>();
 
@@ -111,6 +112,12 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
 
   const body = await c.req.json();
 
+  // Extract optional change reason for revision tracking
+  const changeReason: string | undefined =
+    typeof body.changeReason === "string" && body.changeReason.trim()
+      ? body.changeReason.trim()
+      : undefined;
+
   // Validate autoBlockThreshold bounds
   if (body.autoBlockThreshold !== undefined) {
     const val = Number(body.autoBlockThreshold);
@@ -176,6 +183,28 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
   }
 
   try {
+    // Capture old policy snapshot *before* the change (for revision tracking)
+    const existingDb = await prisma.screeningPolicy.findUnique({
+      where: { apiKeyId: apiKey.id },
+    });
+    const oldPolicySnapshot: Record<string, unknown> = existingDb
+      ? snapshotFromScreeningPolicy({
+          screenUserInput: existingDb.screenUserInput,
+          screenToolOutputs: existingDb.screenToolOutputs,
+          screenForwardedMessages: existingDb.screenForwardedMessages,
+          screenAllPrompts: existingDb.screenAllPrompts,
+          autoBlockThreshold: existingDb.autoBlockThreshold,
+          executeInSandbox: existingDb.executeInSandbox,
+          bypassEnabled: existingDb.bypassEnabled,
+          bypassCodewordHash: existingDb.bypassCodewordHash,
+          bypassExpiresAt: existingDb.bypassExpiresAt,
+          approvalRequiredForPersonalData: true,
+          approvalRequiredForLocation: true,
+          approvalRequiredForFuturePlans: true,
+          approvalDefaultAction: "deny",
+        })
+      : {};
+
     const upserted = await prisma.screeningPolicy.upsert({
       where: { apiKeyId: apiKey.id },
       create: {
@@ -219,6 +248,16 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
       apiKeyId: apiKey.id,
       detail: `Policy updated: ${Object.keys(updateData).join(", ")}`,
     });
+
+    // Create a PolicyRevision row capturing old→new snapshots and diff
+    const newPolicySnapshot = snapshotFromScreeningPolicy(policy);
+    await createPolicyRevision(
+      apiKey.id,
+      oldPolicySnapshot,
+      newPolicySnapshot,
+      apiKey.id,
+      changeReason,
+    );
 
     return c.json(formatPolicyResponse(policy, tier));
   } catch (err) {
