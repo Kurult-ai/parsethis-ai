@@ -1051,9 +1051,10 @@ async function upsertScreeningPolicyData(c: AdminContext, apiKeyId: string, para
   }
 
   const policy = await prisma.screeningPolicy.upsert({
-    where: { apiKeyId },
+    where: { idx_screening_policy_key_env: { apiKeyId, environment: "production" } },
     create: {
       apiKeyId,
+      environment: "production",
       ...DEFAULT_ADMIN_POLICY,
       ...data,
     },

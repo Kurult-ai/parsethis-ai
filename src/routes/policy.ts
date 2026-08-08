@@ -1,12 +1,12 @@
 import { Hono } from "hono";
-import { authMiddleware } from "../auth.js";
+import { authMiddleware, resolveEnvironment } from "../auth.js";
 import { prisma } from "../db.js";
 import { cachePolicyData, getCachedPolicyData, invalidatePolicyCache } from "../result-store.js";
 import type { AppEnv, ScreeningPolicy } from "../types.js";
 import { auditLog } from "../lib/audit-log.js";
 import { formatBypassPolicy, hashBypassCodeword } from "../lib/bypass-codeword.js";
 import { serviceDependencyProblem } from "../lib/problem-response.js";
-import { createPolicyRevision, snapshotFromScreeningPolicy } from "../lib/policy-revision.js";
+import { createPolicyRevision, snapshotFromScreeningPolicy, computeDiff } from "../lib/policy-revision.js";
 import {
   validateRule,
   parseCustomRules,
@@ -32,6 +32,7 @@ export const DEFAULT_POLICY: ScreeningPolicy = {
   approvalRequiredForFuturePlans: true,
   approvalDefaultAction: "deny",
   enforcementMode: "block",
+  environment: "production",
 };
 
 // Tier-enforced maximum autoBlockThreshold
@@ -57,69 +58,147 @@ function formatPolicyResponse(policy: ScreeningPolicy, tier: string) {
     approvalRequiredForFuturePlans: policy.approvalRequiredForFuturePlans ?? true,
     approvalDefaultAction: policy.approvalDefaultAction ?? "deny",
     enforcementMode: policy.enforcementMode ?? "block",
+    environment: policy.environment ?? "production",
     tier,
     max_threshold: MAX_THRESHOLD_BY_TIER[tier] ?? MAX_THRESHOLD_BY_TIER.free,
   };
 }
 
-// GET /v1/policy — retrieve current screening policy
+/** Convert a DB policy row to a ScreeningPolicy typed object. */
+function dbPolicyToScreeningPolicy(dbPolicy: any): ScreeningPolicy {
+  return {
+    screenUserInput: dbPolicy.screenUserInput,
+    screenToolOutputs: dbPolicy.screenToolOutputs,
+    screenForwardedMessages: dbPolicy.screenForwardedMessages,
+    screenAllPrompts: dbPolicy.screenAllPrompts,
+    autoBlockThreshold: dbPolicy.autoBlockThreshold,
+    executeInSandbox: dbPolicy.executeInSandbox,
+    bypassEnabled: dbPolicy.bypassEnabled,
+    bypassCodewordHash: dbPolicy.bypassCodewordHash,
+    bypassExpiresAt: dbPolicy.bypassExpiresAt,
+    approvalRequiredForPersonalData: true,
+    approvalRequiredForLocation: true,
+    approvalRequiredForFuturePlans: true,
+    approvalDefaultAction: "deny",
+    enforcementMode: (dbPolicy.enforcementMode as "monitor" | "warn" | "block") ?? "block",
+    environment: dbPolicy.environment,
+  };
+}
+
+/**
+ * Dashboard advisory: check if production policy is looser than staging.
+ * Returns an array of warning strings (empty if no issues).
+ */
+function checkProductionLooserThanStaging(prod: ScreeningPolicy, staging: ScreeningPolicy): string[] {
+  const warnings: string[] = [];
+
+  if (prod.autoBlockThreshold > staging.autoBlockThreshold) {
+    warnings.push(
+      `Production autoBlockThreshold (${prod.autoBlockThreshold}) is higher than staging (${staging.autoBlockThreshold}) — production is less restrictive`,
+    );
+  }
+
+  if ((prod.enforcementMode ?? "block") !== (staging.enforcementMode ?? "block")) {
+    const modeRank: Record<string, number> = { block: 0, warn: 1, monitor: 2 };
+    const prodRank = modeRank[prod.enforcementMode ?? "block"] ?? 0;
+    const stagingRank = modeRank[staging.enforcementMode ?? "block"] ?? 0;
+    if (prodRank > stagingRank) {
+      warnings.push(
+        `Production enforcementMode (${prod.enforcementMode}) is looser than staging (${staging.enforcementMode})`,
+      );
+    }
+  }
+
+  if (!prod.screenUserInput && staging.screenUserInput) {
+    warnings.push("Production has screenUserInput disabled while staging has it enabled");
+  }
+  if (!prod.screenToolOutputs && staging.screenToolOutputs) {
+    warnings.push("Production has screenToolOutputs disabled while staging has it enabled");
+  }
+  if (!prod.screenForwardedMessages && staging.screenForwardedMessages) {
+    warnings.push("Production has screenForwardedMessages disabled while staging has it enabled");
+  }
+  if (!prod.executeInSandbox && staging.executeInSandbox) {
+    warnings.push("Production has executeInSandbox disabled while staging has it enabled");
+  }
+
+  return warnings;
+}
+
+/** Generate dashboard advisory warnings comparing production vs staging for a given key. */
+async function getDashboardAdvisory(apiKeyId: string, currentEnv: string): Promise<string[]> {
+  if (currentEnv !== "production") return [];
+  try {
+    const [prodPolicy, stagingPolicy] = await Promise.all([
+      prisma.screeningPolicy.findUnique({
+        where: { idx_screening_policy_key_env: { apiKeyId, environment: "production" } },
+      }),
+      prisma.screeningPolicy.findUnique({
+        where: { idx_screening_policy_key_env: { apiKeyId, environment: "staging" } },
+      }),
+    ]);
+    if (!prodPolicy || !stagingPolicy) return [];
+    return checkProductionLooserThanStaging(dbPolicyToScreeningPolicy(prodPolicy), dbPolicyToScreeningPolicy(stagingPolicy));
+  } catch {
+    return [];
+  }
+}
+
+// GET /v1/policy — retrieve current screening policy (environment-aware)
 policyRoutes.get("/v1/policy", authMiddleware("evaluate"), async (c) => {
   const apiKey = c.get("apiKey");
   const tier = apiKey.tier ?? "free";
 
+  // Environment: query param takes priority, then header, then default
+  const envQuery = c.req.query("environment");
+  const environment = envQuery || c.get("environment") || "production";
+
   const preloadedPolicy = c.get("policy");
-  if (preloadedPolicy) {
-    return c.json(formatPolicyResponse(preloadedPolicy, tier));
+  // Only use preloaded policy if environment matches
+  if (preloadedPolicy && (preloadedPolicy.environment === environment || (!preloadedPolicy.environment && environment === "production"))) {
+    const warnings = await getDashboardAdvisory(apiKey.id, environment);
+    return c.json({ ...formatPolicyResponse(preloadedPolicy, tier), ...(warnings.length > 0 ? { advisory: warnings } : {}) });
   }
 
   // Try Redis cache first
-  const cached = await getCachedPolicyData(apiKey.id);
+  const cached = await getCachedPolicyData(apiKey.id, environment);
   if (cached) {
-    return c.json(formatPolicyResponse(cached as ScreeningPolicy, tier));
+    const warnings = await getDashboardAdvisory(apiKey.id, environment);
+    return c.json({ ...formatPolicyResponse(cached as ScreeningPolicy, tier), ...(warnings.length > 0 ? { advisory: warnings } : {}) });
   }
 
   // Load from DB
   try {
     const dbPolicy = await prisma.screeningPolicy.findUnique({
-      where: { apiKeyId: apiKey.id },
+      where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment } },
     });
 
-    const policy: ScreeningPolicy = dbPolicy
-      ? {
-          screenUserInput: dbPolicy.screenUserInput,
-          screenToolOutputs: dbPolicy.screenToolOutputs,
-          screenForwardedMessages: dbPolicy.screenForwardedMessages,
-          screenAllPrompts: dbPolicy.screenAllPrompts,
-          autoBlockThreshold: dbPolicy.autoBlockThreshold,
-          executeInSandbox: dbPolicy.executeInSandbox,
-          bypassEnabled: dbPolicy.bypassEnabled,
-          bypassCodewordHash: dbPolicy.bypassCodewordHash,
-          bypassExpiresAt: dbPolicy.bypassExpiresAt,
-          approvalRequiredForPersonalData: true,
-          approvalRequiredForLocation: true,
-          approvalRequiredForFuturePlans: true,
-          approvalDefaultAction: "deny",
-          enforcementMode: (dbPolicy.enforcementMode as "monitor" | "warn" | "block") ?? "block",
-        }
-      : DEFAULT_POLICY;
+    const policy: ScreeningPolicy = dbPolicy ? dbPolicyToScreeningPolicy(dbPolicy) : { ...DEFAULT_POLICY, environment };
 
     // Cache for next time (fire-and-forget)
-    cachePolicyData(apiKey.id, policy).catch(() => {});
+    cachePolicyData(apiKey.id, policy, environment).catch(() => {});
 
-    return c.json(formatPolicyResponse(policy, tier));
+    const warnings = await getDashboardAdvisory(apiKey.id, environment);
+    return c.json({ ...formatPolicyResponse(policy, tier), ...(warnings.length > 0 ? { advisory: warnings } : {}) });
   } catch (err) {
     console.error("[policy] GET error:", (err as Error).message);
     return c.json(formatPolicyResponse(DEFAULT_POLICY, tier));
   }
 });
 
-// PUT /v1/policy — create or update screening policy
+// PUT /v1/policy — create or update screening policy (environment-aware)
 policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
   const apiKey = c.get("apiKey");
   const tier = apiKey.tier ?? "free";
   const maxThreshold = MAX_THRESHOLD_BY_TIER[tier] ?? MAX_THRESHOLD_BY_TIER.free;
 
   const body = await c.req.json();
+
+  // Environment from body, header, or default
+  const environment =
+    (typeof body.environment === "string" && ["development", "staging", "production"].includes(body.environment) ? body.environment : undefined)
+    || c.get("environment")
+    || "production";
 
   // Extract optional change reason for revision tracking
   const changeReason: string | undefined =
@@ -214,7 +293,9 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
   }
 
   if (updateData.bypassEnabled === true && body.bypassCodeword === undefined) {
-    const existing = await prisma.screeningPolicy.findUnique({ where: { apiKeyId: apiKey.id } });
+    const existing = await prisma.screeningPolicy.findUnique({
+      where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment } },
+    });
     if (!existing?.bypassCodewordHash) {
       return c.json({ error: "bypassCodeword is required before enabling codeword bypass" }, 400);
     }
@@ -223,7 +304,7 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
   try {
     // Capture old policy snapshot *before* the change (for revision tracking)
     const existingDb = await prisma.screeningPolicy.findUnique({
-      where: { apiKeyId: apiKey.id },
+      where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment } },
     });
     const oldPolicySnapshot: Record<string, unknown> = existingDb
       ? snapshotFromScreeningPolicy({
@@ -245,9 +326,10 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
       : {};
 
     const upserted = await prisma.screeningPolicy.upsert({
-      where: { apiKeyId: apiKey.id },
+      where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment } },
       create: {
         apiKeyId: apiKey.id,
+        environment,
         screenUserInput: DEFAULT_POLICY.screenUserInput,
         screenToolOutputs: DEFAULT_POLICY.screenToolOutputs,
         screenForwardedMessages: DEFAULT_POLICY.screenForwardedMessages,
@@ -262,31 +344,16 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
       update: updateData,
     });
 
-    const policy: ScreeningPolicy = {
-      screenUserInput: upserted.screenUserInput,
-      screenToolOutputs: upserted.screenToolOutputs,
-      screenForwardedMessages: upserted.screenForwardedMessages,
-      screenAllPrompts: upserted.screenAllPrompts,
-      autoBlockThreshold: upserted.autoBlockThreshold,
-      executeInSandbox: upserted.executeInSandbox,
-      bypassEnabled: upserted.bypassEnabled,
-      bypassCodewordHash: upserted.bypassCodewordHash,
-      bypassExpiresAt: upserted.bypassExpiresAt,
-      approvalRequiredForPersonalData: true,
-      approvalRequiredForLocation: true,
-      approvalRequiredForFuturePlans: true,
-      approvalDefaultAction: "deny",
-      enforcementMode: (upserted.enforcementMode as "monitor" | "warn" | "block") ?? "block",
-    };
+    const policy: ScreeningPolicy = dbPolicyToScreeningPolicy(upserted);
 
     // Invalidate old cache, set new
-    await invalidatePolicyCache(apiKey.id);
-    cachePolicyData(apiKey.id, policy).catch(() => {});
+    await invalidatePolicyCache(apiKey.id, environment);
+    cachePolicyData(apiKey.id, policy, environment).catch(() => {});
 
     auditLog({
       action: "policy_updated",
       apiKeyId: apiKey.id,
-      detail: `Policy updated: ${Object.keys(updateData).join(", ")}`,
+      detail: `Policy updated (${environment}): ${Object.keys(updateData).join(", ")}`,
     });
 
     // Create a PolicyRevision row capturing old→new snapshots and diff
@@ -299,7 +366,9 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
       changeReason,
     );
 
-    return c.json(formatPolicyResponse(policy, tier));
+    // Advisory for production
+    const warnings = environment === "production" ? await getDashboardAdvisory(apiKey.id, environment) : [];
+    return c.json({ ...formatPolicyResponse(policy, tier), ...(warnings.length > 0 ? { advisory: warnings } : {}) });
   } catch (err) {
     console.error("[policy] PUT error:", (err as Error).message);
     return serviceDependencyProblem(c, err);
@@ -316,12 +385,13 @@ interface EnforcementHole {
 
 policyRoutes.get("/v1/policy/holes", authMiddleware("evaluate"), async (c) => {
   const apiKey = c.get("apiKey");
+  const environment = c.get("environment") || "production";
   const now = new Date();
   const holes: EnforcementHole[] = [];
 
   try {
     const policy = await prisma.screeningPolicy.findUnique({
-      where: { apiKeyId: apiKey.id },
+      where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment } },
     });
 
     if (!policy) {
@@ -419,21 +489,33 @@ policyRoutes.get("/v1/policy/holes", authMiddleware("evaluate"), async (c) => {
   }
 });
 
-// DELETE /v1/policy — reset to defaults
+// DELETE /v1/policy — reset to defaults (environment-aware)
+// If ?environment= is specified, only deletes that environment; otherwise deletes all
 policyRoutes.delete("/v1/policy", authMiddleware("evaluate"), async (c) => {
   const apiKey = c.get("apiKey");
+  const envQuery = c.req.query("environment");
+  const headerEnv = c.get("environment");
+  const environment = envQuery || headerEnv;
 
   try {
-    await prisma.screeningPolicy.deleteMany({
-      where: { apiKeyId: apiKey.id },
-    });
-
-    await invalidatePolicyCache(apiKey.id);
+    if (environment) {
+      // Delete only the specified environment
+      await prisma.screeningPolicy.deleteMany({
+        where: { apiKeyId: apiKey.id, environment },
+      });
+      await invalidatePolicyCache(apiKey.id, environment);
+    } else {
+      // Delete all environments for this key
+      await prisma.screeningPolicy.deleteMany({
+        where: { apiKeyId: apiKey.id },
+      });
+      await invalidatePolicyCache(apiKey.id);
+    }
 
     auditLog({
       action: "policy_deleted",
       apiKeyId: apiKey.id,
-      detail: "Policy reset to defaults",
+      detail: `Policy reset to defaults${environment ? ` (${environment})` : " (all environments)"}`,
     });
 
     return c.json({ message: "Policy reset to defaults", ...DEFAULT_POLICY });
@@ -451,6 +533,7 @@ policyRoutes.delete("/v1/policy", authMiddleware("evaluate"), async (c) => {
  */
 policyRoutes.post("/v1/policy/rules", authMiddleware("evaluate"), async (c) => {
   const apiKey = c.get("apiKey");
+  const environment = c.get("environment") || "production";
   const body = await c.req.json();
 
   // Validate the rule
@@ -462,7 +545,7 @@ policyRoutes.post("/v1/policy/rules", authMiddleware("evaluate"), async (c) => {
   try {
     // Load existing policy + rules
     const existing = await prisma.screeningPolicy.findUnique({
-      where: { apiKeyId: apiKey.id },
+      where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment } },
     });
 
     const existingRules: CustomRule[] = existing?.customRules
@@ -492,9 +575,10 @@ policyRoutes.post("/v1/policy/rules", authMiddleware("evaluate"), async (c) => {
 
     // Upsert the policy with the new rules array
     await prisma.screeningPolicy.upsert({
-      where: { apiKeyId: apiKey.id },
+      where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment } },
       create: {
         apiKeyId: apiKey.id,
+        environment,
         screenUserInput: DEFAULT_POLICY.screenUserInput,
         screenToolOutputs: DEFAULT_POLICY.screenToolOutputs,
         screenForwardedMessages: DEFAULT_POLICY.screenForwardedMessages,
@@ -511,12 +595,12 @@ policyRoutes.post("/v1/policy/rules", authMiddleware("evaluate"), async (c) => {
       },
     });
 
-    await invalidatePolicyCache(apiKey.id);
+    await invalidatePolicyCache(apiKey.id, environment);
 
     auditLog({
       action: "custom_rule_created",
       apiKeyId: apiKey.id,
-      detail: `Custom rule created: ${ruleWithTimestamp.name} (${ruleWithTimestamp.id}) action=${ruleWithTimestamp.action}`,
+      detail: `Custom rule created (${environment}): ${ruleWithTimestamp.name} (${ruleWithTimestamp.id}) action=${ruleWithTimestamp.action}`,
     });
 
     return c.json({ rule: ruleWithTimestamp, total_rules: updatedRules.length }, 201);
@@ -531,10 +615,11 @@ policyRoutes.post("/v1/policy/rules", authMiddleware("evaluate"), async (c) => {
  */
 policyRoutes.get("/v1/policy/rules", authMiddleware("evaluate"), async (c) => {
   const apiKey = c.get("apiKey");
+  const environment = c.get("environment") || "production";
 
   try {
     const policy = await prisma.screeningPolicy.findUnique({
-      where: { apiKeyId: apiKey.id },
+      where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment } },
     });
 
     const rules: CustomRule[] = policy?.customRules
@@ -553,11 +638,12 @@ policyRoutes.get("/v1/policy/rules", authMiddleware("evaluate"), async (c) => {
  */
 policyRoutes.delete("/v1/policy/rules/:id", authMiddleware("evaluate"), async (c) => {
   const apiKey = c.get("apiKey");
+  const environment = c.get("environment") || "production";
   const ruleId = c.req.param("id");
 
   try {
     const existing = await prisma.screeningPolicy.findUnique({
-      where: { apiKeyId: apiKey.id },
+      where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment } },
     });
 
     if (!existing) {
@@ -577,16 +663,16 @@ policyRoutes.delete("/v1/policy/rules/:id", authMiddleware("evaluate"), async (c
     const updatedRules = existingRules.filter((_, i) => i !== ruleIndex);
 
     await prisma.screeningPolicy.update({
-      where: { apiKeyId: apiKey.id },
+      where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment } },
       data: { customRules: updatedRules as any },
     });
 
-    await invalidatePolicyCache(apiKey.id);
+    await invalidatePolicyCache(apiKey.id, environment);
 
     auditLog({
       action: "custom_rule_deleted",
       apiKeyId: apiKey.id,
-      detail: `Custom rule deleted: ${deletedRule.name} (${deletedRule.id})`,
+      detail: `Custom rule deleted (${environment}): ${deletedRule.name} (${deletedRule.id})`,
     });
 
     return c.json({ deleted: deletedRule, total_rules: updatedRules.length });

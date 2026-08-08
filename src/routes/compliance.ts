@@ -106,7 +106,7 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), async
         ORDER BY avg_risk DESC
         LIMIT 5
       `,
-      prisma.screeningPolicy.findUnique({ where: { apiKeyId: apiKey.id } }),
+      prisma.screeningPolicy.findUnique({ where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment: "production" } } }),
     ]);
 
     // Compute active enforcement holes count

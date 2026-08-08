@@ -107,30 +107,60 @@ export function auditEventToSIEM(event: PrismaAuditEvent, orgId?: string): BaseS
 
 // ─── Format Adapters ────────────────────────────────────────────────────
 
+/**
+ * Serialize a single value for CEF/LEEF extension fields.
+ * Returns null for undefined values (which should be omitted entirely).
+ */
+function formatExtensionValue(v: unknown): string | null {
+  if (v === undefined) return null;
+  if (v === null) return "null";
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
+/**
+ * Build the extension portion (key=value pairs) shared by CEF and LEEF.
+ * Undefined values are omitted entirely (not serialized as "undefined").
+ */
+function buildExtensions(
+  event: BaseSIEMEvent,
+  excludeKeys: string[],
+): Array<[string, string]> {
+  return Object.entries(event)
+    .filter(([k]) => !excludeKeys.includes(k))
+    .filter(([, v]) => v !== undefined)
+    .map(([k, v]) => [k, formatExtensionValue(v)!]);
+}
+
 export function toCEF(event: BaseSIEMEvent): string {
   // Common Event Format (Splunk/QRadar compatible)
   const severityMap: Record<string, number> = { low: 3, medium: 6, high: 8 };
   const sev = severityMap[event.severity] ?? 3;
-  const extension = Object.entries(event)
-    .filter(([k]) => !["timestamp", "source", "source_type", "severity", "message"].includes(k))
-    .map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
+  const excluded = ["timestamp", "source", "source_type", "severity", "message"];
+  const extension = buildExtensions(event, excluded)
+    .map(([k, v]) => `${k}=${v}`)
     .join(" ");
   return `CEF:0|Parse|Agent Security|1.0|${event.source_type}|${event.message}|${sev}|${extension}`;
 }
 
 export function toJSON(event: BaseSIEMEvent): string {
-  return JSON.stringify(event);
+  // Strip undefined values so they don't appear in JSON output
+  const clean = Object.fromEntries(
+    Object.entries(event).filter(([, v]) => v !== undefined),
+  );
+  return JSON.stringify(clean);
 }
 
 export function toLEEF(event: BaseSIEMEvent): string {
   // Log Event Extended Format (IBM QRadar)
+  // LEEF:Version|Vendor|Product|Version|EventID  followed by tab-delimited attrs
   const severityMap: Record<string, string> = { low: "1", medium: "2", high: "3" };
   const sev = severityMap[event.severity] ?? "1";
-  const attrs = Object.entries(event)
-    .filter(([k]) => !["timestamp", "source", "source_type", "severity", "message"].includes(k))
-    .map(([k, v]) => `\t${k}=${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
+  const excluded = ["timestamp", "source", "source_type", "message"];
+  const attrs = buildExtensions(event, excluded)
+    .map(([k, v]) => `\t${k}=${v}`)
     .join("");
-  return `LEEF:1.0|Parse|Agent Security|1.0|${event.message}|${sev}${attrs}`;
+  return `LEEF:1.0|Parse|Agent Security|1.0|${event.message}${attrs}`;
 }
 
 export function formatEvent(event: BaseSIEMEvent, format: string): string {
@@ -165,16 +195,16 @@ export async function forwardToSIEM(
     "Content-Type": config.format === "json" ? "application/json" : "text/plain",
   };
 
-  // Platform-specific auth
+  // Platform-specific auth — skip when authHeader is null
   switch (config.platform) {
     case "splunk":
-      headers["Authorization"] = `Splunk ${config.authHeader}`;
+      if (config.authHeader) headers["Authorization"] = `Splunk ${config.authHeader}`;
       break;
     case "datadog":
-      headers["DD-API-KEY"] = config.authHeader ?? "";
+      if (config.authHeader) headers["DD-API-KEY"] = config.authHeader;
       break;
     case "elastic":
-      headers["Authorization"] = `ApiKey ${config.authHeader}`;
+      if (config.authHeader) headers["Authorization"] = `ApiKey ${config.authHeader}`;
       break;
     default:
       if (config.authHeader) headers["Authorization"] = `Bearer ${config.authHeader}`;
@@ -199,48 +229,67 @@ export async function forwardToSIEM(
       body = formatted;
   }
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
+  const maxRetries = 3;
+  let lastError: string | undefined;
+  let lastStatusCode: number | undefined;
 
-    const resp = await fetch(config.endpoint, {
-      method: "POST",
-      headers,
-      body,
-      signal: controller.signal,
-    });
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
 
-    clearTimeout(timeout);
+      const resp = await fetch(config.endpoint, {
+        method: "POST",
+        headers,
+        body,
+        signal: controller.signal,
+      });
 
-    const latency = Date.now() - start;
+      clearTimeout(timeout);
 
-    if (!resp.ok) {
-      return {
-        config_id: config.id,
-        platform: config.platform,
-        success: false,
-        status_code: resp.status,
-        error: `HTTP ${resp.status}: ${await resp.text().catch(() => "unknown")}`,
-        latency_ms: latency,
-      };
+      // Success — return immediately
+      if (resp.ok) {
+        return {
+          config_id: config.id,
+          platform: config.platform,
+          success: true,
+          status_code: resp.status,
+          latency_ms: Date.now() - start,
+        };
+      }
+
+      lastStatusCode = resp.status;
+      lastError = `HTTP ${resp.status}: ${await resp.text().catch(() => "unknown")}`;
+
+      // 5xx is retryable — back off before next attempt
+      if (resp.status >= 500 && attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 500 * attempt)); // 500ms, 1000ms
+        continue;
+      }
+
+      // 4xx or final 5xx — no more retries
+      break;
+    } catch (err) {
+      lastError = (err as Error).message;
+      lastStatusCode = undefined;
+
+      // Network errors / timeouts are retryable
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 500 * attempt));
+        continue;
+      }
+      break;
     }
-
-    return {
-      config_id: config.id,
-      platform: config.platform,
-      success: true,
-      status_code: resp.status,
-      latency_ms: latency,
-    };
-  } catch (err) {
-    return {
-      config_id: config.id,
-      platform: config.platform,
-      success: false,
-      error: (err as Error).message,
-      latency_ms: Date.now() - start,
-    };
   }
+
+  return {
+    config_id: config.id,
+    platform: config.platform,
+    success: false,
+    status_code: lastStatusCode,
+    error: lastError,
+    latency_ms: Date.now() - start,
+  };
 }
 
 export async function forwardToAllSIEMs(

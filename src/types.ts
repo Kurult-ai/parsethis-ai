@@ -14,6 +14,7 @@ export interface ScreeningPolicy {
   bypassCodewordHash?: string | null;
   bypassExpiresAt?: Date | string | null;
   enforcementMode?: "monitor" | "warn" | "block";
+  environment?: string;
 }
 
 export interface ApiKeyContext {
@@ -29,6 +30,7 @@ export type AppEnv = {
     apiKey: ApiKeyContext;
     policy: ScreeningPolicy;
     x402Paid: boolean;
+    environment: string;
   };
 };
 

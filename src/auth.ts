@@ -38,6 +38,18 @@ const DEFAULT_POLICY: ScreeningPolicy = {
   enforcementMode: "block",
 };
 
+// Valid environments for policy pinning
+export const VALID_ENVIRONMENTS = ["development", "staging", "production"] as const;
+export type PolicyEnvironment = (typeof VALID_ENVIRONMENTS)[number];
+export const DEFAULT_ENVIRONMENT = "production";
+
+/** Read and validate X-Parse-Environment header (default: "production"). */
+export function resolveEnvironment(c: Context<AppEnv>): string {
+  const raw = c.req.header("x-parse-environment") || DEFAULT_ENVIRONMENT;
+  if (VALID_ENVIRONMENTS.includes(raw as PolicyEnvironment)) return raw;
+  return DEFAULT_ENVIRONMENT;
+}
+
 // In-memory rate limit fallback (used when Redis is unavailable)
 const memoryRateLimits = new Map<string, { count: number; window_start: number }>();
 
@@ -143,6 +155,7 @@ export function authMiddleware(requiredScope?: string) {
   return async (c: Context<AppEnv>, next: Next) => {
     // x402 payment was verified by upstream middleware — set synthetic key + default policy
     if (c.get("x402Paid")) {
+      const environment = resolveEnvironment(c);
       c.set("apiKey", {
         id: `x402:${crypto.randomUUID().slice(0, 8)}`,
         name: "x402 Payment",
@@ -151,6 +164,7 @@ export function authMiddleware(requiredScope?: string) {
         tier: "free",
       });
       c.set("policy", DEFAULT_POLICY);
+      c.set("environment", environment);
       await next();
       return;
     }
@@ -226,6 +240,7 @@ export function authMiddleware(requiredScope?: string) {
         rate_limit: 1000,
       });
       c.set("policy", DEFAULT_POLICY);
+      c.set("environment", resolveEnvironment(c));
       await next();
       return;
     }
@@ -271,6 +286,7 @@ export function authMiddleware(requiredScope?: string) {
         rate_limit: 30,
       });
       c.set("policy", DEFAULT_POLICY);
+      c.set("environment", resolveEnvironment(c));
       await next();
       return;
     }
@@ -316,6 +332,7 @@ export function authMiddleware(requiredScope?: string) {
         tier: "team",
       });
       c.set("policy", DEFAULT_POLICY);
+      c.set("environment", resolveEnvironment(c));
       await next();
       return;
     }
@@ -401,14 +418,18 @@ export function authMiddleware(requiredScope?: string) {
       tier: apiKeyRecord.tier,
     });
 
-    // Load screening policy (from Redis cache or DB)
-    const cachedPolicy = await getCachedPolicyData(apiKeyRecord.id);
+    // Resolve environment from X-Parse-Environment header (default: production)
+    const environment = resolveEnvironment(c);
+    c.set("environment", environment);
+
+    // Load screening policy (from Redis cache or DB) scoped by environment
+    const cachedPolicy = await getCachedPolicyData(apiKeyRecord.id, environment);
     if (cachedPolicy) {
       c.set("policy", cachedPolicy as ScreeningPolicy);
     } else {
       try {
         const dbPolicy = await prisma.screeningPolicy.findUnique({
-          where: { apiKeyId: apiKeyRecord.id },
+          where: { idx_screening_policy_key_env: { apiKeyId: apiKeyRecord.id, environment } },
         });
         const policy: ScreeningPolicy = dbPolicy
           ? {
@@ -426,11 +447,12 @@ export function authMiddleware(requiredScope?: string) {
               approvalRequiredForFuturePlans: true,
               approvalDefaultAction: "deny",
               enforcementMode: (dbPolicy.enforcementMode as "monitor" | "warn" | "block") ?? "block",
+              environment: dbPolicy.environment,
             }
           : DEFAULT_POLICY;
         c.set("policy", policy);
         // Fire-and-forget cache
-        cachePolicyData(apiKeyRecord.id, policy).catch(() => {});
+        cachePolicyData(apiKeyRecord.id, policy, environment).catch(() => {});
       } catch {
         c.set("policy", DEFAULT_POLICY);
       }

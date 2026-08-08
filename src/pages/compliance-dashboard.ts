@@ -54,7 +54,7 @@ export async function renderComplianceDashboardPage(baseUrl: string, apiKeyId: s
       prisma.screeningEvent.findMany({ where: { apiKeyId }, orderBy: { createdAt: "desc" }, take: 15, select: { id: true, riskScore: true, verdict: true, categories: true, blocked: true, createdAt: true, metadata: true } }),
       prisma.auditEvent.findMany({ where: { apiKeyId }, orderBy: { createdAt: "desc" }, take: 10, select: { id: true, action: true, detail: true, createdAt: true } }),
       prisma.$queryRaw<Array<{ agent_id: string; count: bigint; avg_risk: number }>>`SELECT (metadata->>'agent_id')::text as agent_id, count(*) as count, AVG(risk_score)::float as avg_risk FROM screening_events WHERE api_key_id = ${apiKeyId} AND metadata->>'agent_id' IS NOT NULL GROUP BY agent_id ORDER BY avg_risk DESC LIMIT 5`,
-      prisma.screeningPolicy.findUnique({ where: { apiKeyId } }),
+      prisma.screeningPolicy.findUnique({ where: { idx_screening_policy_key_env: { apiKeyId, environment: "production" } } }),
     ]);
 
     totalScreenings = total;

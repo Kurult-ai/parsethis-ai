@@ -249,6 +249,7 @@ export interface ParseRequest {
     trust_level?: "trusted" | "untrusted" | "external";
     tool_permissions?: string[];
     data_classification?: string[];
+    data_sources?: string[]; // data source IDs the agent is accessing (data governance check)
     intended_action?: "summarize" | "execute" | "route" | "reply" | "extract";
     requester_trust?: RequesterTrust;
     requester_id?: string;

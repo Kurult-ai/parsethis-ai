@@ -24,7 +24,7 @@ model ApiKey {
 
   evaluations      Evaluation[]
   usageRecords     UsageRecord[]
-  screeningPolicy  ScreeningPolicy?
+  screeningPolicies ScreeningPolicy[]
   screeningEvents  ScreeningEvent[]
   subscription     Subscription?
   billingUsage     BillingUsage[]
@@ -83,8 +83,11 @@ model UsageRecord {
 
 model ScreeningPolicy {
   id        String   @id @default(uuid())
-  apiKeyId  String   @unique @map("api_key_id")
-  apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  apiKeyId    String   @map("api_key_id")
+  apiKey      ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  // Per-environment pinning (development | staging | production)
+  environment String @default("production")
 
   // Structural triggers (agents can evaluate mechanically)
   screenUserInput        Boolean @default(true)   @map("screen_user_input")
@@ -112,6 +115,7 @@ model ScreeningPolicy {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
 
+  @@unique([apiKeyId, environment], name: "idx_screening_policy_key_env")
   @@map("screening_policies")
 }
 
@@ -126,6 +130,7 @@ model ScreeningEvent {
   blocked    Boolean  @default(false)
   wouldBlock Boolean? @map("would_block")
   enforcementMode String? @map("enforcement_mode")
+  environment String @default("production")
   metadata   Json?    @map("metadata")
   createdAt  DateTime @default(now()) @map("created_at")
 
@@ -443,4 +448,42 @@ model ComplianceExport {
   @@index([orgId, createdAt(sort: Desc)], name: "idx_compliance_exports_org_created")
   @@index([status], name: "idx_compliance_exports_status")
   @@map("compliance_exports")
+}
+
+// ─── Data Governance Layer ──────────────────────────────────────────────
+// Data Source Registry: admins register data volumes agents may touch.
+// AgentDataGrant: per-agent access grants with optional expiry.
+
+model DataSource {
+  id             String   @id @default(cuid())
+  name           String
+  kind           String   // filesystem | database | api | vector_store | document_collection
+  classification String   @default("internal") // public | internal | confidential | restricted
+  ownerId        String   @map("owner_id")
+  orgId          String   @map("org_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt         @map("updated_at")
+
+  grants AgentDataGrant[]
+
+  @@index([orgId], name: "idx_data_sources_org")
+  @@index([orgId, kind], name: "idx_data_sources_org_kind")
+  @@map("data_sources")
+}
+
+model AgentDataGrant {
+  id           String    @id @default(cuid())
+  agentId      String    @map("agent_id")
+  dataSourceId String    @map("data_source_id")
+  access       String    @default("read") // read | write | readwrite
+  grantedBy    String    @map("granted_by")
+  expiresAt    DateTime? @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  dataSource DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, dataSourceId], name: "idx_agent_data_grant_agent_source")
+  @@index([agentId], name: "idx_agent_data_grants_agent")
+  @@index([dataSourceId], name: "idx_agent_data_grants_source")
+  @@map("agent_data_grants")
 }

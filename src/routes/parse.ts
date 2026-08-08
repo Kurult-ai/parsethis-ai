@@ -18,6 +18,7 @@ import {
 import { codewordBypassAllowed } from "../lib/bypass-codeword.js";
 import { autoRegisterAgentFromScreening } from "../lib/agent-auto-register.js";
 import { isAgentFrozen } from "../lib/freeze-cache.js";
+import { checkDataAccess } from "../lib/data-governance/check-access.js";
 import { evaluateCustomRules, parseCustomRules } from "../lib/policy-engine/custom-rules.js";
 import { prisma } from "../db.js";
 
@@ -216,6 +217,15 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
         retryable: false,
       });
     }
+    if (body.metadata.data_sources !== undefined && (!Array.isArray(body.metadata.data_sources) || !body.metadata.data_sources.every((item) => typeof item === "string"))) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "metadata.data_sources must be an array of strings (data source IDs)",
+        code: ErrorCode.VALIDATION_INVALID_TYPE,
+        retryable: false,
+      });
+    }
   }
   if (body.agent_config !== undefined) {
     if (typeof body.agent_config !== "object") {
@@ -314,7 +324,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   let customRuleMatchedIds: string[] = [];
   try {
     const dbPolicy = await prisma.screeningPolicy.findUnique({
-      where: { apiKeyId: apiKey.id },
+      where: { idx_screening_policy_key_env: { apiKeyId: apiKey.id, environment: "production" } },
       select: { customRules: true },
     });
     if (dbPolicy?.customRules) {
@@ -440,6 +450,56 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     ...result.policy,
     enforcement_mode: enforcementMode,
   };
+
+  // ── Data Access Governance (Task 8.1) ──
+  // When request metadata includes data_sources and an agent_id,
+  // check the agent's grants. Ungranted access is a finding.
+  // The enforcement dial controls whether it blocks:
+  //   monitor → recorded only
+  //   warn    → warning annotation added
+  //   block   → request blocked
+  const dgAgentId = body.metadata?.agent_id;
+  const dgDataSources = body.metadata?.data_sources;
+  if (
+    dgAgentId &&
+    typeof dgAgentId === "string" &&
+    dgDataSources &&
+    Array.isArray(dgDataSources) &&
+    dgDataSources.length > 0
+  ) {
+    try {
+      const accessResult = await checkDataAccess(dgAgentId, dgDataSources);
+      if (!accessResult.allowed) {
+        // Add a flag for each violation
+        for (const v of accessResult.violations) {
+          result.flags.push({
+            category: "data_access_violation",
+            severity: 6,
+            label: `Ungranted data access: ${v.dataSourceId}`,
+            detail: `Agent ${dgAgentId} has no active grant for data source ${v.dataSourceId} (${v.reason})`,
+            source: "data_governance",
+          });
+        }
+        if (!result.categories.includes("data_access_violation")) {
+          result.categories.push("data_access_violation");
+        }
+        (result as unknown as Record<string, unknown>).data_access_violations = accessResult.violations;
+
+        // Enforcement: under "block" mode, escalate risk and block
+        if (enforcementMode === "block") {
+          result.risk_score = Math.max(result.risk_score, 7);
+          result.verdict = "critical";
+          result.safe = false;
+          result.suggested_action = "block";
+          result.recommended_action = "block";
+          result.wouldBlock = true;
+        }
+      }
+    } catch (dgErr) {
+      console.error("[data-governance] access check failed:", (dgErr as Error).message);
+      // Fail open — don't block screening on governance check failure
+    }
+  }
 
   // ── Gate score_components to team+ tier (prevents free-tier scoring oracle) ──
   if (tier !== "team" && tier !== "enterprise" && apiKey.id !== "master") {

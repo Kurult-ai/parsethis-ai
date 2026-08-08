@@ -159,27 +159,46 @@ function policyCacheKey(apiKeyId: string): string {
   return `policy:${apiKeyId}`;
 }
 
-export async function cachePolicyData(apiKeyId: string, policy: unknown): Promise<void> {
+function policyCacheKeyEnv(apiKeyId: string, environment: string): string {
+  return `policy:${apiKeyId}:${environment}`;
+}
+
+export async function cachePolicyData(apiKeyId: string, policy: unknown, environment?: string): Promise<void> {
   if (!isRedisAvailable()) return;
   const connected = await ensureRedisConnected();
   if (!connected) return;
   const redis = getRedis();
-  await redis.set(policyCacheKey(apiKeyId), JSON.stringify(policy), "EX", 300); // 5 min
+  const key = environment ? policyCacheKeyEnv(apiKeyId, environment) : policyCacheKey(apiKeyId);
+  await redis.set(key, JSON.stringify(policy), "EX", 300); // 5 min
 }
 
-export async function getCachedPolicyData(apiKeyId: string): Promise<unknown | null> {
+export async function getCachedPolicyData(apiKeyId: string, environment?: string): Promise<unknown | null> {
   if (!isRedisAvailable()) return null;
   const connected = await ensureRedisConnected();
   if (!connected) return null;
   const redis = getRedis();
-  const data = await redis.get(policyCacheKey(apiKeyId));
+  const key = environment ? policyCacheKeyEnv(apiKeyId, environment) : policyCacheKey(apiKeyId);
+  const data = await redis.get(key);
   return data ? JSON.parse(data) : null;
 }
 
-export async function invalidatePolicyCache(apiKeyId: string): Promise<void> {
+export async function invalidatePolicyCache(apiKeyId: string, environment?: string): Promise<void> {
   if (!isRedisAvailable()) return;
   const connected = await ensureRedisConnected();
   if (!connected) return;
   const redis = getRedis();
-  await redis.del(policyCacheKey(apiKeyId));
+  if (environment) {
+    await redis.del(policyCacheKeyEnv(apiKeyId, environment));
+  } else {
+    // Invalidate all environments for this key (used by DELETE /policy)
+    const pattern = `policy:${apiKeyId}*`;
+    let cursor = "0";
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, "MATCH", pattern, "COUNT", 100);
+      cursor = nextCursor;
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+    } while (cursor !== "0");
+  }
 }
