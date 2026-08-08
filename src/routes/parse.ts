@@ -32,6 +32,7 @@ import {
 } from "../lib/data-governance/approval-matrix.js";
 import { prisma } from "../db.js";
 import { verifySignature } from "../lib/identity/signed-identity.js";
+import { recordActivationEvent, getActivationEventTs } from "../lib/activation-tracker.js";
 
 export const parseRoutes = new Hono<AppEnv>();
 
@@ -354,6 +355,11 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
 
   const apiKey = c.get("apiKey");
   const effectivePolicy = c.get("policy");
+
+  // ── Activation Funnel: first_screen_attempted (Task 17.1) ──
+  // Fire-and-forget — only records the first attempt per apiKeyId
+  recordActivationEvent(apiKey.id, "first_screen_attempted").catch(() => {});
+
   if (body.bypass_codeword && codewordBypassAllowed(body.bypass_codeword, effectivePolicy)) {
     const analyzedAt = new Date().toISOString();
     auditLog({
@@ -1015,6 +1021,9 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
 
   // ── If no execution will run, return immediately ──
   if (!shouldExecute) {
+    // ── Activation Funnel: first_screen_succeeded (Task 17.1) ──
+    const keyGenTs = await getActivationEventTs(apiKey.id, "key_generated").catch(() => null);
+    recordActivationEvent(apiKey.id, "first_screen_succeeded", { keyGeneratedTs: keyGenTs ?? undefined }).catch(() => {});
     return c.json(result);
   }
 
@@ -1144,6 +1153,9 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
         // Return 202 with poll URL
         result.execution_pending = true;
         result.poll_url = `${baseUrl}/v1/parse/${parseId}`;
+        // ── Activation Funnel: first_screen_succeeded (Task 17.1) ──
+        const keyGenTs = await getActivationEventTs(apiKey.id, "key_generated").catch(() => null);
+        recordActivationEvent(apiKey.id, "first_screen_succeeded", { keyGeneratedTs: keyGenTs ?? undefined }).catch(() => {});
         return c.json(result, 202);
       }
     } catch {
@@ -1162,6 +1174,10 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     result.verdict = computeVerdict(result.risk_score);
     result.suggested_action = result.risk_score <= 2 ? "allow" : result.risk_score <= 6 ? "sandbox" : "block";
   }
+
+  // ── Activation Funnel: first_screen_succeeded (Task 17.1) ──
+  const keyGenTs = await getActivationEventTs(apiKey.id, "key_generated").catch(() => null);
+  recordActivationEvent(apiKey.id, "first_screen_succeeded", { keyGeneratedTs: keyGenTs ?? undefined }).catch(() => {});
 
   return c.json(result);
 });

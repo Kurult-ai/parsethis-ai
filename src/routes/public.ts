@@ -28,9 +28,12 @@ import { getFaviconSvg } from "../pages/favicon.js";
 import { getOgImageSvg } from "../pages/og-image.js";
 import { renderScreeningDashboardPage } from "../pages/screening-dashboard.js";
 import { renderComplianceDashboardPage } from "../pages/compliance-dashboard.js";
+import { renderOnboardingPage } from "../pages/onboarding.js";
+import { recordActivationEvent, getActivationFunnel, type ActivationEvent } from "../lib/activation-tracker.js";
 import { renderBillingDashboardPage } from "../pages/billing.js";
 import { renderAgentDashboardPage } from "../pages/agent-dashboard.js";
 import { renderTrustPage } from "../pages/trust-page.js";
+import { renderAboutPage } from "../pages/about.js";
 import { renderPromptGuardLandingPage } from "../pages/prompt-guard-landing.js";
 import { renderPromptGuardPlaygroundPage } from "../pages/prompt-guard-playground.js";
 import { problem, ErrorCode, serviceDependencyProblem, type ErrorCodeValue } from "../lib/problem-response.js";
@@ -431,6 +434,40 @@ publicRoutes.get("/", (c) => {
   return c.html(renderLandingPage(baseUrl));
 });
 
+// ── Developer Onboarding Flow (Task 17.1) ──
+publicRoutes.get("/onboarding", (c) => {
+  return c.html(renderOnboardingPage(getBaseUrl(c)));
+});
+
+// ── Activation Funnel Tracking Endpoint (Task 17.1) ──
+// Fire-and-forget client-side tracking for developer activation events.
+// Stores events in Redis as coverage:activation:{apiKeyId}:{event}.
+publicRoutes.post("/v1/activation/track", async (c) => {
+  const body = await c.req.json<{ api_key_id?: string; event?: string }>().catch(() => null);
+  if (!body || !body.api_key_id || !body.event) {
+    return c.json({ ok: false, error: "api_key_id and event are required" }, 400);
+  }
+  const validEvents: ActivationEvent[] = [
+    "key_generated",
+    "first_screen_attempted",
+    "first_screen_succeeded",
+    "dashboard_viewed",
+  ];
+  if (!validEvents.includes(body.event as ActivationEvent)) {
+    return c.json({ ok: false, error: `Invalid event. Valid events: ${validEvents.join(", ")}` }, 400);
+  }
+  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+  recordActivationEvent(body.api_key_id, body.event as ActivationEvent, { ip }).catch(() => {});
+  return c.json({ ok: true });
+});
+
+// ── Activation Funnel Status (admin/auth) ──
+publicRoutes.get("/v1/activation/funnel", authMiddleware("evaluate"), async (c) => {
+  const apiKey = c.get("apiKey");
+  const funnel = await getActivationFunnel(apiKey.id);
+  return c.json({ api_key_id: apiKey.id, funnel });
+});
+
 // Health check — public liveness only. Dependency checks belong in /health/detail.
 publicRoutes.get("/health", async (c) => {
   return c.json({
@@ -491,6 +528,14 @@ publicRoutes.get("/health/detail", authMiddleware("admin"), async (c) => {
 
 // Dashboard
 publicRoutes.get("/dashboard", (c) => {
+  // ── Activation Funnel: dashboard_viewed (Task 17.1) ──
+  // We can't get the apiKey from the dashboard (no auth), so we rely on
+  // client-side tracking. But if the user passes an api_key_id query param
+  // (used by the onboarding redirect), emit server-side too.
+  const apiKeyId = c.req.query("api_key_id");
+  if (apiKeyId) {
+    recordActivationEvent(apiKeyId, "dashboard_viewed").catch(() => {});
+  }
   return c.html(getDashboardHTML("See /v1/keys/generate"));
 });
 
@@ -530,6 +575,11 @@ publicRoutes.get("/trust", (c) => {
   const baseUrl = getBaseUrl(c);
   recordGeoSurfaceHit(c, "trust.page");
   return c.html(renderTrustPage(baseUrl));
+});
+
+// About page
+publicRoutes.get("/about", (c) => {
+  return c.html(renderAboutPage(getBaseUrl(c)));
 });
 
 // Docs hub page (HTML index to all documentation)
@@ -1798,6 +1848,9 @@ publicRoutes.post("/v1/keys/generate", async (c) => {
     }
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const key = await createApiKey(name, ["analyze", "evaluate", "chat"], expiresAt);
+
+    // ── Activation Funnel: key_generated (Task 17.1) ──
+    recordActivationEvent(key.id, "key_generated", { ip }).catch(() => {});
 
     return c.json({
       id: key.id,

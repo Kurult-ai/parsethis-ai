@@ -93,6 +93,7 @@ Verification required before reporting done:
 .pa-shell{display:grid;gap:88px;}
 .pa-hero{display:grid;grid-template-columns:minmax(0,0.92fr) minmax(520px,1.08fr);gap:46px;align-items:center;min-height:calc(100vh - 180px);padding:34px 0 54px;}
 .pa-hero h1{font-size:clamp(44px,6vw,78px);line-height:0.94;letter-spacing:-0.06em;margin:0 0 22px;max-width:780px;}
+.pa-hero-pain{display:block;font-size:0.58em;color:var(--text-dim);font-weight:600;letter-spacing:-0.03em;margin-top:6px;}
 .pa-hero-copy{font-size:18px;line-height:1.65;color:var(--text-dim);max-width:650px;margin:0 0 28px;}
 .pa-hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px;}
 .pa-signal-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;max-width:620px;}
@@ -176,11 +177,11 @@ Verification required before reporting done:
 <div class="pa-shell">
   <section class="pa-hero">
     <div>
-      <h1>Prompt protection for agents that touch the world.</h1>
-      <p class="pa-hero-copy">Parse screens untrusted text before it reaches tools, memory, credentials, payments, code execution, or users. It is built for independent AI developers who need agent-native security without vendor lock-in.</p>
+      <h1>Ship AI agents with confidence.<br><span class="pa-hero-pain">Stop prompt injection at the boundary.</span></h1>
+      <p class="pa-hero-copy">Agents your team trusts, backed by a screening pipeline that blocks injection before untrusted text reaches tools, memory, credentials, payments, code execution, or users. Don't let one injected instruction undo the work.</p>
       <div class="pa-hero-actions">
-        <a href="/playground" class="btn btn-primary">Get started for free</a>
-        <a href="/docs/quickstart" class="btn btn-outline">Get API key</a>
+        <a href="/onboarding" class="btn btn-primary">Try it now →</a>
+        <a href="/playground" class="btn btn-outline">Playground</a>
       </div>
       <div class="pa-signal-row" aria-label="Product signals">
         <div class="pa-signal"><span>Boundary</span><strong>Input, output, and agent handoff</strong></div>
@@ -319,8 +320,8 @@ Verification required before reporting done:
       <p>Start with the public test lab, then wire the same decision into your agent runtime.</p>
     </div>
     <div class="pa-hero-actions" style="margin:0;">
-      <a href="/playground" class="btn btn-primary">Get started for free</a>
-      <a href="/docs/quickstart" class="btn btn-outline">Get API key</a>
+      <a href="/onboarding" class="btn btn-primary">Try it now →</a>
+      <a href="/playground" class="btn btn-outline">Playground</a>
     </div>
   </section>
 </div>

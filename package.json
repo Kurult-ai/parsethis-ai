@@ -35,7 +35,8 @@
     "worker": "tsx src/worker.ts",
     "seed": "tsx prisma/seed.ts",
     "launch:evidence": "node scripts/open-launch-load-evidence.mjs",
-    "fleet-provision": "node --import tsx scripts/fleet-provision.ts"
+    "fleet-provision": "node --import tsx scripts/fleet-provision.ts",
+    "llm-discovery": "node --import tsx scripts/llm-discovery-check.ts"
   },
   "keywords": [
     "agents",

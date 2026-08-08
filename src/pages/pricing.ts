@@ -289,9 +289,24 @@ Required verification:
 })();
 </script>
 
-<!-- Chunk 3: Tier cards -->
+<!-- Chunk 3: Value Ladder -->
 <div class="section-chunk">
-  <h2 style="margin-top:0;">Plans</h2>
+  <h2 style="margin-top:0;">Value Ladder</h2>
+  <p class="answer-capsule">From free exploration to full implementation — find your entry point and climb as your needs grow.</p>
+
+  <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:16px 0 24px;font-size:13px;">
+    <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Free $0</span>
+    <span style="color:var(--text-dim);">→</span>
+    <span style="background:rgba(47,111,237,0.10);border:1px solid rgba(47,111,237,0.30);border-radius:20px;padding:4px 14px;font-weight:600;">Audit $47</span>
+    <span style="color:var(--text-dim);">→</span>
+    <span style="background:var(--surface);border:1px solid var(--accent);border-radius:20px;padding:4px 14px;font-weight:600;">Pro $49/mo</span>
+    <span style="color:var(--text-dim);">→</span>
+    <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Team $199/mo</span>
+    <span style="color:var(--text-dim);">→</span>
+    <span style="background:rgba(25,182,175,0.10);border:1px solid var(--accent2);border-radius:20px;padding:4px 14px;font-weight:600;">Compliance $999/mo</span>
+    <span style="color:var(--text-dim);">→</span>
+    <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Implementation $3K–$15K</span>
+  </div>
 
   <div class="card-grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));">
 
@@ -309,6 +324,24 @@ Required verification:
         <li style="padding:6px 0;">${PLAN_LIMITS.free.sandboxExecutionsPerHour} sandbox/hr</li>
       </ul>
       <a href="/v1/keys/generate" class="btn btn-outline" style="width:100%;text-align:center;">Generate Free Key</a>
+    </div>
+
+    <!-- $47 Security Audit (one-time) -->
+    <div class="card" style="display:flex;flex-direction:column;gap:12px;border-color:rgba(47,111,237,0.40);position:relative;background:linear-gradient(145deg,rgba(47,111,237,0.06),rgba(25,182,175,0.04));">
+      <span class="badge badge-accent" style="position:absolute;top:-10px;right:16px;">One-Time</span>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Security Audit</div>
+        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$47</div>
+        <div style="font-size:13px;color:var(--text-dim);">one-time report</div>
+      </div>
+      <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Risk score (0&ndash;100)</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Vulnerability breakdown</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Remediation checklist</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">OWASP/NIST/SOC&nbsp;2 mapping</li>
+        <li style="padding:6px 0;">Up to 25 prompts</li>
+      </ul>
+      <a href="/audit" class="btn btn-primary" style="width:100%;text-align:center;">Get Audit Report</a>
     </div>
 
     <!-- Pro -->
@@ -378,6 +411,24 @@ Required verification:
         <li style="padding:6px 0;">Dedicated support</li>
       </ul>
       <a href="mailto:${PRODUCT.contactEmail}?subject=Enterprise%20Plan" class="btn btn-outline" style="width:100%;text-align:center;">Contact Sales</a>
+    </div>
+
+    <!-- Implementation (custom) -->
+    <div class="card" style="display:flex;flex-direction:column;gap:12px;border-color:var(--accent2);position:relative;">
+      <span class="badge badge-accent" style="position:absolute;top:-10px;right:16px;">Custom</span>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Implementation</div>
+        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$3K&ndash;$15K</div>
+        <div style="font-size:13px;color:var(--text-dim);">one-time project</div>
+      </div>
+      <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Agent architecture review</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Custom screening rules</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Integration &amp; deployment</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Training &amp; handoff</li>
+        <li style="padding:6px 0;">Dedicated engineer</li>
+      </ul>
+      <a href="mailto:${PRODUCT.contactEmail}?subject=Implementation%20Project" class="btn btn-primary" style="width:100%;text-align:center;">Book Consultation</a>
     </div>
 
   </div>
@@ -532,9 +583,9 @@ res = session.post("https://www.parsethis.ai/v1/parse", json={"prompt": "..."})<
 `;
 
   return renderPage({
-    title: "Pricing — Free Tier, Pro $49/mo, Team $199/mo, Compliance $999/mo",
+    title: "Pricing — Free → $47 Audit → $49 Pro → $199 Team → $999 Compliance → Implementation",
     description:
-      `${PRODUCT.name} pricing: x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}. Free, Pro, Team, Compliance, and Enterprise keys available.`,
+      `${PRODUCT.name} value ladder: Free tier, $47 one-time Security Audit, Pro $49/mo, Team $199/mo, Compliance $999/mo, and custom Implementation ($3K–$15K). ${PRODUCT.name} also offers x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}.`,
     path: "/pricing",
     content,
     baseUrl,

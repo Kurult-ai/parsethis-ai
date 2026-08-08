@@ -161,7 +161,7 @@ export function listBlogPosts(): ContentFile[] {
 
   try {
     const categories = readdirSync(blogDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && d.name !== "configs");
+      .filter((d) => d.isDirectory() && d.name !== "configs" && d.name !== "drafts");
 
     const posts: ContentFile[] = [];
     for (const catDir of categories) {
