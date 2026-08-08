@@ -24,6 +24,7 @@ export interface ApiKeyContext {
   scopes: string[];
   rate_limit: number;
   tier?: string;
+  role?: string;
 }
 
 export type AppEnv = {

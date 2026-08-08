@@ -12,6 +12,7 @@ export const ErrorCode = {
   AUTH_INVALID_KEY: "auth.invalid_key",
   AUTH_EXPIRED: "auth.expired",
   AUTH_INSUFFICIENT_SCOPE: "auth.insufficient_scope",
+  AUTH_FORBIDDEN_ROLE: "auth.forbidden_role",
   RATE_LIMIT: "rate_limit.exceeded",
   USAGE_CAP: "usage_cap.exceeded",
   PAYMENT_REQUIRED: "payment.required",

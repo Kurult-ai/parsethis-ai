@@ -918,6 +918,7 @@ async function updateApiKeyData(c: AdminContext, id: string, params: UnknownReco
         tier: true,
         scopes: true,
         rateLimit: true,
+        role: true,
         lastUsedAt: true,
         expiresAt: true,
         createdAt: true,

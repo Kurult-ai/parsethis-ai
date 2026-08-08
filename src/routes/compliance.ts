@@ -17,22 +17,24 @@ import { authMiddleware } from "../auth.js";
 import { prisma } from "../db.js";
 import type { AppEnv } from "../types.js";
 import { auditLog } from "../lib/audit-log.js";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   generateFullCrosswalk,
   generateCoverageReport,
 } from "../lib/compliance/framework-crosswalk.js";
+import { generateEvidencePack } from "../lib/compliance/evidence-pack.js";
 import {
   forwardToSIEM,
   testSIEMConnection,
   type PrismaSIEMConfig,
 } from "../lib/compliance/siem-forwarder.js";
+import { requireRole } from "../lib/rbac.js";
 
 export const complianceRoutes = new Hono<AppEnv>();
 
 // ─── GET /v1/compliance/summary — Dashboard data ───────────────────────
 
-complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), async (c) => {
+complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst", "auditor"), async (c) => {
   const apiKey = c.get("apiKey");
   const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -163,7 +165,7 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), async
 
 // ─── GET /v1/compliance/audit-trail — Full audit trail ──────────────────
 
-complianceRoutes.get("/v1/compliance/audit-trail", authMiddleware("evaluate"), async (c) => {
+complianceRoutes.get("/v1/compliance/audit-trail", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst"), async (c) => {
   const apiKey = c.get("apiKey");
   const limit = Math.min(Number(c.req.query("limit") ?? "100"), 500);
   const offset = Number(c.req.query("offset") ?? "0");
@@ -207,12 +209,12 @@ complianceRoutes.get("/v1/compliance/audit-trail", authMiddleware("evaluate"), a
 
 // ─── GET /v1/compliance/framework-map — Framework crosswalk ─────────────
 
-complianceRoutes.get("/v1/compliance/framework-map", authMiddleware("evaluate"), async (c) => {
+complianceRoutes.get("/v1/compliance/framework-map", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst", "auditor"), async (c) => {
   const crosswalk = generateFullCrosswalk();
   return c.json(crosswalk);
 });
 
-complianceRoutes.get("/v1/compliance/framework-map/:framework", authMiddleware("evaluate"), async (c) => {
+complianceRoutes.get("/v1/compliance/framework-map/:framework", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst", "auditor"), async (c) => {
   const framework = c.req.param("framework");
   const crosswalk = generateFullCrosswalk();
 
@@ -238,13 +240,13 @@ complianceRoutes.get("/v1/compliance/framework-map/:framework", authMiddleware("
 
 // ─── GET /v1/compliance/coverage — Framework coverage report ────────────
 
-complianceRoutes.get("/v1/compliance/coverage", authMiddleware("evaluate"), async (c) => {
+complianceRoutes.get("/v1/compliance/coverage", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst", "auditor"), async (c) => {
   return c.json({ frameworks: generateCoverageReport() });
 });
 
 // ─── POST /v1/compliance/export — Generate structured evidence pack ─────
 
-complianceRoutes.post("/v1/compliance/export", authMiddleware("evaluate"), async (c) => {
+complianceRoutes.post("/v1/compliance/export", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst"), async (c) => {
   const apiKey = c.get("apiKey");
   const body = await c.req.json().catch(() => ({}));
 
@@ -304,7 +306,7 @@ complianceRoutes.post("/v1/compliance/export", authMiddleware("evaluate"), async
 
 // ─── SIEM Configuration ─────────────────────────────────────────────────
 
-complianceRoutes.get("/v1/compliance/siem", authMiddleware("evaluate"), async (c) => {
+complianceRoutes.get("/v1/compliance/siem", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst", "auditor"), async (c) => {
   const apiKey = c.get("apiKey");
   try {
     const configs = await prisma.$queryRaw<PrismaSIEMConfig[]>`
@@ -318,7 +320,7 @@ complianceRoutes.get("/v1/compliance/siem", authMiddleware("evaluate"), async (c
   }
 });
 
-complianceRoutes.post("/v1/compliance/siem", authMiddleware("evaluate"), async (c) => {
+complianceRoutes.post("/v1/compliance/siem", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst"), async (c) => {
   const apiKey = c.get("apiKey");
   const body = await c.req.json();
 
@@ -357,7 +359,7 @@ complianceRoutes.post("/v1/compliance/siem", authMiddleware("evaluate"), async (
   }
 });
 
-complianceRoutes.post("/v1/compliance/siem/test", authMiddleware("evaluate"), async (c) => {
+complianceRoutes.post("/v1/compliance/siem/test", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst"), async (c) => {
   const body = await c.req.json();
   const { platform, endpoint, auth_header, format } = body;
 
@@ -382,7 +384,7 @@ complianceRoutes.post("/v1/compliance/siem/test", authMiddleware("evaluate"), as
   return c.json(result);
 });
 
-complianceRoutes.delete("/v1/compliance/siem/:id", authMiddleware("evaluate"), async (c) => {
+complianceRoutes.delete("/v1/compliance/siem/:id", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst"), async (c) => {
   const apiKey = c.get("apiKey");
   const configId = c.req.param("id");
   const orgId = apiKey.id;
@@ -398,7 +400,7 @@ complianceRoutes.delete("/v1/compliance/siem/:id", authMiddleware("evaluate"), a
 
 // ─── GET /v1/compliance/policy-history — Policy change history ──────────
 
-complianceRoutes.get("/v1/compliance/policy-history", authMiddleware("evaluate"), async (c) => {
+complianceRoutes.get("/v1/compliance/policy-history", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst", "auditor"), async (c) => {
   const apiKey = c.get("apiKey");
   const orgId = apiKey.id;
 

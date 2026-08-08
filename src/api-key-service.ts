@@ -193,6 +193,7 @@ function createLocalTestApiKeyRecord(
     tier,
     scopes,
     rateLimit: TIER_RATE_LIMITS[tier] ?? TIER_RATE_LIMITS.free,
+    role: "developer",
     lastUsedAt: null,
     expiresAt: expiresAt ?? null,
     createdAt: now,
@@ -210,6 +211,7 @@ export interface ApiKeyRecord {
   tier: string;
   scopes: string[];
   rateLimit: number;
+  role: string;
   lastUsedAt: Date | null;
   expiresAt: Date | null;
   createdAt: Date;
@@ -280,6 +282,7 @@ export async function createApiKey(
       tier,
       scopes,
       rateLimit,
+      role: "developer",
       lastUsedAt: null,
       expiresAt: expiresAt ?? null,
       createdAt: new Date(),
@@ -517,6 +520,7 @@ function toApiKeyRecord(row: {
   tier: string;
   scopes: string[];
   rateLimit: number;
+  role: string;
   lastUsedAt: Date | null;
   expiresAt: Date | null;
   createdAt: Date;
@@ -531,6 +535,7 @@ function toApiKeyRecord(row: {
     tier: row.tier,
     scopes: row.scopes,
     rateLimit: row.rateLimit,
+    role: row.role,
     lastUsedAt: row.lastUsedAt,
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,

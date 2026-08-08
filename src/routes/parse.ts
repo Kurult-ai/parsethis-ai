@@ -19,6 +19,8 @@ import { codewordBypassAllowed } from "../lib/bypass-codeword.js";
 import { autoRegisterAgentFromScreening } from "../lib/agent-auto-register.js";
 import { isAgentFrozen } from "../lib/freeze-cache.js";
 import { checkDataAccess } from "../lib/data-governance/check-access.js";
+import { checkEgress, type EgressRuleInput } from "../lib/data-governance/check-egress.js";
+import { trackUsage, checkBudget } from "../lib/data-governance/volume-tracker.js";
 import { evaluateCustomRules, parseCustomRules } from "../lib/policy-engine/custom-rules.js";
 import { prisma } from "../db.js";
 
@@ -222,6 +224,24 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
         status: 400,
         title: "Validation failure",
         detail: "metadata.data_sources must be an array of strings (data source IDs)",
+        code: ErrorCode.VALIDATION_INVALID_TYPE,
+        retryable: false,
+      });
+    }
+    if (body.metadata.records_accessed !== undefined && (typeof body.metadata.records_accessed !== "number" || !Number.isInteger(body.metadata.records_accessed) || body.metadata.records_accessed < 0)) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "metadata.records_accessed must be a non-negative integer",
+        code: ErrorCode.VALIDATION_INVALID_TYPE,
+        retryable: false,
+      });
+    }
+    if (body.metadata.bytes_accessed !== undefined && (typeof body.metadata.bytes_accessed !== "number" || !Number.isInteger(body.metadata.bytes_accessed) || body.metadata.bytes_accessed < 0)) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "metadata.bytes_accessed must be a non-negative integer",
         code: ErrorCode.VALIDATION_INVALID_TYPE,
         retryable: false,
       });
@@ -568,6 +588,213 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
         console.error("[tool-allowlist] check failed:", (taErr as Error).message);
         // Fail open — don't block screening on allowlist check failure
       }
+    }
+  }
+
+  // ── Egress Destination Control (Task 8.3) ──
+  // When request metadata includes intended_action with an external destination,
+  // evaluate the destination + classification against the org's egress rules.
+  // Actions:
+  //   block            → add egress_violation flag, enforce through dial
+  //   require_approval → create approval request (reuses existing approval flow)
+  //   allow            → no action
+  const egressDestination = body.metadata?.egress_destination as string | undefined;
+  const egressClassification = (body.metadata?.data_classification as string[] | undefined)?.[0];
+  if (
+    egressDestination &&
+    typeof egressDestination === "string" &&
+    egressClassification &&
+    typeof egressClassification === "string"
+  ) {
+    try {
+      // Resolve org for this API key
+      let egressOrgId: string | null = null;
+      const egressApiKey = await prisma.apiKey.findUnique({
+        where: { id: apiKey.id },
+        select: { orgId: true },
+      });
+      if (egressApiKey?.orgId) {
+        egressOrgId = egressApiKey.orgId;
+      } else {
+        const egressOrg = await prisma.organization.findFirst({
+          where: { ownerId: apiKey.id },
+        });
+        if (egressOrg) egressOrgId = egressOrg.id;
+      }
+
+      if (egressOrgId) {
+        const dbRules = await prisma.egressRule.findMany({
+          where: { orgId: egressOrgId },
+          orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
+        });
+
+        const rules: EgressRuleInput[] = dbRules.map((r) => ({
+          id: r.id,
+          destinationPattern: r.destinationPattern,
+          maxClassification: r.maxClassification,
+          action: r.action,
+          priority: r.priority,
+        }));
+
+        const egressResult = checkEgress(egressDestination, egressClassification, rules);
+
+        if (egressResult.action === "block") {
+          result.flags.push({
+            category: "egress_violation",
+            severity: 8,
+            label: `Egress blocked: ${egressDestination}`,
+            detail: `Data classified as "${egressClassification}" is not permitted at destination "${egressDestination}" (rule: ${egressResult.matchedRule?.destinationPattern ?? "default"}, max classification: ${egressResult.matchedRule?.maxClassification ?? "N/A"})`,
+            source: "egress_control",
+          });
+          if (!result.categories.includes("egress_violation")) {
+            result.categories.push("egress_violation");
+          }
+          (result as unknown as Record<string, unknown>).egress_violation = {
+            destination: egressDestination,
+            classification: egressClassification,
+            action: "block",
+            matched_rule: egressResult.matchedRule?.id ?? null,
+          };
+
+          // Enforcement: under "block" mode, escalate risk and block
+          if (enforcementMode === "block") {
+            result.risk_score = Math.max(result.risk_score, 8);
+            result.verdict = "critical";
+            result.safe = false;
+            result.suggested_action = "block";
+            result.recommended_action = "block";
+            result.wouldBlock = true;
+          } else if (enforcementMode === "warn") {
+            c.header("X-Egress-Warning", `Egress to "${egressDestination}" would be blocked under "block" mode`);
+          }
+        } else if (egressResult.action === "require_approval") {
+          // Create approval request using existing flow structure
+          result.flags.push({
+            category: "egress_approval_required",
+            severity: 5,
+            label: `Egress requires approval: ${egressDestination}`,
+            detail: `Data classified as "${egressClassification}" requires approval before sending to "${egressDestination}" (rule: ${egressResult.matchedRule?.destinationPattern ?? "default"})`,
+            source: "egress_control",
+          });
+          if (!result.categories.includes("egress_approval_required")) {
+            result.categories.push("egress_approval_required");
+          }
+          (result as unknown as Record<string, unknown>).egress_approval_request = {
+            type: "egress_approval",
+            destination: egressDestination,
+            classification: egressClassification,
+            matched_rule: egressResult.matchedRule?.id ?? null,
+            default_action: "deny",
+            expires_in_seconds: 900,
+          };
+
+          // Set suggested action to request approval
+          if (result.suggested_action === "allow") {
+            result.suggested_action = "request_owner_approval";
+          }
+          if (result.recommended_action === "allow" || !result.recommended_action) {
+            result.recommended_action = "request_owner_approval";
+          }
+        }
+      }
+    } catch (egressErr) {
+      console.error("[egress] check failed:", (egressErr as Error).message);
+      // Fail open — don't block screening on egress check failure
+    }
+  }
+
+  // ── Volume Budget Tracking (Task 8.4) ──
+  // When request metadata includes records_accessed or bytes_accessed,
+  // track usage against the agent's volume budgets and enforce limits.
+  const volAgentId = body.metadata?.agent_id;
+  const recordsAccessed = body.metadata?.records_accessed;
+  const bytesAccessed = body.metadata?.bytes_accessed;
+
+  if (
+    volAgentId &&
+    typeof volAgentId === "string" &&
+    (recordsAccessed !== undefined || bytesAccessed !== undefined)
+  ) {
+    const records = typeof recordsAccessed === "number" && recordsAccessed > 0 ? recordsAccessed : 0;
+    const bytes = typeof bytesAccessed === "number" && bytesAccessed > 0 ? bytesAccessed : 0;
+
+    // Track usage for each data source mentioned, plus agent-wide
+    const volDataSources = body.metadata?.data_sources;
+    try {
+      // Track agent-wide usage
+      await trackUsage(volAgentId, null, records, bytes);
+
+      // Track per-source usage if data_sources are specified
+      if (Array.isArray(volDataSources)) {
+        for (const dsId of volDataSources) {
+          await trackUsage(volAgentId, dsId, records, bytes);
+        }
+      }
+
+      // Check budget for each source (or agent-wide if no sources)
+      const sourcesToCheck = Array.isArray(volDataSources) && volDataSources.length > 0
+        ? volDataSources
+        : [null];
+
+      let anyExceeded = false;
+      const allViolations: string[] = [];
+      const allWarnings: string[] = [];
+
+      for (const dsId of sourcesToCheck) {
+        const budgetCheck = await checkBudget(volAgentId, dsId, records);
+        if (budgetCheck.exceeded) {
+          anyExceeded = true;
+          allViolations.push(...budgetCheck.violations);
+        }
+        if (budgetCheck.warning) {
+          allWarnings.push(...budgetCheck.warnings);
+        }
+      }
+
+      if (anyExceeded) {
+        result.flags.push({
+          category: "volume_budget_exceeded",
+          severity: 8,
+          label: "Data volume budget exceeded",
+          detail: `Agent ${volAgentId} has exceeded its volume budget: ${allViolations.join("; ")}`,
+          source: "volume_tracker",
+        });
+        if (!result.categories.includes("volume_budget_exceeded")) {
+          result.categories.push("volume_budget_exceeded");
+        }
+        (result as unknown as Record<string, unknown>).volume_budget_exceeded = {
+          violations: allViolations,
+          agent_id: volAgentId,
+        };
+
+        // Enforcement: under "block" mode, escalate risk and block
+        if (enforcementMode === "block") {
+          result.risk_score = Math.max(result.risk_score, 8);
+          result.verdict = "critical";
+          result.safe = false;
+          result.suggested_action = "block";
+          result.recommended_action = "block";
+          result.wouldBlock = true;
+        } else if (enforcementMode === "warn") {
+          c.header("X-Volume-Budget-Warning", "Data volume budget exceeded — would be blocked under \"block\" mode");
+        }
+      } else if (allWarnings.length > 0) {
+        // 80% threshold — warning only, never blocked
+        result.flags.push({
+          category: "volume_budget_warning",
+          severity: 4,
+          label: "Data volume budget approaching limit",
+          detail: `Agent ${volAgentId} is approaching its volume budget: ${allWarnings.join("; ")}`,
+          source: "volume_tracker",
+        });
+        (result as unknown as Record<string, unknown>).volume_budget_warning = {
+          warnings: allWarnings,
+          agent_id: volAgentId,
+        };
+      }
+    } catch (volErr) {
+      console.error("[volume-tracker] check failed:", (volErr as Error).message);
+      // Fail open — don't block screening on volume check failure
     }
   }
 

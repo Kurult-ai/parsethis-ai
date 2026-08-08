@@ -417,6 +417,7 @@ export function authMiddleware(requiredScope?: string) {
       scopes: apiKeyRecord.scopes,
       rate_limit: apiKeyRecord.rateLimit,
       tier: apiKeyRecord.tier,
+      role: apiKeyRecord.role,
     });
 
     // Resolve environment from X-Parse-Environment header (default: production)

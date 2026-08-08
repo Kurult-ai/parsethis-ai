@@ -17,6 +17,7 @@ model ApiKey {
   tier       String   @default("free")
   scopes     String[] @default(["evaluate"])
   rateLimit  Int      @default(10) @map("rate_limit")
+  role       String   @default("developer")  // org_admin | security_analyst | auditor | developer
   lastUsedAt DateTime? @map("last_used_at")
   expiresAt  DateTime? @map("expires_at")
   createdAt  DateTime @default(now()) @map("created_at")
@@ -364,6 +365,7 @@ model Organization {
   siemConfigs SIEMConfig[]
   exports     ComplianceExport[]
   policyHistory PolicyRevision[]
+  egressRules  EgressRule[]
 
   @@map("organizations")
 }
@@ -493,4 +495,43 @@ model AgentDataGrant {
   @@index([agentId], name: "idx_agent_data_grants_agent")
   @@index([dataSourceId], name: "idx_agent_data_grants_source")
   @@map("agent_data_grants")
+}
+
+/// Volume Budget: caps on data quantity per agent.
+/// dataSourceId null = agent-wide budget; otherwise per (agent × data source).
+model VolumeBudget {
+  id                  String   @id @default(cuid())
+  agentId             String   @map("agent_id")
+  dataSourceId        String?  @map("data_source_id") // null = agent-wide
+  maxRecordsPerRequest Int?    @map("max_records_per_request")
+  maxRecordsPerDay    Int?     @map("max_records_per_day")
+  maxBytesPerDay      Int?     @map("max_bytes_per_day")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt      @map("updated_at")
+
+  @@unique([agentId, dataSourceId], name: "idx_volume_budget_agent_source")
+  @@index([agentId], name: "idx_volume_budgets_agent")
+  @@map("volume_budgets")
+}
+
+/// Egress Rule: controls where data may go.
+/// destinationPattern can be a domain (api.example.com), email domain (@example.com),
+/// webhook URL prefix (https://hooks.example.com), or "*" for any destination.
+/// maxClassification is the highest classification allowed; data above that level
+/// is blocked or requires approval at the matched destination.
+model EgressRule {
+  id                  String   @id @default(cuid())
+  orgId               String   @map("org_id")
+  scope               String   @default("org")    // org | key | agent
+  destinationPattern  String                       // domain, email domain, webhook URL prefix, or "*"
+  maxClassification   String   @default("internal") // public | internal | confidential | restricted
+  action              String   @default("allow")   // allow | require_approval | block
+  priority            Int      @default(0)
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId], name: "idx_egress_rules_org")
+  @@index([orgId, priority], name: "idx_egress_rules_org_priority")
+  @@map("egress_rules")
 }

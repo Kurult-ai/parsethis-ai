@@ -251,6 +251,9 @@ export interface ParseRequest {
     data_classification?: string[];
     data_sources?: string[]; // data source IDs the agent is accessing (data governance check)
     intended_action?: "summarize" | "execute" | "route" | "reply" | "extract";
+    egress_destination?: string; // external destination for egress control check
+    records_accessed?: number; // number of records accessed in this request (volume budget tracking)
+    bytes_accessed?: number; // number of bytes accessed in this request (volume budget tracking)
     requester_trust?: RequesterTrust;
     requester_id?: string;
     channel?: string;

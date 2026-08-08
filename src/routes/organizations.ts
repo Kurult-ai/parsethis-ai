@@ -4,8 +4,10 @@ import { prisma } from "../db.js";
 import { problem, ErrorCode } from "../lib/problem-response.js";
 import { auditLog } from "../lib/audit-log.js";
 import { invalidateApiKeyCache } from "../result-store.js";
+import { requireRole, VALID_ROLES, type Role } from "../lib/rbac.js";
+import type { AppEnv } from "../types.js";
 
-export const organizationRoutes = new Hono();
+export const organizationRoutes = new Hono<AppEnv>();
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -36,6 +38,7 @@ async function generateUniqueSlug(name: string): Promise<string> {
 organizationRoutes.post(
   "/v1/orgs",
   authMiddleware("admin"),
+  requireRole("org_admin"),
   async (c) => {
     const body = await c.req.json<{
       name: string;
@@ -123,6 +126,7 @@ organizationRoutes.post(
 organizationRoutes.get(
   "/v1/orgs/:id",
   authMiddleware("admin"),
+  requireRole("org_admin", "security_analyst", "auditor"),
   async (c) => {
     const orgId = c.req.param("id")!;
 
@@ -170,6 +174,7 @@ organizationRoutes.get(
 organizationRoutes.post(
   "/v1/orgs/:id/claim-keys",
   authMiddleware("admin"),
+  requireRole("org_admin"),
   async (c) => {
     const orgId = c.req.param("id")!;
     const callerKey = c.get("apiKey");
@@ -327,6 +332,144 @@ organizationRoutes.post(
         agentRegistry: result.agentCount,
       },
       isolationVerified: isolationCheck === 0,
+    });
+  },
+);
+
+// ── GET /v1/orgs/:id/members — list members (keys) with roles ───────────
+
+organizationRoutes.get(
+  "/v1/orgs/:id/members",
+  authMiddleware("admin"),
+  requireRole("org_admin", "security_analyst", "auditor"),
+  async (c) => {
+    const orgId = c.req.param("id")!;
+
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { id: true },
+    });
+    if (!org) {
+      return problem(c, {
+        status: 404,
+        title: "Not found",
+        detail: `Organization ${orgId} not found`,
+        code: ErrorCode.RESOURCE_NOT_FOUND,
+        retryable: false,
+      });
+    }
+
+    const members = await prisma.apiKey.findMany({
+      where: { orgId, revokedAt: null },
+      select: {
+        id: true,
+        name: true,
+        keyPrefix: true,
+        role: true,
+        tier: true,
+        scopes: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return c.json({ orgId, members });
+  },
+);
+
+// ── PUT /v1/orgs/:id/members/:keyId/role — change a member's role ───────
+//
+// Only org_admin can change roles. Role changes are audit-logged.
+
+organizationRoutes.put(
+  "/v1/orgs/:id/members/:keyId/role",
+  authMiddleware("admin"),
+  requireRole("org_admin"),
+  async (c) => {
+    const orgId = c.req.param("id")!;
+    const keyId = c.req.param("keyId")!;
+    const callerKey = c.get("apiKey");
+
+    const body = await c.req.json<{ role: string }>();
+
+    if (!body.role || !VALID_ROLES.includes(body.role as Role)) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: `role must be one of: ${VALID_ROLES.join(", ")}`,
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+
+    const newRole = body.role as Role;
+
+    // Verify the org exists
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { id: true, name: true },
+    });
+    if (!org) {
+      return problem(c, {
+        status: 404,
+        title: "Not found",
+        detail: `Organization ${orgId} not found`,
+        code: ErrorCode.RESOURCE_NOT_FOUND,
+        retryable: false,
+      });
+    }
+
+    // Find the target key — must belong to this org
+    const targetKey = await prisma.apiKey.findFirst({
+      where: { id: keyId, orgId },
+      select: { id: true, name: true, role: true, keyPrefix: true },
+    });
+    if (!targetKey) {
+      return problem(c, {
+        status: 404,
+        title: "Not found",
+        detail: `API key ${keyId} not found in organization ${orgId}`,
+        code: ErrorCode.RESOURCE_NOT_FOUND,
+        retryable: false,
+      });
+    }
+
+    const previousRole = targetKey.role;
+
+    // Prevent self-demotion (org_admin can't remove their own admin)
+    if (keyId === callerKey.id && newRole !== "org_admin") {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "You cannot change your own role away from org_admin.",
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+
+    // Update the role
+    const updated = await prisma.apiKey.update({
+      where: { id: keyId },
+      data: { role: newRole },
+      select: { id: true, name: true, role: true },
+    });
+
+    // Invalidate cache so the next request picks up the new role
+    await invalidateApiKeyCache(targetKey.keyPrefix).catch(() => {});
+
+    // Audit log the role change
+    auditLog({
+      action: "member_role_changed",
+      apiKeyId: callerKey.id,
+      detail: `Changed role of key "${targetKey.name}" (${keyId}) from "${previousRole}" to "${newRole}" in org "${org.name}" (${orgId})`,
+    });
+
+    return c.json({
+      keyId: updated.id,
+      name: updated.name,
+      previousRole,
+      newRole: updated.role,
+      changedBy: callerKey.id,
     });
   },
 );
