@@ -100,6 +100,12 @@ model ScreeningPolicy {
   bypassCodewordHash     String?                  @map("bypass_codeword_hash")
   bypassExpiresAt        DateTime?                @map("bypass_expires_at")
 
+  // Enforcement dial: "monitor" | "warn" | "block"
+  // monitor = full pipeline runs, verdicts recorded, nothing blocked (counterfactual)
+  // warn    = verdict annotation returned but not blocked
+  // block   = dangerous content is actually blocked (current behavior)
+  enforcementMode        String   @default("block") @map("enforcement_mode")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
 
@@ -115,6 +121,8 @@ model ScreeningEvent {
   mode       String   @default("full")
   latencyMs  Int      @map("latency_ms")
   blocked    Boolean  @default(false)
+  wouldBlock Boolean? @map("would_block")
+  enforcementMode String? @map("enforcement_mode")
   metadata   Json?    @map("metadata")
   createdAt  DateTime @default(now()) @map("created_at")
 

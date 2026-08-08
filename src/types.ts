@@ -13,6 +13,7 @@ export interface ScreeningPolicy {
   bypassEnabled?: boolean;
   bypassCodewordHash?: string | null;
   bypassExpiresAt?: Date | string | null;
+  enforcementMode?: "monitor" | "warn" | "block";
 }
 
 export interface ApiKeyContext {

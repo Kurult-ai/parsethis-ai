@@ -309,6 +309,8 @@ export interface ParseResponse {
   suggested_action?: SuggestedAction; // recommended next step based on risk score and trust boundary
   recommended_action?: SuggestedAction;
   attack_detected?: boolean;
+  wouldBlock?: boolean;
+  enforcementMode?: "monitor" | "warn" | "block";
   approval_request?: ApprovalRequest;
   score_components?: {
     patternScore: number;
@@ -328,6 +330,7 @@ export interface ParseResponse {
     auto_block: boolean;
     threshold: number;
     tier: string;
+    enforcement_mode?: "monitor" | "warn" | "block";
     approval_required_for_personal_data?: boolean;
     approval_required_for_location?: boolean;
     approval_required_for_future_plans?: boolean;

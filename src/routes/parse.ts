@@ -284,12 +284,14 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
 
   // ── Write ScreeningEvent (fire-and-forget — metadata only, no prompt content) ──
   const apiKeyForEvent = c.get("apiKey");
+  const effectiveEnforcementMode = effectivePolicy?.enforcementMode ?? "block";
   persistScreeningEventForApiKey({
     apiKeyId: apiKeyForEvent?.id,
     request: body,
     result,
     latencyMs: parseLatencyMs,
     autoBlockThreshold: c.get("policy")?.autoBlockThreshold ?? 7,
+    enforcementMode: effectiveEnforcementMode,
   }).catch((err: Error) => console.error("[screening-event] write failed:", err.message));
 
   // ── Audit log the screening result ──
@@ -324,6 +326,36 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     approval_required_for_location: policy?.approvalRequiredForLocation ?? true,
     approval_required_for_future_plans: policy?.approvalRequiredForFuturePlans ?? true,
     approval_default_action: policy?.approvalDefaultAction ?? "deny",
+  };
+
+  // ── Enforcement Dial (monitor → warn → block) ──
+  // Compute what would happen under "block" mode, then downgrade if policy says so.
+  const enforcementMode = policy?.enforcementMode ?? "block";
+  const wouldBlock = result.risk_score >= (policy?.autoBlockThreshold ?? 7);
+
+  result.wouldBlock = wouldBlock;
+  result.enforcementMode = enforcementMode;
+
+  if (enforcementMode !== "block" && wouldBlock) {
+    // monitor / warn: never return a blocking verdict or action
+    // Downgrade the verdict to the highest non-blocking level
+    result.safe = true; // not actually blocked
+    result.recommended_action = "sandbox"; // suggest sandbox instead of block
+    result.suggested_action = "sandbox";
+    // If risk was critical/high, soften the verdict to medium_risk (still visible but not "critical")
+    if (result.risk_score > 6) {
+      result.verdict = "medium_risk";
+    }
+    // For warn mode: add a warning annotation header so the caller knows
+    if (enforcementMode === "warn") {
+      c.header("X-Screening-Warning", `Content would be blocked under "block" mode (risk_score=${result.risk_score})`);
+      (result as unknown as Record<string, unknown>).screening_warning = `This content would be blocked under "block" enforcement mode (risk_score=${result.risk_score}). Current mode: "warn".`;
+    }
+  }
+
+  result.policy = {
+    ...result.policy,
+    enforcement_mode: enforcementMode,
   };
 
   // ── Gate score_components to team+ tier (prevents free-tier scoring oracle) ──

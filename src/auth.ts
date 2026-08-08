@@ -35,6 +35,7 @@ const DEFAULT_POLICY: ScreeningPolicy = {
   approvalRequiredForLocation: true,
   approvalRequiredForFuturePlans: true,
   approvalDefaultAction: "deny",
+  enforcementMode: "block",
 };
 
 // In-memory rate limit fallback (used when Redis is unavailable)
@@ -424,6 +425,7 @@ export function authMiddleware(requiredScope?: string) {
               approvalRequiredForLocation: true,
               approvalRequiredForFuturePlans: true,
               approvalDefaultAction: "deny",
+              enforcementMode: (dbPolicy.enforcementMode as "monitor" | "warn" | "block") ?? "block",
             }
           : DEFAULT_POLICY;
         c.set("policy", policy);

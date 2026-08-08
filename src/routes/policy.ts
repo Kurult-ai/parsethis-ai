@@ -25,6 +25,7 @@ export const DEFAULT_POLICY: ScreeningPolicy = {
   approvalRequiredForLocation: true,
   approvalRequiredForFuturePlans: true,
   approvalDefaultAction: "deny",
+  enforcementMode: "block",
 };
 
 // Tier-enforced maximum autoBlockThreshold
@@ -49,6 +50,7 @@ function formatPolicyResponse(policy: ScreeningPolicy, tier: string) {
     approvalRequiredForLocation: policy.approvalRequiredForLocation ?? true,
     approvalRequiredForFuturePlans: policy.approvalRequiredForFuturePlans ?? true,
     approvalDefaultAction: policy.approvalDefaultAction ?? "deny",
+    enforcementMode: policy.enforcementMode ?? "block",
     tier,
     max_threshold: MAX_THRESHOLD_BY_TIER[tier] ?? MAX_THRESHOLD_BY_TIER.free,
   };
@@ -91,6 +93,7 @@ policyRoutes.get("/v1/policy", authMiddleware("evaluate"), async (c) => {
           approvalRequiredForLocation: true,
           approvalRequiredForFuturePlans: true,
           approvalDefaultAction: "deny",
+          enforcementMode: (dbPolicy.enforcementMode as "monitor" | "warn" | "block") ?? "block",
         }
       : DEFAULT_POLICY;
 
@@ -141,6 +144,13 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
     );
   }
 
+  // Validate enforcementMode
+  if (body.enforcementMode !== undefined) {
+    if (!["monitor", "warn", "block"].includes(body.enforcementMode)) {
+      return c.json({ error: "enforcementMode must be 'monitor', 'warn', or 'block'" }, 400);
+    }
+  }
+
   // Build update data from provided fields
   const updateData: Record<string, unknown> = {};
   if (body.screenUserInput !== undefined) updateData.screenUserInput = Boolean(body.screenUserInput);
@@ -149,6 +159,7 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
   if (body.screenAllPrompts !== undefined) updateData.screenAllPrompts = Boolean(body.screenAllPrompts);
   if (body.autoBlockThreshold !== undefined) updateData.autoBlockThreshold = Number(body.autoBlockThreshold);
   if (body.executeInSandbox !== undefined) updateData.executeInSandbox = Boolean(body.executeInSandbox);
+  if (body.enforcementMode !== undefined) updateData.enforcementMode = body.enforcementMode;
   if (body.bypassCodeword !== undefined) {
     if (body.bypassCodeword === null || body.bypassCodeword === "") {
       updateData.bypassCodewordHash = null;
@@ -202,6 +213,7 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
           approvalRequiredForLocation: true,
           approvalRequiredForFuturePlans: true,
           approvalDefaultAction: "deny",
+          enforcementMode: (existingDb.enforcementMode as "monitor" | "warn" | "block") ?? "block",
         })
       : {};
 
@@ -237,6 +249,7 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
       approvalRequiredForLocation: true,
       approvalRequiredForFuturePlans: true,
       approvalDefaultAction: "deny",
+      enforcementMode: (upserted.enforcementMode as "monitor" | "warn" | "block") ?? "block",
     };
 
     // Invalidate old cache, set new

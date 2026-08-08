@@ -138,5 +138,6 @@ export function snapshotFromScreeningPolicy(policy: ScreeningPolicy): Record<str
       policy.bypassExpiresAt instanceof Date
         ? policy.bypassExpiresAt.toISOString()
         : (policy.bypassExpiresAt ?? null),
+    enforcementMode: policy.enforcementMode ?? "block",
   };
 }

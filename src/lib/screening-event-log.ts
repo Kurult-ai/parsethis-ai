@@ -25,6 +25,8 @@ export interface ScreeningEventData {
   mode: NonNullable<ParseRequest["mode"]>;
   latencyMs: number;
   blocked: boolean;
+  wouldBlock?: boolean;
+  enforcementMode?: string;
   metadata: ScreeningEventMetadata;
 }
 
@@ -55,10 +57,20 @@ export function buildScreeningEventData(input: {
   result: ParseResponse;
   latencyMs: number;
   autoBlockThreshold?: number;
+  enforcementMode?: string;
 }): ScreeningEventData {
   const ruleIds = screeningRuleIds(input.result);
   const recommendedAction = screeningDecisionAction(input.result);
   const threshold = input.autoBlockThreshold ?? 7;
+  const mode = input.enforcementMode ?? "block";
+
+  // The raw verdict: would this have been blocked if mode were "block"?
+  const wouldBlock = input.result.risk_score >= threshold;
+
+  // What actually gets blocked depends on the enforcement mode:
+  // - "block": blocks as normal
+  // - "monitor"/"warn": never actually block (counterfactual only)
+  const blocked = mode === "block" ? wouldBlock : false;
 
   return {
     apiKeyId: input.apiKeyId,
@@ -67,7 +79,9 @@ export function buildScreeningEventData(input: {
     categories: input.result.categories,
     mode: input.request.mode ?? "full",
     latencyMs: input.latencyMs,
-    blocked: input.result.risk_score >= threshold,
+    blocked,
+    wouldBlock,
+    enforcementMode: mode,
     metadata: compactMetadata({
       request_id: input.result.id,
       attack_detected: input.result.attack_detected ?? false,
@@ -121,6 +135,7 @@ export async function persistScreeningEventForApiKey(input: {
   result: ParseResponse;
   latencyMs: number;
   autoBlockThreshold?: number;
+  enforcementMode?: string;
   writer?: ScreeningEventWriter;
 }): Promise<void> {
   if (!shouldPersistScreeningEventForApiKey(input.apiKeyId)) return;
@@ -132,6 +147,7 @@ export async function persistScreeningEventForApiKey(input: {
       result: input.result,
       latencyMs: input.latencyMs,
       autoBlockThreshold: input.autoBlockThreshold,
+      enforcementMode: input.enforcementMode,
     }),
     input.writer,
   );
