@@ -702,55 +702,55 @@ curl -s ${baseUrl}/v1/parse \\
   var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   var vsrc = 'attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }';
-  var fsrc = 'precision highp float;\n' +
-    'uniform vec2 R; uniform float T;\n' +
-    'float hash(vec3 q){ return fract(sin(dot(q, vec3(127.1,311.7,74.7))) * 43758.5453); }\n' +
-    'vec3 stars(vec3 d){ vec3 q = normalize(d); vec3 cell = floor(q * 90.); float h = hash(cell);\n' +
-    '  float st = smoothstep(.995, 1., h) * (.35 + .45 * hash(cell + 1.3)); return vec3(st) * .95; }\n' +
-    'void main(){\n' +
-    '  vec2 uv = (gl_FragCoord.xy - .5 * R) / R.y;\n' +
-    '  float pj = fract(T / 34.);\n' +
-    '  float fall = pow(pj, 2.05);\n' +
-    '  vec3 ro = mix(vec3(0., 4.2, -13.5), vec3(0., -.85, .55), fall);\n' +
-    '  float fov = mix(1.15, .62, fall);\n' +
-    '  vec3 rd = normalize(vec3(uv.x, uv.y, fov));\n' +
-    '  vec3 p = ro, v = rd;\n' +
-    '  vec3 col = vec3(0.);\n' +
-    '  float captured = 0.;\n' +
-    '  float w = 1.;\n' +
-    '  float jit = .9 + .2 * hash(vec3(gl_FragCoord.xy, 7.));\n' +
-    '  for (int i = 0; i < 110; i++) {\n' +
-    '    float r = length(p);\n' +
-    '    if (r < .9) { captured = 1.; break; }\n' +
-    '    float dt = clamp(.05 + .055 * r, .06, .3) * jit;\n' +
-    '    vec3 acc = -1.55 * p / (r * r * r * r);\n' +
-    '    v += acc * dt;\n' +
-    '    vec3 pp = p;\n' +
-    '    p += v * dt;\n' +
-    '    if (pp.y * p.y < 0.) {\n' +
-    '      float t = pp.y / (pp.y - p.y);\n' +
-    '      vec3 hit = mix(pp, p, t);\n' +
-    '      float hr = length(hit.xz);\n' +
-    '      if (hr > 1.3 && hr < 4.6) {\n' +
-    '        float ang = atan(hit.z, hit.x);\n' +
-    '        float doppler = 1. + .6 * sin(ang) / sqrt(hr);\n' +
-    '        float arms = sin(ang * 2. - hr * 3.5 + T * 1.1);\n' +
-    '        float fine = sin(ang * 9. - hr * 11. + T * 2.2);\n' +
-    '        float bands = .72 + .28 * arms + .10 * fine;\n' +
-    '        float glow = pow(1.55 / hr, 2.2) * bands * doppler;\n' +
-    '        vec3 disc = mix(vec3(1.0), vec3(.62), clamp((hr-1.3)/3.3, 0., 1.));\n' +
-    '        disc = mix(disc, vec3(1.06), clamp((doppler - 1.)*.5, 0., .4));\n' +
-    '        col += disc * glow * .55 * w;\n' +
-    '        w *= .5;\n' +
-    '      }\n' +
-    '    }\n' +
-    '  }\n' +
-    '  if (captured < .5) col += stars(v) * 1.5;\n' +
-    '  float lum = dot(col, vec3(.299, .587, .114));\n' +
-    '  col = vec3(lum) * (1. + 2.6 * smoothstep(.72, .93, pj));\n' +
-    '  col *= (1. - smoothstep(.90, .985, pj)) * smoothstep(0., .05, pj);\n' +
-    '  float vig = smoothstep(1.15, .45, length(uv));\n' +
-    '  gl_FragColor = vec4(col * vig, 1.);\n' +
+  var fsrc = 'precision highp float;\\n' +
+    'uniform vec2 R; uniform float T;\\n' +
+    'float hash(vec3 q){ return fract(sin(dot(q, vec3(127.1,311.7,74.7))) * 43758.5453); }\\n' +
+    'vec3 stars(vec3 d){ vec3 q = normalize(d); vec3 cell = floor(q * 90.); float h = hash(cell);\\n' +
+    '  float st = smoothstep(.995, 1., h) * (.35 + .45 * hash(cell + 1.3)); return vec3(st) * .95; }\\n' +
+    'void main(){\\n' +
+    '  vec2 uv = (gl_FragCoord.xy - .5 * R) / R.y;\\n' +
+    '  float pj = fract(T / 34.);\\n' +
+    '  float fall = pow(pj, 2.05);\\n' +
+    '  vec3 ro = mix(vec3(0., 4.2, -13.5), vec3(0., -.85, .55), fall);\\n' +
+    '  float fov = mix(1.15, .62, fall);\\n' +
+    '  vec3 rd = normalize(vec3(uv.x, uv.y, fov));\\n' +
+    '  vec3 p = ro, v = rd;\\n' +
+    '  vec3 col = vec3(0.);\\n' +
+    '  float captured = 0.;\\n' +
+    '  float w = 1.;\\n' +
+    '  float jit = .9 + .2 * hash(vec3(gl_FragCoord.xy, 7.));\\n' +
+    '  for (int i = 0; i < 110; i++) {\\n' +
+    '    float r = length(p);\\n' +
+    '    if (r < .9) { captured = 1.; break; }\\n' +
+    '    float dt = clamp(.05 + .055 * r, .06, .3) * jit;\\n' +
+    '    vec3 acc = -1.55 * p / (r * r * r * r);\\n' +
+    '    v += acc * dt;\\n' +
+    '    vec3 pp = p;\\n' +
+    '    p += v * dt;\\n' +
+    '    if (pp.y * p.y < 0.) {\\n' +
+    '      float t = pp.y / (pp.y - p.y);\\n' +
+    '      vec3 hit = mix(pp, p, t);\\n' +
+    '      float hr = length(hit.xz);\\n' +
+    '      if (hr > 1.3 && hr < 4.6) {\\n' +
+    '        float ang = atan(hit.z, hit.x);\\n' +
+    '        float doppler = 1. + .6 * sin(ang) / sqrt(hr);\\n' +
+    '        float arms = sin(ang * 2. - hr * 3.5 + T * 1.1);\\n' +
+    '        float fine = sin(ang * 9. - hr * 11. + T * 2.2);\\n' +
+    '        float bands = .72 + .28 * arms + .10 * fine;\\n' +
+    '        float glow = pow(1.55 / hr, 2.2) * bands * doppler;\\n' +
+    '        vec3 disc = mix(vec3(1.0), vec3(.62), clamp((hr-1.3)/3.3, 0., 1.));\\n' +
+    '        disc = mix(disc, vec3(1.06), clamp((doppler - 1.)*.5, 0., .4));\\n' +
+    '        col += disc * glow * .55 * w;\\n' +
+    '        w *= .5;\\n' +
+    '      }\\n' +
+    '    }\\n' +
+    '  }\\n' +
+    '  if (captured < .5) col += stars(v) * 1.5;\\n' +
+    '  float lum = dot(col, vec3(.299, .587, .114));\\n' +
+    '  col = vec3(lum) * (1. + 2.6 * smoothstep(.72, .93, pj));\\n' +
+    '  col *= (1. - smoothstep(.90, .985, pj)) * smoothstep(0., .05, pj);\\n' +
+    '  float vig = smoothstep(1.15, .45, length(uv));\\n' +
+    '  gl_FragColor = vec4(col * vig, 1.);\\n' +
     '}';
 
   function sh(t, src) { var o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o);
