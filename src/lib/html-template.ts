@@ -181,7 +181,7 @@ export function renderPage(options: PageOptions): string {
     }
     /* Animated aurora — two fixed layers drifting in counter-phase.
        Oversized (inset -22%) so the drift never exposes an edge; alphas stay
-       under .09 so every page remains near-black. */
+       at or under .11 so every page remains near-black. */
     body::before, body::after {
       content: ""; position: fixed; inset: -22%; pointer-events: none; z-index: 0;
       will-change: transform, filter;

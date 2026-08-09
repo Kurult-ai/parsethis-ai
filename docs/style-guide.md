@@ -60,9 +60,14 @@ Every page is black, but the sky is dressed by tier:
 2. **Tier 2 — Console (`/dashboard/*`).** Fixed ambient aurora (3 radials,
    ≤ .11 alpha, slow breathe), aurora hairlines, live instruments (orbit
    map, pings, beams). No starfield density, no shooting stars.
-3. **Tier 3 — Content (docs, blog, pricing, trust…).** Quietest: one faint
-   fixed ambient glow pair, footer horizon rim, nothing that competes with
+3. **Tier 3 — Content (docs, blog, pricing, trust, Test Lab…).** Quietest:
+   the shell's animated aurora — two fixed layers drifting in counter-phase
+   (46s/64s, alternate, bounded hue-rotate ±22deg, alphas ≤ .11, off under
+   reduced motion) — plus the footer horizon rim. Nothing that competes with
    reading. Long-form text panels sit on `--surface`.
+
+There are no light pages. The Test Lab (/playground) runs on the same
+tokens as everything else; its former light palette is gone.
 
 ## 4. Component idioms
 
