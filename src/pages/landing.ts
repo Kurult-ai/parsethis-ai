@@ -238,9 +238,6 @@ Verification required before reporting done:
   .hf-scene { position: absolute; top: 0; right: 0; bottom: 0; width: 52%; z-index: 4; pointer-events: none; }
   .hf-lane { position: absolute; left: 0; right: 8%; top: 50%; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.10) 20%, rgba(255,255,255,.16) 46%, rgba(255,255,255,.10) 60%, transparent 95%); }
   .hf-disc { position: absolute; left: 46%; top: 50%; transform: translate(-50%,-50%) rotate(-9deg); width: min(430px, 34vw); height: 34px; border-radius: 50%; background: radial-gradient(50% 50% at 50% 50%, rgba(255,196,130,.16), rgba(255,180,84,.05) 62%, transparent 75%); filter: blur(5px); z-index: 1; }
-  .hf-lensarc { position: absolute; border-radius: 50%; border: 1px solid transparent; pointer-events: none; z-index: 1; }
-  .hf-lensarc.la1 { left: calc(46% - min(190px, 15vw)); top: calc(50% - min(205px, 16.4vw)); width: min(380px, 30vw); height: min(380px, 30vw); border-top-color: rgba(255,255,255,.14); transform: rotate(-8deg); }
-  .hf-lensarc.la2 { left: calc(46% - min(230px, 18.2vw)); top: calc(50% - min(205px, 16.2vw)); width: min(460px, 36.5vw); height: min(460px, 36.5vw); border-bottom-color: rgba(255,217,160,.12); transform: rotate(6deg); }
   .hf-ring { position: absolute; left: 46%; top: 50%; transform: translate(-50%,-50%); width: min(300px, 24vw); height: min(300px, 24vw); border-radius: 50%; border: 1px solid rgba(255,255,255,.12); display: grid; place-items: center; animation: ringPulse 12s ease-in-out infinite; }
   @keyframes ringPulse {
     0% { box-shadow: 0 0 100px rgba(255,93,93,.20), inset 0 0 56px rgba(255,93,93,.09); }
@@ -457,8 +454,6 @@ Verification required before reporting done:
   <div class="hf-scene" aria-hidden="true">
     <div class="hf-lane"></div>
     <div class="hf-disc"></div>
-    <div class="hf-lensarc la1"></div>
-    <div class="hf-lensarc la2"></div>
     <div class="hf-ring">
       <span class="hf-ring-arc"></span>
       <span class="hf-ring-core"></span>
