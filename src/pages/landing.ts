@@ -1,10 +1,10 @@
-import { renderPage } from "../lib/html-template.js";
 import {
   organizationSchema,
   webApplicationSchema,
 } from "../lib/schema.js";
 import { listBlogPosts } from "../lib/markdown.js";
-import { DETECTION_FACTS, PLAN_LIMITS, X402_PAYMENT, X402_ENDPOINTS } from "../lib/product-facts.js";
+import { getLogoMarkSvg } from "../lib/logo.js";
+import { DETECTION_FACTS, PLAN_LIMITS, X402_PAYMENT, X402_ENDPOINTS, PRODUCT } from "../lib/product-facts.js";
 
 function escapeHtml(value: string): string {
   return value
@@ -21,6 +21,14 @@ export interface LandingPageVariant {
   variant?: string;
 }
 
+/**
+ * Landing page — "Event Horizon" design (2026-08-09).
+ *
+ * Self-contained dark document (does NOT use the light renderPage shell):
+ * full-viewport hero with the boundary-gate animation, starfield, aurora
+ * with scroll-driven hue, and the section system from the approved mockups.
+ * The rest of the site (docs, blog, pricing) keeps the light shell.
+ */
 export function renderLandingPage(baseUrl: string, ab?: LandingPageVariant): string {
   const bearerPrompt = `Integrate Parse as the prompt protection boundary for this agent runtime.
 
@@ -90,7 +98,7 @@ Verification required before reporting done:
   const blogCardsHtml = blogPosts
     .map((post) => {
       const fm = post.frontmatter;
-      return `<a href="/blog/${fm.category}/${fm.slug}" class="pa-article">
+      return `<a href="/blog/${fm.category}/${fm.slug}" class="pa-article rv">
         <span>${escapeHtml(String(fm.date))}</span>
         <strong>${escapeHtml(String(fm.title))}</strong>
         <p>${escapeHtml(String(fm.description || ""))}</p>
@@ -98,460 +106,617 @@ Verification required before reporting done:
     })
     .join("\n");
 
-  // ─── A/B Test: hero-copy variant definitions ───
+  // ─── A/B: two serif hero headlines, same design ───
   const variantKey = ab?.variant ?? "a";
-  const heroVariants: Record<string, {
-    headline: string;
-    accent: string;
-    lede: string;
-    ctaPrimary: string;
-    ctaSecondary: string;
-  }> = {
+  const heroVariants: Record<string, { l1: string; l2: string; lede: string }> = {
     a: {
-      headline: "Every agent governed.",
-      accent: "Every decision receipted.",
-      lede: `Parse is the governance and compliance layer for your agent fleet — every agent on the record, policy you dial per environment, screening at every trust boundary, and <b>an audit receipt for every decision</b>.`,
-      ctaPrimary: "↓ Install Parse — free",
-      ctaSecondary: "Talk to security engineering",
+      l1: "Governance for",
+      l2: "autonomous agents",
+      lede: "Every agent on the record. Every boundary screened. Every decision receipted.",
     },
     b: {
-      headline: "Give your agents real authority.",
-      accent: "Without losing yours.",
-      lede: `Decide what your agent can <b>read, touch, and spend</b>. Parse enforces those boundaries on every call — and writes an audit receipt for every decision. Install in under a minute.`,
-      ctaPrimary: "↓ Install Parse — free",
-      ctaSecondary: "Talk to security engineering",
+      l1: "Give your agents real authority.",
+      l2: "Without losing yours.",
+      lede: "Decide what your agent can read, touch, and spend. Parse enforces those boundaries on every call — and writes an audit receipt for every decision.",
     },
   };
   const hero = heroVariants[variantKey] ?? heroVariants.a;
 
-  const content = `
-<style>
-.pa-shell{display:grid;gap:0;}
-.pa-mono{font-family:'IBM Plex Mono','JetBrains Mono',monospace;}
-.pa-kicker{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--accent);letter-spacing:0.18em;text-transform:uppercase;margin-bottom:16px;}
-.pa-sec{padding:96px 0;}
-.pa-sec-alt{background:var(--surface2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:0 -24px;padding:96px 24px;}
-.pa-sec h2{font-size:clamp(30px,3.4vw,42px);font-weight:800;letter-spacing:-0.03em;line-height:1.1;max-width:640px;margin:0;}
-.pa-sub{color:var(--text-dim);max-width:580px;margin:16px 0 0;font-size:16.5px;}
+  const canonicalUrl = `${baseUrl}/`;
+  const title = "Agent Governance & Compliance for AI Agents";
+  const description = `Parse governs agent fleets: registry, runtime policy, boundary screening, and an audit receipt for every decision. ${DETECTION_FACTS.riskCategoryCount} risk categories, ${DETECTION_FACTS.pipelineLayers.length} detection layers, machine-readable by design.`;
+  const jsonLd = [organizationSchema(baseUrl), webApplicationSchema(baseUrl)]
+    .map((obj) => `<script type="application/ld+json">${JSON.stringify(obj).replace(/<\//g, "<\\/")}</script>`)
+    .join("\n  ");
+  const bodyAttrs = ab?.experiment ? ` data-experiment="${escapeHtml(ab.experiment)}" data-variant="${escapeHtml(variantKey)}"` : "";
 
-/* hero */
-.pa-hero{text-align:center;padding:84px 0 32px;}
-.pa-pill{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(31,95,224,0.2);padding:6px 14px;border-radius:999px;margin-bottom:28px;}
-.pa-pill i{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px var(--green-dim);}
-.pa-hero h1{font-size:clamp(40px,5.2vw,66px);font-weight:800;letter-spacing:-0.035em;line-height:1.04;max-width:880px;margin:0 auto;}
-.pa-hero h1 .pa-accent{color:var(--accent);}
-.pa-lede{max-width:660px;margin:26px auto 34px;color:var(--text-dim);font-size:18px;}
-.pa-lede b{color:var(--text);font-weight:600;}
-.pa-cta-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;}
-.pa-btn-lg{padding:13px 26px;font-size:15.5px;border-radius:10px;}
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(title)} | ${PRODUCT.name}</title>
+  <meta name="description" content="${escapeHtml(description)}">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+  <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
+  <meta property="og:title" content="${escapeHtml(title)}">
+  <meta property="og:description" content="${escapeHtml(description)}">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
+  <meta property="og:site_name" content="${PRODUCT.name}">
+  <meta property="og:image" content="${escapeHtml(`${baseUrl}/og-image.svg`)}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#000000">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  ${jsonLd}
+  <style>
+  :root {
+    --black: #000; --panel: #0a0a0b; --panel2: #101012;
+    --line: rgba(255,255,255,0.08); --line2: rgba(255,255,255,0.14);
+    --white: #f2f2f2; --gray: #adb1b3; --gray-dim: #878b8e;
+    --blue: #3d7bff; --violet: #6d5dfc; --cyan: #06b6d4;
+    --green: #3ddc84; --red: #ff5d5d; --amber: #ffb454; --gold: #ffd9a0;
+    --serif: 'Instrument Serif', serif;
+    --sans: 'Schibsted Grotesk', sans-serif;
+    --mono: 'IBM Plex Mono', monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { overflow-x: clip; max-width: 100%; }
+  body { background: var(--black); color: var(--gray); font-family: var(--sans); font-size: 16px; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 32px; }
+  .mono { font-family: var(--mono); }
 
-/* install strip */
-.pa-install{margin:30px auto 0;max-width:760px;background:var(--surface);border:1px solid var(--border2);border-radius:12px;box-shadow:0 2px 4px rgba(15,22,32,0.03),0 18px 40px rgba(15,22,32,0.06);overflow:hidden;text-align:left;}
-.pa-install-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface2);}
-.pa-install-tabs button{font:inherit;font-size:13px;font-weight:600;color:var(--text-dim);background:none;border:0;padding:12px 18px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;}
-.pa-install-tabs button:hover{color:var(--text);}
-.pa-install-tabs button.on{color:var(--accent);border-bottom-color:var(--accent);background:var(--surface);}
-.pa-install-body{display:flex;align-items:center;gap:16px;padding:16px 18px;}
-.pa-install-body code{font-family:'IBM Plex Mono',monospace;font-size:13.5px;color:var(--text);flex:1;overflow-x:auto;white-space:nowrap;background:none;border:0;padding:0;}
-.pa-copy{font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;color:var(--text-dim);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 12px;cursor:pointer;white-space:nowrap;transition:all .15s;}
-.pa-copy:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-dim);}
-.pa-copy.done{color:var(--green);border-color:var(--green);background:var(--green-dim);}
-.pa-install-foot{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--text-soft);padding:0 18px 14px;}
-.pa-install-foot b{color:var(--text-dim);font-weight:500;}
+  /* ── starfield + shooting stars ── */
+  .sky, .sky i { position: fixed; inset: 0; pointer-events: none; }
+  .sky { z-index: 0; }
+  .sky i { width: 1px; height: 1px; border-radius: 50%; background: transparent; display: block; inset: auto; top: 0; left: 0; }
+  .sky .s1 { box-shadow: 7vw 12vh 0 0 rgba(255,255,255,.5), 19vw 78vh 0 0 rgba(255,255,255,.4), 27vw 33vh 0 0 rgba(255,255,255,.6), 36vw 88vh 0 0 rgba(255,255,255,.35), 44vw 8vh 0 0 rgba(255,255,255,.55), 52vw 61vh 0 0 rgba(255,255,255,.4), 61vw 24vh 0 0 rgba(255,255,255,.5), 68vw 91vh 0 0 rgba(255,255,255,.3), 76vw 45vh 0 0 rgba(255,255,255,.6), 83vw 70vh 0 0 rgba(255,255,255,.4), 91vw 16vh 0 0 rgba(255,255,255,.5), 12vw 55vh 0 0 rgba(255,255,255,.35), 31vw 5vh 0 0 rgba(255,255,255,.45), 57vw 40vh 0 0 rgba(255,255,255,.3), 88vw 84vh 0 0 rgba(255,255,255,.5), 4vw 95vh 0 0 rgba(255,255,255,.4), 48vw 73vh 0 0 rgba(255,255,255,.35), 72vw 6vh 0 0 rgba(255,255,255,.45), 95vw 52vh 0 0 rgba(255,255,255,.4), 23vw 96vh 0 0 rgba(255,255,255,.3); opacity: .16; animation: skyDrift 240s linear infinite alternate; }
+  .sky .s2 { width: 1.5px; height: 1.5px; box-shadow: 14vw 28vh 0 0 rgba(255,255,255,.6), 39vw 64vh 0 0 rgba(255,255,255,.5), 63vw 15vh 0 0 rgba(255,255,255,.55), 81vw 58vh 0 0 rgba(255,255,255,.45), 9vw 82vh 0 0 rgba(255,255,255,.5), 54vw 92vh 0 0 rgba(255,255,255,.4), 70vw 37vh 0 0 rgba(255,255,255,.6), 29vw 47vh 0 0 rgba(255,255,255,.5), 93vw 26vh 0 0 rgba(255,255,255,.45), 46vw 20vh 0 0 rgba(255,255,255,.55); opacity: .22; animation: skyDrift 150s linear infinite alternate-reverse; }
+  .sky .s3 { box-shadow: 17vw 41vh 0 0 rgba(255,255,255,.7), 58vw 79vh 0 0 rgba(255,255,255,.6), 86vw 12vh 0 0 rgba(255,255,255,.65), 34vw 18vh 0 0 rgba(255,255,255,.6), 66vw 55vh 0 0 rgba(255,255,255,.7), 11vw 68vh 0 0 rgba(255,255,255,.6); opacity: .3; animation: twinkle 7s ease-in-out infinite alternate; }
+  @keyframes skyDrift { to { transform: translateY(-3vh); } }
+  @keyframes twinkle { 0% { opacity: .08; } 100% { opacity: .4; } }
+  .shoot { position: fixed; top: 12%; left: 68%; width: 130px; height: 1px; z-index: 0; pointer-events: none; background: linear-gradient(270deg, rgba(255,255,255,.7), transparent); border-radius: 1px; transform: rotate(-28deg); opacity: 0; animation: shoot 26s linear infinite 7s; }
+  .shoot.sh2 { top: 64%; left: 22%; width: 90px; animation: shoot 34s linear infinite 19s; }
+  @keyframes shoot { 0% { opacity: 0; transform: rotate(-28deg) translateX(0); } 1.2% { opacity: .8; } 4.5% { opacity: 0; transform: rotate(-28deg) translateX(-42vw); } 100% { opacity: 0; transform: rotate(-28deg) translateX(-42vw); } }
 
-/* console */
-.pa-console-wrap{margin:56px auto 0;max-width:1040px;}
-.pa-console{background:var(--surface);border:1px solid var(--border2);border-radius:14px;box-shadow:0 2px 4px rgba(15,22,32,0.04),0 30px 70px rgba(15,22,32,0.12);overflow:hidden;text-align:left;}
-.pa-chrome{display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--surface2);font-size:12.5px;color:var(--text-soft);}
-.pa-dots{display:flex;gap:6px;}
-.pa-dots i{width:10px;height:10px;border-radius:50%;background:var(--border2);display:block;}
-.pa-url{font-family:'IBM Plex Mono',monospace;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 12px;color:var(--text-dim);}
-.pa-console-body{display:grid;grid-template-columns:190px 1fr;min-height:400px;}
-.pa-side{border-right:1px solid var(--border);padding:18px 0;background:var(--surface2);font-size:13.5px;}
-.pa-side a{display:flex;align-items:center;gap:10px;padding:9px 20px;color:var(--text-dim);}
-.pa-side a.on{color:var(--accent);background:var(--accent-dim);border-right:2px solid var(--accent);font-weight:600;}
-.pa-side i{width:7px;height:7px;border-radius:2px;background:var(--text-soft);opacity:.55;}
-.pa-side a.on i{background:var(--accent);opacity:1;}
-.pa-pane{padding:24px 26px;}
-.pa-pane-title{display:flex;align-items:baseline;gap:12px;margin-bottom:18px;}
-.pa-pane-title h4{font-size:15px;font-weight:700;margin:0;}
-.pa-pane-title span{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-soft);}
-.pa-strip{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:18px;}
-.pa-cell{padding:14px 16px;border-left:1px solid var(--border);}
-.pa-cell:first-child{border-left:0;}
-.pa-cell b{display:block;font-size:10px;letter-spacing:0.1em;font-weight:700;color:var(--text-soft);text-transform:uppercase;margin-bottom:5px;}
-.pa-cell strong{font-size:20px;font-weight:700;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;}
-.pa-cell small{display:block;font-size:11px;color:var(--text-soft);margin-top:3px;}
-.pa-g{color:var(--green);} .pa-a{color:var(--yellow);} .pa-r{color:var(--destructive);} .pa-b{color:var(--accent);}
-.pa-console table{width:100%;border-collapse:collapse;font-size:13px;}
-.pa-console th{background:none;position:static;text-align:left;font-size:10.5px;letter-spacing:0.09em;text-transform:uppercase;color:var(--text-soft);padding:8px 10px;border-bottom:1px solid var(--border);font-weight:700;}
-.pa-console td{padding:10px;border-bottom:1px solid var(--border);color:var(--text-dim);}
-.pa-console td:first-child{color:var(--text);font-weight:500;}
-.pa-console tbody tr:hover{background:var(--surface2);}
-.pa-chip{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 9px;border-radius:999px;font-weight:500;background:none;}
-.pa-chip.blocked{background:var(--destructive-dim);color:var(--destructive);}
-.pa-chip.allowed{background:var(--green-dim);color:var(--green);}
-.pa-chip.warned{background:var(--yellow-dim);color:var(--yellow);}
-.pa-risk{font-family:'IBM Plex Mono',monospace;font-weight:600;font-variant-numeric:tabular-nums;}
-.pa-console-caption{text-align:center;font-size:12px;color:var(--text-soft);margin-top:10px;}
+  /* ── ambient aurora (scroll-hued) ── */
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(min(760px, 95vw) 460px at 82% -8%, rgba(61,123,255,.11), transparent 70%),
+      radial-gradient(min(560px, 85vw) 380px at 8% 112%, rgba(109,93,252,.09), transparent 70%);
+    filter: hue-rotate(calc(var(--scrollp, 0) * 80deg));
+    animation: glowBreathe 24s ease-in-out infinite alternate;
+  }
+  @keyframes glowBreathe { from { opacity: 1; } to { opacity: .72; } }
+  body > * { position: relative; z-index: 1; }
 
-/* stat band */
-.pa-band{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:64px;}
-.pa-band > div{padding:24px 26px;border-left:1px solid var(--border);background:var(--surface);}
-.pa-band > div:first-child{border-left:0;}
-.pa-band strong{font-family:'IBM Plex Mono',monospace;font-size:25px;font-weight:600;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;}
-.pa-band span{display:block;font-size:13px;color:var(--text-dim);margin-top:4px;}
+  /* ── header ── */
+  header { position: sticky; top: 0; z-index: 50; background: rgba(0,0,0,.72); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+  .nav { display: flex; align-items: center; height: 64px; gap: 32px; }
+  .logo { display: flex; align-items: center; gap: 10px; color: var(--white); font-weight: 700; font-size: 17px; }
+  .logo svg { width: 30px; height: 30px; display: block; }
+  .nav-links { display: flex; gap: 26px; font-size: 15px; color: var(--gray); }
+  .nav-links a:hover { color: var(--white); }
+  .nav-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; padding: 9px 18px; border-radius: 8px; border: 1px solid transparent; transition: all .18s; }
+  .btn-white { background: var(--white); color: #000; }
+  .btn-white:hover { background: #fff; transform: translateY(-1px); box-shadow: 0 0 0 1.5px rgba(255,217,160,.55), 0 8px 30px rgba(255,180,84,.16); }
+  .btn-ghost { border-color: var(--line2); color: var(--gray); }
+  .btn-ghost:hover { color: var(--white); border-color: rgba(255,255,255,.3); }
+  .btn-lg { padding: 12px 24px; font-size: 15px; border-radius: 10px; }
 
-/* cards */
-.pa-grid{display:grid;gap:16px;margin-top:52px;}
-.pa-grid-4{grid-template-columns:repeat(4,1fr);}
-.pa-grid-3{grid-template-columns:repeat(3,1fr);}
-.pa-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:26px 24px;transition:border-color .2s,transform .2s,box-shadow .2s;}
-.pa-card:hover{border-color:var(--border2);transform:translateY(-3px);box-shadow:0 14px 32px rgba(15,22,32,0.07);}
-.pa-card .pa-ico{width:38px;height:38px;border-radius:9px;background:var(--accent-dim);border:1px solid rgba(31,95,224,0.2);display:grid;place-items:center;margin-bottom:18px;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12px;}
-.pa-card h3{font-size:16.5px;font-weight:700;margin:0 0 8px;}
-.pa-card p{font-size:14px;color:var(--text-dim);margin:0 0 16px;}
-.pa-card .pa-ep{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);}
+  /* ── full-viewport hero ── */
+  .hf { position: relative; min-height: 100dvh; display: flex; align-items: center; overflow: hidden; }
+  .hf-inner { position: relative; z-index: 5; width: 100%; }
+  .hf-copy { max-width: 620px; }
+  .hf h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(46px, 6vw, 82px); line-height: 1.02; letter-spacing: -0.01em; color: var(--white); }
+  .hf h1 em { font-style: italic; }
+  .hf-lede { margin: 26px 0 36px; font-size: 19px; color: var(--gray); line-height: 1.6; max-width: 52ch; }
+  .hf-cta { display: flex; gap: 12px; flex-wrap: wrap; }
+  .hf-fine { margin-top: 22px; font-family: var(--mono); font-size: 13.5px; color: var(--gray-dim); }
+  .hf-scroll { position: absolute; left: 50%; transform: translateX(-50%); bottom: 26px; z-index: 5; font-family: var(--mono); font-size: 10.5px; letter-spacing: .3em; text-transform: uppercase; color: var(--gray-dim); text-align: center; line-height: 1.8; animation: hfBob 2.6s ease-in-out infinite; }
+  @keyframes hfBob { 50% { transform: translateX(-50%) translateY(6px); } }
 
-/* pipeline */
-.pa-layers{display:grid;grid-template-columns:repeat(4,1fr);margin-top:52px;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--surface);}
-.pa-layer{padding:28px 26px;border-left:1px solid var(--border);}
-.pa-layer:first-child{border-left:0;}
-.pa-layer b{font-family:'IBM Plex Mono',monospace;color:var(--text-soft);font-size:11.5px;display:block;margin-bottom:14px;letter-spacing:0.08em;}
-.pa-layer h3{font-size:16px;font-weight:700;margin:0 0 8px;}
-.pa-layer p{font-size:13.5px;color:var(--text-dim);margin:0;}
-.pa-layer i{display:block;margin-top:16px;font-style:normal;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);}
-.pa-dial-row{display:flex;gap:12px;margin-top:26px;align-items:center;font-size:14px;color:var(--text-dim);flex-wrap:wrap;}
-.pa-dial{display:flex;border:1px solid var(--border2);border-radius:999px;overflow:hidden;font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--surface);}
-.pa-dial span{padding:7px 16px;color:var(--text-soft);}
-.pa-dial span.on{background:var(--accent);color:white;font-weight:600;}
+  .hf-aurora { position: absolute; inset: 0; z-index: 1; filter: hue-rotate(calc(var(--scrollp, 0) * 80deg)); }
+  .hf-aurora i { position: absolute; border-radius: 50%; filter: blur(70px); display: block; will-change: transform, opacity; }
+  .hf-aurora .a1 { width: min(52vw, 760px); height: min(46vh, 480px); left: 44%; top: 6%; background: radial-gradient(closest-side, rgba(61,123,255,.20), transparent 72%); animation: aur1 34s ease-in-out infinite alternate; }
+  .hf-aurora .a2 { width: min(44vw, 620px); height: min(40vh, 420px); left: 58%; top: 42%; background: radial-gradient(closest-side, rgba(109,93,252,.16), transparent 72%); animation: aur2 42s ease-in-out infinite alternate; }
+  .hf-aurora .a3 { width: min(36vw, 520px); height: min(34vh, 360px); left: -6%; top: 58%; background: radial-gradient(closest-side, rgba(255,180,84,.08), transparent 72%); animation: aur3 38s ease-in-out infinite alternate; }
+  @keyframes aur1 { from { transform: translate(0,0) scale(1); } to { transform: translate(-9vw, 7vh) scale(1.18); } }
+  @keyframes aur2 { from { transform: translate(0,0) scale(1.1); opacity:.9; } to { transform: translate(6vw, -9vh) scale(.92); opacity:.65; } }
+  @keyframes aur3 { from { transform: translate(0,0) scale(1); } to { transform: translate(7vw, -5vh) scale(1.22); } }
+  .hf-floor { position: absolute; left: -10%; right: -10%; bottom: -4%; height: 34%; z-index: 2; pointer-events: none; background: radial-gradient(60% 90% at 50% 100%, rgba(160,140,110,.08), transparent 70%); transform: skewY(-2.2deg); animation: floorSweep 16s ease-in-out infinite alternate; }
+  @keyframes floorSweep { from { opacity: .5; transform: skewY(-2.2deg) translateX(-4%); } to { opacity: 1; transform: skewY(-2.2deg) translateX(4%); } }
+  .hf-grain { position: absolute; inset: 0; z-index: 3; pointer-events: none; opacity: .05; mix-blend-mode: overlay; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.7'/%3E%3C/svg%3E"); }
 
-/* compliance */
-.pa-ent{display:grid;grid-template-columns:1fr 1fr;gap:72px;align-items:start;}
-.pa-checklist{margin-top:40px;border-top:1px solid var(--border);}
-.pa-check{display:flex;gap:16px;padding:18px 4px;border-bottom:1px solid var(--border);align-items:baseline;}
-.pa-check i{color:var(--green);font-family:'IBM Plex Mono',monospace;font-size:14px;font-style:normal;}
-.pa-check b{font-weight:600;}
-.pa-check span{color:var(--text-dim);font-size:14.5px;}
-.pa-fw{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
-.pa-fw span{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 10px;border-radius:999px;background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);}
-.pa-quote{background:linear-gradient(180deg,var(--accent-dim),var(--surface) 70%);border:1px solid var(--border2);border-radius:16px;padding:36px;position:sticky;top:100px;}
-.pa-quote .q{font-size:21px;font-weight:500;line-height:1.45;letter-spacing:-0.01em;}
-.pa-quote .q em{color:var(--accent);font-style:normal;}
-.pa-quote .attr{margin-top:22px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--text-soft);}
+  /* ── the boundary gate (event horizon) ── */
+  .hf-scene { position: absolute; top: 0; right: 0; bottom: 0; width: 52%; z-index: 4; pointer-events: none; }
+  .hf-lane { position: absolute; left: 0; right: 8%; top: 50%; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.10) 20%, rgba(255,255,255,.16) 46%, rgba(255,255,255,.10) 60%, transparent 95%); }
+  .hf-disc { position: absolute; left: 46%; top: 50%; transform: translate(-50%,-50%) rotate(-9deg); width: min(430px, 34vw); height: 34px; border-radius: 50%; background: radial-gradient(50% 50% at 50% 50%, rgba(255,196,130,.16), rgba(255,180,84,.05) 62%, transparent 75%); filter: blur(5px); z-index: 1; }
+  .hf-lensarc { position: absolute; border-radius: 50%; border: 1px solid transparent; pointer-events: none; z-index: 1; }
+  .hf-lensarc.la1 { left: calc(46% - min(190px, 15vw)); top: calc(50% - min(205px, 16.4vw)); width: min(380px, 30vw); height: min(380px, 30vw); border-top-color: rgba(255,255,255,.14); transform: rotate(-8deg); }
+  .hf-lensarc.la2 { left: calc(46% - min(230px, 18.2vw)); top: calc(50% - min(205px, 16.2vw)); width: min(460px, 36.5vw); height: min(460px, 36.5vw); border-bottom-color: rgba(255,217,160,.12); transform: rotate(6deg); }
+  .hf-ring { position: absolute; left: 46%; top: 50%; transform: translate(-50%,-50%); width: min(300px, 24vw); height: min(300px, 24vw); border-radius: 50%; border: 1px solid rgba(255,255,255,.12); display: grid; place-items: center; animation: ringPulse 12s ease-in-out infinite; }
+  @keyframes ringPulse {
+    0% { box-shadow: 0 0 100px rgba(255,93,93,.20), inset 0 0 56px rgba(255,93,93,.09); }
+    7%, 48% { box-shadow: 0 0 60px rgba(255,180,84,.15), inset 0 0 40px rgba(255,180,84,.06); }
+    54% { box-shadow: 0 0 110px rgba(255,93,93,.22), inset 0 0 60px rgba(255,93,93,.10); }
+    62%, 96% { box-shadow: 0 0 64px rgba(255,180,84,.16), inset 0 0 42px rgba(255,180,84,.065); }
+    100% { box-shadow: 0 0 100px rgba(255,93,93,.20), inset 0 0 56px rgba(255,93,93,.09); }
+  }
+  .hf-ring-arc { position: absolute; inset: -1px; border-radius: 50%; background: conic-gradient(from 0deg, transparent 0 70%, rgba(255,180,84,0) 70%, rgba(255,180,84,.8) 86%, rgba(255,217,160,.95) 94%, transparent 100%); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 1.5px)); mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 1.5px)); animation: arcSpin 14s linear infinite; }
+  @keyframes arcSpin { to { transform: rotate(360deg); } }
+  .hf-ring-core { width: 56px; height: 56px; border-radius: 50%; background: #000; border: 1px solid rgba(255,217,160,.35); box-shadow: 0 0 0 1.5px rgba(255,217,160,.5), 0 0 26px rgba(255,180,84,.28), 0 14px 44px rgba(255,180,84,.18); }
 
-/* agent prompt */
-.pa-prompt{background:var(--surface);border:1px solid var(--border2);border-radius:14px;overflow:hidden;margin-top:52px;}
-.pa-prompt-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface2);flex-wrap:wrap;}
-.pa-prompt-head b{font-size:14px;}
-.pa-prompt-head small{display:block;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-soft);letter-spacing:0.08em;text-transform:uppercase;}
-.pa-tabs{display:inline-flex;gap:3px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:3px;}
-.pa-tab{appearance:none;border:0;border-radius:999px;background:transparent;color:var(--text-dim);font:inherit;font-size:12px;font-weight:700;padding:7px 12px;cursor:pointer;}
-.pa-tab.is-active{background:var(--accent);color:white;}
-.pa-prompt pre{margin:0;padding:20px;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-word;font:12.5px/1.7 'IBM Plex Mono',monospace;background:var(--surface);color:var(--text-dim);}
-.pa-prompt pre code{background:none;border:0;padding:0;font-size:inherit;}
+  .hf-p { position: absolute; top: 50%; left: -2%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: var(--amber); color: var(--amber); box-shadow: 0 0 12px rgba(255,180,84,.65); opacity: 0; animation: pathA 12s linear infinite; }
+  .hf-p::after { content: ""; position: absolute; right: 70%; top: 50%; transform: translateY(-50%); width: 52px; height: 2px; border-radius: 2px; background: linear-gradient(270deg, currentColor, transparent); opacity: .45; }
+  ${buildPathKeyframes()}
+  .p1 { animation-delay: 0s; } .p2 { animation-name: pathB; animation-delay: 1.6s; } .p3 { animation-name: pathC; animation-delay: 3s; }
+  .p4 { animation-name: pathD; animation-delay: 4.6s; } .p5 { animation-name: pathE; animation-delay: 6.2s; } .p6 { animation-name: pathF; animation-delay: 7.8s; }
+  .p7 { animation-name: pathB; animation-delay: 9.2s; } .p8 { animation-name: pathF; animation-delay: 10.6s; }
+  .hf-bad { animation-name: blockHit; }
+  @keyframes blockHit {
+    0% { left: -2%; opacity: 0; transform: translateY(-70px) scale(1); background: var(--amber); color: var(--amber); box-shadow: 0 0 12px rgba(255,180,84,.65); }
+    6% { opacity: 1; }
+    20% { left: 12%; transform: translateY(-60px) scale(1); }
+    34% { left: 22%; transform: translateY(-46px) scale(1); background: var(--amber); }
+    42% { left: 28%; transform: translateY(-34px) scale(1); background: var(--red); color: var(--red); box-shadow: 0 0 18px rgba(255,93,93,.9); }
+    47% { left: 30%; transform: translateY(-30px) scaleX(2.9) scaleY(.5); box-shadow: 0 0 26px rgba(255,93,93,.9); opacity: .9; }
+    55% { left: 35%; transform: translateY(-22px) scaleX(.06) scaleY(.06); opacity: 0; }
+    100% { left: 35%; opacity: 0; transform: translateY(-22px) scale(.06); }
+  }
+  @keyframes blockHitLow {
+    0% { left: -2%; opacity: 0; transform: translateY(84px) scale(1); background: var(--amber); color: var(--amber); box-shadow: 0 0 12px rgba(255,180,84,.65); }
+    6% { opacity: 1; }
+    20% { left: 12%; transform: translateY(72px) scale(1); }
+    34% { left: 23%; transform: translateY(54px) scale(1); background: var(--amber); }
+    42% { left: 29%; transform: translateY(40px) scale(1); background: var(--red); color: var(--red); box-shadow: 0 0 18px rgba(255,93,93,.9); }
+    47% { left: 31%; transform: translateY(36px) scaleX(2.9) scaleY(.5); box-shadow: 0 0 26px rgba(255,93,93,.9); opacity: .9; }
+    55% { left: 36%; transform: translateY(26px) scaleX(.06) scaleY(.06); opacity: 0; }
+    100% { left: 36%; opacity: 0; transform: translateY(26px) scale(.06); }
+  }
+  .b1 { animation-delay: 6.8s; animation-duration: 12s; }
+  .b2 { animation-name: blockHitLow; animation-delay: 1.2s; animation-duration: 12s; }
+  .hf-readout { position: absolute; left: 46%; top: calc(50% + min(170px, 14vw)); transform: translateX(-50%); display: flex; gap: 22px; font-family: var(--mono); font-size: 11px; letter-spacing: .12em; white-space: nowrap; }
+  .hf-readout .ok { color: var(--green); opacity: .85; }
+  .hf-readout .no { color: var(--red); opacity: .75; }
 
-/* pricing */
-.pa-plans{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:52px;}
-.pa-plan{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px 26px;display:flex;flex-direction:column;}
-.pa-plan.hot{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 20px 44px rgba(31,95,224,0.14);}
-.pa-plan .name{font-size:13px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-dim);}
-.pa-plan.hot .name{color:var(--accent);}
-.pa-plan .price{font-size:32px;font-weight:800;letter-spacing:-0.03em;margin-top:12px;font-variant-numeric:tabular-nums;}
-.pa-plan .per{color:var(--text-soft);font-size:13px;margin-bottom:20px;}
-.pa-plan ul{list-style:none;font-size:13.5px;color:var(--text-dim);flex:1;margin:0;padding:0;}
-.pa-plan li{padding:7px 0;border-top:1px solid var(--border);margin:0;}
-.pa-plan li::before{content:"— ";color:var(--text-soft);}
-.pa-plan .btn{justify-content:center;margin-top:22px;}
-.pa-ladder{margin-top:20px;display:flex;align-items:center;gap:16px;border:1px dashed var(--border2);border-radius:12px;padding:18px 24px;font-size:14px;color:var(--text-dim);background:var(--surface);flex-wrap:wrap;}
-.pa-ladder b{font-family:'IBM Plex Mono',monospace;color:var(--accent);font-weight:600;}
+  /* ── sections ── */
+  section { padding: 92px 0; position: relative; }
+  .sec-center { text-align: center; }
+  html.js .sec-center { opacity: 0; transform: translateY(26px); transition: opacity .8s ease, transform .8s ease; }
+  html.js .sec-center.in { opacity: 1; transform: none; }
+  .cube { width: 56px; height: 56px; margin: 0 auto 30px; border-radius: 14px; position: relative; background: linear-gradient(145deg, #17181b, #0a0a0b); border: 1px solid var(--line2); box-shadow: 0 20px 50px rgba(255,180,84,.10), inset 0 1px 0 rgba(255,255,255,.08); display: grid; place-items: center; font-family: var(--mono); font-size: 15px; color: var(--white); }
+  .cube::after { content: ""; position: absolute; inset: -26px; border-radius: 50%; background: radial-gradient(closest-side, transparent 56%, rgba(255,196,130,.22) 65%, transparent 74%); z-index: -1; }
+  .cube::before { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: rgba(255,255,255,.8); box-shadow: 0 0 8px rgba(255,255,255,.5); transform: rotate(0deg) translateY(-46px); animation: cubeMoon 14s linear infinite; }
+  .cube.v::before { animation-duration: 18s; animation-direction: reverse; }
+  .cube.c::before { animation-duration: 22s; }
+  .cube.v::after { background: radial-gradient(closest-side, transparent 56%, rgba(109,93,252,.26) 65%, transparent 74%); }
+  .cube.c::after { background: radial-gradient(closest-side, transparent 56%, rgba(6,182,212,.24) 65%, transparent 74%); }
+  @keyframes cubeMoon { to { transform: rotate(360deg) translateY(-46px); } }
+  h2 { font-size: clamp(34px, 4.6vw, 52px); font-weight: 600; letter-spacing: -0.045em; line-height: 1.08; color: var(--white); }
+  h2 .thin { font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--white); letter-spacing: 0; }
+  .sec-sub { max-width: 560px; margin: 20px auto 0; font-size: 18px; color: var(--gray); }
 
-/* articles + final */
-.pa-articles{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:52px;}
-.pa-article{display:block;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;color:inherit;transition:border-color .2s,transform .2s;}
-.pa-article:hover{border-color:var(--border2);transform:translateY(-3px);}
-.pa-article span{font-size:12px;color:var(--text-soft);font-family:'IBM Plex Mono',monospace;}
-.pa-article strong{display:block;color:var(--text);font-size:16px;line-height:1.3;margin:8px 0;}
-.pa-article p{margin:0;color:var(--text-dim);font-size:13px;line-height:1.5;}
-.pa-final{text-align:center;padding:110px 0 40px;}
-.pa-final h2{margin:0 auto;max-width:700px;}
-.pa-final .pa-cta-row{margin-top:36px;}
-.pa-fine{margin-top:20px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text-soft);}
+  /* aurora hairline accent */
+  .aura-line { position: relative; }
+  .aura-line::before { content: ""; position: absolute; top: -1px; left: 0; right: 0; height: 1px; z-index: 2; background: linear-gradient(90deg, rgba(61,123,255,.55), rgba(109,93,252,.55) 45%, rgba(255,180,84,.45) 80%, transparent); background-size: 200% 100%; animation: auraLine 12s ease-in-out infinite alternate; }
+  @keyframes auraLine { to { background-position: 100% 0; } }
 
-@media (max-width:1000px){
-  .pa-grid-4,.pa-plans,.pa-band,.pa-strip{grid-template-columns:repeat(2,1fr);}
-  .pa-grid-3,.pa-layers,.pa-ent,.pa-console-body,.pa-articles{grid-template-columns:1fr;}
-  .pa-side{display:none;}
-  .pa-cell,.pa-band > div,.pa-layer{border-left:0;border-top:1px solid var(--border);}
-  .pa-sec-alt{margin:0 -16px;padding:64px 16px;}
-  .pa-sec{padding:64px 0;}
-}
-@media (max-width:640px){
-  .pa-grid-4,.pa-plans,.pa-band,.pa-strip{grid-template-columns:1fr;}
-  .pa-install-body code{font-size:12px;}
-}
-</style>
+  /* terminal artifact */
+  .artifact { max-width: 880px; margin: 60px auto 0; position: relative; text-align: left; }
+  .artifact::before { content: ""; position: absolute; inset: -60px 0; pointer-events: none; background: radial-gradient(50% 60% at 50% 40%, rgba(255,180,84,.07), transparent 75%); }
+  .term { position: relative; background: var(--panel); border: 1px solid var(--line2); border-radius: 14px; overflow: hidden; box-shadow: 0 40px 100px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.06); }
+  .term-tabs { display: flex; gap: 2px; padding: 10px 12px 0; border-bottom: 1px solid var(--line); background: #050506; }
+  .term-tabs button { font: inherit; font-family: var(--mono); font-size: 13.5px; color: var(--gray-dim); background: none; border: 0; border-radius: 8px 8px 0 0; padding: 9px 16px; cursor: pointer; }
+  .term-tabs button.on { color: var(--white); background: var(--panel); border: 1px solid var(--line); border-bottom-color: var(--panel); margin-bottom: -1px; }
+  .term pre { margin: 0; padding: 24px 26px; font: 14.5px/1.8 var(--mono); color: #d6d9dc; overflow-x: auto; }
+  .tk-c { color: #5b6063; } .tk-s { color: #8ab8ff; } .tk-k { color: #c0b1ff; } .tk-g { color: var(--green); } .tk-r { color: var(--red); } .tk-a { color: var(--amber); }
+  .term .cur { display: inline-block; width: 8px; height: 15px; background: var(--green); vertical-align: -2px; margin-left: 3px; animation: curBlink 1.2s steps(1) infinite; }
+  @keyframes curBlink { 50% { opacity: 0; } }
+  .term-foot { border-top: 1px solid var(--line); padding: 14px 26px; display: flex; gap: 24px; font-family: var(--mono); font-size: 13.5px; color: var(--gray-dim); flex-wrap: wrap; }
+  .term-foot b { color: var(--green); font-weight: 500; }
 
-<div class="pa-shell">
+  /* install strip */
+  .install { margin: 26px auto 0; max-width: 880px; background: var(--panel); border: 1px solid var(--line2); border-radius: 12px; overflow: hidden; text-align: left; }
+  .install-tabs { display: flex; border-bottom: 1px solid var(--line); background: #050506; }
+  .install-tabs button { font: inherit; font-size: 13.5px; font-weight: 600; color: var(--gray-dim); background: none; border: 0; padding: 12px 18px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .install-tabs button.on { color: var(--gold); border-bottom-color: var(--amber); }
+  .install-body { display: flex; align-items: center; gap: 16px; padding: 16px 18px; }
+  .install-body code { font-family: var(--mono); font-size: 13.5px; color: var(--white); flex: 1; overflow-x: auto; white-space: nowrap; }
+  .copybtn { font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--gray-dim); background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; padding: 7px 12px; cursor: pointer; white-space: nowrap; transition: all .15s; }
+  .copybtn:hover { color: var(--gold); border-color: rgba(255,217,160,.5); }
+  .copybtn.done { color: var(--green); border-color: var(--green); }
+  .install-foot { font-family: var(--mono); font-size: 12.5px; color: var(--gray-dim); padding: 0 18px 14px; }
+  .install-foot b { color: var(--gray); font-weight: 500; }
 
-  <section class="pa-hero">
-    <div class="pa-pill"><i></i> Agent governance &amp; compliance</div>
-    <h1>${hero.headline}<br><span class="pa-accent">${hero.accent}</span></h1>
-    <p class="pa-lede">${hero.lede}</p>
-    <div class="pa-cta-row">
-      <a href="/docs/quickstart" class="btn btn-primary pa-btn-lg">${hero.ctaPrimary}</a>
-      <a href="/support" class="btn btn-outline pa-btn-lg">${hero.ctaSecondary}</a>
+  .bento { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; max-width: 880px; margin: 26px auto 0; text-align: left; }
+  .bcard { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 28px; transition: border-color .2s, box-shadow .2s; }
+  .bcard:hover { border-color: rgba(109,93,252,.28); box-shadow: 0 18px 60px rgba(61,123,255,.10), 0 8px 34px rgba(255,180,84,.07); }
+  .bcard h3 { font-size: 18.5px; font-weight: 600; color: var(--white); margin-bottom: 8px; letter-spacing: -.01em; }
+  .bcard p { font-size: 15.5px; color: var(--gray); }
+  .bcard .more { display: inline-block; margin-top: 16px; font-size: 15px; color: var(--gray-dim); }
+  .bcard:hover .more { color: var(--white); }
+
+  .rows { max-width: 880px; margin: 56px auto 0; border-top: 1px solid var(--line); text-align: left; }
+  .rowi { display: grid; grid-template-columns: 230px 1fr auto; gap: 26px; padding: 24px 6px; border-bottom: 1px solid var(--line); align-items: baseline; }
+  .rowi:hover { background: rgba(255,255,255,.015); }
+  .rowi h3 { font-size: 17.5px; font-weight: 600; color: var(--white); }
+  .rowi p { font-size: 16px; color: var(--gray); }
+  .rowi .ep { font-family: var(--mono); font-size: 13.5px; color: var(--gray-dim); }
+  .rowi:hover .ep { color: var(--gold); }
+
+  .gov { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 980px; margin: 56px auto 0; text-align: left; }
+  .gcard { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 24px; transition: border-color .2s, box-shadow .2s; }
+  .gcard:hover { border-color: rgba(109,93,252,.28); box-shadow: 0 18px 60px rgba(61,123,255,.10), 0 8px 34px rgba(255,180,84,.07); }
+  .gcard .tag { font-family: var(--mono); font-size: 12px; letter-spacing: .16em; color: var(--gray-dim); }
+  .gcard h3 { font-size: 17.5px; font-weight: 600; color: var(--white); margin: 12px 0 6px; }
+  .gcard p { font-size: 15.5px; color: var(--gray); }
+
+  /* agent prompt */
+  .prompt-panel { max-width: 880px; margin: 52px auto 0; background: var(--panel); border: 1px solid var(--line2); border-radius: 14px; overflow: hidden; text-align: left; }
+  .prompt-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); background: #050506; flex-wrap: wrap; }
+  .prompt-head b { font-size: 15px; color: var(--white); }
+  .prompt-head small { display: block; font-family: var(--mono); font-size: 11px; color: var(--gray-dim); letter-spacing: .08em; text-transform: uppercase; }
+  .ptabs { display: inline-flex; gap: 3px; background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+  .ptab { appearance: none; border: 0; border-radius: 999px; background: transparent; color: var(--gray-dim); font: inherit; font-size: 12.5px; font-weight: 700; padding: 7px 12px; cursor: pointer; }
+  .ptab.is-active { background: var(--white); color: #000; }
+  .prompt-panel pre { margin: 0; padding: 20px; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word; font: 12.5px/1.7 var(--mono); color: var(--gray); }
+
+  /* pricing */
+  .price-strip { max-width: 880px; margin: 56px auto 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; text-align: left; }
+  .prow { display: grid; grid-template-columns: 160px 1fr auto auto; gap: 20px; align-items: center; padding: 18px 26px; border-top: 1px solid var(--line); }
+  .prow:first-child { border-top: 0; }
+  .prow:hover { background: rgba(255,255,255,.015); }
+  .prow .t { color: var(--white); font-weight: 600; font-size: 16.5px; }
+  .prow .d { font-size: 15px; color: var(--gray); }
+  .prow .p { font-family: var(--mono); font-size: 16.5px; color: var(--white); }
+  .prow .p small { color: var(--gray-dim); font-size: 11.5px; display: block; }
+  .prow .go { font-size: 15px; color: var(--gray-dim); }
+  .prow:hover .go { color: var(--white); }
+  .price-note { max-width: 880px; margin: 18px auto 0; text-align: left; font-family: var(--mono); font-size: 13.5px; color: var(--gray-dim); }
+
+  /* articles */
+  .pa-articles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 980px; margin: 52px auto 0; text-align: left; }
+  .pa-article { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px; color: inherit; transition: border-color .2s; }
+  .pa-article:hover { border-color: var(--line2); }
+  .pa-article span { font-size: 12px; color: var(--gray-dim); font-family: var(--mono); }
+  .pa-article strong { display: block; color: var(--white); font-size: 16px; line-height: 1.3; margin: 8px 0; }
+  .pa-article p { margin: 0; color: var(--gray); font-size: 13.5px; line-height: 1.5; }
+
+  /* closer + footer horizon */
+  .closer { text-align: center; padding: 150px 0 140px; position: relative; }
+  html.js .closer { opacity: 0; transform: translateY(26px); transition: opacity .8s ease, transform .8s ease; }
+  html.js .closer.in { opacity: 1; transform: none; }
+  .closer::before { content: ""; position: absolute; top: 20%; left: 50%; transform: translateX(-50%); width: min(700px, 100vw); height: 400px; pointer-events: none; background: radial-gradient(closest-side, rgba(109,93,252,.1), transparent 70%); }
+  .closer h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(44px, 6vw, 72px); letter-spacing: -0.01em; }
+  .closer h2 em { font-style: italic; }
+  .closer .hf-cta { justify-content: center; margin-top: 40px; }
+  footer { border-top: 1px solid var(--line); padding: 44px 0 60px; font-size: 15px; color: var(--gray-dim); position: relative; overflow: hidden; }
+  footer::before { content: ""; position: absolute; left: 50%; bottom: -20px; transform: translateX(-50%); width: min(180vw, 2400px); height: 240px; pointer-events: none; background: radial-gradient(50% 100% at 50% 100%, transparent 55%, rgba(255,196,130,.13) 66%, rgba(255,180,84,.04) 76%, transparent 86%); }
+  .frow { display: flex; gap: 26px; flex-wrap: wrap; }
+  .frow a:hover { color: var(--white); }
+  .limits { margin-top: 16px; max-width: 82ch; }
+
+  @media (max-width: 900px) {
+    .hf-scene { width: 100%; opacity: .34; }
+    .hf-copy { max-width: 100%; }
+    .hf-readout { display: none; }
+    .bento, .gov { grid-template-columns: 1fr; }
+    .pa-articles { grid-template-columns: 1fr; }
+    .rowi { grid-template-columns: 1fr; gap: 8px; padding: 20px 4px; }
+    .prow { grid-template-columns: 1fr auto; row-gap: 6px; }
+    .prow .d { grid-column: 1 / -1; }
+    section { padding: 64px 0; }
+    .closer { padding: 100px 0 90px; }
+  }
+  @media (max-width: 720px) {
+    .nav-links { display: none; }
+    .nav-right .btn-ghost { display: none; }
+    .nav { gap: 14px; }
+    .hf-cta { flex-direction: column; align-items: flex-start; }
+    .term pre { font-size: 12.5px; padding: 18px 16px; }
+    .install-body code { font-size: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hf-aurora i, .hf-floor, .hf-ring, .hf-ring-arc, .hf-p, .hf-scroll, .sky i, .shoot, .cube::before, .term .cur, .aura-line::before, body::after { animation: none; }
+    .hf-p, .shoot { display: none; }
+    .sec-center, .closer { opacity: 1; transform: none; transition: none; }
+  }
+  </style>
+</head>
+<body${bodyAttrs}>
+
+<div class="sky" aria-hidden="true"><i class="s1"></i><i class="s2"></i><i class="s3"></i></div>
+<div class="shoot" aria-hidden="true"></div>
+<div class="shoot sh2" aria-hidden="true"></div>
+
+<header>
+  <div class="wrap nav">
+    <a class="logo" href="/">${getLogoMarkSvg()}Parse</a>
+    <nav class="nav-links">
+      <a href="/playground">Playground</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/trust">Trust</a><a href="/blog">Blog</a>
+    </nav>
+    <div class="nav-right">
+      <a class="btn btn-ghost" href="/admin/login">Sign in</a>
+      <a class="btn btn-white" href="/docs/quickstart">Install Parse</a>
     </div>
+  </div>
+</header>
 
-    <div class="pa-install">
-      <div class="pa-install-tabs" role="tablist" aria-label="Install method">
-        <button type="button" role="tab" aria-selected="true" class="on" data-t="sdk">SDK</button>
-        <button type="button" role="tab" aria-selected="false" data-t="mcp">Claude Code / MCP</button>
-        <button type="button" role="tab" aria-selected="false" data-t="curl">cURL</button>
+<div class="hf">
+  <div class="hf-aurora"><i class="a1"></i><i class="a2"></i><i class="a3"></i></div>
+  <div class="hf-floor"></div>
+  <div class="hf-grain"></div>
+
+  <div class="hf-scene" aria-hidden="true">
+    <div class="hf-lane"></div>
+    <div class="hf-disc"></div>
+    <div class="hf-lensarc la1"></div>
+    <div class="hf-lensarc la2"></div>
+    <div class="hf-ring">
+      <span class="hf-ring-arc"></span>
+      <span class="hf-ring-core"></span>
+    </div>
+    <span class="hf-p p1"></span><span class="hf-p p2"></span><span class="hf-p p3"></span>
+    <span class="hf-p p4"></span><span class="hf-p p5"></span><span class="hf-p p6"></span>
+    <span class="hf-p p7"></span><span class="hf-p p8"></span>
+    <span class="hf-p hf-bad b1"></span><span class="hf-p hf-bad b2"></span>
+    <div class="hf-readout"><span class="ok">allowed · receipted</span><span class="no">blocked · receipted</span></div>
+  </div>
+
+  <div class="wrap hf-inner">
+    <div class="hf-copy">
+      <h1>${hero.l1}<br><em>${hero.l2}</em></h1>
+      <p class="hf-lede">${hero.lede}</p>
+      <div class="hf-cta">
+        <a class="btn btn-white btn-lg" href="/docs/quickstart">Install Parse</a>
+        <a class="btn btn-ghost btn-lg" href="/docs">Documentation</a>
       </div>
-      <div class="pa-install-body">
+      <div class="hf-fine">npm install @parsethis/sdk · no credit card, no sales call</div>
+    </div>
+  </div>
+
+  <div class="hf-scroll">scroll<br>↓</div>
+</div>
+
+<section class="sec-center">
+  <div class="wrap">
+    <div class="cube">/</div>
+    <h2>Integrate <span class="thin">this afternoon</span></h2>
+    <p class="sec-sub">One POST at the boundary. Score, categories, action — and a receipt.</p>
+    <div class="artifact">
+      <div class="term aura-line">
+        <div class="term-tabs"><button class="on">cURL</button><button disabled>response</button></div>
+        <pre><span class="tk-c"># screen a retrieved document before your agent acts on it</span>
+curl -s ${baseUrl}/v1/parse \\
+  -H <span class="tk-s">"Authorization: Bearer $PARSE_API_KEY"</span> \\
+  -d <span class="tk-s">'{"prompt": "&lt;untrusted content&gt;"}'</span>
+
+<span class="tk-c"># →</span> {
+<span class="tk-c">    </span><span class="tk-k">"risk_score"</span>: <span class="tk-r">8.7</span>,
+<span class="tk-c">    </span><span class="tk-k">"verdict"</span>: <span class="tk-s">"critical"</span>,
+<span class="tk-c">    </span><span class="tk-k">"categories"</span>: [<span class="tk-s">"instruction_override"</span>, <span class="tk-s">"data_exfiltration"</span>],
+<span class="tk-c">    </span><span class="tk-k">"recommended_action"</span>: <span class="tk-a">"block"</span>,
+<span class="tk-c">    </span><span class="tk-k">"trace_id"</span>: <span class="tk-s">"prs_7fd2"</span>  <span class="tk-c">// your receipt</span>
+  }<span class="cur"></span></pre>
+        <div class="term-foot"><span>${DETECTION_FACTS.pipelineLayers.length} detection layers</span><span>${DETECTION_FACTS.riskCategoryCount} risk categories</span><span>receipt on <b>every</b> verdict</span></div>
+      </div>
+    </div>
+    <div class="install">
+      <div class="install-tabs" role="tablist" aria-label="Install method">
+        <button type="button" class="on" data-t="sdk">SDK</button>
+        <button type="button" data-t="mcp">Claude Code / MCP</button>
+        <button type="button" data-t="curl">cURL</button>
+      </div>
+      <div class="install-body">
         <code id="pa-ins">npm install @parsethis/sdk</code>
-        <button type="button" class="pa-copy" id="pa-cp">COPY</button>
+        <button type="button" class="copybtn" id="pa-cp">COPY</button>
       </div>
-      <div class="pa-install-foot" id="pa-insfoot"><b>then:</b> wrap your agent — screening runs at every trust boundary.</div>
+      <div class="install-foot" id="pa-insfoot"><b>then:</b> wrap your agent — screening runs at every trust boundary.</div>
     </div>
+    <div class="bento">
+      <div class="bcard"><h3>Test Lab</h3><p>Blind fixtures probe whether your agent resists injection — before your customers do.</p><a class="more" href="/playground">Open the playground →</a></div>
+      <div class="bcard"><h3>Monitor first, block later</h3><p>Ship in monitor mode, then dial to block per environment. Every change is versioned.</p><a class="more" href="/docs">Read about the dial →</a></div>
+    </div>
+  </div>
+</section>
 
-    <div class="pa-console-wrap">
-      <div class="pa-console" aria-label="Illustrative Parse console preview">
-        <div class="pa-chrome">
-          <span class="pa-dots"><i></i><i></i><i></i></span>
-          <span class="pa-url">parsethis.ai/dashboard/agents</span>
-          <span style="margin-left:auto" class="pa-mono">org: acme-industries · production</span>
-        </div>
-        <div class="pa-console-body">
-          <div class="pa-side">
-            <a href="/dashboard/agents" class="on"><i></i>Agents</a>
-            <a href="/dashboard/screening"><i></i>Screening</a>
-            <a href="/dashboard/compliance"><i></i>Compliance</a>
-            <a href="/dashboard/billing"><i></i>Billing</a>
-          </div>
-          <div class="pa-pane">
-            <div class="pa-pane-title"><h4>Fleet posture</h4><span>last 24h</span></div>
-            <div class="pa-strip">
-              <div class="pa-cell"><b>Agents</b><strong>128</strong><small>124 active · 4 frozen</small></div>
-              <div class="pa-cell"><b>Screenings</b><strong>41,209</strong><small>across 3 environments</small></div>
-              <div class="pa-cell"><b>Blocked</b><strong class="pa-r">312</strong><small>risk ≥ 7.0</small></div>
-              <div class="pa-cell"><b>Coverage</b><strong class="pa-g">98%</strong><small>7-day attestation</small></div>
-              <div class="pa-cell"><b>Prod dial</b><strong class="pa-b">BLOCK</strong><small>SIEM connected</small></div>
-            </div>
-            <table>
-              <thead><tr><th>Event</th><th>Verdict</th><th>Risk</th><th>Surface</th></tr></thead>
-              <tbody>
-                <tr><td>Instruction override in RAG chunk</td><td><span class="pa-chip blocked">blocked</span></td><td class="pa-risk pa-r">8.7</td><td>rag</td></tr>
-                <tr><td>Callback URL in tool JSON</td><td><span class="pa-chip blocked">blocked</span></td><td class="pa-risk pa-r">9.2</td><td>tool</td></tr>
-                <tr><td>Role hijack attempt, low confidence</td><td><span class="pa-chip warned">warned</span></td><td class="pa-risk pa-a">5.5</td><td>input</td></tr>
-                <tr><td>Peer delegation, verified chain</td><td><span class="pa-chip allowed">allowed</span></td><td class="pa-risk pa-g">0.8</td><td>handoff</td></tr>
-                <tr><td>Routine model output to user</td><td><span class="pa-chip allowed">allowed</span></td><td class="pa-risk pa-g">0.0</td><td>output</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-      <div class="pa-console-caption">Console preview with illustrative data.</div>
+<section class="sec-center">
+  <div class="wrap">
+    <div class="cube v">◈</div>
+    <h2>Four surfaces. <span class="thin">One decision.</span></h2>
+    <p class="sec-sub">Screen before authority — at all four places an agent can be steered.</p>
+    <div class="rows">
+      <div class="rowi"><h3>User &amp; RAG input</h3><p>Injection and hidden instructions in what it reads.</p><span class="ep">POST /v1/parse</span></div>
+      <div class="rowi"><h3>Tool &amp; browser output</h3><p>Data that parses like instruction.</p><span class="ep">POST /v1/parse</span></div>
+      <div class="rowi"><h3>Generated output</h3><p>Screened before users, tools, or memory.</p><span class="ep">POST /v1/screen-output</span></div>
+      <div class="rowi"><h3>Agent handoff</h3><p>Delegation verified before work is accepted.</p><span class="ep">POST /v1/agent/trust/verify</span></div>
     </div>
+  </div>
+</section>
 
-    <div class="pa-band">
-      <div><strong>${DETECTION_FACTS.patternRuleCount}+</strong><span>pattern rules, deterministic and first in line</span></div>
-      <div><strong>${DETECTION_FACTS.riskCategoryCount}</strong><span>public risk categories, documented taxonomy</span></div>
-      <div><strong>${DETECTION_FACTS.pipelineLayers.length}</strong><span>detection layers on every request</span></div>
-      <div><strong>100%</strong><span>of verdicts ship with an audit receipt</span></div>
+<section class="sec-center">
+  <div class="wrap">
+    <div class="cube c">§</div>
+    <h2>Screening is the floor.<br><span class="thin">Governance is the product.</span></h2>
+    <p class="sec-sub">Six controls around the pipeline. Evidence your auditor can read.</p>
+    <div class="gov">
+      <div class="gcard"><div class="tag">REGISTRY</div><h3>Every agent on record</h3><p>Status, risk, owner, last seen. Freeze or retire from one place.</p></div>
+      <div class="gcard"><div class="tag">POLICY</div><h3>Enforcement you dial</h3><p>Monitor, warn, or block — per environment, versioned with diffs.</p></div>
+      <div class="gcard"><div class="tag">DATA</div><h3>Boundaries on data</h3><p>Grants, egress control, and volume budgets per agent.</p></div>
+      <div class="gcard"><div class="tag">EVIDENCE</div><h3>Receipts &amp; SIEM</h3><p>Category, score, action, trace ID — sealed and forwarded.</p></div>
+      <div class="gcard"><div class="tag">ATTESTATION</div><h3>Coverage, proven</h3><p>Screened vs. unscreened traffic over any window.</p></div>
+      <div class="gcard"><div class="tag">CROSSWALK</div><h3>Framework mapping</h3><p>OWASP LLM, NIST AI RMF, EU AI Act, ISO 42001, and SOC 2 TSC — certifications on the roadmap, controls aligned today.</p></div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section class="pa-sec">
-    <div class="pa-kicker">Runtime enforcement</div>
-    <h2>Four surfaces. One decision: screen before authority.</h2>
-    <p class="pa-sub">The routing rule stays simple — when text crosses a trust boundary, call Parse first. Everything downstream keeps least privilege.</p>
-    <div class="pa-grid pa-grid-4">
-      <div class="pa-card"><div class="pa-ico">IN</div><h3>User &amp; RAG input</h3><p>Prompt injection, hidden instructions, and retrieved content that tries to redirect the agent.</p><div class="pa-ep">POST /v1/parse</div></div>
-      <div class="pa-card"><div class="pa-ico">TL</div><h3>Tool &amp; browser output</h3><p>HTML, JSON, search snippets, and page content returned by external tools.</p><div class="pa-ep">POST /v1/parse</div></div>
-      <div class="pa-card"><div class="pa-ico">OUT</div><h3>Generated output</h3><p>Screen model output before it reaches users, tools, memory, or another agent.</p><div class="pa-ep">POST /v1/screen-output</div></div>
-      <div class="pa-card"><div class="pa-ico">A2A</div><h3>Agent handoff</h3><p>Verify identity, delegation context, and social-engineering risk before accepting work.</p><div class="pa-ep">POST /v1/agent/trust/verify</div></div>
-    </div>
-  </section>
-
-  <section class="pa-sec pa-sec-alt">
-    <div class="pa-kicker">Detection pipeline</div>
-    <h2>Four independent layers on every request.</h2>
-    <div class="pa-layers">
-      <div class="pa-layer"><b>LAYER 01</b><h3>Pattern engine</h3><p>${DETECTION_FACTS.patternRuleCount}+ rules across ${DETECTION_FACTS.riskCategoryCount} risk categories, with text normalization against obfuscation.</p><i>~0.3ms p95</i></div>
-      <div class="pa-layer"><b>LAYER 02</b><h3>Structural analysis</h3><p>Encoded payloads, hidden content, callback URLs, and tool-result JSON injection caught by contextual detectors.</p><i>deterministic</i></div>
-      <div class="pa-layer"><b>LAYER 03</b><h3>Semantic analysis</h3><p>LLM scoring that reads intent — role hijacks and indirect injection that string rules can't enumerate.</p><i>when configured</i></div>
-      <div class="pa-layer"><b>LAYER 04</b><h3>Sandbox execution</h3><p>Suspicious content runs against an isolated decoy agent. SSRF-guarded, DOM-aware, zero egress.</p><i>optional · contained</i></div>
-    </div>
-    <div class="pa-dial-row">
-      <span>Enforcement is yours to dial, per environment:</span>
-      <div class="pa-dial"><span>MONITOR</span><span>WARN</span><span class="on">BLOCK</span></div>
-      <span class="pa-mono" style="font-size:12.5px;color:var(--text-soft)">risk ≥ 7.0 → quarantine + receipt</span>
-    </div>
-  </section>
-
-  <section class="pa-sec">
-    <div class="pa-kicker">Governance</div>
-    <h2>Screening is the floor. Governance is the product.</h2>
-    <p class="pa-sub">Detection alone doesn't answer an auditor. Parse wraps the screening pipeline in the controls a fleet actually needs.</p>
-    <div class="pa-grid pa-grid-3">
-      <div class="pa-card"><div class="pa-ico">REG</div><h3>Agent registry</h3><p>Every agent on record: status, risk level, owner, last seen. Freeze or retire from one place.</p><div class="pa-ep">/dashboard/agents</div></div>
-      <div class="pa-card"><div class="pa-ico">POL</div><h3>Policy &amp; enforcement</h3><p>Monitor, warn, or block — set per environment. Every policy change is versioned with a diff.</p><div class="pa-ep">/v1/policy</div></div>
-      <div class="pa-card"><div class="pa-ico">DAT</div><h3>Data governance</h3><p>Data grants, egress control, and volume budgets bound what each agent may touch and move.</p><div class="pa-ep">grants · egress · budgets</div></div>
-      <div class="pa-card"><div class="pa-ico">COV</div><h3>Coverage attestation</h3><p>Screened vs. unscreened traffic over any window — the number your auditor actually asks for.</p><div class="pa-ep">/dashboard/compliance</div></div>
-      <div class="pa-card"><div class="pa-ico">RCP</div><h3>Receipts, SIEM &amp; evidence packs</h3><p>Category, score, action, and trace ID on every verdict — sealed, exportable, forwarded to your pipeline.</p><div class="pa-ep">NDJSON export</div></div>
-      <div class="pa-card"><div class="pa-ico">APR</div><h3>Approval matrix &amp; kill switch</h3><p>Per-action human-approval requirements, and one call to freeze a compromised agent while you investigate.</p><div class="pa-ep">approve · deny · freeze</div></div>
-    </div>
-  </section>
-
-  <section class="pa-sec pa-sec-alt">
-    <div class="pa-ent">
-      <div>
-        <div class="pa-kicker">Compliance</div>
-        <h2>Built to pass your security review.</h2>
-        <div class="pa-checklist">
-          <div class="pa-check"><i>✓</i><div><b>Audit receipts on every verdict.</b> <span>Category, score, action, and trace ID — exportable, SIEM-forwardable.</span></div></div>
-          <div class="pa-check"><i>✓</i><div><b>Framework crosswalk.</b> <span>Parse controls mapped to the frameworks your reviewers use; formal certifications are on the roadmap, and controls are SOC 2-aligned today.</span>
-            <div class="pa-fw"><span>SOC 2 TSC</span><span>OWASP LLM Top 10</span><span>NIST AI RMF</span><span>EU AI Act</span><span>ISO/IEC 42001</span></div>
-          </div></div>
-          <div class="pa-check"><i>✓</i><div><b>Enforcement dial per environment.</b> <span>Monitor in staging, block in production. Policy changes are versioned with diffs.</span></div></div>
-          <div class="pa-check"><i>✓</i><div><b>Data governance for agent fleets.</b> <span>Registry, data grants, egress control, volume budgets, kill switch.</span></div></div>
-          <div class="pa-check"><i>✓</i><div><b>Honest limits, in writing.</b> <span>Detection reduces risk; it does not replace least-privilege tools or output validation.</span></div></div>
-        </div>
-        <p style="margin-top:18px;font-size:14px;"><a href="/trust">Trust &amp; Security →</a> Architecture, security controls, and the pre-answered vendor questionnaire.</p>
-      </div>
-      <div class="pa-quote">
-        <div class="q">"Every screening returns a verdict, a category, and a receipt. <em>When your auditor asks what your agents read last quarter, you have an answer</em> — not a shrug."</div>
-        <div class="attr">FROM THE PARSE DESIGN PRINCIPLES · /trust</div>
-      </div>
-    </div>
-  </section>
-
-  <section class="pa-sec">
-    <div class="pa-kicker">For agents &amp; runtimes</div>
-    <h2>Hand this to the agent. It wires itself.</h2>
-    <p class="pa-sub">A copy-paste integration prompt for any agent runtime — Bearer-key first, x402 pay-per-call when no account exists.</p>
-    <div class="pa-prompt" aria-labelledby="prompt-title">
-      <div class="pa-prompt-head">
-        <div>
-          <small>Copy into an agent</small>
-          <b id="prompt-title">Integration prompt</b>
-        </div>
+<section class="sec-center">
+  <div class="wrap">
+    <div class="cube">⌁</div>
+    <h2>Hand this to the agent. <span class="thin">It wires itself.</span></h2>
+    <p class="sec-sub">A copy-paste integration prompt for any agent runtime — Bearer-key first, x402 when no account exists.</p>
+    <div class="prompt-panel aura-line">
+      <div class="prompt-head">
+        <div><small>Copy into an agent</small><b>Integration prompt</b></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <div class="pa-tabs" role="tablist" aria-label="Authentication path">
-            <button type="button" role="tab" aria-selected="true" data-route="bearer" class="pa-tab is-active">Bearer key</button>
-            <button type="button" role="tab" aria-selected="false" data-route="x402" class="pa-tab">x402</button>
+          <div class="ptabs" role="tablist" aria-label="Authentication path">
+            <button type="button" role="tab" aria-selected="true" data-route="bearer" class="ptab is-active">Bearer key</button>
+            <button type="button" role="tab" aria-selected="false" data-route="x402" class="ptab">x402</button>
           </div>
-          <button type="button" class="pa-copy pa-copy-prompt">COPY</button>
+          <button type="button" class="copybtn pa-copy-prompt">COPY</button>
         </div>
       </div>
       <pre tabindex="0"><code class="pa-prompt-text"></code></pre>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section class="pa-sec pa-sec-alt">
-    <div class="pa-kicker">Pricing</div>
-    <h2>Start free. Scale when your fleet does.</h2>
-    <div class="pa-plans">
-      <div class="pa-plan"><div class="name">Free</div><div class="price">$0</div><div class="per">forever</div>
-        <ul><li>${PLAN_LIMITS.free.requestsPerMinute} req/min</li><li>All screening endpoints</li><li>30-day self-serve keys</li><li>Playground &amp; test lab</li></ul>
-        <a class="btn btn-outline" href="/docs/quickstart">Install free</a></div>
-      <div class="pa-plan hot"><div class="name">Pro</div><div class="price">$49</div><div class="per">per month · 10K screenings</div>
-        <ul><li>Full detection pipeline</li><li>Enforcement dial per env</li><li>Screening dashboard</li><li>Email support</li></ul>
-        <a class="btn btn-primary" href="/pricing">Deploy Pro</a></div>
-      <div class="pa-plan"><div class="name">Team</div><div class="price">$199</div><div class="per">per month · 50K screenings</div>
-        <ul><li>${PLAN_LIMITS.team.requestsPerMinute} req/min</li><li>Org &amp; agent registry</li><li>SIEM forwarding</li><li>Priority support</li></ul>
-        <a class="btn btn-outline" href="/pricing">Scale up</a></div>
-      <div class="pa-plan"><div class="name">Compliance</div><div class="price">$999</div><div class="per">per month · evidence-grade</div>
-        <ul><li>Coverage attestation</li><li>Evidence pack exports</li><li>Framework crosswalk</li><li>Security review support</li></ul>
-        <a class="btn btn-outline" href="/pricing">See details</a></div>
+<section class="sec-center">
+  <div class="wrap">
+    <div class="cube v">$</div>
+    <h2>Start free. <span class="thin">Scale on evidence.</span></h2>
+    <div class="price-strip aura-line">
+      <div class="prow"><span class="t">Free</span><span class="d">${PLAN_LIMITS.free.requestsPerMinute} req/min · all endpoints · test lab</span><span class="p">$0<small>forever</small></span><a class="go" href="/docs/quickstart">Install →</a></div>
+      <div class="prow"><span class="t">Pro</span><span class="d">10K screenings · full pipeline · dashboard</span><span class="p">$49<small>/mo</small></span><a class="go" href="/pricing">Deploy →</a></div>
+      <div class="prow"><span class="t">Team</span><span class="d">50K screenings · registry · SIEM forwarding</span><span class="p">$199<small>/mo</small></span><a class="go" href="/pricing">Scale →</a></div>
+      <div class="prow"><span class="t">Compliance</span><span class="d">attestation · evidence packs · review support</span><span class="p">$999<small>/mo</small></span><a class="go" href="/pricing">Engage →</a></div>
     </div>
-    <div class="pa-ladder"><b>$47</b><span>One-time Security Audit — a scored review of your agent's trust boundaries.</span><b>x402</b><span>No account? Agents pay per call — ${X402_ENDPOINTS.parse.price} per prompt screening, ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}.</span></div>
-  </section>
+    <div class="price-note">$47 one-time Security Audit · x402 pay-per-call from ${X402_ENDPOINTS.parse.price} — ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}, no account required.</div>
+  </div>
+</section>
 
-  <section class="pa-sec">
-    <div class="pa-kicker">Field notes</div>
-    <h2>Durable writing on agent security.</h2>
+<section class="sec-center">
+  <div class="wrap">
+    <div class="cube c">✎</div>
+    <h2>Field <span class="thin">notes.</span></h2>
     <div class="pa-articles">
       ${blogCardsHtml}
     </div>
-  </section>
+  </div>
+</section>
 
-  <section class="pa-final">
-    <div class="pa-kicker">Install in under a minute</div>
-    <h2>Put a checkpoint between the internet and your agents' authority.</h2>
-    <div class="pa-cta-row">
-      <a href="/docs/quickstart" class="btn btn-primary pa-btn-lg">↓ Install Parse — free</a>
-      <a href="/playground" class="btn btn-outline pa-btn-lg">Open the Test Lab</a>
+<div class="closer">
+  <div class="wrap">
+    <h2>Agent governance,<br><em>receipted.</em></h2>
+    <div class="hf-cta">
+      <a class="btn btn-white btn-lg" href="/docs/quickstart">Install Parse</a>
+      <a class="btn btn-ghost btn-lg" href="/support">Talk to security engineering</a>
     </div>
-    <div class="pa-fine">npm install @parsethis/sdk · no credit card, no sales call</div>
-  </section>
-
+  </div>
 </div>
 
+<footer>
+  <div class="wrap">
+    <div class="frow mono" style="font-size:12.5px">
+      <a href="/llms.txt">/llms.txt</a><a href="/openapi.json">/openapi.json</a><a href="/mcp">/mcp</a><a href="/trust">/trust</a><a href="/status">/status</a>
+    </div>
+    <p class="limits">Detection reduces risk; it does not replace least-privilege tools or output validation. © 2026 Parse · agent governance &amp; compliance.</p>
+  </div>
+</footer>
+
 <script>
-(function(){
-  // Install strip tabs
-  var snippets=${installPayload};
-  var ins=document.getElementById('pa-ins');
-  var foot=document.getElementById('pa-insfoot');
-  var cp=document.getElementById('pa-cp');
-  document.querySelectorAll('.pa-install-tabs button').forEach(function(b){
-    b.addEventListener('click',function(){
-      document.querySelectorAll('.pa-install-tabs button').forEach(function(x){x.classList.remove('on');x.setAttribute('aria-selected','false');});
-      b.classList.add('on');b.setAttribute('aria-selected','true');
-      var s=snippets[b.getAttribute('data-t')];
-      if(s&&ins&&foot){ins.textContent=s.code;foot.innerHTML=s.foot;}
-      if(cp){cp.textContent='COPY';cp.classList.remove('done');}
+(function () {
+  document.documentElement.classList.add('js');
+  // scroll-driven hue
+  var root = document.documentElement, ticking = false;
+  function update() {
+    ticking = false;
+    var max = document.body.scrollHeight - window.innerHeight;
+    var p = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+    root.style.setProperty('--scrollp', p.toFixed(4));
+  }
+  window.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(update); } }, { passive: true });
+  update();
+
+  // section reveals
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.sec-center, .closer').forEach(function (el) { io.observe(el); });
+
+  // install strip
+  var snippets = ${installPayload};
+  var ins = document.getElementById('pa-ins'), foot = document.getElementById('pa-insfoot'), cp = document.getElementById('pa-cp');
+  document.querySelectorAll('.install-tabs button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.install-tabs button').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      var sn = snippets[b.getAttribute('data-t')];
+      if (sn && ins && foot) { ins.textContent = sn.code; foot.innerHTML = sn.foot; }
+      if (cp) { cp.textContent = 'COPY'; cp.classList.remove('done'); }
     });
   });
-  if(cp){cp.addEventListener('click',function(){
-    var t=ins?ins.textContent||'':'';
-    if(navigator.clipboard){navigator.clipboard.writeText(t);}
-    cp.textContent='COPIED';cp.classList.add('done');
-    setTimeout(function(){cp.textContent='COPY';cp.classList.remove('done');},1600);
-  });}
+  if (cp) cp.addEventListener('click', function () {
+    if (navigator.clipboard) navigator.clipboard.writeText(ins ? ins.textContent || '' : '');
+    cp.textContent = 'COPIED'; cp.classList.add('done');
+    setTimeout(function () { cp.textContent = 'COPY'; cp.classList.remove('done'); }, 1600);
+  });
 
-  // Agent integration prompt tabs
-  var prompts=${promptsPayload};
-  var tabs=document.querySelectorAll('.pa-tab');
-  var code=document.querySelector('.pa-prompt-text');
-  var copy=document.querySelector('.pa-copy-prompt');
-  function setRoute(route){
-    if(!prompts[route]||!code)return;
-    tabs.forEach(function(tab){
-      var active=tab.dataset.route===route;
-      tab.classList.toggle('is-active',active);
-      tab.setAttribute('aria-selected',active?'true':'false');
+  // agent prompt tabs
+  var prompts = ${promptsPayload};
+  var tabs = document.querySelectorAll('.ptab');
+  var code = document.querySelector('.pa-prompt-text');
+  var copy = document.querySelector('.pa-copy-prompt');
+  function setRoute(route) {
+    if (!prompts[route] || !code) return;
+    tabs.forEach(function (tab) {
+      var active = tab.dataset.route === route;
+      tab.classList.toggle('is-active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
     });
-    code.textContent=prompts[route];
+    code.textContent = prompts[route];
   }
-  tabs.forEach(function(tab){tab.addEventListener('click',function(){setRoute(tab.dataset.route);});});
+  tabs.forEach(function (tab) { tab.addEventListener('click', function () { setRoute(tab.dataset.route); }); });
   setRoute('bearer');
-  if(copy){
-    copy.addEventListener('click',function(){
-      var text=code?code.textContent||'':'';
-      navigator.clipboard.writeText(text).then(function(){
-        copy.textContent='COPIED';copy.classList.add('done');
-        setTimeout(function(){copy.textContent='COPY';copy.classList.remove('done');},1600);
-      }).catch(function(){copy.textContent='Press Cmd+C';});
-    });
-  }
+  if (copy) copy.addEventListener('click', function () {
+    var text = code ? code.textContent || '' : '';
+    navigator.clipboard.writeText(text).then(function () {
+      copy.textContent = 'COPIED'; copy.classList.add('done');
+      setTimeout(function () { copy.textContent = 'COPY'; copy.classList.remove('done'); }, 1600);
+    }).catch(function () { copy.textContent = 'Press Cmd+C'; });
+  });
 })();
 </script>
-`;
 
-  return renderPage({
-    title: "Agent Governance & Compliance for AI Agents",
-    description:
-      `Parse governs agent fleets: registry, runtime policy, boundary screening, and an audit receipt for every decision. ${DETECTION_FACTS.riskCategoryCount} risk categories, ${DETECTION_FACTS.pipelineLayers.length} detection layers, machine-readable by design.`,
-    path: "/",
-    content,
-    baseUrl,
-    jsonLd: [organizationSchema(baseUrl), webApplicationSchema(baseUrl)],
-    bodyAttributes: ab?.experiment && ab?.variant
-      ? `data-experiment="${ab.experiment}" data-variant="${ab.variant}"`
-      : undefined,
-  });
+</body>
+</html>`;
+}
+
+/** Six curved packet trajectories converging on the gate and fanning out. */
+function buildPathKeyframes(): string {
+  const amber = "background: var(--amber); color: var(--amber); box-shadow: 0 0 12px rgba(255,180,84,.65);";
+  const green = "background: var(--green); color: var(--green); box-shadow: 0 0 14px rgba(61,220,132,.8);";
+  const paths: Array<[string, Record<number, number>]> = [
+    ["pathA", { 0: -88, 18: -72, 32: -40, 45: -6, 62: 14, 78: 30, 96: 40 }],
+    ["pathB", { 0: 96, 18: 76, 32: 42, 45: 8, 62: -18, 78: -38, 96: -52 }],
+    ["pathC", { 0: -34, 18: -10, 32: 12, 45: 4, 62: -10, 78: -24, 96: -28 }],
+    ["pathD", { 0: 58, 18: 52, 32: 30, 45: 5, 62: 26, 78: 48, 96: 62 }],
+    ["pathE", { 0: 14, 18: 10, 32: 6, 45: 2, 62: -6, 78: -30, 96: -46 }],
+    ["pathF", { 0: -60, 18: -52, 32: -30, 45: -4, 62: 4, 78: 8, 96: 6 }],
+  ];
+  return paths
+    .map(([name, ys]) => {
+      const seg = (pct: number) => (pct <= 45 ? (-2 + 50 * pct / 46) : (46 + 48 * (pct - 47) / 49));
+      return `@keyframes ${name} {
+    0% { left: -2%; opacity: 0; transform: translateY(${ys[0]}px); ${amber} }
+    6% { opacity: 1; }
+    18% { left: ${seg(18).toFixed(1)}%; transform: translateY(${ys[18]}px); }
+    32% { left: ${seg(32).toFixed(1)}%; transform: translateY(${ys[32]}px); }
+    45% { left: 44%; transform: translateY(${ys[45]}px); ${amber} }
+    47% { left: 46%; transform: translateY(0px); ${green} }
+    62% { left: ${seg(62).toFixed(1)}%; transform: translateY(${ys[62]}px); }
+    78% { left: ${seg(78).toFixed(1)}%; transform: translateY(${ys[78]}px); }
+    88% { opacity: 1; }
+    96% { left: 94%; opacity: 0; transform: translateY(${ys[96]}px); background: var(--green); }
+    100% { left: 94%; opacity: 0; }
+  }`;
+    })
+    .join("\n  ");
 }

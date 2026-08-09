@@ -1,6 +1,6 @@
 # Parse Brand Guidelines
 
-Version 1.1 · 2026-08-09 · Owner: Danny (Kurultai LLC)
+Version 1.2 · 2026-08-09 · Owner: Danny (Kurultai LLC)
 
 This document governs how Parse presents itself: positioning, naming, voice,
 claims, and the visual system. It applies to the public site, docs, dashboards,
@@ -161,14 +161,22 @@ marketing copy — the brand claims section here should mirror those statuses.
 
 ## 6. Logo
 
-- The mark is the rhythmic dots-and-bars lockup (offbeat dots, vertical
-  motion bars) beside the wordmark **Parse** — source of truth is
-  `src/lib/logo.ts`. Do not redraw it per surface.
-- Mark palette: charcoal `#111827`, blue `#0b66ff`, violet `#6d5dfc`, cyan
-  `#06b6d4`. On dark grounds, use the single-color blue or white rendering.
-- Clearspace: the height of one tall bar on all sides. Minimum height 20px.
+- The mark is the **Event Horizon** (adopted 2026-08-09): a black pupil
+  ringed by an accretion glow — amber `#ffb454` inner ring fading to Parse
+  Blue `#3d7bff` at the rim, horizon keyline `#ffd9a0`. It is the trust
+  boundary, the eye that watches everything crossing it, and (per the
+  holographic principle) the surface where the record lives. Source of truth
+  is `src/lib/logo.ts`. Do not redraw it per surface.
+- The mark must read on both dark and light grounds: the pupil stays pure
+  black; the accretion gradient carries the identity.
+- Accretion amber in atmosphere/logo contexts does not violate the
+  risk-color rule (§7); on data surfaces, amber remains reserved for
+  warn-tier content.
+- Clearspace: half the mark's diameter on all sides. Minimum size 16px
+  (favicon-tested).
 - Don'ts: no shields, locks, robots, or hoodie iconography attached to the
-  mark; no gradients through it; no rotation; no shadow.
+  mark; no rotation; no extra glows beyond the built-in gradient; never
+  place a red element inside the pupil.
 
 ## 7. Color
 
@@ -282,6 +290,11 @@ Appendix — approved short descriptions:
 ---
 
 ## Change log
+
+- **v1.2 (2026-08-09):** Logo replaced with the Event Horizon mark. Landing
+  page moved to the dark full-viewport design (serif hero, boundary-gate
+  animation, starfield/aurora, scroll-driven hue); docs/blog/pricing keep the
+  light shell. Accretion amber sanctioned for atmosphere and logo.
 
 - **v1.1 (2026-08-09):** Updated Govern/Enforce/Prove pillars to reflect the
   full platform buildout — agent registry, policy packs, data governance,

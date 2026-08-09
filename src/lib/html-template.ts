@@ -219,8 +219,8 @@ export function renderPage(options: PageOptions): string {
       line-height: 1;
     }
     .parse-logo-mark {
-      width: 70px;
-      height: 35px;
+      width: 32px;
+      height: 32px;
       flex-shrink: 0;
       display: block;
     }
@@ -582,6 +582,14 @@ export function renderPage(options: PageOptions): string {
     }
   </style>
   ${headExtra || ""}
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-CQCF8RMPYR"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-CQCF8RMPYR');
+  </script>
 </head>
 <body${bodyAttributes ? ` ${bodyAttributes}` : ""}>
   <a href="#main-content" class="sr-only">Skip to main content</a>
