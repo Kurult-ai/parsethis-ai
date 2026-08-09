@@ -130,7 +130,7 @@ posted from a dashboard needs its own CSRF token; do not rely on Lax alone.
 
 ## Brand & Claims Enforcement
 
-`docs/brand-guidelines.md` is the binding brand document (positioning: agent
+`docs/brand-guidelines.md` is the binding brand document and `docs/style-guide.md` is the visual-system source of truth (Event Horizon theme: tokens, typography, atmosphere tiers) (positioning: agent
 governance & compliance; primary CTA "Install Parse"; banned vocabulary;
 claims rules). Two CI gates enforce it — both run in `ci.yml` and must pass
 before any page copy ships:

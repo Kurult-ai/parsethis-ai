@@ -61,7 +61,7 @@ Required verification:
     min-height:360px;
   }
   .pricing-x402-panel {
-    background:linear-gradient(145deg, rgba(47, 111, 237, 0.12), rgba(25, 182, 175, 0.09));
+    background:linear-gradient(145deg, rgba(61, 123, 255, 0.10), rgba(6, 182, 212, 0.06));
     border:1px solid rgba(47, 111, 237, 0.34);
     border-radius:8px;
     padding:24px;
@@ -107,7 +107,7 @@ Required verification:
     margin:18px 0;
   }
   .pricing-fact {
-    background:rgba(255,255,255,0.72);
+    background:var(--surface);
     border:1px solid var(--border);
     border-radius:8px;
     padding:12px;
@@ -323,7 +323,7 @@ Required verification:
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Self-service</li>
         <li style="padding:6px 0;">${PLAN_LIMITS.free.sandboxExecutionsPerHour} sandbox/hr</li>
       </ul>
-      <a href="/v1/keys/generate" class="btn btn-outline" style="width:100%;text-align:center;">Generate Free Key</a>
+      <a href="/v1/keys/generate" class="btn btn-outline" style="width:100%;text-align:center;">Install Parse — free</a>
     </div>
 
     <!-- $47 Security Audit (one-time) -->
@@ -374,7 +374,7 @@ Required verification:
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.team.sandboxExecutionsPerHour} sandbox/hr</li>
         <li style="padding:6px 0;">Priority support</li>
       </ul>
-      <a href="mailto:${PRODUCT.contactEmail}?subject=Team%20Plan" class="btn btn-outline" style="width:100%;text-align:center;">Contact Sales</a>
+      <a href="/v1/billing/checkout" class="btn btn-primary" style="width:100%;text-align:center;" onclick="event.preventDefault();(async()=>{try{const k=localStorage.getItem('pfa_key');if(k){const r=await fetch('/v1/billing/checkout',{method:'POST',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'},body:JSON.stringify({tier:'team'})});if(r.ok){const d=await r.json();if(d.url){window.location=d.url;return;}}}const r2=await fetch('/v1/billing/signup-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier:'team'})});if(!r2.ok){const err=await r2.json().catch(()=>({}));alert(err.error||'Signup failed');return;}const d2=await r2.json();if(d2.key)localStorage.setItem('pfa_key',d2.key);if(d2.checkout_url){window.location=d2.checkout_url;}else{window.location='mailto:${PRODUCT.contactEmail}?subject=Team%20Plan';}}catch{window.location='mailto:${PRODUCT.contactEmail}?subject=Team%20Plan';}})();">Start Team</a>
     </div>
 
     <!-- Compliance -->

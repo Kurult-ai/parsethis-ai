@@ -11,7 +11,7 @@ export function renderTechnologyPage(baseUrl: string): string {
 .tech-lede{font-size:18px;line-height:1.65;color:var(--text-dim);max-width:680px;margin:0 0 28px;}
 .tech-actions{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 28px;}
 .tech-signals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;max-width:650px;}
-.tech-signal{background:rgba(255,255,255,0.74);border:1px solid var(--border);border-radius:var(--radius);padding:13px 14px;}
+.tech-signal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:13px 14px;}
 .tech-label,.tech-signal span,.tech-mini-label{display:block;font-size:10px;font-weight:800;letter-spacing:0.11em;text-transform:uppercase;color:var(--text-soft);margin-bottom:5px;}
 .tech-signal strong{display:block;font-size:14px;line-height:1.25;}
 .tech-console{background:#10141a;color:#f7fbff;border:1px solid #202a35;border-radius:14px;box-shadow:0 28px 70px rgba(18,28,40,0.18);overflow:hidden;}

@@ -135,39 +135,41 @@ export function renderPage(options: PageOptions): string {
   <meta name="twitter:title" content="${safeTitle}">
   <meta name="twitter:description" content="${safeDesc}">
   <meta name="twitter:image" content="${escapeHtml(ogImg)}">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="theme-color" content="#000000">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   ${authorMeta}
   ${modifiedTimeMeta}
   ${jsonLdBlocks}
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
-      --bg: #ffffff;
-      --surface: #ffffff;
-      --surface2: #f2f5fa;
-      --surface3: #e9eef6;
-      --border: #e3e8f0;
-      --border2: #cfd7e4;
-      --input: #ffffff;
-      --text: #0f1620;
-      --text-dim: #5a6678;
-      --text-soft: #8b96a8;
-      --accent: #1f5fe0;
-      --accent2: #1a51c2;
-      --accent-dim: #eaf1ff;
-      --green: #10794f;
-      --green-dim: #e6f6ee;
-      --yellow: #9a6410;
-      --yellow-dim: #fdf3e0;
-      --destructive: #c0392f;
-      --destructive-dim: #fdecea;
-      --ring: #1f5fe0;
+      --bg: #000000;
+      --surface: #0a0a0b;
+      --surface2: #131316;
+      --surface3: #1a1a1f;
+      --border: rgba(255,255,255,0.09);
+      --border2: rgba(255,255,255,0.16);
+      --input: #0a0a0b;
+      --text: #f2f2f2;
+      --text-dim: #adb1b3;
+      --text-soft: #878b8e;
+      --accent: #3d7bff;
+      --accent2: #8ab8ff;
+      --accent-dim: rgba(61,123,255,0.12);
+      --green: #3ddc84;
+      --green-dim: rgba(61,220,132,0.12);
+      --yellow: #ffb454;
+      --yellow-dim: rgba(255,180,84,0.12);
+      --destructive: #ff5d5d;
+      --destructive-dim: rgba(255,93,93,0.12);
+      --gold: #ffd9a0;
+      --ring: #3d7bff;
       --radius: 8px;
-      --shadow: 0 18px 45px rgba(15, 22, 32, 0.08);
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+      --serif: 'Instrument Serif', serif;
     }
     body {
       font-family: 'Schibsted Grotesk', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -178,8 +180,15 @@ export function renderPage(options: PageOptions): string {
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
-    a { color: var(--accent2); text-decoration: none; }
-    a:hover { color: var(--accent); }
+    body::before {
+      content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(min(680px, 90vw) 380px at 80% -8%, rgba(61,123,255,.07), transparent 70%),
+        radial-gradient(min(520px, 80vw) 320px at 8% 112%, rgba(109,93,252,.05), transparent 70%);
+    }
+    body > * { position: relative; z-index: 1; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent2); }
     a:focus-visible, button:focus-visible, summary:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-visible {
       outline: 2px solid var(--ring);
       outline-offset: 2px;
@@ -193,9 +202,9 @@ export function renderPage(options: PageOptions): string {
       position: sticky;
       top: 0;
       z-index: 100;
-      background: rgba(247, 248, 250, 0.86);
-      backdrop-filter: blur(16px) saturate(180%);
-      -webkit-backdrop-filter: blur(16px) saturate(180%);
+      background: rgba(0, 0, 0, 0.72);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
     }
     .site-header nav {
@@ -261,8 +270,8 @@ export function renderPage(options: PageOptions): string {
       height: auto;
     }
     .site-header .nav-cta {
-      background: var(--accent);
-      color: white !important;
+      background: var(--text);
+      color: #000 !important;
       padding: 8px 16px;
       border-radius: var(--radius);
       font-weight: 700;
@@ -271,13 +280,14 @@ export function renderPage(options: PageOptions): string {
       transition: all 0.2s;
       letter-spacing: -0.01em;
     }
-    .site-header .nav-cta:hover { background: var(--accent2); text-decoration: none; }
+    .site-header .nav-cta:hover { background: #fff; text-decoration: none; box-shadow: 0 0 0 1.5px rgba(255,217,160,.55), 0 6px 24px rgba(255,180,84,.16); }
 
     /* Headings */
     h1 {
-      font-size: 2.25em;
-      font-weight: 700;
-      letter-spacing: -0.035em;
+      font-family: var(--serif);
+      font-size: 2.6em;
+      font-weight: 400;
+      letter-spacing: -0.01em;
       color: var(--text);
       margin-bottom: 12px;
       line-height: 1.2;
@@ -327,7 +337,7 @@ export function renderPage(options: PageOptions): string {
       box-shadow: 0 1px 0 rgba(24,36,50,0.02);
       transition: border-color 0.2s;
     }
-    .card:hover { border-color: #b8c4cf; }
+    .card:hover { border-color: var(--border2); }
     .card-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -370,10 +380,10 @@ export function renderPage(options: PageOptions): string {
       transition: all 0.2s;
       white-space: nowrap;
     }
-    .btn-primary { background: var(--accent); color: white; box-shadow: 0 8px 18px rgba(0,111,238,0.18); }
-    .btn-primary:hover { background: var(--accent2); color: white; }
-    .btn-outline { background: transparent; color: var(--accent2); border: 1px solid var(--border); }
-    .btn-outline:hover { background: var(--surface2); color: var(--text); border-color: #b8c4cf; }
+    .btn-primary { background: var(--text); color: #000; }
+    .btn-primary:hover { background: #fff; color: #000; box-shadow: 0 0 0 1.5px rgba(255,217,160,.55), 0 8px 30px rgba(255,180,84,.16); }
+    .btn-outline { background: transparent; color: var(--text-dim); border: 1px solid var(--border2); }
+    .btn-outline:hover { background: transparent; color: var(--text); border-color: rgba(255,255,255,.3); }
     .btn-ghost { background: transparent; color: var(--text-dim); }
     .btn-ghost:hover { background: var(--surface2); color: var(--text); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -414,7 +424,7 @@ export function renderPage(options: PageOptions): string {
     /* Terminal code block */
     .terminal {
       position: relative;
-      background: #10141a;
+      background: #0a0a0b;
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 16px 48px 16px 16px;
@@ -497,6 +507,13 @@ export function renderPage(options: PageOptions): string {
       color: var(--text-dim);
       border-top: 1px solid var(--border);
       margin-top: 64px;
+      position: relative;
+      overflow: hidden;
+    }
+    .site-footer::before {
+      content: ""; position: absolute; left: 50%; bottom: -20px; transform: translateX(-50%);
+      width: min(180vw, 2400px); height: 220px; pointer-events: none;
+      background: radial-gradient(50% 100% at 50% 100%, transparent 55%, rgba(255,196,130,.11) 66%, rgba(255,180,84,.035) 76%, transparent 86%);
     }
     .site-footer .footer-inner {
       max-width: 1180px;
@@ -541,12 +558,12 @@ export function renderPage(options: PageOptions): string {
       cursor: pointer;
       transition: all 0.15s;
     }
-    .copy-btn:hover { color: var(--text); border-color: #b8c4cf; }
+    .copy-btn:hover { color: var(--text); border-color: var(--border2); }
     .copy-btn.copied { background: var(--green-dim); color: var(--green); border-color: var(--green); }
 
     /* Screen reader only (a11y) */
     .sr-only { position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0; }
-    .sr-only:focus { position:static;width:auto;height:auto;padding:8px 16px;margin:0;overflow:visible;clip:auto;white-space:normal;background:var(--accent);color:white;z-index:200; }
+    .sr-only:focus { position:static;width:auto;height:auto;padding:8px 16px;margin:0;overflow:visible;clip:auto;white-space:normal;background:var(--accent);color:#000;z-index:200; }
 
     /* Muted text utility */
     .muted { color: var(--text-dim); }

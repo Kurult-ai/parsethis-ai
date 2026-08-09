@@ -1,6 +1,6 @@
 # Parse Brand Guidelines
 
-Version 1.2 · 2026-08-09 · Owner: Danny (Kurultai LLC)
+Version 1.3 · 2026-08-09 · Owner: Danny (Kurultai LLC)
 
 This document governs how Parse presents itself: positioning, naming, voice,
 claims, and the visual system. It applies to the public site, docs, dashboards,
@@ -290,6 +290,12 @@ Appendix — approved short descriptions:
 ---
 
 ## Change log
+
+- **v1.3 (2026-08-09):** The Event Horizon theme applied platform-wide via
+  the shared shell; `docs/style-guide.md` created as the visual-system
+  source of truth (tokens, typography, atmosphere tiers, component idioms).
+  There is no light theme; the playground's self-contained light lab UI is
+  the one temporary exception, queued for conversion.
 
 - **v1.2 (2026-08-09):** Logo replaced with the Event Horizon mark. Landing
   page moved to the dark full-viewport design (serif hero, boundary-gate
