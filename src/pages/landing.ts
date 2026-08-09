@@ -200,7 +200,7 @@ Verification required before reporting done:
   .nav { display: flex; align-items: center; height: 64px; gap: 32px; }
   .logo { display: flex; align-items: center; gap: 10px; color: var(--white); font-family: 'Michroma', sans-serif; font-weight: 400; font-size: 14.5px; letter-spacing: .06em; }
   .logo svg { width: 30px; height: 30px; display: block; }
-  .nav-links { display: flex; gap: 26px; font-size: 15px; color: var(--gray); }
+  .nav-links { display: flex; gap: 26px; font-size: 14px; font-weight: 600; color: var(--gray); }
   .nav-links a:hover { color: var(--white); }
   .nav-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
   .btn { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; padding: 9px 18px; border-radius: 8px; border: 1px solid transparent; transition: all .18s; }
@@ -438,7 +438,7 @@ Verification required before reporting done:
   <div class="wrap nav">
     <a class="logo" href="/">${getLogoMarkSvg()}Parse</a>
     <nav class="nav-links">
-      <a href="/playground">Playground</a><a href="/docs">Docs</a><a href="/pricing">Pricing</a><a href="/trust">Trust</a><a href="/blog">Blog</a>
+      <a href="/playground">Playground</a><a href="/docs">Docs</a><a href="/technology">Technology</a><a href="/pricing">Pricing</a><a href="/blog">Blog</a><a href="/about">About</a>
     </nav>
     <div class="nav-right">
       <a class="btn btn-ghost" href="/admin/login">Sign in</a>

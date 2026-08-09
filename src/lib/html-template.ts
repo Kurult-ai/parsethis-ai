@@ -264,8 +264,8 @@ export function renderPage(options: PageOptions): string {
     .site-header .logo:hover { color: var(--text); text-decoration: none; }
     .site-header nav a {
       color: var(--text-dim);
-      font-size: 13px;
-      font-weight: 650;
+      font-size: 14px;
+      font-weight: 600;
       text-decoration: none;
       transition: color 0.2s;
       position: relative;
@@ -295,6 +295,17 @@ export function renderPage(options: PageOptions): string {
       background: none;
       height: auto;
     }
+    .site-header .nav-signin {
+      border: 1px solid var(--border2);
+      color: var(--text-dim);
+      padding: 7px 15px;
+      border-radius: var(--radius);
+      font-weight: 600;
+      font-size: 13px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .site-header .nav-signin:hover { color: var(--text); border-color: rgba(255,255,255,.3); text-decoration: none; }
     .site-header .nav-cta {
       background: var(--text);
       color: #000 !important;
@@ -617,7 +628,7 @@ export function renderPage(options: PageOptions): string {
       .logo-lockup { align-items:center; }
       .site-header .nav-links { display:none;width:100%;flex-direction:column;gap:12px;padding-top:8px; }
       .site-header .nav-links.open { display:flex; }
-      .site-header .nav-cta { text-align:center; }
+      .site-header .nav-cta, .site-header .nav-signin { text-align:center; }
       .card-grid { grid-template-columns: 1fr; }
       .section-chunk { padding: 28px 0; }
       .site-footer .footer-inner { flex-direction: column; gap: 20px; }
@@ -644,6 +655,7 @@ export function renderPage(options: PageOptions): string {
       <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links" onclick="const n=document.getElementById('nav-links');const open=n.classList.toggle('open');this.setAttribute('aria-expanded',open);this.textContent=open?'\u2715':'\u2630';">\u2630</button>
       <div class="nav-links" id="nav-links">
       ${navLinksHtml}
+      <a href="/admin/login" class="nav-signin">Sign in</a>
       <a href="/get-started" class="nav-cta">Install Parse</a>
       </div>
     </nav>
@@ -672,6 +684,7 @@ export function renderPage(options: PageOptions): string {
           <a href="/llms.txt">llms.txt</a>
           <a href="/openapi.json">OpenAPI</a>
           <a href="/pricing">Pricing</a>
+          <a href="/trust">Trust</a>
           <a href="/status">Status</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
