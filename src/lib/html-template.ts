@@ -13,6 +13,8 @@ export interface PageOptions {
   ogImage?: string;
   author?: string;
   headExtra?: string;
+  /** Extra attributes for the <body> tag (e.g. data-experiment, data-variant). */
+  bodyAttributes?: string;
 }
 
 function formatDate(iso: string): string {
@@ -46,6 +48,7 @@ export function renderPage(options: PageOptions): string {
     ogImage,
     author,
     headExtra,
+    bodyAttributes,
   } = options;
 
   const canonicalUrl = `${baseUrl}${path}`;
@@ -580,7 +583,7 @@ export function renderPage(options: PageOptions): string {
   </style>
   ${headExtra || ""}
 </head>
-<body>
+<body${bodyAttributes ? ` ${bodyAttributes}` : ""}>
   <a href="#main-content" class="sr-only">Skip to main content</a>
   <header class="site-header">
     <nav aria-label="Site">

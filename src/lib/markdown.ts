@@ -69,7 +69,7 @@ renderer.code = function (token: Tokens.Code): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
   const langClass = token.lang ? ` class="language-${token.lang}"` : "";
-  return `<pre><code${langClass}>${escaped}</code></pre>`;
+  return `<div class="code-block"><button class="copy-btn" onclick="copyCode(this)">Copy</button><pre><code${langClass}>${escaped}</code></pre></div>`;
 };
 
 marked.setOptions({

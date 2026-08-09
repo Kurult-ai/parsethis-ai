@@ -14,7 +14,14 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-export function renderLandingPage(baseUrl: string): string {
+export interface LandingPageVariant {
+  /** Experiment name for data-experiment attribute. */
+  experiment?: string;
+  /** Assigned variant key for data-variant attribute. */
+  variant?: string;
+}
+
+export function renderLandingPage(baseUrl: string, ab?: LandingPageVariant): string {
   const bearerPrompt = `Integrate Parse as the prompt protection boundary for this agent runtime.
 
 First-use path:
@@ -90,6 +97,32 @@ Verification required before reporting done:
       </a>`;
     })
     .join("\n");
+
+  // ─── A/B Test: hero-copy variant definitions ───
+  const variantKey = ab?.variant ?? "a";
+  const heroVariants: Record<string, {
+    headline: string;
+    accent: string;
+    lede: string;
+    ctaPrimary: string;
+    ctaSecondary: string;
+  }> = {
+    a: {
+      headline: "Every agent governed.",
+      accent: "Every decision receipted.",
+      lede: `Parse is the governance and compliance layer for your agent fleet — every agent on the record, policy you dial per environment, screening at every trust boundary, and <b>an audit receipt for every decision</b>.`,
+      ctaPrimary: "↓ Install Parse — free",
+      ctaSecondary: "Talk to security engineering",
+    },
+    b: {
+      headline: "Screen every prompt.",
+      accent: "Receipt every decision.",
+      lede: `Parse stops prompt injection, tool hijacking, and data exfiltration at every trust boundary — with <b>an audit trail for every call</b>. Install in under a minute.`,
+      ctaPrimary: "Get your free API key →",
+      ctaSecondary: "See the live demo",
+    },
+  };
+  const hero = heroVariants[variantKey] ?? heroVariants.a;
 
   const content = `
 <style>
@@ -263,11 +296,11 @@ Verification required before reporting done:
 
   <section class="pa-hero">
     <div class="pa-pill"><i></i> Agent governance &amp; compliance</div>
-    <h1>Every agent governed.<br><span class="pa-accent">Every decision receipted.</span></h1>
-    <p class="pa-lede">Parse is the governance and compliance layer for your agent fleet — every agent on the record, policy you dial per environment, screening at every trust boundary, and <b>an audit receipt for every decision</b>.</p>
+    <h1>${hero.headline}<br><span class="pa-accent">${hero.accent}</span></h1>
+    <p class="pa-lede">${hero.lede}</p>
     <div class="pa-cta-row">
-      <a href="/docs/quickstart" class="btn btn-primary pa-btn-lg">↓ Install Parse — free</a>
-      <a href="/support" class="btn btn-outline pa-btn-lg">Talk to security engineering</a>
+      <a href="/docs/quickstart" class="btn btn-primary pa-btn-lg">${hero.ctaPrimary}</a>
+      <a href="/support" class="btn btn-outline pa-btn-lg">${hero.ctaSecondary}</a>
     </div>
 
     <div class="pa-install">
@@ -517,5 +550,8 @@ Verification required before reporting done:
     content,
     baseUrl,
     jsonLd: [organizationSchema(baseUrl), webApplicationSchema(baseUrl)],
+    bodyAttributes: ab?.experiment && ab?.variant
+      ? `data-experiment="${ab.experiment}" data-variant="${ab.variant}"`
+      : undefined,
   });
 }

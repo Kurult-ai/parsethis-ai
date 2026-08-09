@@ -1,6 +1,6 @@
 # Parse Brand Guidelines
 
-Version 1.0 · 2026-08-09 · Owner: Danny (Kurultai LLC)
+Version 1.1 · 2026-08-09 · Owner: Danny (Kurultai LLC)
 
 This document governs how Parse presents itself: positioning, naming, voice,
 claims, and the visual system. It applies to the public site, docs, dashboards,
@@ -35,9 +35,9 @@ policy surface, the screening pipeline, and the evidence trail — together.
 
 | Pillar | Claim | Proof points |
 |--------|-------|--------------|
-| **Govern** | Every agent is on the record and under policy. | Agent registry · enforcement dial (monitor/warn/block) per environment · versioned policy with diffs · data grants, egress rules, volume budgets · kill switch |
-| **Enforce** | Untrusted text is screened before it gets authority. | 3-layer pipeline (pattern ~2ms, semantic, sandbox) · 9 public risk categories · risk 0–10 · p50 14ms · 4 surfaces (input, tool output, generated output, handoff) |
-| **Prove** | Every decision leaves evidence an auditor can read. | Receipt on 100% of verdicts (category, score, action, trace ID) · coverage attestation · SIEM forwarding · SOC 2-aligned controls at /trust · pre-answered vendor questionnaire |
+| **Govern** | Every agent is on the record and under policy. | Agent registry (CRUD, heartbeats, decommission) · enforcement dial (monitor/warn/block) per environment · versioned policy revisions with diffs · policy packs (OWASP-aligned presets) · data grants & data-source registry · egress control · volume budgets · approval matrix · kill switch · signed identity (agent keypairs) · SSO |
+| **Enforce** | Untrusted text is screened before it gets authority. | 4-layer pipeline (pattern ~0.3ms p95, structural & contextual analysis, semantic, sandbox) · 9 risk categories · 126+ pattern rules + contextual & intent detectors · risk 0–10 · 4 surfaces (input, tool output, generated output, handoff) · gateway proxy (OpenAI-compatible) |
+| **Prove** | Every decision leaves evidence an auditor can read. | Receipt on 100% of verdicts (category, score, action, trace ID) · coverage attestation · SIEM forwarding (Splunk, Datadog, Elastic, Sentinel, webhook) · evidence pack export · framework crosswalk (OWASP LLM Top 10, NIST AI RMF, EU AI Act, ISO 42001, SOC 2) · compliance dashboard · SOC 2-aligned controls at /trust · pre-answered vendor questionnaire |
 
 The mechanism mantra — **"screen before authority"** — stays. It describes the
 Enforce pillar, not the whole brand.
@@ -46,7 +46,7 @@ Enforce pillar, not the whole brand.
 1. Builders shipping agents (self-serve; they install, they advocate).
 2. Security engineering (they approve; they need receipts and stated limits).
 3. CISO / procurement (they sign; they need attestation, SOC 2 alignment, the
-   questionnaire).
+   questionnaire, and the framework crosswalk).
 
 **Boilerplate (footer / press):**
 > Parse is the agent governance and compliance platform: registry, runtime
@@ -61,7 +61,8 @@ Enforce pillar, not the whole brand.
   (parsethe.media, media credibility) are separate products. Never conflate
   them; when both appear in one document, use the full names.
 - Product surfaces: **Console** (the dashboards), **Registry** (agent
-  registry), **Test Lab** (public playground), **Trust Center** (/trust).
+  registry), **Test Lab** (public playground), **Trust Center** (/trust),
+  **Compliance Center** (framework crosswalk + evidence pack exports).
 - Endpoints, tools, and code identifiers are written exactly as they exist
   (`POST /v1/parse`, `screen_prompt`) and always set in monospace.
 
@@ -98,20 +99,53 @@ active voice):
 | surface | one of the four boundary types | vector, channel |
 | fleet | an org's set of agents | swarm, army |
 | coverage attestation | screened-vs-unscreened report | coverage score |
+| policy pack | OWASP-aligned preset policy bundle | template, profile |
+| data grant | an agent's access permission to a data source | permission (ok in prose, not as term) |
+| egress rule | a constraint on outbound data flows | firewall rule |
+| evidence pack | tamper-evident compliance export | audit report (ok in prose, not as term) |
+| framework crosswalk | mapping of Parse controls to compliance frameworks | compliance matrix |
+| approval matrix | per-action human-approval requirement table | sign-off list |
+| enforcement floor | the minimum action a flag forces (block/sandbox/log) | threshold |
 
 ## 4. Claims and proof
 
 - Every public claim must be verifiable in the product or docs today.
-  Approved numeric claims: p50 14ms end-to-end, ~2ms pattern layer, 9 public
-  risk categories, 3 detection layers, risk scale 0–10, receipt on every
-  verdict, free tier 10 req/min, 30-day self-serve keys, x402 from $0.001
-  (USDC on Base), Pro $49/10K, Team $199/50K.
+  Approved numeric claims: pattern layer ~0.3ms p95, 126+ pattern rules, 9
+  risk categories, 4 detection layers, risk scale 0–10, receipt on every
+  verdict, free tier 10 req/min, 30-day self-serve keys, x402 from $0.005
+  (USDC on Base), Pro $49/10K, Team $199/50K, Compliance $999/mo, Security
+  Audit $47 one-time.
+- **Four screening surfaces:** input (`POST /v1/parse`), output
+  (`POST /v1/screen-output`), handoff (`POST /v1/agent/trust/verify`),
+  generated-output re-screen. All four produce the same receipt structure.
+- **Pipeline layers are four:** (1) deterministic pattern matching with text
+  normalization, (2) structural & contextual risk analysis (encoded payloads,
+  hidden content, callback URLs, tool-result JSON injection, memory
+  contamination, high-risk action bypass), (3) LLM semantic analysis when
+  configured, (4) optional isolated sandbox execution.
+- **Compliance framework crosswalk** covers OWASP Top 10 for LLM Applications
+  (2025), NIST AI RMF 1.0, EU AI Act, ISO/IEC 42001, and SOC 2 Trust Services
+  Criteria. Language is always "framework crosswalk" or "framework mapping,"
+  never "certification" for frameworks without a cert body.
+- **Detection metrics** (internal, non-claimable without independent holdout):
+  pattern recall ≥0.95, benign FPR ≤0.002, public F1 0.976 on the frozen
+  holdout corpus. Quote these only with the dataset name, date, and the
+  "non-claimable without independent holdout" caveat.
 - **Never fabricate social proof.** No invented customers, logos, quotes,
   case studies, or review scores. Until real customer proof exists, proof is
   the product itself: live latency, the test lab, machine-readable surfaces.
 - SOC 2 language is always "SOC 2-**aligned** controls" until a report exists.
   Never imply certification.
 - Benchmarks are quoted only with dataset, date, and limitations attached.
+
+### Claims-lint CI gate
+
+The `FEATURE_STATUS` registry in `src/lib/product-facts.ts` is the single
+source of truth for shipped vs. building vs. planned features. The
+`claims-lint` CI gate fails the build if a page references a feature marked
+"planned" or "building" without an "in development" qualifier. When a feature
+ships, update `FEATURE_STATUS` to `"shipped"` in the same PR that adds
+marketing copy — the brand claims section here should mirror those statuses.
 
 ## 5. Calls to action
 
@@ -120,8 +154,8 @@ active voice):
   or add the MCP endpoint, or one keygen curl. Never "Get API key" as a
   primary CTA — keys are plumbing, not the product.
 - Secondary CTA by audience: builders → "Open the Test Lab" / "Read the docs";
-  security → "Talk to security engineering"; executive → "Request a security
-  briefing."
+  security → "See the framework crosswalk" / "Talk to security engineering";
+  executive → "Request a security briefing" / "Start a Security Audit."
 - Under a primary CTA, show the self-serve fact line in monospace:
   `npm install @parsethis/sdk · no credit card, no sales call`.
 
@@ -200,9 +234,18 @@ Recurring components that make a surface read as Parse:
   (org "acme-industries").
 - **Enforcement dial:** MONITOR / WARN / BLOCK segmented control, active
   segment filled with Parse Blue.
+- **Framework badge:** small pill, mono, showing a compliance framework
+  short-name (e.g. `OWASP LLM`, `NIST AI RMF`, `SOC 2`). Appears on evidence
+  pack exports and the compliance dashboard.
+- **Policy pack card:** labelled card showing pack name, description, and the
+  enforcement floor it sets (e.g. "block on prompt_injection ≥ 7"). Parse Blue
+  accent on the active pack.
+- **Approval gate:** inline panel that appears when a verdict triggers an
+  approval-request, showing the blocked action, reason, and approve / deny
+  controls.
 - Radius: 8–14px. Borders: 1px hairline everywhere; shadows soft and rare.
-- Miller's law: navigation and section groups hold 4–7 items; a page has at
-  most 7 top-level zones.
+- Miller's law: navigation and section groups hold 4–7 items; a page has
+  at most 7 top-level zones.
 
 ## 10. Motion
 
@@ -235,3 +278,20 @@ Appendix — approved short descriptions:
 - Tagline candidates: "Every agent governed. Every decision receipted." ·
   "Screening is the floor. Governance is the product." · "Screen before
   authority."
+
+---
+
+## Change log
+
+- **v1.1 (2026-08-09):** Updated Govern/Enforce/Prove pillars to reflect the
+  full platform buildout — agent registry, policy packs, data governance,
+  egress control, approval matrix, enforcement floor, signed identity, SSO,
+  gateway proxy, four-layer pipeline (126+ patterns + contextual + intent
+  detection), compliance framework crosswalk (5 frameworks), SIEM forwarding,
+  evidence pack export. Added Compliance tier and Security Audit to approved
+  claims. Added new terminology (policy pack, data grant, egress rule,
+  evidence pack, framework crosswalk, approval matrix, enforcement floor).
+  Added new UI idioms (framework badge, policy pack card, approval gate).
+  Added claims-lint CI gate section.
+- **v1.0 (2026-08-09):** Initial brand guidelines — reposition as agent
+  governance and compliance platform.
