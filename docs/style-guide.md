@@ -98,11 +98,11 @@ sweep, scroll-hue. Never scroll-jacking or parallax.
 
 ## 6. The logo in the system
 
-The Event Horizon mark (see brand guidelines §6) is the only place the full
-accretion gradient appears at rest. The gate animation on the landing uses
-the mark as its core — product surfaces may echo the horizon (black disc +
-gold keyline) for "core"/"origin" elements, but never redraw the gradient
-ring as decoration.
+The Total Eclipse mark (see brand guidelines §6) is the only place the full
+corona gradient and diamond-ring flare appear at rest. The gate animation on
+the landing uses the mark as its core — product surfaces may echo the
+eclipse (black disc + gold rim) for "core"/"origin" elements, but never
+redraw the corona or the flare as decoration.
 
 ## 7. Light surfaces
 

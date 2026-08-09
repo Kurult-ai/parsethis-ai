@@ -1,6 +1,6 @@
 # Parse Brand Guidelines
 
-Version 1.5 · 2026-08-09 · Owner: Danny (Kurultai LLC)
+Version 1.6 · 2026-08-09 · Owner: Danny (Kurultai LLC)
 
 This document governs how Parse presents itself: positioning, naming, voice,
 claims, and the visual system. It applies to the public site, docs, dashboards,
@@ -167,17 +167,21 @@ marketing copy — the brand claims section here should mirror those statuses.
 
 ## 6. Logo
 
-- The mark is the **Event Horizon** (adopted 2026-08-09): a black pupil
-  ringed by an accretion glow — amber `#ffb454` inner ring fading to Parse
-  Blue `#3d7bff` at the rim, horizon keyline `#ffd9a0`. It is the trust
-  boundary, the eye that watches everything crossing it, and (per the
-  holographic principle) the surface where the record lives. Source of truth
-  is `src/lib/logo.ts`. Do not redraw it per surface.
-- The mark must read on both dark and light grounds: the pupil stays pure
-  black; the accretion gradient carries the identity.
-- Accretion amber in atmosphere/logo contexts does not violate the
-  risk-color rule (§7); on data surfaces, amber remains reserved for
-  warn-tier content.
+- The mark is the **Total Eclipse** (adopted 2026-08-09, succeeds the
+  Event Horizon mark): a deep black disc at totality, a warm orange-yellow
+  corona around the limb — gold `#ffd9a0` at the edge through amber
+  `#ffb454` to deep orange `#ff8a3d` at the fade — and the diamond-ring
+  flare `#fff3d6` at the upper-right limb. The reading: Parse stands
+  between raw power and everything else; what passes the boundary is
+  deliberate, visible, and receipted. Source of truth is `src/lib/logo.ts`.
+  Do not redraw it per surface.
+- The mark must read on both dark and light grounds: the disc stays pure
+  black with the hairline gold rim; the corona carries the identity.
+- The corona is all-warm — no blue in the mark. Corona amber/gold in
+  atmosphere/logo contexts does not violate the risk-color rule (§7); on
+  data surfaces, amber remains reserved for warn-tier content.
+- The flare sits at 40° on the upper-right limb, always. It is part of the
+  mark, not a decoration to move or multiply.
 - Clearspace: half the mark's diameter on all sides. Minimum size 16px
   (favicon-tested).
 - Don'ts: no shields, locks, robots, or hoodie iconography attached to the
@@ -297,6 +301,11 @@ Appendix — approved short descriptions:
 
 ## Change log
 
+- **v1.6 (2026-08-09):** Logo replaced with the **Total Eclipse** mark:
+  deep black disc, orange-yellow corona, diamond-ring flare at the
+  upper-right limb. The mark is now all-warm — Parse Blue no longer appears
+  in the logo (it keeps its role for links and active states). §6 rewritten;
+  favicon, header, OG image, and lockup all draw from `src/lib/logo.ts`.
 - **v1.5 (2026-08-09):** Verbiage sweep to complete the expansion. The
   model-facing category (llms.txt, GEO kicker) is now "agent governance and
   compliance platform for AI agents"; the old keyword phrases stay in
