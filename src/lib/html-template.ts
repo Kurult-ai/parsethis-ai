@@ -188,15 +188,15 @@ export function renderPage(options: PageOptions): string {
     }
     body::before {
       background:
-        radial-gradient(42% 30% at 78% 12%, rgba(61,123,255,.085), transparent 68%),
-        radial-gradient(36% 26% at 12% 86%, rgba(109,93,252,.06), transparent 70%),
-        radial-gradient(50% 34% at 50% 108%, rgba(255,180,84,.035), transparent 72%);
+        radial-gradient(42% 30% at 78% 12%, rgba(61,123,255,.11), transparent 68%),
+        radial-gradient(36% 26% at 12% 86%, rgba(109,93,252,.08), transparent 70%),
+        radial-gradient(50% 34% at 50% 108%, rgba(255,180,84,.05), transparent 72%);
       animation: aurora-a 46s ease-in-out infinite alternate;
     }
     body::after {
       background:
-        radial-gradient(34% 26% at 22% 18%, rgba(56,189,248,.05), transparent 70%),
-        radial-gradient(40% 30% at 88% 78%, rgba(61,123,255,.045), transparent 70%);
+        radial-gradient(34% 26% at 22% 18%, rgba(56,189,248,.07), transparent 70%),
+        radial-gradient(40% 30% at 88% 78%, rgba(61,123,255,.06), transparent 70%);
       animation: aurora-b 64s ease-in-out infinite alternate;
     }
     @keyframes aurora-a {
