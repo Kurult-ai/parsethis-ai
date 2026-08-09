@@ -48,7 +48,11 @@ photon-ring hovers — on data surfaces amber stays warn-tier.
 - **Data, code, receipts, labels:** IBM Plex Mono, `tabular-nums` for all
   numerals in data contexts. Micro-labels uppercase, letterspaced ≥ .1em,
   never below 10.5px.
-- Never Inter/Roboto/Arial; never more than these three families.
+- **Wordmark only:** Michroma 400, letterspaced ≥ .05em — exactly where the
+  brand lockup appears (header, footer brand, console masthead, OG image),
+  never in headings, body, or UI.
+- Never Inter/Roboto/Arial; never more than these three text families plus
+  the wordmark face.
 
 ## 3. Atmosphere tiers
 
