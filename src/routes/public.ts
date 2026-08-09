@@ -17,9 +17,6 @@ import { getDeploymentMetadata, getPublicVersionPayload, SERVICE_VERSION } from 
 import { renderPage } from "../lib/html-template.js";
 import { organizationSchema } from "../lib/schema.js";
 import { getLogoLockupSvg } from "../lib/logo.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-const HERO_JOURNEY_JS = readFileSync(join(process.cwd(), "content", "hero-journey.js"), "utf-8");
 import { renderLandingPage } from "../pages/landing.js";
 import { renderFaqPage } from "../pages/faq.js";
 import { renderDocsPage, renderGuidePage, renderComparePage, renderSecurityPage } from "../pages/docs.js";
@@ -499,12 +496,6 @@ publicRoutes.get("/get-started", (c) => {
 });
 
 // Old onboarding wizard merged into /get-started
-publicRoutes.get("/hero-journey.js", (c) => {
-  c.header("Content-Type", "application/javascript; charset=utf-8");
-  c.header("Cache-Control", "public, max-age=300");
-  return c.body(HERO_JOURNEY_JS);
-});
-
 publicRoutes.get("/onboarding", (c) => {
   return c.redirect("/get-started", 301);
 });

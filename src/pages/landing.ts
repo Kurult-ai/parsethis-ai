@@ -262,7 +262,6 @@ Verification required before reporting done:
 
   /* ── the boundary gate (event horizon) ── */
   .hf-scene { position: absolute; top: 0; right: 0; bottom: 0; width: 52%; z-index: 4; pointer-events: none; }
-  #bh { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
   .hf-lane { position: absolute; left: 0; right: 8%; top: 50%; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.10) 20%, rgba(255,255,255,.16) 46%, rgba(255,255,255,.10) 60%, transparent 95%); }
   .hf-disc { position: absolute; left: 46%; top: 50%; transform: translate(-50%,-50%) rotate(-9deg); width: min(430px, 34vw); height: 34px; border-radius: 50%; background: radial-gradient(50% 50% at 50% 50%, rgba(255,196,130,.16), rgba(255,180,84,.05) 62%, transparent 75%); filter: blur(5px); z-index: 1; }
   .hf-ring { position: absolute; left: 46%; top: 50%; transform: translate(-50%,-50%); width: min(300px, 24vw); height: min(300px, 24vw); border-radius: 50%; border: 1px solid rgba(255,255,255,.12); display: grid; place-items: center; animation: ringPulse 12s ease-in-out infinite; }
@@ -449,15 +448,13 @@ Verification required before reporting done:
     .install-body code { font-size: 12px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .hf-ring, .hf-ring-arc, .hf-p, .hf-scroll, .cube::before, .term .cur, .aura-line::before, .lp-wash, .lp-wash2, body::after { animation: none; }
+    .hf-ring, .hf-ring-arc, .hf-p, .hf-scroll, .cube::before, .term .cur, .aura-line::before, body::after { animation: none; }
     .hf-p, .shoot { display: none; }
     .sec-center, .closer { opacity: 1; transform: none; transition: none; }
   }
   </style>
 </head>
 <body${bodyAttrs}>
-<div class="lp-wash" aria-hidden="true"></div><div class="lp-wash2" aria-hidden="true"></div>
-<canvas id="bh" aria-hidden="true"></canvas>
 
 
 <header>
@@ -696,7 +693,6 @@ curl -s ${baseUrl}/v1/parse \\
 
 </script>
 
-<script src="/hero-journey.js" defer></script>
 </body>
 </html>`;
 }
