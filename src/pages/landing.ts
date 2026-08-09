@@ -206,6 +206,16 @@ Verification required before reporting done:
   @keyframes lpswayB { 0% { transform: translateX(1.8%) skewX(2deg); filter: hue-rotate(22deg); } 100% { transform: translateX(-2.2%) skewX(-2.6deg); filter: hue-rotate(-34deg); } }
   @keyframes lpswayC { 0% { transform: translateX(-1.2%) skewX(1.4deg); filter: hue-rotate(22deg); } 100% { transform: translateX(1.6%) skewX(-1.8deg); filter: hue-rotate(-18deg); } }
   @keyframes lpswayD { 0% { transform: translateX(1%) skewX(-1.2deg); filter: hue-rotate(-14deg); } 100% { transform: translateX(-1.4%) skewX(1.6deg); filter: hue-rotate(26deg); } }
+  /* ── landing scene: pure black + whisper of slowly shifting color ── */
+  .lp-wash { position: fixed; inset: -20%; pointer-events: none; z-index: 0; will-change: transform, filter;
+    background:
+      radial-gradient(38% 30% at 22% 18%, rgba(56,189,248,.05), transparent 70%),
+      radial-gradient(34% 28% at 80% 30%, rgba(122,92,255,.045), transparent 70%),
+      radial-gradient(40% 32% at 55% 85%, rgba(61,220,132,.035), transparent 72%),
+      radial-gradient(30% 24% at 10% 78%, rgba(236,110,205,.03), transparent 70%);
+    animation: lpWashDrift 73s ease-in-out infinite alternate, lpWashHue 210s linear infinite; }
+  @keyframes lpWashDrift { from { transform: translate3d(-1.5%, -1%, 0); } to { transform: translate3d(1.8%, 1.4%, 0); } }
+  @keyframes lpWashHue { to { filter: hue-rotate(360deg); } }
   /* ── header ── */
   header { position: sticky; top: 0; z-index: 50; background: rgba(0,0,0,.72); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
   .nav { display: flex; align-items: center; height: 64px; gap: 32px; }
@@ -434,18 +444,15 @@ Verification required before reporting done:
     .install-body code { font-size: 12px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .hf-aurora i, .hf-floor, .hf-ring, .hf-ring-arc, .hf-p, .hf-scroll, .sky i, .shoot, .cube::before, .term .cur, .aura-line::before, .lp-curt, body::after { animation: none; }
+    .hf-ring, .hf-ring-arc, .hf-p, .hf-scroll, .cube::before, .term .cur, .aura-line::before, .lp-wash, body::after { animation: none; }
     .hf-p, .shoot { display: none; }
     .sec-center, .closer { opacity: 1; transform: none; transition: none; }
   }
   </style>
 </head>
 <body${bodyAttrs}>
-<div class="lp-curt lp-c1" aria-hidden="true"></div><div class="lp-curt lp-c2" aria-hidden="true"></div><div class="lp-curt lp-c3" aria-hidden="true"></div><div class="lp-curt lp-c4" aria-hidden="true"></div>
+<div class="lp-wash" aria-hidden="true"></div>
 
-<div class="sky" aria-hidden="true"><i class="s1"></i><i class="s2"></i><i class="s3"></i></div>
-<div class="shoot" aria-hidden="true"></div>
-<div class="shoot sh2" aria-hidden="true"></div>
 
 <header>
   <div class="wrap nav">
@@ -461,10 +468,7 @@ Verification required before reporting done:
 </header>
 
 <div class="hf">
-  <div class="hf-aurora"><i class="a1"></i><i class="a2"></i><i class="a3"></i></div>
-  <div class="hf-floor"></div>
-  <div class="hf-grain"></div>
-
+  
   <div class="hf-scene" aria-hidden="true">
     <div class="hf-lane"></div>
     <div class="hf-disc"></div>
