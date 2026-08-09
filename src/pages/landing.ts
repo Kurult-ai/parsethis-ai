@@ -248,7 +248,8 @@ Verification required before reporting done:
   }
   .hf-ring-arc { position: absolute; inset: -1px; border-radius: 50%; background: conic-gradient(from 0deg, transparent 0 70%, rgba(255,180,84,0) 70%, rgba(255,180,84,.8) 86%, rgba(255,217,160,.95) 94%, transparent 100%); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 1.5px)); mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 1.5px)); animation: arcSpin 14s linear infinite; }
   @keyframes arcSpin { to { transform: rotate(360deg); } }
-  .hf-ring-core { width: 56px; height: 56px; border-radius: 50%; background: #000; border: 1px solid rgba(255,217,160,.35); box-shadow: 0 0 0 1.5px rgba(255,217,160,.5), 0 0 26px rgba(255,180,84,.28), 0 14px 44px rgba(255,180,84,.18); }
+  .hf-ring-core { width: 96px; height: 96px; display: grid; place-items: center; filter: drop-shadow(0 0 26px rgba(255,180,84,.35)) drop-shadow(0 14px 44px rgba(255,180,84,.18)); }
+  .hf-core-mark { width: 100%; height: 100%; display: block; }
 
   .hf-p { position: absolute; top: 50%; left: -2%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: var(--amber); color: var(--amber); box-shadow: 0 0 12px rgba(255,180,84,.65); opacity: 0; animation: pathA 12s linear infinite; }
   .hf-p::after { content: ""; position: absolute; right: 70%; top: 50%; transform: translateY(-50%); width: 52px; height: 2px; border-radius: 2px; background: linear-gradient(270deg, currentColor, transparent); opacity: .45; }
@@ -456,7 +457,7 @@ Verification required before reporting done:
     <div class="hf-disc"></div>
     <div class="hf-ring">
       <span class="hf-ring-arc"></span>
-      <span class="hf-ring-core"></span>
+      <span class="hf-ring-core">${getLogoMarkSvg("hf-core-mark")}</span>
     </div>
     <span class="hf-p p1"></span><span class="hf-p p2"></span><span class="hf-p p3"></span>
     <span class="hf-p p4"></span><span class="hf-p p5"></span><span class="hf-p p6"></span>
