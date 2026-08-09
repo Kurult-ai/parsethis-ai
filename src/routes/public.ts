@@ -21,6 +21,7 @@ import { renderLandingPage } from "../pages/landing.js";
 import { renderFaqPage } from "../pages/faq.js";
 import { renderDocsPage, renderGuidePage, renderComparePage, renderSecurityPage } from "../pages/docs.js";
 import { renderPricingPage } from "../pages/pricing.js";
+import { renderAnalyticsDashboardPage } from "../pages/analytics-dashboard.js";
 import { renderSupportPage } from "../pages/support.js";
 import { renderTechnologyPage } from "../pages/technology.js";
 import { renderGeoPage } from "../pages/geo.js";
@@ -29,6 +30,10 @@ import { getOgImageSvg } from "../pages/og-image.js";
 import { renderScreeningDashboardPage } from "../pages/screening-dashboard.js";
 import { renderComplianceDashboardPage } from "../pages/compliance-dashboard.js";
 import { renderOnboardingPage } from "../pages/onboarding.js";
+import { renderDeveloperActivationPage } from "../pages/developer-activation.js";
+import { renderDemoPage } from "../pages/demo-page.js";
+import { renderCompetitorComparePage, getComparisonSlugs } from "../pages/compare.js";
+import { DEMO_API_KEY } from "../lib/constants.js";
 import { recordActivationEvent, getActivationFunnel, type ActivationEvent } from "../lib/activation-tracker.js";
 import { renderBillingDashboardPage } from "../pages/billing.js";
 import { renderAgentDashboardPage } from "../pages/agent-dashboard.js";
@@ -451,6 +456,21 @@ publicRoutes.get("/", (c) => {
     console.log(`[ab-test] experiment="${experiment}" variant="${variant}" source="hash" ip="${ip}"`);
   }
 
+  // ── Funnel: discovery_hit (Task 14.3) ──
+  // Fire-and-forget; never block the landing page on telemetry.
+  import("../lib/funnel.js").then(({ recordFunnelEvent }) => {
+    recordFunnelEvent("discovery_hit", ip).catch(() => {});
+  }).catch(() => {});
+
+  // ── Attribution: capture UTM params (Task 17.4) ──
+  // Fire-and-forget; first-touch wins, never overwrites.
+  import("../lib/attribution.js").then(({ captureAttribution, visitorHash, extractUtmParams }) => {
+    const vHash = visitorHash(ip, userAgent);
+    const utmParams = extractUtmParams(c.req.query());
+    const referrer = c.req.header("referer") || undefined;
+    captureAttribution(vHash, utmParams, referrer, "/").catch(() => {});
+  }).catch(() => {});
+
   return c.html(renderLandingPage(baseUrl, { experiment, variant }));
 });
 
@@ -458,6 +478,104 @@ publicRoutes.get("/", (c) => {
 publicRoutes.get("/onboarding", (c) => {
   return c.html(renderOnboardingPage(getBaseUrl(c)));
 });
+
+// ── Developer Self-Serve Activation Page (Task 17.1) ──
+publicRoutes.get("/get-started", (c) => {
+  return c.html(renderDeveloperActivationPage(getBaseUrl(c)));
+});
+
+// ── Public No-Login Demo Page (Task 17.2) ──
+publicRoutes.get("/demo", (c) => {
+  return c.html(renderDemoPage(getBaseUrl(c)));
+});
+
+// ── Demo API proxy — rate-limited per IP, uses DEMO_API_KEY internally ──
+const DEMO_RATE_LIMIT_PER_HOUR = 5;
+const DEMO_RATE_WINDOW_SECONDS = 60 * 60;
+const DEMO_RATE_KEY_PREFIX = "demo:rate";
+
+publicRoutes.post("/demo/api", async (c) => {
+  const body = await c.req.json<{ prompt?: string }>().catch(() => null);
+  if (!body || typeof body.prompt !== "string" || body.prompt.trim() === "") {
+    return c.json({ error: "prompt is required and must be a non-empty string" }, 400);
+  }
+  if (body.prompt.length > 10000) {
+    return c.json({ error: "prompt must be less than 10,000 characters" }, 400);
+  }
+
+  if (!DEMO_API_KEY) {
+    return c.json({ error: "Demo key is not configured on this server. Sign up at /get-started for a free API key." }, 503);
+  }
+
+  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+  const rateKey = `${DEMO_RATE_KEY_PREFIX}:${createHash("sha256").update(ip).digest("hex").slice(0, 16)}`;
+
+  // Check rate limit using Redis
+  let useCount = 0;
+  let rateLimited = false;
+  try {
+    if (isRedisAvailable()) {
+      const connected = await ensureRedisConnected();
+      if (connected) {
+        const redis = getRedis();
+        useCount = await redis.incr(rateKey);
+        if (useCount === 1) {
+          await redis.expire(rateKey, DEMO_RATE_WINDOW_SECONDS);
+        }
+        if (useCount > DEMO_RATE_LIMIT_PER_HOUR) {
+          rateLimited = true;
+        }
+      }
+    }
+  } catch {
+    // If Redis is down, allow the request (fail open for demo)
+  }
+
+  if (rateLimited) {
+    return c.json(
+      {
+        error: "Rate limit exceeded",
+        detail: `You've used all ${DEMO_RATE_LIMIT_PER_HOUR} demo requests for this hour. Sign up at /get-started for a free API key with higher limits.`,
+        use_count: useCount,
+      },
+      429,
+    );
+  }
+
+  // Call /v1/parse with the demo key
+  try {
+    const parseUrl = `${getBaseUrl(c)}/v1/parse`;
+    const parseRes = await fetch(parseUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${DEMO_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt: body.prompt }),
+    });
+
+    if (!parseRes.ok) {
+      const errBody = await parseRes.json().catch(() => ({}));
+      return c.json(
+        { error: "Screening failed", detail: (errBody as Record<string, string>).detail || `Upstream HTTP ${parseRes.status}` },
+        parseRes.status as 400 | 401 | 403 | 404 | 429 | 500 | 502 | 503 | 504,
+      );
+    }
+
+    const data = await parseRes.json();
+    return c.json({ ...data, use_count: useCount });
+  } catch (err) {
+    return c.json(
+      { error: "Screening failed", detail: (err as Error).message || "Internal error during screening" },
+      500,
+    );
+  }
+});
+
+// ── Competitive Comparison / SEO Pages (Task 17.3) ──
+// ── Competitor Comparison Pages (Task 17.3) ──
+// Hono doesn't support inline params like /compare/parse-vs-:slug,
+// so we handle parse-vs-* inside the generic /compare/:slug route below.
 
 // ── Activation Funnel Tracking Endpoint (Task 17.1) ──
 // Fire-and-forget client-side tracking for developer activation events.
@@ -606,6 +724,11 @@ publicRoutes.get("/dashboard", (c) => {
   return c.html(getDashboardHTML("See /v1/keys/generate"));
 });
 
+// ── Conversion Analytics Dashboard (Task 14.3) ──
+publicRoutes.get("/dashboard/analytics", authMiddleware("evaluate"), async (c) => {
+  return c.html(await renderAnalyticsDashboardPage(getBaseUrl(c)));
+});
+
 // Admin login — set browser cookie for dashboard access
 publicRoutes.post("/admin/login", async (c) => {
   const body = await c.req.json().catch(() => ({}));
@@ -723,7 +846,7 @@ publicRoutes.get("/dashboard/billing", authMiddleware("evaluate"), async (c) => 
 publicRoutes.get("/dashboard/agents", authMiddleware("evaluate"), async (c) => {
   const baseUrl = getBaseUrl(c);
   const apiKey = c.get("apiKey");
-  const html = await renderAgentDashboardPage(baseUrl, apiKey.id);
+  const html = await renderAgentDashboardPage(baseUrl, apiKey.id, apiKey.name || "Parse");
   return c.html(html);
 });
 
@@ -995,9 +1118,22 @@ publicRoutes.get("/guides/:slug", (c) => {
 
 // Compare pages (markdown content, supports Accept: text/markdown)
 publicRoutes.get("/compare/:slug", (c) => {
+  const slug = c.req.param("slug")!;
+
+  // Check for competitor comparison pages (Task 17.3) — /compare/parse-vs-{slug}
+  if (slug.startsWith("parse-vs-")) {
+    const competitorSlug = slug.replace("parse-vs-", "");
+    const html = renderCompetitorComparePage(competitorSlug, getBaseUrl(c));
+    if (html) {
+      recordGeoSurfaceHit(c, `compare.parse-vs-${competitorSlug}`);
+      return c.html(html);
+    }
+    return c.json({ error: "Comparison page not found", valid_slugs: getComparisonSlugs() }, 404);
+  }
+
   const wantsMarkdown = (c.req.header("Accept") || "").includes("text/markdown");
-  recordGeoSurfaceHit(c, `compare.${c.req.param("slug")}`);
-  const result = renderComparePage(c.req.param("slug"), getBaseUrl(c), wantsMarkdown);
+  recordGeoSurfaceHit(c, `compare.${slug}`);
+  const result = renderComparePage(slug, getBaseUrl(c), wantsMarkdown);
   if (!result) return c.json({ error: "Not found" }, 404);
   if ("markdown" in result) {
     c.header("Content-Type", "text/markdown; charset=utf-8");
@@ -2009,6 +2145,18 @@ publicRoutes.post("/v1/keys/generate", async (c) => {
     // ── Activation Funnel: key_generated (Task 17.1) ──
     recordActivationEvent(key.id, "key_generated", { ip }).catch(() => {});
 
+    // ── Conversion Funnel: signup (Task 14.3) ──
+    import("../lib/funnel.js").then(({ recordFunnelEvent }) => {
+      recordFunnelEvent("signup", ip).catch(() => {});
+    }).catch(() => {});
+
+    // ── Attribution: attach to API key (Task 17.4) ──
+    const userAgent = c.req.header("user-agent") || "";
+    import("../lib/attribution.js").then(({ attachAttributionToApiKey, visitorHash }) => {
+      const vHash = visitorHash(ip, userAgent);
+      attachAttributionToApiKey(key.id, vHash).catch(() => {});
+    }).catch(() => {});
+
     return c.json({
       id: key.id,
       key: key.key,
@@ -2209,5 +2357,63 @@ publicRoutes.get("/v1/payments/stats", authMiddleware("admin"), async (c) => {
     });
   } catch (err) {
     return serviceDependencyProblem(c, err);
+  }
+});
+
+// ── Nurture Email Processor (Task 13.3) ──
+// Cron-triggered endpoint that processes due nurture emails.
+// Auth: requires a valid NURTURE_CRON_KEY header OR admin API key.
+publicRoutes.post("/v1/nurture/process", async (c) => {
+  // Auth: either NURTURE_CRON_KEY env var match or admin key
+  const cronKey = c.req.header("x-nurture-key");
+  const expectedKey = process.env.NURTURE_CRON_KEY;
+
+  if (expectedKey && cronKey === expectedKey) {
+    // Cron key matches — proceed
+  } else {
+    // Fall back to admin API key auth
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return c.json({ error: "Unauthorized — provide x-nurture-key or admin Bearer token" }, 401);
+    }
+    const token = authHeader.slice(7);
+    try {
+      const { validateApiKey: validateKey } = await import("../api-key-service.js");
+      const validation = await validateKey(token);
+      if (!validation || (validation.tier !== "admin" && !validation.scopes.includes("admin"))) {
+        return c.json({ error: "Unauthorized — admin access required" }, 403);
+      }
+    } catch {
+      return c.json({ error: "Authentication failed" }, 401);
+    }
+  }
+
+  try {
+    const { processNurtureEmails } = await import("../lib/email.js");
+    const result = await processNurtureEmails();
+    return c.json({
+      ok: true,
+      processed: result.processed,
+      sent: result.sent,
+      errors: result.errors,
+      details: result.details,
+    });
+  } catch (err) {
+    console.error("[nurture] Process failed:", (err as Error).message);
+    return c.json({ ok: false, error: "Nurture processing failed" }, 500);
+  }
+});
+
+// ── Attribution Stats (Task 17.4) ──
+publicRoutes.get("/v1/attribution/stats", authMiddleware("evaluate"), async (c) => {
+  const daysParam = parseInt(c.req.query("days") || "30", 10);
+  const days = Number.isFinite(daysParam) && daysParam >= 1 && daysParam <= 90 ? daysParam : 30;
+  try {
+    const { getAttributionStats } = await import("../lib/attribution.js");
+    const stats = await getAttributionStats(days);
+    return c.json({ days, ...stats });
+  } catch (err) {
+    console.error("[attribution] Stats failed:", (err as Error).message);
+    return c.json({ error: "Attribution stats unavailable" }, 503);
   }
 });
