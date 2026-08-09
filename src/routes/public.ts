@@ -539,6 +539,96 @@ publicRoutes.get("/dashboard", (c) => {
   return c.html(getDashboardHTML("See /v1/keys/generate"));
 });
 
+// Admin login — set browser cookie for dashboard access
+publicRoutes.post("/admin/login", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const key = body.api_key || c.req.query("key");
+  if (!key) {
+    return c.json({ error: "api_key required" }, 400);
+  }
+  // Validate the key directly against the auth service
+  try {
+    const { validateApiKey: validateKey } = await import("../api-key-service.js");
+    const validation = await validateKey(key);
+    if (!validation) {
+      return c.json({ error: "Invalid API key" }, 401);
+    }
+    const record = validation;
+    // Set httpOnly cookie, 30-day expiry, same-site lax for nav
+    c.header(
+      "Set-Cookie",
+      `parse_admin_key=${encodeURIComponent(key)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000; Secure`
+    );
+    return c.json({ ok: true, tier: record.tier, redirect: "/dashboard/agents" });
+  } catch (err) {
+    return c.json({ error: "Validation failed", detail: String(err) }, 500);
+  }
+});
+
+// Admin logout — clear cookie
+publicRoutes.post("/admin/logout", (c) => {
+  c.header("Set-Cookie", "parse_admin_key=; Path=/; HttpOnly; Max-Age=0");
+  return c.json({ ok: true });
+});
+
+// Admin login page (browser-friendly)
+publicRoutes.get("/admin/login", (c) => {
+  const baseUrl = getBaseUrl(c);
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Parse Admin Login</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0f1117; color: #e1e4e8; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 2rem; max-width: 440px; width: 90%; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
+    p { color: #8b949e; font-size: 0.875rem; margin: 0 0 1.5rem; }
+    input { width: 100%; padding: 0.75rem; border-radius: 8px; border: 1px solid #30363d; background: #0d1117; color: #e1e4e8; font-size: 0.875rem; box-sizing: border-box; font-family: monospace; }
+    input:focus { outline: none; border-color: #0b66ff; }
+    button { width: 100%; padding: 0.75rem; border-radius: 8px; border: none; background: #0b66ff; color: white; font-size: 0.875rem; font-weight: 600; cursor: pointer; margin-top: 1rem; }
+    button:hover { background: #0957d6; }
+    .error { color: #f85149; font-size: 0.8125rem; margin-top: 0.75rem; display: none; }
+    a { color: #0b66ff; text-decoration: none; font-size: 0.8125rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🔐 Parse Admin</h1>
+    <p>Enter your API key to access the dashboard</p>
+    <input type="password" id="key" placeholder="pfa_live_..." autofocus>
+    <button onclick="login()">Login</button>
+    <div class="error" id="err"></div>
+    <p style="margin-top:1.5rem"><a href="/">← Back to site</a></p>
+  </div>
+  <script>
+    async function login() {
+      const key = document.getElementById('key').value.trim();
+      if (!key) return;
+      const res = await fetch('/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: key })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        window.location.href = data.redirect || '/dashboard/agents';
+      } else {
+        const el = document.getElementById('err');
+        el.textContent = data.error || 'Login failed';
+        el.style.display = 'block';
+      }
+    }
+    document.getElementById('key').addEventListener('keydown', e => {
+      if (e.key === 'Enter') login();
+    });
+  </script>
+</body>
+</html>`;
+  return c.html(html);
+});
+
 // Screening dashboard (SSR — queries Prisma directly)
 publicRoutes.get("/dashboard/screening", async (c) => {
   const baseUrl = getBaseUrl(c);

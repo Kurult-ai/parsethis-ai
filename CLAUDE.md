@@ -44,6 +44,30 @@ npm run seed         # Seed database (prisma/seed.ts)
 | screening-metrics.ts | `/v1/screening-metrics` | Screening analytics |
 | billing.ts | `/v1/billing/*` | Stripe checkout, portal, usage, webhook |
 
+### Browser Dashboards (`src/pages/`, mounted in `src/routes/public.ts`)
+
+SSR pages for human operators, distinct from the agent-facing JSON API.
+
+| Path | Page module | Auth |
+|------|-------------|------|
+| `/dashboard/agents` | `agent-dashboard.ts` | `authMiddleware("evaluate")` |
+| `/dashboard/screening` | `screening-dashboard.ts` | none |
+| `/dashboard/compliance` | `compliance-dashboard.ts` | `authMiddleware("evaluate")` |
+| `/dashboard/billing` | `billing.ts` | `authMiddleware("evaluate")` |
+| `/admin/login` | inline in `public.ts` | none (issues the cookie) |
+
+Conventions for these pages:
+- **Read-only.** A GET that renders a dashboard must never write to the database. Org provisioning belongs to the API routes.
+- Every DB read is individually wrapped in `try/catch` so a missing table or a
+  degraded database renders an empty section instead of a 500.
+- Counts shown as totals come from `groupBy`/`count`, never from `.length` of a
+  `findMany` that has a `take` cap.
+- Per-org metrics must be scoped by `orgId` (or by that org's agent ids);
+  an unscoped `count()` leaks other tenants' magnitudes.
+- Absent data renders as `—` / "no data yet", not as a red `0%`.
+- Layout follows Miller's law: a small number of labelled zones, each holding
+  roughly 5-7 items, with the page's primary object given the most weight.
+
 ### Prompt Security Pipeline (`src/parse.ts`)
 Three-layer defense:
 1. **Regex/Pattern** — 100+ patterns in `src/lib/patterns/index.ts` across 9 risk categories, with text normalization (`src/lib/patterns/normalize.ts`)
@@ -87,6 +111,23 @@ Three-layer defense:
 - `prompt-guard` — Standalone prompt guard library
 - `mcp-prompt-guard` — MCP server for prompt guard
 
+### Authentication (`src/auth.ts`)
+
+`authMiddleware(scope)` resolves a key in this order:
+
+1. x402 payment verified upstream → synthetic key, default policy
+2. `Authorization: Bearer <key>` header — the path agents use
+3. `parse_admin_key` cookie — browser-only fallback so the SSR dashboards work
+   without putting a key in the URL
+
+The cookie is set by `POST /admin/login` (httpOnly, Secure, SameSite=Lax,
+30-day expiry) and cleared by `POST /admin/logout`. Query-parameter auth
+(`?api_key=`) is not supported — keys in URLs leak through logs and referrers.
+
+Because the cookie is `SameSite=Lax`, it rides along on top-level navigations
+but not on cross-site subrequests. Any future state-changing browser form
+posted from a dashboard needs its own CSRF token; do not rely on Lax alone.
+
 ## Environment Variables
 
 Requires: `DATABASE_URL`, `REDIS_URL`, `OPENROUTER_API_KEY`
@@ -96,3 +137,24 @@ Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `ST
 ## Testing
 
 Tests use Node's built-in test runner via tsx. Test files are colocated: `src/**/*.test.ts` and `src/__tests__/`.
+
+**Gotcha: `npm test` hangs.** `src/__tests__/keygen-local.test.ts` points Redis
+at an intentionally-unreachable `127.0.0.1:1` to exercise the fallback path, but
+the client retries forever, so the process never exits and the whole batch
+stalls with no output. Run a single file while working:
+
+```bash
+npx tsx --test src/routes/playground.test.ts
+```
+
+Use a per-file timeout when you need a full sweep, so one hanging file cannot
+stall the rest:
+
+```bash
+for f in src/__tests__/*.test.ts src/lib/*.test.ts src/routes/*.test.ts; do
+  timeout 60 npx tsx --test "$f" || echo "PROBLEM: $f"
+done
+```
+
+Fixing this properly means giving that test's Redis client a bounded
+`maxRetriesPerRequest` / `retryStrategy` so it fails fast instead of spinning.

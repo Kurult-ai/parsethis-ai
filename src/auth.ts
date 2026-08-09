@@ -170,24 +170,24 @@ export function authMiddleware(requiredScope?: string) {
       return;
     }
 
-    // Check for deprecated query parameter auth
-    const queryKey = c.req.query("api_key");
-    if (queryKey) {
-      return problem(c, {
-        status: 401,
-        title: "Authentication required",
-        detail: "Query parameter authentication is deprecated. Use Authorization: Bearer header.",
-        code: ErrorCode.AUTH_REQUIRED,
-        retryable: false,
-      });
-    }
-
-    // Extract API key from Authorization header
+    // Extract API key from Authorization header or admin cookie
     const authHeader = c.req.header("Authorization");
     let keyStr: string | undefined;
 
     if (authHeader?.startsWith("Bearer ")) {
       keyStr = authHeader.slice(7).trim();
+    }
+
+    // Fallback: admin cookie for browser dashboard access
+    if (!keyStr) {
+      const cookieHeader = c.req.header("Cookie") || "";
+      const adminCookie = cookieHeader
+        .split(";")
+        .map((c) => c.trim())
+        .find((c) => c.startsWith("parse_admin_key="));
+      if (adminCookie) {
+        keyStr = decodeURIComponent(adminCookie.slice("parse_admin_key=".length));
+      }
     }
 
     if (!keyStr) {
