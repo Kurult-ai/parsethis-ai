@@ -115,8 +115,8 @@ Verification required before reporting done:
       ctaSecondary: "Talk to security engineering",
     },
     b: {
-      headline: "You draw the lines.",
-      accent: "Agents work inside them.",
+      headline: "Give your agents real authority.",
+      accent: "Without losing yours.",
       lede: `Decide what your agent can <b>read, touch, and spend</b>. Parse enforces those boundaries on every call — and writes an audit receipt for every decision. Install in under a minute.`,
       ctaPrimary: "↓ Install Parse — free",
       ctaSecondary: "Talk to security engineering",
