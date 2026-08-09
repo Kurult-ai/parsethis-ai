@@ -115,11 +115,11 @@ Verification required before reporting done:
       ctaSecondary: "Talk to security engineering",
     },
     b: {
-      headline: "Screen every prompt.",
-      accent: "Receipt every decision.",
-      lede: `Parse stops prompt injection, tool hijacking, and data exfiltration at every trust boundary — with <b>an audit trail for every call</b>. Install in under a minute.`,
-      ctaPrimary: "Get your free API key →",
-      ctaSecondary: "See the live demo",
+      headline: "You draw the lines.",
+      accent: "Agents work inside them.",
+      lede: `Decide what your agent can <b>read, touch, and spend</b>. Parse enforces those boundaries on every call — and writes an audit receipt for every decision. Install in under a minute.`,
+      ctaPrimary: "↓ Install Parse — free",
+      ctaSecondary: "Talk to security engineering",
     },
   };
   const hero = heroVariants[variantKey] ?? heroVariants.a;
