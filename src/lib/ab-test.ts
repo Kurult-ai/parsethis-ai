@@ -50,11 +50,8 @@ export const EXPERIMENTS: Record<string, Experiment> = {
  */
 function hashFraction(experiment: string, requestId: string): number {
   const hash = createHash("sha256").update(`${experiment}:${requestId}`).digest();
-  // Use the first 6 bytes as a 48-bit integer → divide by 2^48
-  const hi = hash.readUInt32BE(0);
-  const lo = hash.readUInt32BE(4);
-  const combined = hi * 0x100000000 + lo; // 48-bit value
-  return combined / 0x100000000000000;
+  // Use the first 6 bytes as a 48-bit integer → divide by 2^48 for [0, 1)
+  return hash.readUIntBE(0, 6) / 0x1000000000000;
 }
 
 /**

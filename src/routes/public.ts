@@ -40,6 +40,7 @@ import { problem, ErrorCode, serviceDependencyProblem, type ErrorCodeValue } fro
 import { renderBlogListingPage, renderBlogPostPage, renderBlogPostPageBySlug } from "../pages/blog.js";
 import { PRODUCT, PLAN_LIMITS, DETECTION_FACTS, X402_PAYMENT } from "../lib/product-facts.js";
 import { recordGeoSurfaceHit } from "../lib/geo-analytics.js";
+import { getVariant, isValidVariant, isAdminRequest, getRequestId, EXPERIMENTS } from "../lib/ab-test.js";
 
 export const publicRoutes = new Hono();
 
@@ -431,7 +432,26 @@ publicRoutes.get("/", (c) => {
     });
   }
   const baseUrl = getBaseUrl(c);
-  return c.html(renderLandingPage(baseUrl));
+
+  // ── A/B Testing: deterministic variant assignment ──
+  const experiment = "hero-copy";
+  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+  const userAgent = c.req.header("user-agent") || "";
+  const requestId = getRequestId(ip, userAgent);
+
+  let variant: string;
+  const overrideVariant = c.req.query("variant");
+  const isAdmin = isAdminRequest(c.req.header("Cookie"));
+
+  if (overrideVariant && isAdmin && isValidVariant(experiment, overrideVariant)) {
+    variant = overrideVariant;
+    console.log(`[ab-test] experiment="${experiment}" variant="${variant}" source="admin-override" ip="${ip}"`);
+  } else {
+    variant = getVariant(experiment, requestId);
+    console.log(`[ab-test] experiment="${experiment}" variant="${variant}" source="hash" ip="${ip}"`);
+  }
+
+  return c.html(renderLandingPage(baseUrl, { experiment, variant }));
 });
 
 // ── Developer Onboarding Flow (Task 17.1) ──
@@ -524,6 +544,53 @@ publicRoutes.get("/health/detail", authMiddleware("admin"), async (c) => {
     },
     version: SERVICE_VERSION,
   }, allOk ? 200 : 503);
+});
+
+// ── A/B Testing Dashboard (admin only) ──
+publicRoutes.get("/dashboard/experiments", authMiddleware("admin"), (c) => {
+  const baseUrl = getBaseUrl(c);
+
+  const experimentCards = Object.values(EXPERIMENTS).map((exp) => {
+    const variantRows = exp.variants.map((v) => {
+      const previewUrl = `/?variant=${v.key}`;
+      return `<tr>
+        <td><code>${v.key}</code></td>
+        <td>${exp.name === "hero-copy" ? (v.key === "a" ? "Control" : "Variant") : "Variant"} ${v.key.toUpperCase()}</td>
+        <td style="color:var(--text-dim)">${v.label}</td>
+        <td><a href="${previewUrl}" class="btn btn-outline" style="font-size:12px;padding:5px 12px">Preview</a></td>
+      </tr>`;
+    }).join("\n");
+
+    return `<div class="card" style="margin-bottom:20px">
+      <h2 style="margin-top:0;font-size:20px">${exp.name}</h2>
+      <p class="muted" style="margin-bottom:16px">${exp.description}</p>
+      <div class="table-wrapper">
+        <table>
+          <thead><tr><th>Key</th><th>Name</th><th>Description</th><th>Preview</th></tr></thead>
+          <tbody>${variantRows}</tbody>
+        </table>
+      </div>
+      <p style="margin-top:12px;font-size:13px;color:var(--text-dim)">
+        To preview a variant, visit <code>/?variant=KEY</code> (requires admin login).
+        Visitors are assigned deterministically via IP+User-Agent hash — no cookies needed.
+      </p>
+    </div>`;
+  }).join("\n");
+
+  const content = `
+<div class="section-chunk">
+  <h1>A/B Test Experiments</h1>
+  <p class="muted">Server-side variant assignment for landing page optimization. Deterministic per-visitor — no cookies, no client-side JS.</p>
+  ${experimentCards}
+</div>`;
+
+  return c.html(renderPage({
+    title: "A/B Experiments",
+    description: "A/B testing dashboard for landing page experiments.",
+    path: "/dashboard/experiments",
+    content,
+    baseUrl,
+  }));
 });
 
 // Dashboard
