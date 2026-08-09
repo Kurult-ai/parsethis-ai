@@ -200,7 +200,8 @@ Verification required before reporting done:
   .nav { display: flex; align-items: center; height: 64px; gap: 32px; }
   .logo { display: flex; align-items: center; gap: 10px; color: var(--white); font-family: 'Michroma', sans-serif; font-weight: 400; font-size: 14.5px; letter-spacing: .06em; }
   .logo svg { width: 30px; height: 30px; display: block; }
-  .nav-links { display: flex; gap: 26px; font-size: 14px; font-weight: 600; color: var(--gray); }
+  .nav-links { display: flex; gap: 26px; font-family: 'Michroma', sans-serif; font-size: 11.5px; font-weight: 400; letter-spacing: .05em; color: var(--gray); }
+  .nav .btn { font-family: 'Michroma', sans-serif; font-weight: 400; font-size: 11px; letter-spacing: .03em; }
   .nav-links a:hover { color: var(--white); }
   .nav-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
   .btn { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; padding: 9px 18px; border-radius: 8px; border: 1px solid transparent; transition: all .18s; }

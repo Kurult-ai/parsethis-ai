@@ -1,6 +1,6 @@
 # Parse Brand Guidelines
 
-Version 1.7 · 2026-08-09 · Owner: Danny (Kurultai LLC)
+Version 1.8 · 2026-08-09 · Owner: Danny (Kurultai LLC)
 
 This document governs how Parse presents itself: positioning, naming, voice,
 claims, and the visual system. It applies to the public site, docs, dashboards,
@@ -227,10 +227,11 @@ contrast; red is never used for emphasis of non-risk content.
 
 ## 8. Typography
 
-- **Wordmark only:** Michroma (single weight 400, letterspaced ≥ .05em).
-  It appears exactly where the brand lockup appears — header, footer brand
-  line, console masthead, OG image, lockup SVG — and nowhere else. Never
-  for headings, body, nav links, buttons, or labels.
+- **Wordmark and top bar:** Michroma (single weight 400, letterspaced
+  ≥ .03em). It appears where the brand lockup appears — header, footer
+  brand line, console masthead, OG image, lockup SVG — and across the top
+  navigation bar (nav links, Sign in, Install Parse) at 11–12px. Nowhere
+  else: never for headings, body, in-page buttons, or labels.
 - **UI and display:** Schibsted Grotesk (weights 400–800). Display at
   -0.03em tracking; never below 400.
 - **Data, code, endpoints, receipts:** IBM Plex Mono. All numerals in data
@@ -306,6 +307,9 @@ Appendix — approved short descriptions:
 
 ## Change log
 
+- **v1.8 (2026-08-09):** Michroma's scope widened from wordmark-only to
+  wordmark + top navigation bar (nav links, Sign in, Install Parse,
+  11–12px). In-page buttons, headings, and body stay Schibsted.
 - **v1.7 (2026-08-09):** Wordmark set in Michroma (Eurostile lineage —
   the aerospace-instrument face), wordmark-only: header lockup, footer
   brand, console masthead, lockup SVG, OG image. UI text stays Schibsted;

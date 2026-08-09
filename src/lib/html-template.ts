@@ -264,8 +264,10 @@ export function renderPage(options: PageOptions): string {
     .site-header .logo:hover { color: var(--text); text-decoration: none; }
     .site-header nav a {
       color: var(--text-dim);
-      font-size: 14px;
-      font-weight: 600;
+      font-family: 'Michroma', sans-serif;
+      font-size: 11.5px;
+      font-weight: 400;
+      letter-spacing: .05em;
       text-decoration: none;
       transition: color 0.2s;
       position: relative;
@@ -298,10 +300,10 @@ export function renderPage(options: PageOptions): string {
     .site-header .nav-signin {
       border: 1px solid var(--border2);
       color: var(--text-dim);
-      padding: 7px 15px;
+      padding: 8px 15px;
       border-radius: var(--radius);
-      font-weight: 600;
-      font-size: 13px;
+      font-weight: 400;
+      font-size: 11px;
       text-decoration: none;
       transition: all 0.2s;
     }
@@ -309,13 +311,12 @@ export function renderPage(options: PageOptions): string {
     .site-header .nav-cta {
       background: var(--text);
       color: #000 !important;
-      padding: 8px 16px;
+      padding: 9px 16px;
       border-radius: var(--radius);
-      font-weight: 700;
-      font-size: 13px;
+      font-weight: 400;
+      font-size: 11px;
       text-decoration: none;
       transition: all 0.2s;
-      letter-spacing: -0.01em;
     }
     .site-header .nav-cta:hover { background: #fff; text-decoration: none; box-shadow: 0 0 0 1.5px rgba(255,217,160,.55), 0 6px 24px rgba(255,180,84,.16); }
 
