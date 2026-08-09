@@ -29,8 +29,7 @@ import { getFaviconSvg } from "../pages/favicon.js";
 import { getOgImageSvg } from "../pages/og-image.js";
 import { renderScreeningDashboardPage } from "../pages/screening-dashboard.js";
 import { renderComplianceDashboardPage } from "../pages/compliance-dashboard.js";
-import { renderOnboardingPage } from "../pages/onboarding.js";
-import { renderDeveloperActivationPage } from "../pages/developer-activation.js";
+import { renderGetStartedPage } from "../pages/get-started.js";
 import { renderDemoPage } from "../pages/demo-page.js";
 import { renderCompetitorComparePage, getComparisonSlugs } from "../pages/compare.js";
 import { DEMO_API_KEY } from "../lib/constants.js";
@@ -474,14 +473,14 @@ publicRoutes.get("/", (c) => {
   return c.html(renderLandingPage(baseUrl, { experiment, variant }));
 });
 
-// ── Developer Onboarding Flow (Task 17.1) ──
-publicRoutes.get("/onboarding", (c) => {
-  return c.html(renderOnboardingPage(getBaseUrl(c)));
+// ── Get Started / Install Parse (consolidated activation page) ──
+publicRoutes.get("/get-started", (c) => {
+  return c.html(renderGetStartedPage(getBaseUrl(c)));
 });
 
-// ── Developer Self-Serve Activation Page (Task 17.1) ──
-publicRoutes.get("/get-started", (c) => {
-  return c.html(renderDeveloperActivationPage(getBaseUrl(c)));
+// Old onboarding wizard merged into /get-started
+publicRoutes.get("/onboarding", (c) => {
+  return c.redirect("/get-started", 301);
 });
 
 // ── Public No-Login Demo Page (Task 17.2) ──

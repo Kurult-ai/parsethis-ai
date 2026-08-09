@@ -101,7 +101,6 @@ export function renderPage(options: PageOptions): string {
 
   // Build nav links with aria-current for active page
   const navLinks = [
-    { href: "/onboarding", label: "Get Started" },
     { href: "/playground", label: "Playground" },
     { href: "/docs", label: "Docs" },
     { href: "/technology", label: "Technology" },
@@ -616,7 +615,7 @@ export function renderPage(options: PageOptions): string {
       <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links" onclick="const n=document.getElementById('nav-links');const open=n.classList.toggle('open');this.setAttribute('aria-expanded',open);this.textContent=open?'\u2715':'\u2630';">\u2630</button>
       <div class="nav-links" id="nav-links">
       ${navLinksHtml}
-      <a href="/docs/quickstart" class="nav-cta">Install Parse</a>
+      <a href="/get-started" class="nav-cta">Install Parse</a>
       </div>
     </nav>
   </header>

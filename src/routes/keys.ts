@@ -12,7 +12,7 @@ keysRoutes.get("/v1/keys", authMiddleware("admin"), async (c) => {
 });
 
 keysRoutes.post("/v1/keys", authMiddleware("admin"), async (c) => {
-  const body = await c.req.json<{ name: string; scopes?: string[]; orgId?: string }>();
+  const body = await c.req.json<{ name: string; scopes?: string[]; orgId?: string; email?: string }>();
 
   if (!body.name || typeof body.name !== "string") {
     return c.json({ error: "name is required and must be a string" }, 400);
@@ -53,6 +53,20 @@ keysRoutes.post("/v1/keys", authMiddleware("admin"), async (c) => {
   }
 
   const key = await createApiKey(body.name, body.scopes || ["analyze", "evaluate", "chat"], undefined, orgId);
+
+  // Send welcome email if email is provided
+  if (body.email) {
+    const { sendEmail, welcomeEmail, enrollInNurture } = await import("../lib/email.js");
+    const template = welcomeEmail(body.name);
+    sendEmail({ to: body.email, ...template }).catch((err) => {
+      console.error("[email] Welcome email failed:", err);
+    });
+    // Enroll user in the 5-email nurture sequence (Day 1, 3, 5, 7)
+    enrollInNurture(body.email).catch((err) => {
+      console.error("[nurture] Enrollment failed:", err);
+    });
+  }
+
   return c.json(key, 201);
 });
 

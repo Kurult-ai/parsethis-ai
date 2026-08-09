@@ -441,7 +441,7 @@ Verification required before reporting done:
     </nav>
     <div class="nav-right">
       <a class="btn btn-ghost" href="/admin/login">Sign in</a>
-      <a class="btn btn-white" href="/docs/quickstart">Install Parse</a>
+      <a class="btn btn-white" href="/get-started">Install Parse</a>
     </div>
   </div>
 </header>
@@ -470,7 +470,7 @@ Verification required before reporting done:
       <h1>${hero.l1}<br><em>${hero.l2}</em></h1>
       <p class="hf-lede">${hero.lede}</p>
       <div class="hf-cta">
-        <a class="btn btn-white btn-lg" href="/docs/quickstart">Install Parse</a>
+        <a class="btn btn-white btn-lg" href="/get-started">Install Parse</a>
         <a class="btn btn-ghost btn-lg" href="/docs">Documentation</a>
       </div>
       <div class="hf-fine">npm install @parsethis/sdk · no credit card, no sales call</div>
@@ -578,7 +578,7 @@ curl -s ${baseUrl}/v1/parse \\
     <div class="cube v">$</div>
     <h2>Start free. <span class="thin">Scale on evidence.</span></h2>
     <div class="price-strip aura-line">
-      <div class="prow"><span class="t">Free</span><span class="d">${PLAN_LIMITS.free.requestsPerMinute} req/min · all endpoints · test lab</span><span class="p">$0<small>forever</small></span><a class="go" href="/docs/quickstart">Install →</a></div>
+      <div class="prow"><span class="t">Free</span><span class="d">${PLAN_LIMITS.free.requestsPerMinute} req/min · all endpoints · test lab</span><span class="p">$0<small>forever</small></span><a class="go" href="/get-started">Install →</a></div>
       <div class="prow"><span class="t">Pro</span><span class="d">10K screenings · full pipeline · dashboard</span><span class="p">$49<small>/mo</small></span><a class="go" href="/pricing">Deploy →</a></div>
       <div class="prow"><span class="t">Team</span><span class="d">50K screenings · registry · SIEM forwarding</span><span class="p">$199<small>/mo</small></span><a class="go" href="/pricing">Scale →</a></div>
       <div class="prow"><span class="t">Compliance</span><span class="d">attestation · evidence packs · review support</span><span class="p">$999<small>/mo</small></span><a class="go" href="/pricing">Engage →</a></div>
@@ -601,7 +601,7 @@ curl -s ${baseUrl}/v1/parse \\
   <div class="wrap">
     <h2>Agent governance,<br><em>receipted.</em></h2>
     <div class="hf-cta">
-      <a class="btn btn-white btn-lg" href="/docs/quickstart">Install Parse</a>
+      <a class="btn btn-white btn-lg" href="/get-started">Install Parse</a>
       <a class="btn btn-ghost btn-lg" href="/support">Talk to security engineering</a>
     </div>
   </div>

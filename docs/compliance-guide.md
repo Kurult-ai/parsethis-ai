@@ -118,8 +118,8 @@ curl https://www.parsethis.ai/v1/compliance/coverage \
   "title": "Prompt Injection",
   "parse_categories": ["prompt_injection", "indirect_injection"],
   "parse_capabilities": [
-    "3-layer prompt security pipeline",
-    "100+ injection patterns",
+    "4-layer detection pipeline (pattern, structural, semantic, sandbox)",
+    "126+ pattern rules",
     "indirect injection detection",
     "nonce-tagged delimiters"
   ],

@@ -211,7 +211,7 @@ export function renderAboutPage(baseUrl: string): string {
   <div class="about-cta-actions">
     <a href="/playground" class="btn btn-primary">Get started for free</a>
     <a href="/trust" class="btn btn-outline">Trust &amp; Security</a>
-    <a href="/docs/quickstart" class="btn btn-outline">Install Parse</a>
+    <a href="/get-started" class="btn btn-outline">Install Parse</a>
   </div>
 </div>
 `;

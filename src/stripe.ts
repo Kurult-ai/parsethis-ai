@@ -60,6 +60,7 @@ export function isStripeEnabled(): boolean {
 export const TIER_CONFIG = {
   pro: { priceEnvVar: "STRIPE_PRO_PRICE_ID", includedRequests: 10_000, overageRate: 0.003, rateLimit: PLAN_LIMITS.pro.requestsPerMinute },
   team: { priceEnvVar: "STRIPE_TEAM_PRICE_ID", includedRequests: 50_000, overageRate: 0.002, rateLimit: PLAN_LIMITS.team.requestsPerMinute },
+  compliance: { priceEnvVar: "STRIPE_AUDIT_PRICE_ID", includedRequests: 200_000, overageRate: 0.001, rateLimit: PLAN_LIMITS.compliance.requestsPerMinute },
 } as const;
 
 export type PaidTier = keyof typeof TIER_CONFIG;
