@@ -207,19 +207,7 @@ Verification required before reporting done:
   @keyframes lpswayC { 0% { transform: translateX(-1.2%) skewX(1.4deg); filter: hue-rotate(22deg); } 100% { transform: translateX(1.6%) skewX(-1.8deg); filter: hue-rotate(-18deg); } }
   @keyframes lpswayD { 0% { transform: translateX(1%) skewX(-1.2deg); filter: hue-rotate(-14deg); } 100% { transform: translateX(-1.4%) skewX(1.6deg); filter: hue-rotate(26deg); } }
   /* ── landing scene: pure black + whisper of slowly shifting color ── */
-  .lp-wash, .lp-wash2 { position: fixed; inset: -22%; pointer-events: none; z-index: 0; will-change: transform; }
-  .lp-wash {
-    background: radial-gradient(42% 34% at 24% 22%, rgba(45,90,200,.055), transparent 70%),
-                radial-gradient(36% 30% at 78% 68%, rgba(35,70,170,.045), transparent 72%);
-    animation: lpDriftA 67s ease-in-out infinite alternate;
-  }
-  .lp-wash2 {
-    background: radial-gradient(38% 30% at 72% 18%, rgba(30,120,70,.05), transparent 70%),
-                radial-gradient(34% 28% at 18% 80%, rgba(25,100,60,.04), transparent 72%);
-    animation: lpDriftB 89s ease-in-out infinite alternate;
-  }
-  @keyframes lpDriftA { from { transform: translate3d(-2%, -1.4%, 0); } to { transform: translate3d(2.2%, 1.8%, 0); } }
-  @keyframes lpDriftB { from { transform: translate3d(1.8%, 1.2%, 0); } to { transform: translate3d(-2.4%, -1.6%, 0); } }
+ }
   /* ── header ── */
   header { position: sticky; top: 0; z-index: 50; background: rgba(0,0,0,.72); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
   .nav { display: flex; align-items: center; height: 64px; gap: 32px; }
