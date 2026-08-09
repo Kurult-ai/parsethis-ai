@@ -111,8 +111,15 @@ export function renderBlogPostPage(
   const fm = file.frontmatter;
   const title = (fm.title as string) || slug;
   const description = (fm.description as string) || "";
-  const datePublished = (fm.date as string) || "2026-04-06";
-  const dateModified = (fm.lastUpdated as string) || datePublished;
+  // YAML parses unquoted dates (date: 2026-03-06) into Date objects; quoted
+  // ones stay strings. Normalize both so downstream string ops never crash.
+  const fmDate = (value: unknown, fallback: string): string => {
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    if (typeof value === "string" && value) return value;
+    return fallback;
+  };
+  const datePublished = fmDate(fm.date, "2026-04-06");
+  const dateModified = fmDate(fm.lastUpdated, datePublished);
   const author = (fm.author as string) || "Parse Team";
   const path = `/blog/${category}/${slug}`;
 
