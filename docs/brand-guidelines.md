@@ -1,6 +1,6 @@
 # Parse Brand Guidelines
 
-Version 1.3 · 2026-08-09 · Owner: Danny (Kurultai LLC)
+Version 1.4 · 2026-08-09 · Owner: Danny (Kurultai LLC)
 
 This document governs how Parse presents itself: positioning, naming, voice,
 claims, and the visual system. It applies to the public site, docs, dashboards,
@@ -41,6 +41,12 @@ policy surface, the screening pipeline, and the evidence trail — together.
 
 The mechanism mantra — **"screen before authority"** — stays. It describes the
 Enforce pillar, not the whole brand.
+
+**Where the pillars surface:** marketing pages present the message house in
+house order (Govern → Enforce → Prove). Developer surfaces may lead with
+Enforce because that is the install journey — /docs is organized as
+Start here → Enforce → Govern → Prove → boundary guides → reference. The
+pillar names never change per surface; only the order may.
 
 **Audiences, in priority order:**
 1. Builders shipping agents (self-serve; they install, they advocate).
@@ -291,6 +297,14 @@ Appendix — approved short descriptions:
 
 ## Change log
 
+- **v1.4 (2026-08-09):** Documentation IA aligned to the message house: /docs
+  is now organized Start here → Enforce → Govern → Prove → boundary guides →
+  reference, with the governance and compliance endpoints (registry, budgets,
+  grants, approvals, egress rules, audit trail, evidence export, SIEM,
+  coverage) documented as first-class surface. Added the "where the pillars
+  surface" rule to §1: pillar names are fixed, order may follow the surface's
+  journey. Activation consolidated at /get-started ("Install Parse" CTA
+  target); the old /onboarding wizard 301s there.
 - **v1.3 (2026-08-09):** The Event Horizon theme applied platform-wide via
   the shared shell; `docs/style-guide.md` created as the visual-system
   source of truth (tokens, typography, atmosphere tiers, component idioms).

@@ -42,6 +42,23 @@ import { renderPromptGuardLandingPage } from "../pages/prompt-guard-landing.js";
 import { renderPromptGuardPlaygroundPage } from "../pages/prompt-guard-playground.js";
 import { problem, ErrorCode, serviceDependencyProblem, type ErrorCodeValue } from "../lib/problem-response.js";
 import { renderBlogListingPage, renderBlogPostPage, renderBlogPostPageBySlug } from "../pages/blog.js";
+import {
+  createUser,
+  authenticateUser,
+  createSession,
+  getSessionUser,
+  destroySession,
+  createPasswordReset,
+  consumePasswordReset,
+  getUserByEmail,
+  hashPassword,
+  type PublicUser,
+} from "../lib/user-auth.js";
+import { renderSignupPage } from "../pages/signup-page.js";
+import { renderLoginPage } from "../pages/login-page.js";
+import { renderForgotPasswordPage } from "../pages/forgot-password-page.js";
+import { renderAccountDashboard } from "../pages/account-dashboard.js";
+import { createPortalSession, isStripeEnabled } from "../stripe.js";
 import { PRODUCT, PLAN_LIMITS, DETECTION_FACTS, X402_PAYMENT } from "../lib/product-facts.js";
 import { recordGeoSurfaceHit } from "../lib/geo-analytics.js";
 import { getVariant, isValidVariant, isAdminRequest, getRequestId, EXPERIMENTS } from "../lib/ab-test.js";
@@ -868,9 +885,51 @@ publicRoutes.get("/docs", (c) => {
   const content = `
 <h1>Documentation</h1>
 
-<p class="answer-capsule">${PRODUCT.description} Get started in under 5 minutes.</p>
+<p class="answer-capsule">${PRODUCT.description} Around that screening core, Parse is an agent governance and compliance layer: register your agents, set the boundaries they operate inside, and keep a receipt for every decision.</p>
 
-<h2>Quick Start</h2>
+<h2>Start here</h2>
+
+<ul>
+  <li><a href="/get-started">Install Parse</a> — generate a key, copy a runtime snippet, make your first screened call. Under three minutes, no account.</li>
+  <li><a href="/docs/quickstart">Quickstart</a> — paste-into-your-agent install prompts for Claude Code, Hermes, OpenClaw, Codex, and Cursor. Agents can fetch it as markdown.</li>
+  <li><a href="/playground">Playground</a> — test screening interactively against real injection attempts.</li>
+  <li><a href="/demo">Demo</a> — try a screening call with no key at all.</li>
+</ul>
+
+<h2>The governance loop</h2>
+
+<p>Parse covers three jobs. Each has its own endpoints, and the sections below follow the same order.</p>
+
+<div class="table-wrapper">
+  <table>
+    <thead>
+      <tr>
+        <th>Job</th>
+        <th>What it means</th>
+        <th>Surface</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Enforce</strong></td>
+        <td>Screen untrusted text at every trust boundary before it gains authority.</td>
+        <td><code>/v1/parse</code>, <code>/v1/screen-output</code>, <code>/v1/agent/trust/verify</code></td>
+      </tr>
+      <tr>
+        <td><strong>Govern</strong></td>
+        <td>Register agents and set the boundaries they operate inside: policies, approvals, budgets, data grants, egress rules.</td>
+        <td><code>/v1/agents</code>, <code>/v1/policy</code>, <code>/v1/approvals</code>, <code>/v1/egress-rules</code></td>
+      </tr>
+      <tr>
+        <td><strong>Prove</strong></td>
+        <td>Show what happened: audit trail, coverage, evidence export, SIEM forwarding.</td>
+        <td><code>/v1/compliance/*</code>, <code>/v1/coverage</code>, <a href="/dashboard/compliance">compliance dashboard</a></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2>Enforce — screen every trust boundary</h2>
 
 <ol>
   <li><strong>Generate an API key:</strong> <code>POST /v1/keys/generate</code> (no auth required). Keys expire in 30 days.</li>
@@ -878,8 +937,6 @@ publicRoutes.get("/docs", (c) => {
   <li><strong>Screen generated output:</strong> Call <code>POST /v1/screen-output</code> before forwarding model output to users, tools, memory, or other agents.</li>
   <li><strong>Interpret results:</strong> Follow <code>suggested_action</code> or <code>recommended_action</code>; risk score 7+ should be blocked by default.</li>
 </ol>
-
-<h2>Core Endpoints</h2>
 
 <div class="table-wrapper">
   <table>
@@ -910,21 +967,101 @@ publicRoutes.get("/docs", (c) => {
         <td><code>POST /v1/keys/generate</code></td>
         <td>Generate a new API key (self-service, no auth required).</td>
       </tr>
+    </tbody>
+  </table>
+</div>
+
+<h2>Govern — registry, policy, and boundaries</h2>
+
+<p class="answer-capsule">Governance starts with knowing which agents exist and what each one is allowed to do. The agent registry holds identity and risk posture; policies, approvals, budgets, grants, and egress rules set the boundaries.</p>
+
+<div class="table-wrapper">
+  <table>
+    <thead>
       <tr>
-        <td><code>GET /v1/policy</code></td>
-        <td>Get current screening policy for your API key.</td>
+        <th>Endpoint</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>POST/GET /v1/agents</code></td>
+        <td>Register and list your agents. Each registered agent gets identity, risk level, and check-in tracking — visible on the <a href="/dashboard/agents">agent dashboard</a>.</td>
       </tr>
       <tr>
-        <td><code>PUT /v1/policy</code></td>
-        <td>Update screening policy (auto-block threshold, screen all prompts).</td>
+        <td><code>GET/PUT/DELETE /v1/agents/:id</code></td>
+        <td>Read, update, freeze, or retire a registered agent.</td>
       </tr>
       <tr>
-        <td><code>DELETE /v1/policy</code></td>
-        <td>Reset screening policy to defaults.</td>
+        <td><code>GET/POST /v1/agents/:id/budgets</code></td>
+        <td>Volume budgets per agent — cap how much work an agent can do before a human looks.</td>
+      </tr>
+      <tr>
+        <td><code>GET/POST /v1/agents/:id/grants</code></td>
+        <td>Data grants — declare which data sources an agent may touch.</td>
+      </tr>
+      <tr>
+        <td><code>GET/PUT/DELETE /v1/policy</code></td>
+        <td>Screening policy for your key: auto-block threshold, screen-all mode.</td>
+      </tr>
+      <tr>
+        <td><code>POST /v1/approvals</code></td>
+        <td>Owner approval workflow — when screening returns <code>request_owner_approval</code>, file the request and verify the owner's signed answer.</td>
+      </tr>
+      <tr>
+        <td><code>GET/POST /v1/egress-rules</code></td>
+        <td>Egress control — rules and templates for where agent output is allowed to go, with a test endpoint.</td>
       </tr>
     </tbody>
   </table>
 </div>
+
+<h2>Prove — audit trail and evidence</h2>
+
+<p class="answer-capsule">Every screening decision leaves a receipt. The compliance endpoints turn those receipts into an audit trail, coverage reports, framework mappings, and exportable evidence packs; SIEM forwarding streams them into the tools your security team already runs.</p>
+
+<div class="table-wrapper">
+  <table>
+    <thead>
+      <tr>
+        <th>Endpoint</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>GET /v1/compliance/audit-trail</code></td>
+        <td>The decision log: what was screened, what verdict came back, what the agent did.</td>
+      </tr>
+      <tr>
+        <td><code>GET /v1/compliance/summary</code></td>
+        <td>Posture overview: verdict counts, coverage, policy state.</td>
+      </tr>
+      <tr>
+        <td><code>POST /v1/compliance/export</code></td>
+        <td>Evidence pack export for auditors and vendor reviews.</td>
+      </tr>
+      <tr>
+        <td><code>GET /v1/compliance/framework-map</code></td>
+        <td>Map screening controls to compliance framework line items.</td>
+      </tr>
+      <tr>
+        <td><code>POST /v1/compliance/siem</code></td>
+        <td>SIEM forwarding: register a destination, test it, stream decisions.</td>
+      </tr>
+      <tr>
+        <td><code>GET /v1/coverage</code></td>
+        <td>Boundary coverage: which of your declared trust boundaries are actually being screened.</td>
+      </tr>
+      <tr>
+        <td><code>GET /v1/screening/metrics</code></td>
+        <td>Screening analytics over time — see <a href="/docs/screening-metrics">the metrics guide</a>.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Human-readable views of the same data: the <a href="/dashboard/compliance">compliance dashboard</a> and <a href="/dashboard/agents">agent dashboard</a> (both need an API key), and the <a href="/trust">trust page</a> for security posture and the pre-answered vendor questionnaire. Org-wide controls — SIEM forwarding, custom rules, evidence packs, RBAC — are part of the <a href="/pricing">Compliance tier</a>.</p>
 
 <h2>Authentication</h2>
 
@@ -965,33 +1102,22 @@ publicRoutes.get("/docs", (c) => {
   }
 }</code></pre>
 
-<h2>Integration Guides</h2>
+<h2>Boundary guides</h2>
+
+<p>Start with the audit, then work through the boundaries your agents actually have.</p>
 
 <ul>
-  <li><a href="/docs/quickstart">Quick Start Guide</a> — Get started in 5 minutes</li>
-  <li><a href="/docs/api">Full API Reference</a> — Complete REST API documentation</li>
-  <li><a href="/technology">Technology</a> — Architecture, decision fields, and current evidence status</li>
-  <li><a href="/docs/x402">x402 Guide</a> — Pay-per-call prompt protection for autonomous agents</li>
-  <li><a href="/docs/risk-categories">Risk Categories</a> — Canonical threat taxonomy</li>
-  <li><a href="/docs/openapi-gpt-actions-prompt-screening">OpenAPI / GPT Actions Guide</a> — Tool-calling setup</li>
-  <li><a href="/guides/owner-approval-private-disclosures">Owner Approval for Private Disclosures</a> — Pause before sharing owner details</li>
-  <li><a href="/guides/prompt-injection-detection">Prompt Injection Detection Guide</a> — Comprehensive detection methods</li>
-  <li><a href="/guides/agent-security">Securing AI Agents</a> — Best practices for agent security</li>
-  <li><a href="/guides/agent-trust-boundary-audit">Agent Trust Boundary Audit</a> — Map where untrusted text can influence tools, memory, browsers, code, support, or payments</li>
-  <li><a href="/guides/screen-tool-results">Screen Tool Results</a> — Defend tool and browser boundaries</li>
-  <li><a href="/guides/nango-action-functions">Protect Nango action functions</a> — Screen OAuth-backed tool actions before they run</li>
-  <li><a href="/guides/rag-prompt-injection-screening">RAG Prompt Injection Screening</a> — Screen retrieved documents</li>
-  <li><a href="/security/limitations">Limitations</a> — What Parse does and does not guarantee</li>
-  <li><a href="/compare/prompt-injection-tools">Tool Comparison</a> — Sourced tradeoff comparison</li>
-</ul>
-
-<h2>Compliance &amp; Governance</h2>
-
-<ul>
-  <li><a href="/trust">Trust &amp; Security</a> — Architecture, security controls, subprocessors, vulnerability disclosure, SOC 2 alignment, and pre-answered vendor security questionnaire</li>
-  <li><a href="/docs/compliance-guide">Compliance Guide</a> — Framework mapping, SIEM integration, evidence export, agent registry, data governance, and enforcement dials</li>
-  <li><a href="/dashboard/compliance">Compliance Dashboard</a> — Real-time overview, audit trail, policy levers, and evidence packs (requires API key)</li>
-  <li><a href="/pricing">Compliance Tier</a> — SIEM forwarding, custom rules, evidence packs, org model, RBAC, and data governance for $999/mo</li>
+  <li><a href="/guides/agent-trust-boundary-audit">Agent Trust Boundary Audit</a> — map where untrusted text can influence tools, memory, browsers, code, support, or payments. Do this first.</li>
+  <li><a href="/guides/screen-tool-results">Screen Tool Results</a> — the tool and browser boundary</li>
+  <li><a href="/guides/rag-prompt-injection-screening">RAG Prompt Injection Screening</a> — the retrieval boundary</li>
+  <li><a href="/guides/browser-agent-screening">Browser Agent Screening</a> — the web page boundary</li>
+  <li><a href="/guides/code-tool-agent-screening">Code Tool Agent Screening</a> — the code execution boundary</li>
+  <li><a href="/guides/email-support-agent-screening">Email &amp; Support Agent Screening</a> — the inbound message boundary</li>
+  <li><a href="/guides/mcp-agent-handoff-screening">MCP Agent Handoff Screening</a> — the agent-to-agent boundary</li>
+  <li><a href="/guides/nango-action-functions">Protect Nango Action Functions</a> — the OAuth-backed action boundary</li>
+  <li><a href="/guides/owner-approval-private-disclosures">Owner Approval for Private Disclosures</a> — the personal-data boundary</li>
+  <li><a href="/guides/prompt-injection-detection">Prompt Injection Detection Guide</a> — how detection works across all of them</li>
+  <li><a href="/guides/agent-security">Securing AI Agents</a> — the broader practices around screening</li>
 </ul>
 
 <h2>Agent Integration</h2>
@@ -1015,24 +1141,37 @@ publicRoutes.get("/docs", (c) => {
   <li><a href="/mcp-prompt-protection-server">MCP Prompt Protection Server</a></li>
 </ul>
 
+<h2>Reference</h2>
+
+<ul>
+  <li><a href="/docs/api">Full API Reference</a> — every endpoint, request, and response shape</li>
+  <li><a href="/docs/risk-categories">Risk Categories</a> — the canonical threat taxonomy behind verdicts</li>
+  <li><a href="/docs/x402">x402 Guide</a> — pay-per-call screening for autonomous agents, no key required</li>
+  <li><a href="/docs/screening-metrics">Screening Metrics</a> — the analytics endpoint and its fields</li>
+  <li><a href="/docs/openapi-gpt-actions-prompt-screening">OpenAPI / GPT Actions Guide</a> — tool-calling setup</li>
+  <li><a href="/security/limitations">Limitations</a> — what Parse does and does not guarantee</li>
+  <li><a href="/compare/prompt-injection-tools">Tool Comparison</a> — sourced tradeoff comparison</li>
+</ul>
+
 <h2>Resources</h2>
 
 <ul>
   <li><a href="/trust">Trust &amp; Security</a> — Security posture, SOC 2 alignment, and vendor questionnaire</li>
-  <li><a href="/faq">FAQ</a> — 20+ common questions</li>
   <li><a href="/technology">Technology</a> — Public architecture and non-claimable evidence state</li>
-  <li><a href="/pricing">Pricing</a> — x402 USDC payments and tier information</li>
-  <li><a href="/playground">Playground</a> — Test the API interactively</li>
+  <li><a href="/pricing">Pricing</a> — free and monthly tiers, the Compliance tier, and x402 pay-per-call</li>
+  <li><a href="/faq">FAQ</a> — 20+ common questions</li>
+  <li><a href="/blog">Blog</a> — release notes and boundary-defense writing</li>
 </ul>
 `;
   return c.html(renderPage({
     title: "Documentation",
-    description: "Parse documentation for prompt protection, output screening, agent trust verification, MCP, and x402.",
+    description:
+      "Parse documentation: screen every trust boundary, govern agents with registry, policy, approvals, budgets, and egress rules, and prove it with audit trail, evidence export, and SIEM forwarding.",
     path: "/docs",
     content,
     baseUrl,
     jsonLd: [organizationSchema(baseUrl)],
-    lastUpdated: "2026-03-23",
+    lastUpdated: "2026-08-09",
   }));
 });
 
@@ -2414,5 +2553,384 @@ publicRoutes.get("/v1/attribution/stats", authMiddleware("evaluate"), async (c) 
   } catch (err) {
     console.error("[attribution] Stats failed:", (err as Error).message);
     return c.json({ error: "Attribution stats unavailable" }, 503);
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════
+// User Authentication (Email/Password)
+// Separate from the existing API key-based auth.
+// Uses parse_session cookie (httpOnly, Secure, SameSite=Lax, 30-day).
+// ════════════════════════════════════════════════════════════════════
+
+const SESSION_COOKIE = "parse_session";
+const SESSION_COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days in seconds
+
+/** Extract parse_session cookie value from request headers. */
+function getSessionCookie(c: Context): string | null {
+  const cookieHeader = c.req.header("Cookie") || "";
+  const match = cookieHeader
+    .split(";")
+    .map((s) => s.trim())
+    .find((s) => s.startsWith(`${SESSION_COOKIE}=`));
+  return match ? match.slice(`${SESSION_COOKIE}=`.length) : null;
+}
+
+/** Session-based auth middleware for account pages. Redirects to /login if no session. */
+async function sessionMiddleware(c: Context, next: () => Promise<void>) {
+  const token = getSessionCookie(c);
+  if (!token) {
+    return c.redirect("/login");
+  }
+  const user = await getSessionUser(token);
+  if (!user) {
+    // Clear the invalid cookie
+    c.header("Set-Cookie", `${SESSION_COOKIE}=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax; Secure`);
+    return c.redirect("/login");
+  }
+  // Attach user to context via a custom variable
+  (c as Context & { Variables: { sessionUser: PublicUser } }).set("sessionUser" as never, user as never);
+  await next();
+}
+
+/** Get the session user from context (set by sessionMiddleware). */
+function getSessionUserFromContext(c: Context): PublicUser | null {
+  try {
+    return (c as unknown as { get: (key: string) => PublicUser }).get("sessionUser") ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// ── Signup ──────────────────────────────────────────────────────────
+
+// GET /signup — render signup page
+publicRoutes.get("/signup", (c) => {
+  const baseUrl = getBaseUrl(c);
+  return c.html(renderSignupPage(baseUrl));
+});
+
+// POST /auth/signup — create user, create session, redirect to /account
+publicRoutes.post("/auth/signup", async (c) => {
+  const body = await c.req.json().catch(() => null) as
+    | { email?: unknown; password?: unknown; name?: unknown }
+    | null;
+
+  if (!body || typeof body !== "object") {
+    return c.json({ error: "Invalid request body" }, 400);
+  }
+
+  const email = typeof body.email === "string" ? body.email.trim() : "";
+  const password = typeof body.password === "string" ? body.password : "";
+  const name = typeof body.name === "string" ? body.name.trim() : undefined;
+
+  if (!email || !email.includes("@")) {
+    return c.json({ error: "Valid email is required" }, 400);
+  }
+  if (!password || password.length < 8) {
+    return c.json({ error: "Password must be at least 8 characters" }, 400);
+  }
+
+  // Check if user already exists
+  const existing = await getUserByEmail(email);
+  if (existing) {
+    return c.json({ error: "An account with this email already exists" }, 409);
+  }
+
+  // Create user
+  let user;
+  try {
+    user = await createUser(email, password, name);
+  } catch (err) {
+    console.error("[auth] User creation failed:", (err as Error).message);
+    return c.json({ error: "Failed to create account" }, 500);
+  }
+
+  // Create session
+  const token = await createSession(user.id);
+  if (!token) {
+    // User created but session failed — still return ok, they can log in
+    return c.json({ ok: true, redirect: "/login" });
+  }
+
+  c.header(
+    "Set-Cookie",
+    `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_COOKIE_MAX_AGE}; Secure`
+  );
+  return c.json({ ok: true, redirect: "/account" });
+});
+
+// ── Login ───────────────────────────────────────────────────────────
+
+// GET /login — render login page
+publicRoutes.get("/login", (c) => {
+  const baseUrl = getBaseUrl(c);
+  const error = c.req.query("error");
+  return c.html(renderLoginPage(baseUrl, error || undefined));
+});
+
+// POST /auth/login — authenticate, create session, redirect to /account
+publicRoutes.post("/auth/login", async (c) => {
+  const body = await c.req.json().catch(() => null) as
+    | { email?: unknown; password?: unknown }
+    | null;
+
+  if (!body || typeof body !== "object") {
+    return c.json({ error: "Invalid request body" }, 400);
+  }
+
+  const email = typeof body.email === "string" ? body.email.trim() : "";
+  const password = typeof body.password === "string" ? body.password : "";
+
+  if (!email || !password) {
+    return c.json({ error: "Email and password are required" }, 400);
+  }
+
+  const user = await authenticateUser(email, password);
+  if (!user) {
+    return c.json({ error: "Invalid email or password" }, 401);
+  }
+
+  const token = await createSession(user.id);
+  if (!token) {
+    return c.json({ error: "Failed to create session. Please try again." }, 500);
+  }
+
+  c.header(
+    "Set-Cookie",
+    `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_COOKIE_MAX_AGE}; Secure`
+  );
+  return c.json({ ok: true, redirect: "/account" });
+});
+
+// ── Logout ──────────────────────────────────────────────────────────
+
+// POST /auth/logout — destroy session, clear cookie, redirect to /
+publicRoutes.post("/auth/logout", async (c) => {
+  const token = getSessionCookie(c);
+  if (token) {
+    await destroySession(token);
+  }
+  c.header("Set-Cookie", `${SESSION_COOKIE}=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax; Secure`);
+  return c.json({ ok: true });
+});
+
+// ── Forgot Password ─────────────────────────────────────────────────
+
+// GET /forgot-password — render forgot password page
+publicRoutes.get("/forgot-password", (c) => {
+  const baseUrl = getBaseUrl(c);
+  return c.html(renderForgotPasswordPage(baseUrl));
+});
+
+// POST /auth/forgot-password — create reset token, send email
+publicRoutes.post("/auth/forgot-password", async (c) => {
+  const body = await c.req.json().catch(() => null) as
+    | { email?: unknown }
+    | null;
+
+  const email = body && typeof body.email === "string" ? body.email.trim() : "";
+  if (!email) {
+    // Don't reveal whether email is valid
+    return c.json({ ok: true });
+  }
+
+  // Look up user — but always return ok to prevent email enumeration
+  const user = await getUserByEmail(email);
+  if (user) {
+    const token = await createPasswordReset(user.id);
+    if (token) {
+      const baseUrl = getBaseUrl(c);
+      const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+      try {
+        const { sendEmail } = await import("../lib/email.js");
+        await sendEmail({
+          to: email,
+          subject: "Reset your Parse password",
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #0f1620;">
+              <h1 style="font-size: 22px; font-weight: 700; margin-bottom: 8px;">Reset your password</h1>
+              <p style="color: #5a6678; font-size: 15px; margin-bottom: 24px;">
+                Click the button below to reset your Parse account password. This link expires in 1 hour.
+              </p>
+              <p>
+                <a href="${resetUrl}" style="display: inline-block; background: #1f5fe0; color: white; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">Reset Password</a>
+              </p>
+              <p style="color: #8b96a8; font-size: 13px; margin-top: 16px;">
+                If you didn't request this, you can safely ignore this email.
+              </p>
+              <hr style="border: none; border-top: 1px solid #e3e8f0; margin: 32px 0;">
+              <p style="font-size: 12px; color: #8b96a8;">Parse · parsethis.ai</p>
+            </div>
+          `,
+        });
+      } catch {
+        // Non-fatal — don't reveal whether email sent
+      }
+    }
+  }
+
+  // Always return ok to prevent email enumeration
+  return c.json({ ok: true });
+});
+
+// ── Reset Password ──────────────────────────────────────────────────
+
+// GET /reset-password?token=X — render reset password page
+publicRoutes.get("/reset-password", (c) => {
+  const baseUrl = getBaseUrl(c);
+  const token = c.req.query("token") || "";
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset Password | Parse</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #000000; color: #f2f2f2; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .card { background: #0a0a0b; border: 1px solid rgba(255,255,255,0.09); border-radius: 8px; padding: 32px; max-width: 440px; width: 90%; }
+    h1 { font-size: 1.75rem; font-weight: 600; margin-bottom: 8px; }
+    p { color: #adb1b3; font-size: 0.875rem; margin-bottom: 24px; }
+    label { display: block; font-size: 13px; color: #adb1b3; margin-bottom: 6px; }
+    input { width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.16); background: #0a0a0b; color: #f2f2f2; font-size: 14px; box-sizing: border-box; margin-bottom: 16px; }
+    input:focus { outline: 2px solid #3d7bff; outline-offset: 2px; }
+    button { width: 100%; padding: 10px 24px; border-radius: 8px; border: none; background: #f2f2f2; color: #000; font-size: 14px; font-weight: 600; cursor: pointer; }
+    button:hover { background: #fff; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .error { background: rgba(255,93,93,0.12); color: #ff5d5d; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; display: none; }
+    a { color: #3d7bff; text-decoration: none; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Reset Password</h1>
+    <p>Enter your new password below.</p>
+    <div class="error" id="err"></div>
+    <form onsubmit="return resetPassword(event)">
+      <label for="password">New Password</label>
+      <input type="password" id="password" required minlength="8" placeholder="At least 8 characters" autofocus>
+      <label for="confirm">Confirm Password</label>
+      <input type="password" id="confirm" required placeholder="Re-enter password">
+      <button type="submit" id="btn">Reset Password</button>
+    </form>
+    <p style="margin-top: 20px; text-align: center;"><a href="/login">Back to login</a></p>
+  </div>
+  <script>
+    async function resetPassword(e) {
+      e.preventDefault();
+      const pw = document.getElementById('password').value;
+      const cf = document.getElementById('confirm').value;
+      const errEl = document.getElementById('err');
+      const btn = document.getElementById('btn');
+      errEl.style.display = 'none';
+
+      if (pw !== cf) {
+        errEl.textContent = 'Passwords do not match';
+        errEl.style.display = 'block';
+        return false;
+      }
+      if (pw.length < 8) {
+        errEl.textContent = 'Password must be at least 8 characters';
+        errEl.style.display = 'block';
+        return false;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Resetting...';
+
+      try {
+        const res = await fetch('/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: ${JSON.stringify(token)}, password: pw }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          window.location.href = '/login?error=' + encodeURIComponent('Password reset successful. Please log in.');
+        } else {
+          errEl.textContent = data.error || 'Reset failed';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Reset Password';
+        }
+      } catch (err) {
+        errEl.textContent = 'Network error: ' + err.message;
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Reset Password';
+      }
+      return false;
+    }
+  </script>
+</body>
+</html>`;
+  return c.html(html);
+});
+
+// POST /auth/reset-password — validate token, update password, redirect to /login
+publicRoutes.post("/auth/reset-password", async (c) => {
+  const body = await c.req.json().catch(() => null) as
+    | { token?: unknown; password?: unknown }
+    | null;
+
+  if (!body || typeof body !== "object") {
+    return c.json({ error: "Invalid request body" }, 400);
+  }
+
+  const token = typeof body.token === "string" ? body.token : "";
+  const password = typeof body.password === "string" ? body.password : "";
+
+  if (!token) {
+    return c.json({ error: "Reset token is required" }, 400);
+  }
+  if (!password || password.length < 8) {
+    return c.json({ error: "Password must be at least 8 characters" }, 400);
+  }
+
+  const success = await consumePasswordReset(token, password);
+  if (!success) {
+    return c.json({ error: "Invalid or expired reset token" }, 400);
+  }
+
+  return c.json({ ok: true, redirect: "/login" });
+});
+
+// ── Account Dashboard (session-protected) ───────────────────────────
+
+// GET /account — sessionMiddleware, render account dashboard
+publicRoutes.get("/account", sessionMiddleware, async (c) => {
+  const baseUrl = getBaseUrl(c);
+  const user = getSessionUserFromContext(c);
+  if (!user) {
+    return c.redirect("/login");
+  }
+  const html = await renderAccountDashboard(baseUrl, user);
+  return c.html(html);
+});
+
+// ── Stripe Customer Portal (session-protected) ──────────────────────
+
+// POST /v1/billing/portal — requires session auth (not API key auth)
+publicRoutes.post("/v1/billing/portal", sessionMiddleware, async (c) => {
+  const user = getSessionUserFromContext(c);
+  if (!user) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  if (!user.stripeCustomerId) {
+    return c.json({ error: "No active subscription found. Visit /pricing to subscribe." }, 400);
+  }
+
+  if (!isStripeEnabled()) {
+    return c.json({ error: "Billing is not configured" }, 503);
+  }
+
+  try {
+    const baseUrl = getBaseUrl(c);
+    const url = await createPortalSession(user.stripeCustomerId, baseUrl);
+    return c.json({ url });
+  } catch (err) {
+    console.error("[billing] Portal session failed:", (err as Error).message);
+    return c.json({ error: "Failed to create billing portal session" }, 500);
   }
 });
