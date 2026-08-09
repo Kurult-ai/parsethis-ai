@@ -885,7 +885,7 @@ publicRoutes.get("/docs", (c) => {
   const content = `
 <h1>Documentation</h1>
 
-<p class="answer-capsule">${PRODUCT.description} Around that screening core, Parse is an agent governance and compliance layer: register your agents, set the boundaries they operate inside, and keep a receipt for every decision.</p>
+<p class="answer-capsule">${PRODUCT.description} The docs follow that loop: install screening, govern the fleet, prove what happened.</p>
 
 <h2>Start here</h2>
 
