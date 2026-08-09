@@ -138,7 +138,7 @@ export function renderPage(options: PageOptions): string {
   <link rel="icon" href="/favicon.svg?v=eclipse" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=Michroma&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=Krona+One&display=swap" rel="stylesheet">
   ${authorMeta}
   ${modifiedTimeMeta}
   ${jsonLdBlocks}
@@ -259,15 +259,15 @@ export function renderPage(options: PageOptions): string {
       display: block;
     }
     .logo-lockup { display:flex; align-items:center; gap:12px; }
-    /* Wordmark face: Michroma, wordmark only — UI text stays Schibsted. */
-    .logo-primary { color:var(--text); font-family:'Michroma',sans-serif; font-weight:400; font-size:16px; letter-spacing:.06em; }
+    /* Wordmark face: Krona One — wordmark + top bar only; UI text stays Schibsted. */
+    .logo-primary { color:var(--text); font-family:'Krona One',sans-serif; font-weight:400; font-size:15px; letter-spacing:.02em; }
     .site-header .logo:hover { color: var(--text); text-decoration: none; }
     .site-header nav a {
       color: var(--text-dim);
-      font-family: 'Michroma', sans-serif;
-      font-size: 11.5px;
+      font-family: 'Krona One', sans-serif;
+      font-size: 11px;
       font-weight: 400;
-      letter-spacing: .05em;
+      letter-spacing: .02em;
       text-decoration: none;
       transition: color 0.2s;
       position: relative;
@@ -563,10 +563,10 @@ export function renderPage(options: PageOptions): string {
       flex-wrap: wrap;
     }
     .site-footer .footer-brand {
-      font-family: 'Michroma', sans-serif;
-      font-size: 12.5px;
+      font-family: 'Krona One', sans-serif;
+      font-size: 12px;
       font-weight: 400;
-      letter-spacing: .06em;
+      letter-spacing: .02em;
       color: var(--text);
       margin-bottom: 6px;
     }

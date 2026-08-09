@@ -150,7 +150,7 @@ Verification required before reporting done:
   <link rel="icon" href="/favicon.svg?v=eclipse" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&family=Michroma&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&family=Krona+One&display=swap" rel="stylesheet">
   ${jsonLd}
   <style>
   :root {
@@ -198,10 +198,10 @@ Verification required before reporting done:
   /* ── header ── */
   header { position: sticky; top: 0; z-index: 50; background: rgba(0,0,0,.72); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
   .nav { display: flex; align-items: center; height: 64px; gap: 32px; }
-  .logo { display: flex; align-items: center; gap: 10px; color: var(--white); font-family: 'Michroma', sans-serif; font-weight: 400; font-size: 14.5px; letter-spacing: .06em; }
+  .logo { display: flex; align-items: center; gap: 10px; color: var(--white); font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 13.5px; letter-spacing: .02em; }
   .logo svg { width: 30px; height: 30px; display: block; }
-  .nav-links { display: flex; gap: 26px; font-family: 'Michroma', sans-serif; font-size: 11.5px; font-weight: 400; letter-spacing: .05em; color: var(--gray); }
-  .nav .btn { font-family: 'Michroma', sans-serif; font-weight: 400; font-size: 11px; letter-spacing: .03em; }
+  .nav-links { display: flex; gap: 26px; font-family: 'Krona One', sans-serif; font-size: 11px; font-weight: 400; letter-spacing: .02em; color: var(--gray); }
+  .nav .btn { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 10.5px; letter-spacing: .02em; }
   .nav-links a:hover { color: var(--white); }
   .nav-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
   .btn { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; padding: 9px 18px; border-radius: 8px; border: 1px solid transparent; transition: all .18s; }

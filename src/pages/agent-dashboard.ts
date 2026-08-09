@@ -295,7 +295,7 @@ export async function renderAgentDashboardPage(
   <link rel="icon" href="/favicon.svg?v=eclipse" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Michroma&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Krona+One&display=swap" rel="stylesheet">
   <style>
   :root {
     --bg: #000; --side: #070708; --panel: #0b0b0d; --panel2: #101013;
@@ -325,7 +325,7 @@ export async function renderAgentDashboardPage(
   .side { background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 14px 12px; position: sticky; top: 0; height: 100vh; }
   .ws { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; }
   .ws svg { width: 26px; height: 26px; flex: none; }
-  .ws-name { font-family: 'Michroma', sans-serif; font-size: 12px; font-weight: 400; letter-spacing: .05em; color: var(--white); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ws-name { font-family: 'Krona One', sans-serif; font-size: 11.5px; font-weight: 400; letter-spacing: .05em; color: var(--white); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   nav.groups { flex: 1; margin-top: 18px; display: flex; flex-direction: column; gap: 22px; overflow-y: auto; }
   .grp-label { font-family: var(--mono); font-size: 11px; letter-spacing: .22em; color: var(--dim); padding: 0 10px; margin-bottom: 6px; }
   .item { position: relative; display: flex; align-items: center; gap: 11px; padding: 8.5px 10px; border-radius: 9px; color: var(--gray); font-size: 14.5px; font-weight: 500; transition: background .12s, color .12s; }

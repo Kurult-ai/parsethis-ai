@@ -1,6 +1,6 @@
 # Parse Brand Guidelines
 
-Version 1.8 · 2026-08-09 · Owner: Danny (Kurultai LLC)
+Version 1.9 · 2026-08-09 · Owner: Danny (Kurultai LLC)
 
 This document governs how Parse presents itself: positioning, naming, voice,
 claims, and the visual system. It applies to the public site, docs, dashboards,
@@ -227,8 +227,8 @@ contrast; red is never used for emphasis of non-risk content.
 
 ## 8. Typography
 
-- **Wordmark and top bar:** Michroma (single weight 400, letterspaced
-  ≥ .03em). It appears where the brand lockup appears — header, footer
+- **Wordmark and top bar:** Krona One (single weight 400, letterspaced
+  ≥ .02em). It appears where the brand lockup appears — header, footer
   brand line, console masthead, OG image, lockup SVG — and across the top
   navigation bar (nav links, Sign in, Install Parse) at 11–12px. Nowhere
   else: never for headings, body, in-page buttons, or labels.
@@ -307,6 +307,9 @@ Appendix — approved short descriptions:
 
 ## Change log
 
+- **v1.9 (2026-08-09):** Wordmark and top-bar face changed from Michroma
+  to Krona One (single weight 400, .02em tracking) — chunkier, warmer,
+  distinctive lowercase. Same scope rule as v1.8: lockup + top bar only.
 - **v1.8 (2026-08-09):** Michroma's scope widened from wordmark-only to
   wordmark + top navigation bar (nav links, Sign in, Install Parse,
   11–12px). In-page buttons, headings, and body stay Schibsted.

@@ -48,7 +48,7 @@ photon-ring hovers — on data surfaces amber stays warn-tier.
 - **Data, code, receipts, labels:** IBM Plex Mono, `tabular-nums` for all
   numerals in data contexts. Micro-labels uppercase, letterspaced ≥ .1em,
   never below 10.5px.
-- **Wordmark and top bar:** Michroma 400, letterspaced ≥ .03em — the brand
+- **Wordmark and top bar:** Krona One 400, letterspaced ≥ .02em — the brand
   lockup (header, footer brand, console masthead, OG image) plus the top
   navigation bar at 11–12px. Never in headings, body, or in-page UI.
 - Never Inter/Roboto/Arial; never more than these three text families plus
