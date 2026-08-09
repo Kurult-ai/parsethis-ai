@@ -258,8 +258,7 @@ Verification required before reporting done:
 
   /* ── the boundary gate (event horizon) ── */
   .hf-scene { position: absolute; top: 0; right: 0; bottom: 0; width: 52%; z-index: 4; pointer-events: none; }
-  #bh { position: absolute; right: -4%; top: 50%; transform: translateY(-50%) rotate(-45deg); width: min(860px, 56vw); aspect-ratio: 1;
-        -webkit-mask-image: radial-gradient(circle closest-side, #000 52%, transparent 96%); mask-image: radial-gradient(circle closest-side, #000 52%, transparent 96%); }
+  #bh { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
   .hf-lane { position: absolute; left: 0; right: 8%; top: 50%; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.10) 20%, rgba(255,255,255,.16) 46%, rgba(255,255,255,.10) 60%, transparent 95%); }
   .hf-disc { position: absolute; left: 46%; top: 50%; transform: translate(-50%,-50%) rotate(-9deg); width: min(430px, 34vw); height: 34px; border-radius: 50%; background: radial-gradient(50% 50% at 50% 50%, rgba(255,196,130,.16), rgba(255,180,84,.05) 62%, transparent 75%); filter: blur(5px); z-index: 1; }
   .hf-ring { position: absolute; left: 46%; top: 50%; transform: translate(-50%,-50%); width: min(300px, 24vw); height: min(300px, 24vw); border-radius: 50%; border: 1px solid rgba(255,255,255,.12); display: grid; place-items: center; animation: ringPulse 12s ease-in-out infinite; }
@@ -454,6 +453,7 @@ Verification required before reporting done:
 </head>
 <body${bodyAttrs}>
 <div class="lp-wash" aria-hidden="true"></div>
+<canvas id="bh" aria-hidden="true"></canvas>
 
 
 <header>
@@ -472,7 +472,6 @@ Verification required before reporting done:
 <div class="hf">
   
   <div class="hf-scene" aria-hidden="true">
-    <canvas id="bh"></canvas>
     <div class="hf-readout"><span class="ok">allowed · receipted</span><span class="no">blocked · receipted</span></div>
   </div>
 
@@ -710,14 +709,11 @@ curl -s ${baseUrl}/v1/parse \\
     '  float st = smoothstep(.995, 1., h) * (.35 + .45 * hash(cell + 1.3)); return vec3(st) * .95; }\n' +
     'void main(){\n' +
     '  vec2 uv = (gl_FragCoord.xy - .5 * R) / R.y;\n' +
-    '  vec3 ro = vec3(0., .55, -7.2);\n' +
-    '  vec3 rd = normalize(vec3(uv.x, uv.y - .04, 1.05));\n' +
-    '  float ca = -.10;\n' +
-    '  mat3 tilt = mat3(1.,0.,0., 0.,cos(ca),-sin(ca), 0.,sin(ca),cos(ca));\n' +
-    '  ro = tilt * ro; rd = tilt * rd;\n' +
-    '  float yaw = T * .06;\n' +
-    '  mat3 orb = mat3(cos(yaw),0.,sin(yaw), 0.,1.,0., -sin(yaw),0.,cos(yaw));\n' +
-    '  ro = orb * ro; rd = orb * rd;\n' +
+    '  float pj = fract(T / 34.);\n' +
+    '  float fall = pow(pj, 2.05);\n' +
+    '  vec3 ro = mix(vec3(0., 4.2, -13.5), vec3(0., -.85, .55), fall);\n' +
+    '  float fov = mix(1.15, .62, fall);\n' +
+    '  vec3 rd = normalize(vec3(uv.x, uv.y, fov));\n' +
     '  vec3 p = ro, v = rd;\n' +
     '  vec3 col = vec3(0.);\n' +
     '  float captured = 0.;\n' +
@@ -749,9 +745,10 @@ curl -s ${baseUrl}/v1/parse \\
     '      }\n' +
     '    }\n' +
     '  }\n' +
-    '  if (captured < .5) col += stars(v) * .8;\n' +
+    '  if (captured < .5) col += stars(v) * 1.5;\n' +
     '  float lum = dot(col, vec3(.299, .587, .114));\n' +
-    '  col = vec3(lum) * (.94 + .06 * sin(T * .18));\n' +
+    '  col = vec3(lum) * (1. + 2.6 * smoothstep(.72, .93, pj));\n' +
+    '  col *= (1. - smoothstep(.90, .985, pj)) * smoothstep(0., .05, pj);\n' +
     '  float vig = smoothstep(1.15, .45, length(uv));\n' +
     '  gl_FragColor = vec4(col * vig, 1.);\n' +
     '}';
