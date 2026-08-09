@@ -36,7 +36,7 @@ export function renderInjectionPlaygroundPage(baseUrl: string): string {
       <a class="inj-link" href="/docs">Docs</a>
       <a class="inj-link" href="/guides/agent-security">Guides</a>
       <a class="inj-link" href="/pricing">Pricing</a>
-      <a class="inj-btn inj-btn-secondary" href="/docs/quickstart" @click="recordPlaygroundEvent('get_key_clicked')">Get API key</a>
+      <a class="inj-btn inj-btn-secondary" href="/docs/quickstart" @click="recordPlaygroundEvent('get_key_clicked')">Install Parse</a>
       <button type="button" class="inj-btn inj-btn-primary" @click="createSession()" :disabled="loading">
         <span x-text="session ? 'New workbench session' : 'Start workbench session'"></span>
       </button>

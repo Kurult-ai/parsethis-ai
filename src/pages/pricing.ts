@@ -181,7 +181,7 @@ Required verification:
 <div class="section-chunk animate-in pricing-hero">
   <div class="pricing-hero-copy">
     <h1>Pricing</h1>
-    <p class="answer-capsule">Pay per screening with x402, or use a monthly key when request volume becomes predictable.</p>
+    <p class="answer-capsule">Pay per screening with x402, or use a monthly key when request volume becomes predictable. Detection reduces risk; it does not replace least-privilege tools or output validation.</p>
     <div class="pricing-choice-rail" aria-label="Pricing choices">
       <div class="pricing-choice">
         <span class="pricing-label">No account</span>

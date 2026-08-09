@@ -32,6 +32,7 @@
     "beta:sentinel": "node --import tsx scripts/beta-sentinel.ts",
     "launch:evidence": "node scripts/open-launch-load-evidence.mjs",
     "claims-lint": "node --import tsx scripts/claims-lint.ts",
+    "brand-lint": "node --import tsx scripts/brand-lint.ts",
     "worker": "tsx src/worker.ts",
     "seed": "tsx prisma/seed.ts",
     "launch:evidence": "node scripts/open-launch-load-evidence.mjs",

@@ -132,41 +132,42 @@ export function renderPage(options: PageOptions): string {
   <meta name="twitter:title" content="${safeTitle}">
   <meta name="twitter:description" content="${safeDesc}">
   <meta name="twitter:image" content="${escapeHtml(ogImg)}">
-  <meta name="theme-color" content="#f7f8fa">
+  <meta name="theme-color" content="#ffffff">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   ${authorMeta}
   ${modifiedTimeMeta}
   ${jsonLdBlocks}
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
-      --bg: #f7f8fa;
+      --bg: #ffffff;
       --surface: #ffffff;
-      --surface2: #eef2f5;
-      --surface3: #e4e9ee;
-      --border: #d8e0e7;
+      --surface2: #f2f5fa;
+      --surface3: #e9eef6;
+      --border: #e3e8f0;
+      --border2: #cfd7e4;
       --input: #ffffff;
-      --text: #171b21;
-      --text-dim: #5f6c7a;
-      --text-soft: #8190a0;
-      --accent: #006fee;
-      --accent2: #004fba;
-      --accent-dim: rgba(0,111,238,0.1);
-      --green: #11845b;
-      --green-dim: #e6f7ef;
-      --yellow: #b7791f;
-      --yellow-dim: #fff4d6;
-      --destructive: #c73535;
-      --destructive-dim: #ffe8e6;
-      --ring: #006fee;
+      --text: #0f1620;
+      --text-dim: #5a6678;
+      --text-soft: #8b96a8;
+      --accent: #1f5fe0;
+      --accent2: #1a51c2;
+      --accent-dim: #eaf1ff;
+      --green: #10794f;
+      --green-dim: #e6f6ee;
+      --yellow: #9a6410;
+      --yellow-dim: #fdf3e0;
+      --destructive: #c0392f;
+      --destructive-dim: #fdecea;
+      --ring: #1f5fe0;
       --radius: 8px;
-      --shadow: 0 18px 45px rgba(24, 36, 50, 0.08);
+      --shadow: 0 18px 45px rgba(15, 22, 32, 0.08);
     }
     body {
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      font-family: 'Schibsted Grotesk', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.6;
@@ -345,7 +346,7 @@ export function renderPage(options: PageOptions): string {
     .badge-default { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
     .badge-accent { background: var(--accent-dim); color: var(--accent2); }
     .badge-green { background: var(--green-dim); color: var(--green); }
-    .badge-destructive { background: var(--destructive-dim); color: #fca5a5; }
+    .badge-destructive { background: var(--destructive-dim); color: var(--destructive); }
     .badge-yellow { background: var(--yellow-dim); color: var(--yellow); }
 
     /* Button component (shadcn-style) */
@@ -587,7 +588,7 @@ export function renderPage(options: PageOptions): string {
       <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links" onclick="const n=document.getElementById('nav-links');const open=n.classList.toggle('open');this.setAttribute('aria-expanded',open);this.textContent=open?'\u2715':'\u2630';">\u2630</button>
       <div class="nav-links" id="nav-links">
       ${navLinksHtml}
-      <a href="/docs/quickstart" class="nav-cta">Get API key</a>
+      <a href="/docs/quickstart" class="nav-cta">Install Parse</a>
       </div>
     </nav>
   </header>
@@ -604,7 +605,7 @@ export function renderPage(options: PageOptions): string {
     <div class="footer-inner">
       <div>
         <div class="footer-brand">Parse</div>
-        <div>Prompt security for AI agents</div>
+        <div>Agent governance &amp; compliance for AI agents</div>
       </div>
       <nav aria-label="Footer">
         <div class="footer-links">
@@ -624,6 +625,63 @@ export function renderPage(options: PageOptions): string {
       </nav>
     </div>
   </footer>
+  <script>
+    function copyCode(btn) {
+      var pre = btn.parentElement.querySelector('pre');
+      if (!pre) return;
+      var text = pre.innerText;
+      navigator.clipboard.writeText(text).then(function() {
+        btn.textContent = '✓ Copied';
+        btn.classList.add('copied');
+        setTimeout(function() {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      }).catch(function() {
+        // Fallback for older browsers
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        btn.textContent = '✓ Copied';
+        btn.classList.add('copied');
+        setTimeout(function() {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
+  </script>
+  <style>
+    .code-block { position: relative; }
+    .code-block > pre { margin-top: 0; }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #8b949e;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: system-ui, -apple-system, sans-serif;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.15s ease, background 0.15s ease;
+      z-index: 1;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    .code-block:hover > .copy-btn, .copy-btn { opacity: 1; }
+    .copy-btn:hover { background: rgba(255,255,255,0.2); color: #e1e4e8; }
+    .copy-btn.copied { background: rgba(17,132,91,0.3); border-color: rgba(17,132,91,0.5); color: #3fb950; opacity: 1; }
+    @media (max-width: 640px) {
+      .copy-btn { opacity: 1; font-size: 11px; padding: 3px 10px; }
+    }
+  </style>
 </body>
 </html>`;
 }

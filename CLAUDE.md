@@ -128,6 +128,21 @@ Because the cookie is `SameSite=Lax`, it rides along on top-level navigations
 but not on cross-site subrequests. Any future state-changing browser form
 posted from a dashboard needs its own CSRF token; do not rely on Lax alone.
 
+## Brand & Claims Enforcement
+
+`docs/brand-guidelines.md` is the binding brand document (positioning: agent
+governance & compliance; primary CTA "Install Parse"; banned vocabulary;
+claims rules). Two CI gates enforce it — both run in `ci.yml` and must pass
+before any page copy ships:
+
+```bash
+npm run claims-lint   # features marked planned/building need an "in development" qualifier
+npm run brand-lint    # banned words, forbidden CTAs, naming, cert overclaims, limits sentence
+```
+
+When a feature ships, flip its entry in `FEATURE_STATUS`
+(`src/lib/product-facts.ts`) in the same commit that adds the marketing copy.
+
 ## Environment Variables
 
 Requires: `DATABASE_URL`, `REDIS_URL`, `OPENROUTER_API_KEY`

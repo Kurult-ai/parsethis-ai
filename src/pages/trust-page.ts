@@ -113,7 +113,7 @@ export function renderTrustPage(baseUrl: string): string {
   <span class="trust-status-badge">SOC 2 Type II — In Progress</span>
 </div>
 
-<p class="answer-capsule">${PRODUCT.name} is built for enterprise-grade security from day one. This page provides a transparent overview of our architecture, security controls, compliance posture, and pre-answered vendor questionnaire — everything your security team needs to assess Parse.</p>
+<p class="answer-capsule">${PRODUCT.name} is built for enterprise-grade security from day one. This page provides a transparent overview of our architecture, security controls, compliance posture, and pre-answered vendor questionnaire — everything your security team needs to assess Parse. Detection reduces risk; it does not replace least-privilege tools or output validation.</p>
 
 <div class="trust-contact-box">
   <h3>Need this for your vendor risk assessment?</h3>
@@ -322,6 +322,7 @@ export function renderTrustPage(baseUrl: string): string {
 <h3>SOC 2 Type II — In Progress</h3>
 <p>Parse is actively pursuing SOC 2 Type II certification. Expected completion: Q1 2027.</p>
 
+<p class="muted" style="font-size:13px;">Certification is in progress and on the roadmap; the controls below are aligned today.</p>
 <div class="table-wrapper">
   <table>
     <thead><tr><th>SOC 2 Trust Principle</th><th>Criteria</th><th>Parse Control</th><th>Status</th></tr></thead>
@@ -524,7 +525,7 @@ export function renderTrustPage(baseUrl: string): string {
   return renderPage({
     title: "Trust & Security",
     description:
-      "Parse trust package: architecture overview, security controls, subprocessors, vulnerability disclosure policy, SOC 2 compliance alignment, and pre-answered vendor security questionnaire.",
+      "Parse trust package: architecture overview, security controls, subprocessors, vulnerability disclosure policy, SOC 2 alignment (certification in progress), and pre-answered vendor security questionnaire.",
     path: "/trust",
     content,
     baseUrl,

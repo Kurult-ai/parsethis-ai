@@ -253,7 +253,9 @@ export const FEATURE_STATUS: FeatureStatusEntry[] = [
   { name: "Multi-Tenant Isolation Hardening", status: "building", aliases: ["multi-tenant isolation", "tenant hardening"] },
   { name: "Real-time Alerting", status: "building", aliases: ["real-time alerts", "real-time alerting"] },
   { name: "Custom LLM Fine-Tuning", status: "planned", aliases: ["fine-tuning", "custom model training"] },
-  { name: "Agent Registry", status: "building", aliases: ["agent registry", "agent inventory"] },
+  // Shipped: CRUD API (src/routes/agent-registry.ts), auto-registration +
+  // kill switch, and the /dashboard/agents console page are live.
+  { name: "Agent Registry", status: "shipped", aliases: ["agent registry", "agent inventory"] },
 ];
 
 /**

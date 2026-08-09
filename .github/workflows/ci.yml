@@ -39,6 +39,8 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npm run typecheck
+      - run: npm run claims-lint
+      - run: npm run brand-lint
       - run: npm test
       - run: npm run eval:screening
 
