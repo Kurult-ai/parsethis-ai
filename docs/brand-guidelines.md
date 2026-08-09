@@ -1,6 +1,6 @@
 # Parse Brand Guidelines
 
-Version 1.4 · 2026-08-09 · Owner: Danny (Kurultai LLC)
+Version 1.5 · 2026-08-09 · Owner: Danny (Kurultai LLC)
 
 This document governs how Parse presents itself: positioning, naming, voice,
 claims, and the visual system. It applies to the public site, docs, dashboards,
@@ -297,6 +297,17 @@ Appendix — approved short descriptions:
 
 ## Change log
 
+- **v1.5 (2026-08-09):** Verbiage sweep to complete the expansion. The
+  model-facing category (llms.txt, GEO kicker) is now "agent governance and
+  compliance platform for AI agents"; the old keyword phrases stay in
+  GEO_TASK_PHRASES for discovery. PRODUCT.description gains the
+  registry/policy/receipt sentence. About page, blog capsule, OG share image
+  (now dark, "Govern your agent fleet."), nurture email subject, and the
+  agent install prompts ("governance and screening boundary") repositioned.
+  "Control Panel — Parse for Agents" retitled "Compliance Console — Parse";
+  the demo page's "Get Your Free API Key" CTA replaced with "Install Parse".
+  The Test Lab (/playground) converted to the Event Horizon theme — the
+  "no light surfaces" rule in the style guide now holds everywhere.
 - **v1.4 (2026-08-09):** Documentation IA aligned to the message house: /docs
   is now organized Start here → Enforce → Govern → Prove → boundary guides →
   reference, with the governance and compliance endpoints (registry, budgets,

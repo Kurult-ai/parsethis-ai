@@ -147,7 +147,7 @@ export function renderDemoPage(baseUrl: string): string {
     <h3>Ready for full access?</h3>
     <p>Get your own API key, higher rate limits, policy configuration, evidence packs, and SIEM forwarding. No credit card needed for the free tier.</p>
     <div class="demo-cta-actions">
-      <a href="/get-started" class="btn btn-primary">Get Your Free API Key</a>
+      <a href="/get-started" class="btn btn-primary">Install Parse</a>
       <a href="/pricing" class="btn btn-outline">See Pricing</a>
     </div>
   </div>

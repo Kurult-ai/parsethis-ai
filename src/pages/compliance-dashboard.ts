@@ -432,7 +432,7 @@ if (typeof Chart !== 'undefined') {
 `;
 
   return renderPage({
-    title: "Control Panel — Parse for Agents",
+    title: "Compliance Console — Parse",
     description: "Agent security control panel: audit trail, policy levers, compliance frameworks, evidence export, and SIEM forwarding.",
     path: "/dashboard/compliance",
     content,

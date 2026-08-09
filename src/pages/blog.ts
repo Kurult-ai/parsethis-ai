@@ -69,14 +69,14 @@ export function renderBlogListingPage(baseUrl: string): string {
 
   const content = `
 <h1>Blog</h1>
-<p class="answer-capsule">Insights on prompt security, agent safety, and building trustworthy AI infrastructure.</p>
+<p class="answer-capsule">Writing on agent governance, trust boundaries, and building agents that leave evidence.</p>
 ${posts.length === 0 ? "<p>No posts yet. Check back soon.</p>" : categorySections}
 `;
 
   return renderPage({
     title: "Blog",
     description:
-      "Parse blog — insights on prompt security, agent safety, and AI infrastructure.",
+      "Parse blog — writing on agent governance, trust boundaries, and screening infrastructure.",
     path: "/blog",
     content,
     baseUrl,

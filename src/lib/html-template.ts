@@ -179,11 +179,37 @@ export function renderPage(options: PageOptions): string {
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
+    /* Animated aurora — two fixed layers drifting in counter-phase.
+       Oversized (inset -22%) so the drift never exposes an edge; alphas stay
+       under .09 so every page remains near-black. */
+    body::before, body::after {
+      content: ""; position: fixed; inset: -22%; pointer-events: none; z-index: 0;
+      will-change: transform, filter;
+    }
     body::before {
-      content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
       background:
-        radial-gradient(min(680px, 90vw) 380px at 80% -8%, rgba(61,123,255,.07), transparent 70%),
-        radial-gradient(min(520px, 80vw) 320px at 8% 112%, rgba(109,93,252,.05), transparent 70%);
+        radial-gradient(42% 30% at 78% 12%, rgba(61,123,255,.085), transparent 68%),
+        radial-gradient(36% 26% at 12% 86%, rgba(109,93,252,.06), transparent 70%),
+        radial-gradient(50% 34% at 50% 108%, rgba(255,180,84,.035), transparent 72%);
+      animation: aurora-a 46s ease-in-out infinite alternate;
+    }
+    body::after {
+      background:
+        radial-gradient(34% 26% at 22% 18%, rgba(56,189,248,.05), transparent 70%),
+        radial-gradient(40% 30% at 88% 78%, rgba(61,123,255,.045), transparent 70%);
+      animation: aurora-b 64s ease-in-out infinite alternate;
+    }
+    @keyframes aurora-a {
+      0%   { transform: translate3d(-2.5%, -1.5%, 0) rotate(-1.2deg); filter: hue-rotate(-14deg); }
+      50%  { transform: translate3d(1.5%, 2%, 0) rotate(0.8deg);      filter: hue-rotate(18deg); }
+      100% { transform: translate3d(3%, -2%, 0) rotate(2deg);         filter: hue-rotate(-6deg); }
+    }
+    @keyframes aurora-b {
+      0%   { transform: translate3d(2%, 1.5%, 0);                     filter: hue-rotate(10deg); }
+      100% { transform: translate3d(-2.5%, -2%, 0) rotate(-1.6deg);   filter: hue-rotate(-22deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      body::before, body::after { animation: none; }
     }
     body > * { position: relative; z-index: 1; }
     a { color: var(--accent); text-decoration: none; }

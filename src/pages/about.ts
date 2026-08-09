@@ -125,8 +125,8 @@ export function renderAboutPage(baseUrl: string): string {
 </style>
 
 <div class="about-hero">
-  <h1>We built Parse because agents that touch the world need a security boundary.</h1>
-  <p>${PRODUCT.name} is an independent prompt protection API for AI agents. We screen untrusted input, tool output, and agent handoffs before text gets authority over tools, memory, credentials, payments, or code execution.</p>
+  <h1>We built Parse because agents that touch the world need governance.</h1>
+  <p>${PRODUCT.name} is an independent agent governance and compliance platform. We keep every agent on the record and under policy, screen untrusted text before it gets authority over tools, memory, credentials, payments, or code execution, and leave a receipt for every decision.</p>
 </div>
 
 <section class="about-section">
@@ -138,7 +138,7 @@ export function renderAboutPage(baseUrl: string): string {
 
 <section class="about-section">
   <h2>What we built</h2>
-  <p>Parse is an API-first prompt protection service designed for the people building AI agents. Three endpoints cover the three trust boundaries in any agent system:</p>
+  <p>Parse is an API-first governance layer designed for the people building AI agents. Screening is the enforcement mechanism: three endpoints cover the three trust boundaries in any agent system, and around them sit the registry, policy surface, and evidence trail.</p>
   <ul>
     <li><strong>Input screening</strong> — <code>POST /v1/parse</code> screens untrusted text before it reaches the agent's LLM</li>
     <li><strong>Output screening</strong> — <code>POST /v1/screen-output</code> checks generated output before it reaches users, tools, or memory</li>
@@ -200,7 +200,7 @@ export function renderAboutPage(baseUrl: string): string {
   <ul>
     <li><strong>AI agencies and consultancies</strong> deploying custom agents for enterprise clients and needing compliance evidence to pass security review</li>
     <li><strong>Engineering teams</strong> building autonomous agents that process untrusted data from the web, documents, email, or tool APIs</li>
-    <li><strong>Independent developers</strong> who want prompt protection without enterprise sales friction or vendor lock-in</li>
+    <li><strong>Independent developers</strong> who want screening and receipts without enterprise sales friction or vendor lock-in</li>
     <li><strong>Security teams</strong> evaluating agent deployments and needing audit evidence, policy enforcement, and risk visibility</li>
   </ul>
 </section>
@@ -209,16 +209,16 @@ export function renderAboutPage(baseUrl: string): string {
   <h2>See for yourself</h2>
   <p>Start with the free tier, explore the trust package, or request a demo.</p>
   <div class="about-cta-actions">
-    <a href="/playground" class="btn btn-primary">Get started for free</a>
+    <a href="/get-started" class="btn btn-primary">Install Parse</a>
+    <a href="/playground" class="btn btn-outline">Open the Test Lab</a>
     <a href="/trust" class="btn btn-outline">Trust &amp; Security</a>
-    <a href="/get-started" class="btn btn-outline">Install Parse</a>
   </div>
 </div>
 `;
 
   return renderPage({
     title: "About",
-    description: `${PRODUCT.name} is an independent prompt protection API for AI agents. We screen untrusted input, tool output, and agent handoffs before text gets authority over tools, memory, or credentials.`,
+    description: `${PRODUCT.name} is an independent agent governance and compliance platform: registry, runtime policy, boundary screening, and audit receipts for autonomous-agent fleets.`,
     path: "/about",
     content,
     baseUrl,

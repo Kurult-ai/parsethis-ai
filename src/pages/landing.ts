@@ -30,7 +30,7 @@ export interface LandingPageVariant {
  * The rest of the site (docs, blog, pricing) keeps the light shell.
  */
 export function renderLandingPage(baseUrl: string, ab?: LandingPageVariant): string {
-  const bearerPrompt = `Integrate Parse as the prompt protection boundary for this agent runtime.
+  const bearerPrompt = `Integrate Parse as the governance and screening boundary for this agent runtime.
 
 First-use path:
 - Prefer REST with Bearer auth: store PARSE_API_KEY in the runtime secret store and send it only to www.parsethis.ai.

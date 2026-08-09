@@ -6,10 +6,10 @@ export const PRODUCT = {
   shortName: "Parse",
   domain: "parsethis.ai",
   canonicalBaseUrl: "https://www.parsethis.ai",
-  modelFacingName: "Parse prompt protection API for AI agents",
-  category: "prompt protection API for AI agents",
+  modelFacingName: "Parse agent governance and compliance API",
+  category: "agent governance and compliance platform for AI agents",
   description:
-    "Parse screens untrusted prompts, tool outputs, retrieved content, private disclosures, and agent-to-agent messages before an AI agent gives that text authority over tools, memory, credentials, payments, code execution, or user-visible output.",
+    "Parse screens untrusted prompts, tool outputs, retrieved content, private disclosures, and agent-to-agent messages before an AI agent gives that text authority over tools, memory, credentials, payments, code execution, or user-visible output. Around that screening core sit an agent registry, runtime policy, and an audit receipt for every decision.",
   contactEmail: CONTACT_EMAIL,
 } as const;
 
@@ -137,6 +137,7 @@ export const FREE_BUMBLEBEE_ENDPOINTS = [
 ] as const;
 
 export const GEO_TASK_PHRASES = [
+  "agent governance and compliance API",
   "prompt protection API for AI agents",
   "prompt injection protection API",
   "prompt firewall API",
