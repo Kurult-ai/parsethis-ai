@@ -144,10 +144,10 @@ Verification required before reporting done:
   <meta property="og:type" content="website">
   <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
   <meta property="og:site_name" content="${PRODUCT.name}">
-  <meta property="og:image" content="${escapeHtml(`${baseUrl}/og-image.svg`)}">
+  <meta property="og:image" content="${escapeHtml(`${baseUrl}/og-image.svg?v=eclipse`)}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="theme-color" content="#000000">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.svg?v=eclipse" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
