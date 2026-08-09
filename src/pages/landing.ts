@@ -258,6 +258,8 @@ Verification required before reporting done:
 
   /* ── the boundary gate (event horizon) ── */
   .hf-scene { position: absolute; top: 0; right: 0; bottom: 0; width: 52%; z-index: 4; pointer-events: none; }
+  #bh { position: absolute; right: -4%; top: 50%; transform: translateY(-50%) rotate(-45deg); width: min(860px, 56vw); aspect-ratio: 1;
+        -webkit-mask-image: radial-gradient(circle closest-side, #000 52%, transparent 96%); mask-image: radial-gradient(circle closest-side, #000 52%, transparent 96%); }
   .hf-lane { position: absolute; left: 0; right: 8%; top: 50%; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.10) 20%, rgba(255,255,255,.16) 46%, rgba(255,255,255,.10) 60%, transparent 95%); }
   .hf-disc { position: absolute; left: 46%; top: 50%; transform: translate(-50%,-50%) rotate(-9deg); width: min(430px, 34vw); height: 34px; border-radius: 50%; background: radial-gradient(50% 50% at 50% 50%, rgba(255,196,130,.16), rgba(255,180,84,.05) 62%, transparent 75%); filter: blur(5px); z-index: 1; }
   .hf-ring { position: absolute; left: 46%; top: 50%; transform: translate(-50%,-50%); width: min(300px, 24vw); height: min(300px, 24vw); border-radius: 50%; border: 1px solid rgba(255,255,255,.12); display: grid; place-items: center; animation: ringPulse 12s ease-in-out infinite; }
@@ -470,16 +472,7 @@ Verification required before reporting done:
 <div class="hf">
   
   <div class="hf-scene" aria-hidden="true">
-    <div class="hf-lane"></div>
-    <div class="hf-disc"></div>
-    <div class="hf-ring">
-      <span class="hf-ring-arc"></span>
-      <span class="hf-ring-core">${getLogoMarkSvg("hf-core-mark")}</span>
-    </div>
-    <span class="hf-p p1"></span><span class="hf-p p2"></span><span class="hf-p p3"></span>
-    <span class="hf-p p4"></span><span class="hf-p p5"></span><span class="hf-p p6"></span>
-    <span class="hf-p p7"></span><span class="hf-p p8"></span>
-    <span class="hf-p hf-bad b1"></span><span class="hf-p hf-bad b2"></span>
+    <canvas id="bh"></canvas>
     <div class="hf-readout"><span class="ok">allowed · receipted</span><span class="no">blocked · receipted</span></div>
   </div>
 
@@ -695,6 +688,98 @@ curl -s ${baseUrl}/v1/parse \\
       setTimeout(function () { copy.textContent = 'COPY'; copy.classList.remove('done'); }, 1600);
     }).catch(function () { copy.textContent = 'Press Cmd+C'; });
   });
+})();
+
+// ── Lensed black hole hero (approved 2026-08-09) ──
+// One raw-WebGL fragment shader: iterative geodesic bending, grayscale
+// accretion disc with Doppler beaming, photon ring, lensed starfield,
+// slow camera orbit + luminance breathe. DPR-capped, offscreen-paused,
+// static frame under reduced motion, silent no-op without WebGL.
+(function () {
+  var canvas = document.getElementById('bh');
+  if (!canvas) return;
+  var gl = canvas.getContext('webgl', { alpha: true, antialias: false, depth: false, stencil: false, powerPreference: 'low-power' });
+  if (!gl) { canvas.style.display = 'none'; return; }
+  var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var vsrc = 'attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }';
+  var fsrc = 'precision highp float;\n' +
+    'uniform vec2 R; uniform float T;\n' +
+    'float hash(vec3 q){ return fract(sin(dot(q, vec3(127.1,311.7,74.7))) * 43758.5453); }\n' +
+    'vec3 stars(vec3 d){ vec3 q = normalize(d); vec3 cell = floor(q * 90.); float h = hash(cell);\n' +
+    '  float st = smoothstep(.995, 1., h) * (.35 + .45 * hash(cell + 1.3)); return vec3(st) * .95; }\n' +
+    'void main(){\n' +
+    '  vec2 uv = (gl_FragCoord.xy - .5 * R) / R.y;\n' +
+    '  vec3 ro = vec3(0., .55, -7.2);\n' +
+    '  vec3 rd = normalize(vec3(uv.x, uv.y - .04, 1.05));\n' +
+    '  float ca = -.10;\n' +
+    '  mat3 tilt = mat3(1.,0.,0., 0.,cos(ca),-sin(ca), 0.,sin(ca),cos(ca));\n' +
+    '  ro = tilt * ro; rd = tilt * rd;\n' +
+    '  float yaw = T * .06;\n' +
+    '  mat3 orb = mat3(cos(yaw),0.,sin(yaw), 0.,1.,0., -sin(yaw),0.,cos(yaw));\n' +
+    '  ro = orb * ro; rd = orb * rd;\n' +
+    '  vec3 p = ro, v = rd;\n' +
+    '  vec3 col = vec3(0.);\n' +
+    '  float captured = 0.;\n' +
+    '  float w = 1.;\n' +
+    '  float jit = .9 + .2 * hash(vec3(gl_FragCoord.xy, 7.));\n' +
+    '  for (int i = 0; i < 110; i++) {\n' +
+    '    float r = length(p);\n' +
+    '    if (r < .9) { captured = 1.; break; }\n' +
+    '    float dt = clamp(.05 + .055 * r, .06, .3) * jit;\n' +
+    '    vec3 acc = -1.55 * p / (r * r * r * r);\n' +
+    '    v += acc * dt;\n' +
+    '    vec3 pp = p;\n' +
+    '    p += v * dt;\n' +
+    '    if (pp.y * p.y < 0.) {\n' +
+    '      float t = pp.y / (pp.y - p.y);\n' +
+    '      vec3 hit = mix(pp, p, t);\n' +
+    '      float hr = length(hit.xz);\n' +
+    '      if (hr > 1.3 && hr < 4.6) {\n' +
+    '        float ang = atan(hit.z, hit.x);\n' +
+    '        float doppler = 1. + .6 * sin(ang) / sqrt(hr);\n' +
+    '        float arms = sin(ang * 2. - hr * 3.5 + T * 1.1);\n' +
+    '        float fine = sin(ang * 9. - hr * 11. + T * 2.2);\n' +
+    '        float bands = .72 + .28 * arms + .10 * fine;\n' +
+    '        float glow = pow(1.55 / hr, 2.2) * bands * doppler;\n' +
+    '        vec3 disc = mix(vec3(1.0), vec3(.62), clamp((hr-1.3)/3.3, 0., 1.));\n' +
+    '        disc = mix(disc, vec3(1.06), clamp((doppler - 1.)*.5, 0., .4));\n' +
+    '        col += disc * glow * .55 * w;\n' +
+    '        w *= .5;\n' +
+    '      }\n' +
+    '    }\n' +
+    '  }\n' +
+    '  if (captured < .5) col += stars(v) * .8;\n' +
+    '  float lum = dot(col, vec3(.299, .587, .114));\n' +
+    '  col = vec3(lum) * (.94 + .06 * sin(T * .18));\n' +
+    '  float vig = smoothstep(1.15, .45, length(uv));\n' +
+    '  gl_FragColor = vec4(col * vig, 1.);\n' +
+    '}';
+
+  function sh(t, src) { var o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o);
+    if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) return null; return o; }
+  var vs = sh(gl.VERTEX_SHADER, vsrc), fs = sh(gl.FRAGMENT_SHADER, fsrc);
+  if (!vs || !fs) { canvas.style.display = 'none'; return; }
+  var prog = gl.createProgram();
+  gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog); gl.useProgram(prog);
+  var buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  var loc = gl.getAttribLocation(prog, 'p');
+  gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  var uR = gl.getUniformLocation(prog, 'R'), uT = gl.getUniformLocation(prog, 'T');
+  function size() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+    var w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h); }
+  }
+  function frame(t) { size(); gl.uniform2f(uR, canvas.width, canvas.height); gl.uniform1f(uT, t * .001); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+  var visible = true, raf = 0;
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (e) { visible = e[0].isIntersecting; if (visible && !raf && !reduced) loop(); }).observe(canvas);
+  }
+  function loop() { raf = requestAnimationFrame(function (ts) { frame(ts); raf = 0; if (visible) loop(); }); }
+  if (reduced) { size(); frame(9000); } else loop();
 })();
 </script>
 
