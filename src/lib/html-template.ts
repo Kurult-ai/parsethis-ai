@@ -138,7 +138,7 @@ export function renderPage(options: PageOptions): string {
   <link rel="icon" href="/favicon.svg?v=eclipse" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=Krona+One&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Lexend:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Saira:wght@500;600;700&display=swap" rel="stylesheet">
   ${authorMeta}
   ${modifiedTimeMeta}
   ${jsonLdBlocks}
@@ -152,9 +152,9 @@ export function renderPage(options: PageOptions): string {
       --border: rgba(255,255,255,0.09);
       --border2: rgba(255,255,255,0.16);
       --input: #0a0a0b;
-      --text: #f2f2f2;
-      --text-dim: #adb1b3;
-      --text-soft: #878b8e;
+      --text: #fafafa;
+      --text-dim: #c3c7ca;
+      --text-soft: #9a9ea2;
       --accent: #3d7bff;
       --accent2: #8ab8ff;
       --accent-dim: rgba(61,123,255,0.12);
@@ -171,7 +171,8 @@ export function renderPage(options: PageOptions): string {
       --serif: 'Instrument Serif', serif;
     }
     body {
-      font-family: 'Schibsted Grotesk', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      font-family: 'Lexend', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      letter-spacing: 0.005em;
       background: var(--bg);
       color: var(--text);
       line-height: 1.6;
@@ -179,35 +180,29 @@ export function renderPage(options: PageOptions): string {
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
-    /* Animated aurora — two fixed layers drifting in counter-phase.
-       Oversized (inset -22%) so the drift never exposes an edge; alphas stay
-       at or under .11 so every page remains near-black. */
-    body::before, body::after {
-      content: ""; position: fixed; inset: -22%; pointer-events: none; z-index: 0;
-      will-change: transform, filter;
-    }
+    /* Approach Vector — the platform scene. A faint spacetime grid above; below
+       the fold, a vast black planet whose limb carries a slowly rotating
+       multicolor corona (140s revolution, 14s breathe). Geometry matches the
+       approved mockup: ring band 84-95% of a 338vw circle centered 131vw below
+       the viewport. */
     body::before {
-      background:
-        radial-gradient(42% 30% at 78% 12%, rgba(61,123,255,.11), transparent 68%),
-        radial-gradient(36% 26% at 12% 86%, rgba(109,93,252,.08), transparent 70%),
-        radial-gradient(50% 34% at 50% 108%, rgba(255,180,84,.05), transparent 72%);
-      animation: aurora-a 46s ease-in-out infinite alternate;
+      content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background: repeating-radial-gradient(120% 90% at 50% 124%, transparent 0 46px, rgba(255,255,255,.028) 47px 48px);
     }
     body::after {
-      background:
-        radial-gradient(34% 26% at 22% 18%, rgba(56,189,248,.07), transparent 70%),
-        radial-gradient(40% 30% at 88% 78%, rgba(61,123,255,.06), transparent 70%);
-      animation: aurora-b 64s ease-in-out infinite alternate;
+      content: ""; position: fixed; left: 50%; bottom: -300vw; width: 338vw; height: 338vw;
+      transform: translateX(-50%) rotate(0deg); border-radius: 50%; pointer-events: none; z-index: 0;
+      filter: blur(3px); will-change: transform, opacity;
+      background: conic-gradient(from 0deg,
+        rgba(255,217,160,.44) 0%, rgba(255,180,84,.33) 9%, rgba(61,220,132,.30) 20%,
+        rgba(56,189,248,.35) 34%, rgba(122,92,255,.35) 50%, rgba(236,110,205,.32) 66%,
+        rgba(255,138,61,.33) 82%, rgba(255,217,160,.44) 100%);
+      -webkit-mask: radial-gradient(closest-side, transparent 0 84.2%, rgba(0,0,0,.9) 85%, #000 86%, rgba(0,0,0,.35) 90%, transparent 95.5%);
+      mask: radial-gradient(closest-side, transparent 0 84.2%, rgba(0,0,0,.9) 85%, #000 86%, rgba(0,0,0,.35) 90%, transparent 95.5%);
+      animation: coronaSpin 140s linear infinite, coronaBreathe 14s ease-in-out infinite alternate;
     }
-    @keyframes aurora-a {
-      0%   { transform: translate3d(-2.5%, -1.5%, 0) rotate(-1.2deg); filter: hue-rotate(-14deg); }
-      50%  { transform: translate3d(1.5%, 2%, 0) rotate(0.8deg);      filter: hue-rotate(18deg); }
-      100% { transform: translate3d(3%, -2%, 0) rotate(2deg);         filter: hue-rotate(-6deg); }
-    }
-    @keyframes aurora-b {
-      0%   { transform: translate3d(2%, 1.5%, 0);                     filter: hue-rotate(10deg); }
-      100% { transform: translate3d(-2.5%, -2%, 0) rotate(-1.6deg);   filter: hue-rotate(-22deg); }
-    }
+    @keyframes coronaSpin { to { transform: translateX(-50%) rotate(360deg); } }
+    @keyframes coronaBreathe { from { opacity: .62; } to { opacity: .9; } }
     @media (prefers-reduced-motion: reduce) {
       body::before, body::after { animation: none; }
     }
@@ -259,15 +254,15 @@ export function renderPage(options: PageOptions): string {
       display: block;
     }
     .logo-lockup { display:flex; align-items:center; gap:12px; }
-    /* Wordmark face: Krona One — wordmark + top bar only; UI text stays Schibsted. */
-    .logo-primary { color:var(--text); font-family:'Krona One',sans-serif; font-weight:400; font-size:15px; letter-spacing:.02em; }
+    /* Top-bar face: Saira — wordmark + top navigation only; UI text is Lexend. */
+    .logo-primary { color:var(--text); font-family:'Saira',sans-serif; font-weight:700; font-size:17px; letter-spacing:.09em; }
     .site-header .logo:hover { color: var(--text); text-decoration: none; }
     .site-header nav a {
       color: var(--text-dim);
-      font-family: 'Krona One', sans-serif;
-      font-size: 11px;
-      font-weight: 400;
-      letter-spacing: .02em;
+      font-family: 'Saira', sans-serif;
+      font-size: 13.5px;
+      font-weight: 600;
+      letter-spacing: .045em;
       text-decoration: none;
       transition: color 0.2s;
       position: relative;
@@ -277,7 +272,7 @@ export function renderPage(options: PageOptions): string {
       text-decoration: none;
     }
     .site-header nav a[aria-current="page"] {
-      color: var(--text);
+      color: var(--gold);
     }
     .site-header nav a[aria-current="page"]::after {
       content: '';
@@ -286,7 +281,7 @@ export function renderPage(options: PageOptions): string {
       left: 0;
       right: 0;
       height: 2px;
-      background: var(--accent);
+      background: var(--gold);
       border-radius: 1px;
     }
     .site-header nav a.external::after {
@@ -548,11 +543,6 @@ export function renderPage(options: PageOptions): string {
       position: relative;
       overflow: hidden;
     }
-    .site-footer::before {
-      content: ""; position: absolute; left: 50%; bottom: -20px; transform: translateX(-50%);
-      width: min(180vw, 2400px); height: 220px; pointer-events: none;
-      background: radial-gradient(50% 100% at 50% 100%, transparent 55%, rgba(255,196,130,.11) 66%, rgba(255,180,84,.035) 76%, transparent 86%);
-    }
     .site-footer .footer-inner {
       max-width: 1180px;
       margin: 0 auto;
@@ -563,10 +553,10 @@ export function renderPage(options: PageOptions): string {
       flex-wrap: wrap;
     }
     .site-footer .footer-brand {
-      font-family: 'Krona One', sans-serif;
-      font-size: 12px;
-      font-weight: 400;
-      letter-spacing: .02em;
+      font-family: 'Saira', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .08em;
       color: var(--text);
       margin-bottom: 6px;
     }

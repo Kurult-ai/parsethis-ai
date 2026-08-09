@@ -295,18 +295,25 @@ export async function renderAgentDashboardPage(
   <link rel="icon" href="/favicon.svg?v=eclipse" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Krona+One&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Lexend:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Saira:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
   :root {
     --bg: #000; --side: #070708; --panel: #0b0b0d; --panel2: #101013;
     --line: rgba(255,255,255,0.08); --line2: rgba(255,255,255,0.14);
-    --white: #f2f2f2; --gray: #b0b4b6; --dim: #83878a;
+    --white: #fafafa; --gray: #c3c7ca; --dim: #9a9ea2;
     --blue: #3d7bff; --violet: #6d5dfc; --cyan: #06b6d4;
     --green: #3ddc84; --red: #ff5d5d; --amber: #ffb454; --gold: #ffd9a0;
-    --serif: 'Instrument Serif', serif; --sans: 'Schibsted Grotesk', sans-serif; --mono: 'IBM Plex Mono', monospace;
+    --serif: 'Instrument Serif', serif; --sans: 'Lexend', sans-serif; --mono: 'IBM Plex Mono', monospace;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { overflow-x: clip; max-width: 100%; }
+  .pv-corona { position: fixed; left: 50%; bottom: -300vw; width: 338vw; height: 338vw; transform: translateX(-50%) rotate(0deg); border-radius: 50%; pointer-events: none; z-index: 0; filter: blur(3px); will-change: transform, opacity;
+    background: conic-gradient(from 0deg, rgba(255,217,160,.44) 0%, rgba(255,180,84,.33) 9%, rgba(61,220,132,.30) 20%, rgba(56,189,248,.35) 34%, rgba(122,92,255,.35) 50%, rgba(236,110,205,.32) 66%, rgba(255,138,61,.33) 82%, rgba(255,217,160,.44) 100%);
+    -webkit-mask: radial-gradient(closest-side, transparent 0 84.2%, rgba(0,0,0,.9) 85%, #000 86%, rgba(0,0,0,.35) 90%, transparent 95.5%);
+    mask: radial-gradient(closest-side, transparent 0 84.2%, rgba(0,0,0,.9) 85%, #000 86%, rgba(0,0,0,.35) 90%, transparent 95.5%);
+    animation: pvSpin 140s linear infinite, pvBreathe 14s ease-in-out infinite alternate; }
+  @keyframes pvSpin { to { transform: translateX(-50%) rotate(360deg); } }
+  @keyframes pvBreathe { from { opacity: .62; } to { opacity: .9; } }
   body { background: var(--bg); color: var(--gray); font-family: var(--sans); font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
   a { color: inherit; text-decoration: none; }
   .mono { font-family: var(--mono); }
@@ -325,7 +332,7 @@ export async function renderAgentDashboardPage(
   .side { background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 14px 12px; position: sticky; top: 0; height: 100vh; }
   .ws { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; }
   .ws svg { width: 26px; height: 26px; flex: none; }
-  .ws-name { font-family: 'Krona One', sans-serif; font-size: 11.5px; font-weight: 400; letter-spacing: .05em; color: var(--white); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ws-name { font-family: 'Saira', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: .07em; color: var(--white); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   nav.groups { flex: 1; margin-top: 18px; display: flex; flex-direction: column; gap: 22px; overflow-y: auto; }
   .grp-label { font-family: var(--mono); font-size: 11px; letter-spacing: .22em; color: var(--dim); padding: 0 10px; margin-bottom: 6px; }
   .item { position: relative; display: flex; align-items: center; gap: 11px; padding: 8.5px 10px; border-radius: 9px; color: var(--gray); font-size: 14.5px; font-weight: 500; transition: background .12s, color .12s; }
@@ -480,6 +487,7 @@ export async function renderAgentDashboardPage(
   </style>
 </head>
 <body>
+<div class="pv-corona" aria-hidden="true"></div>
 <div class="app">
 
   <aside class="side">

@@ -70,7 +70,7 @@ export function getLogoLockupSvg(): string {
   <circle cx="38" cy="36" r="16.6" fill="#000"/>
   <circle cx="38" cy="36" r="17.2" fill="none" stroke="${CORONA_GOLD}" stroke-opacity="0.8" stroke-width="1.6"/>
   <circle cx="${f.x}" cy="${f.y}" r="2.5" fill="${FLARE_HOT}"/>
-  <text x="86" y="47" fill="${INK}" font-family="Krona One, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="30" font-weight="400" letter-spacing="1">Parse</text>
+  <text x="86" y="47" fill="${INK}" font-family="Saira, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="32" font-weight="700" letter-spacing="2.5">Parse</text>
 </svg>`;
 }
 

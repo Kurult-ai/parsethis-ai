@@ -22,7 +22,7 @@ export function getOgImageSvg(): string {
   <rect width="1200" height="630" fill="url(#og-glow)"/>
   <rect y="330" width="1200" height="300" fill="url(#og-rim)"/>
   <g transform="translate(96 84) scale(1.5)">${getLogoMarkSvg()}</g>
-  <text x="188" y="124" fill="#f2f2f2" font-family="Krona One, system-ui, sans-serif" font-weight="400" font-size="28" letter-spacing="1.5">Parse</text>
+  <text x="188" y="124" fill="#f2f2f2" font-family="Saira, system-ui, sans-serif" font-weight="700" font-size="30" letter-spacing="2.5">Parse</text>
   <text x="96" y="306" fill="#f2f2f2" font-family="Georgia, 'Times New Roman', serif" font-size="66">Govern your agent fleet.</text>
   <text x="96" y="386" fill="#adb1b3" font-family="Schibsted Grotesk, system-ui, sans-serif" font-weight="450" font-size="30">Every agent registered. Every boundary screened. Every decision receipted.</text>
   <rect x="96" y="452" width="204" height="52" rx="26" fill="#f2f2f2"/>

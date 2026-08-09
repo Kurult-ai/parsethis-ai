@@ -1,6 +1,6 @@
 # Parse Brand Guidelines
 
-Version 1.9 · 2026-08-09 · Owner: Danny (Kurultai LLC)
+Version 2.0 · 2026-08-09 · Owner: Danny (Kurultai LLC)
 
 This document governs how Parse presents itself: positioning, naming, voice,
 claims, and the visual system. It applies to the public site, docs, dashboards,
@@ -227,13 +227,16 @@ contrast; red is never used for emphasis of non-risk content.
 
 ## 8. Typography
 
-- **Wordmark and top bar:** Krona One (single weight 400, letterspaced
-  ≥ .02em). It appears where the brand lockup appears — header, footer
-  brand line, console masthead, OG image, lockup SVG — and across the top
-  navigation bar (nav links, Sign in, Install Parse) at 11–12px. Nowhere
-  else: never for headings, body, in-page buttons, or labels.
-- **UI and display:** Schibsted Grotesk (weights 400–800). Display at
-  -0.03em tracking; never below 400.
+- **Wordmark and top bar:** Saira (600 for nav at 13.5px/.045em, 700 for
+  the wordmark at 16–17px/.09em). Eurostile lineage grown into a UI
+  family — it appears in the lockup, footer brand line, console masthead,
+  OG image, lockup SVG, and across the top navigation. Nowhere else.
+  The active page in the top nav is marked in corona gold (#ffd9a0 text +
+  2px gold underline); blue stays reserved for in-page links and actions.
+- **UI and body:** Lexend (weights 300–800), chosen for measured
+  readability: wide apertures, even rhythm, +.005em tracking at 15–16px
+  body sizes. Text tiers on black: #fafafa primary, #c3c7ca body,
+  #9a9ea2 muted (AA floor).
 - **Data, code, endpoints, receipts:** IBM Plex Mono. All numerals in data
   contexts use `font-variant-numeric: tabular-nums`.
 - Body 16–16.5px, line-height 1.6. Display clamps between 40–68px.
@@ -307,6 +310,19 @@ Appendix — approved short descriptions:
 
 ## Change log
 
+- **v2.0 (2026-08-09):** The final platform style, approved from the
+  Range Control mockup line. Typography: Lexend replaces Schibsted
+  Grotesk as the UI/body face; Saira replaces Krona One for wordmark +
+  top bar; gold active-page state in the nav. Text tiers brightened
+  (#fafafa / #c3c7ca / #9a9ea2). Background: the "Approach Vector"
+  scene ships platform-wide — a black planet below the fold whose limb
+  carries a slowly rotating multicolor corona (140s revolution, 14s
+  breathe, blur-softened, sharp dark limb) over a faint spacetime grid.
+  The landing page is the one exception: it keeps its own scene — dark
+  with multicolor aurora curtains (four layers, hue-cycling) — plus its
+  boundary-gate production. Playground adopts the Range Control step
+  structure (01 Select threat / 02 Run the packet / 03 Verdict &
+  receipt) with the Automate band moved to the top.
 - **v1.9 (2026-08-09):** Wordmark and top-bar face changed from Michroma
   to Krona One (single weight 400, .02em tracking) — chunkier, warmer,
   distinctive lowercase. Same scope rule as v1.8: lockup + top bar only.

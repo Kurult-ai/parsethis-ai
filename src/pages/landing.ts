@@ -150,17 +150,17 @@ Verification required before reporting done:
   <link rel="icon" href="/favicon.svg?v=eclipse" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&family=Krona+One&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Lexend:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=Saira:wght@500;600;700&display=swap" rel="stylesheet">
   ${jsonLd}
   <style>
   :root {
     --black: #000; --panel: #0a0a0b; --panel2: #101012;
     --line: rgba(255,255,255,0.08); --line2: rgba(255,255,255,0.14);
-    --white: #f2f2f2; --gray: #adb1b3; --gray-dim: #878b8e;
+    --white: #fafafa; --gray: #c3c7ca; --gray-dim: #9a9ea2;
     --blue: #3d7bff; --violet: #6d5dfc; --cyan: #06b6d4;
     --green: #3ddc84; --red: #ff5d5d; --amber: #ffb454; --gold: #ffd9a0;
     --serif: 'Instrument Serif', serif;
-    --sans: 'Schibsted Grotesk', sans-serif;
+    --sans: 'Lexend', sans-serif;
     --mono: 'IBM Plex Mono', monospace;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -195,13 +195,24 @@ Verification required before reporting done:
   @keyframes glowBreathe { from { opacity: 1; } to { opacity: .72; } }
   body > * { position: relative; z-index: 1; }
 
+  /* ── multicolor aurora curtains (landing-only scene) ── */
+  .lp-curt { position: fixed; top: -12%; bottom: 8%; left: -16%; right: -16%; pointer-events: none; z-index: 0; mix-blend-mode: screen; will-change: transform, filter;
+    -webkit-mask-image: linear-gradient(180deg, #000 6%, transparent 94%); mask-image: linear-gradient(180deg, #000 6%, transparent 94%); }
+  .lp-c1 { background: repeating-linear-gradient(94deg, transparent 0 30px, rgba(56,189,248,.12) 36px 46px, rgba(61,220,132,.10) 52px 60px, rgba(122,92,255,.09) 66px 74px, rgba(255,214,120,.06) 80px 86px, transparent 92px 150px); animation: lpswayA 27s ease-in-out infinite alternate; }
+  .lp-c2 { background: repeating-linear-gradient(87deg, transparent 0 50px, rgba(61,220,180,.11) 58px 70px, rgba(255,196,130,.07) 78px 86px, rgba(96,165,250,.09) 94px 102px, transparent 110px 180px); animation: lpswayB 41s ease-in-out infinite alternate; }
+  .lp-c3 { background: repeating-linear-gradient(91deg, transparent 0 80px, rgba(109,93,252,.10) 88px 102px, rgba(236,110,205,.085) 110px 120px, rgba(52,211,153,.07) 128px 136px, transparent 144px 235px); animation: lpswayC 59s ease-in-out infinite alternate; }
+  .lp-c4 { background: repeating-linear-gradient(89deg, transparent 0 120px, rgba(45,212,191,.09) 130px 144px, rgba(244,140,224,.065) 152px 162px, rgba(250,204,21,.05) 170px 178px, rgba(94,234,212,.06) 186px 194px, transparent 202px 320px); animation: lpswayD 73s ease-in-out infinite alternate; }
+  @keyframes lpswayA { 0% { transform: translateX(-2.5%) skewX(-3deg); filter: hue-rotate(-32deg); } 50% { filter: hue-rotate(26deg); } 100% { transform: translateX(2%) skewX(2.4deg); filter: hue-rotate(-8deg); } }
+  @keyframes lpswayB { 0% { transform: translateX(1.8%) skewX(2deg); filter: hue-rotate(22deg); } 100% { transform: translateX(-2.2%) skewX(-2.6deg); filter: hue-rotate(-34deg); } }
+  @keyframes lpswayC { 0% { transform: translateX(-1.2%) skewX(1.4deg); filter: hue-rotate(22deg); } 100% { transform: translateX(1.6%) skewX(-1.8deg); filter: hue-rotate(-18deg); } }
+  @keyframes lpswayD { 0% { transform: translateX(1%) skewX(-1.2deg); filter: hue-rotate(-14deg); } 100% { transform: translateX(-1.4%) skewX(1.6deg); filter: hue-rotate(26deg); } }
   /* ── header ── */
   header { position: sticky; top: 0; z-index: 50; background: rgba(0,0,0,.72); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
   .nav { display: flex; align-items: center; height: 64px; gap: 32px; }
-  .logo { display: flex; align-items: center; gap: 10px; color: var(--white); font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 13.5px; letter-spacing: .02em; }
+  .logo { display: flex; align-items: center; gap: 10px; color: var(--white); font-family: 'Saira', sans-serif; font-weight: 700; font-size: 16px; letter-spacing: .09em; }
   .logo svg { width: 30px; height: 30px; display: block; }
-  .nav-links { display: flex; gap: 26px; font-family: 'Krona One', sans-serif; font-size: 11px; font-weight: 400; letter-spacing: .02em; color: var(--gray); }
-  .nav .btn { font-family: 'Krona One', sans-serif; font-weight: 400; font-size: 10.5px; letter-spacing: .02em; }
+  .nav-links { display: flex; gap: 28px; font-family: 'Saira', sans-serif; font-size: 13.5px; font-weight: 600; letter-spacing: .045em; color: var(--gray); }
+  .nav .btn { font-family: 'Saira', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: .03em; }
   .nav-links a:hover { color: var(--white); }
   .nav-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
   .btn { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; padding: 9px 18px; border-radius: 8px; border: 1px solid transparent; transition: all .18s; }
@@ -423,13 +434,14 @@ Verification required before reporting done:
     .install-body code { font-size: 12px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .hf-aurora i, .hf-floor, .hf-ring, .hf-ring-arc, .hf-p, .hf-scroll, .sky i, .shoot, .cube::before, .term .cur, .aura-line::before, body::after { animation: none; }
+    .hf-aurora i, .hf-floor, .hf-ring, .hf-ring-arc, .hf-p, .hf-scroll, .sky i, .shoot, .cube::before, .term .cur, .aura-line::before, .lp-curt, body::after { animation: none; }
     .hf-p, .shoot { display: none; }
     .sec-center, .closer { opacity: 1; transform: none; transition: none; }
   }
   </style>
 </head>
 <body${bodyAttrs}>
+<div class="lp-curt lp-c1" aria-hidden="true"></div><div class="lp-curt lp-c2" aria-hidden="true"></div><div class="lp-curt lp-c3" aria-hidden="true"></div><div class="lp-curt lp-c4" aria-hidden="true"></div>
 
 <div class="sky" aria-hidden="true"><i class="s1"></i><i class="s2"></i><i class="s3"></i></div>
 <div class="shoot" aria-hidden="true"></div>

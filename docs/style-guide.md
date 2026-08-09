@@ -43,14 +43,15 @@ photon-ring hovers — on data surfaces amber stays warn-tier.
 - **Display / h1 / editorial turns:** Instrument Serif 400 (italic for the
   turn). Serif appears at the two editorial moments per page — the opening
   statement and the closer — never for body or UI.
-- **UI, headings h2+, body:** Schibsted Grotesk (400–700). Section headings
-  600 at −0.045em; body 15–16px, line-height 1.55–1.65.
+- **UI, headings h2+, body:** Lexend (300–800), +.005em tracking. Section
+  headings 600; body 15–16px, line-height 1.55–1.65. Text tiers on black:
+  `#fafafa` primary, `#c3c7ca` body, `#9a9ea2` muted.
 - **Data, code, receipts, labels:** IBM Plex Mono, `tabular-nums` for all
   numerals in data contexts. Micro-labels uppercase, letterspaced ≥ .1em,
   never below 10.5px.
-- **Wordmark and top bar:** Krona One 400, letterspaced ≥ .02em — the brand
-  lockup (header, footer brand, console masthead, OG image) plus the top
-  navigation bar at 11–12px. Never in headings, body, or in-page UI.
+- **Wordmark and top bar:** Saira — 700/.09em for the wordmark, 600/.045em
+  at 13.5px for nav. Active page marked in corona gold text + underline.
+  Never in headings, body, or in-page UI.
 - Never Inter/Roboto/Arial; never more than these three text families plus
   the wordmark face.
 
@@ -64,11 +65,16 @@ Every page is black, but the sky is dressed by tier:
 2. **Tier 2 — Console (`/dashboard/*`).** Fixed ambient aurora (3 radials,
    ≤ .11 alpha, slow breathe), aurora hairlines, live instruments (orbit
    map, pings, beams). No starfield density, no shooting stars.
-3. **Tier 3 — Content (docs, blog, pricing, trust, Test Lab…).** Quietest:
-   the shell's animated aurora — two fixed layers drifting in counter-phase
-   (46s/64s, alternate, bounded hue-rotate ±22deg, alphas ≤ .11, off under
-   reduced motion) — plus the footer horizon rim. Nothing that competes with
-   reading. Long-form text panels sit on `--surface`.
+3. **Tier 3 — Content (docs, blog, pricing, trust, Test Lab…).** The
+   platform scene, "Approach Vector": a faint spacetime grid, and below the
+   fold a vast black planet whose limb carries a slowly rotating multicolor
+   corona (338vw circle, ring band 84–95%, 140s revolution + 14s breathe,
+   blur(3px), off under reduced motion). Sharp dark limb; the colors travel
+   around the ring rather than changing all at once.
+
+The landing is the exception to the shared scene: its sky is the multicolor
+aurora — four curtain layers (12 color bands, 27–73s sways, hue-cycling) —
+falling toward its own boundary-gate production.
 
 There are no light pages. The Test Lab (/playground) runs on the same
 tokens as everything else; its former light palette is gone.
