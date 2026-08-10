@@ -240,8 +240,9 @@ contrast; red is never used for emphasis of non-risk content.
 - **Data, code, endpoints, receipts:** IBM Plex Mono. All numerals in data
   contexts use `font-variant-numeric: tabular-nums`.
 - Body 16–16.5px, line-height 1.6. Display clamps between 40–68px.
-- The production site currently ships DM Sans; treat as legacy, migrate when
-  touched.
+- Canonical spec, scale, tokens, and loader URL: `docs/typography.md` — this
+  section is the summary; that file wins on conflict. DM Sans is fully
+  migrated out and must not return.
 - Don'ts: no Inter/Roboto/Arial; beyond the wordmark, no more than the two
   text families per surface; no all-caps body text (kickers and labels only,
   letterspaced ≥ .1em).

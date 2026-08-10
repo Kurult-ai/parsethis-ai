@@ -59,7 +59,7 @@ export function renderTrustPage(baseUrl: string): string {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 24px;
-    font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    font-family: var(--mono);
     font-size: 13px;
     color: #c8d6e5;
     overflow-x: auto;

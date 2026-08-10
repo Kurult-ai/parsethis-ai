@@ -150,7 +150,7 @@ Verification required before reporting done:
   <link rel="icon" href="/favicon.svg?v=eclipse" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Lexend:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=Saira:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Lexend:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Saira:wght@500;600;700&display=swap" rel="stylesheet">
   ${jsonLd}
   <style>
   :root {
@@ -159,9 +159,9 @@ Verification required before reporting done:
     --white: #fafafa; --gray: #c3c7ca; --gray-dim: #9a9ea2;
     --blue: #3d7bff; --violet: #6d5dfc; --cyan: #06b6d4;
     --green: #3ddc84; --red: #ff5d5d; --amber: #ffb454; --gold: #ffd9a0;
-    --serif: 'Instrument Serif', serif;
-    --sans: 'Lexend', sans-serif;
-    --mono: 'IBM Plex Mono', monospace;
+    --serif: 'Instrument Serif', Georgia, serif;
+    --sans: 'Lexend', -apple-system, system-ui, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { overflow-x: clip; max-width: 100%; }

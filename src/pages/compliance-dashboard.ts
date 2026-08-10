@@ -182,7 +182,7 @@ export async function renderComplianceDashboardPage(baseUrl: string, apiKeyId: s
     <table style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid var(--border);">Agent ID</th><th style="text-align:right;padding:8px;border-bottom:1px solid var(--border);">Screenings</th><th style="text-align:right;padding:8px;border-bottom:1px solid var(--border);">Avg Risk</th></tr></thead>
       <tbody>
-        ${topAgents.map(a => `<tr><td style="padding:8px;border-bottom:1px solid var(--border);font-family:monospace;font-size:12px;">${a.agent_id}</td><td style="padding:8px;text-align:right;border-bottom:1px solid var(--border);">${a.screenings}</td><td style="padding:8px;text-align:right;border-bottom:1px solid var(--border);color:${a.avg_risk >= 7 ? "var(--destructive)" : a.avg_risk >= 5 ? "#eab308" : "var(--green)"};font-weight:600;">${a.avg_risk}</td></tr>`).join("")}
+        ${topAgents.map(a => `<tr><td style="padding:8px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px;">${a.agent_id}</td><td style="padding:8px;text-align:right;border-bottom:1px solid var(--border);">${a.screenings}</td><td style="padding:8px;text-align:right;border-bottom:1px solid var(--border);color:${a.avg_risk >= 7 ? "var(--destructive)" : a.avg_risk >= 5 ? "#eab308" : "var(--green)"};font-weight:600;">${a.avg_risk}</td></tr>`).join("")}
       </tbody>
     </table>
   </div>` : ""}
@@ -213,7 +213,7 @@ export async function renderComplianceDashboardPage(baseUrl: string, apiKeyId: s
           const scoreColor = score >= 7 ? "var(--destructive)" : score >= 5 ? "#eab308" : "var(--green)";
           const cats = (s.categories as string[] ?? []).map(c => `<span style="display:inline-block;background:var(--surface2);padding:2px 8px;border-radius:4px;font-size:11px;margin:2px;">${c.replace(/_/g," ")}</span>`).join("");
           return `<tr>
-            <td style="padding:10px;border-bottom:1px solid var(--border);font-family:monospace;font-size:11px;color:var(--text-dim);">${new Date(s.createdAt as string).toLocaleString()}</td>
+            <td style="padding:10px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text-dim);">${new Date(s.createdAt as string).toLocaleString()}</td>
             <td style="padding:10px;border-bottom:1px solid var(--border);"><span style="color:${color};font-weight:600;">${verdict.replace(/_/g," ")}</span></td>
             <td style="padding:10px;text-align:center;border-bottom:1px solid var(--border);color:${scoreColor};font-weight:700;font-size:15px;">${score.toFixed(1)}</td>
             <td style="padding:10px;border-bottom:1px solid var(--border);">${cats}</td>
@@ -358,7 +358,7 @@ export async function renderComplianceDashboardPage(baseUrl: string, apiKeyId: s
     </div>
     <div style="margin-bottom:16px;">
       <label style="display:block;font-size:13px;margin-bottom:6px;">Endpoint URL</label>
-      <input type="text" id="siem-endpoint" placeholder="https://splunk.example.com:8088/services/collector" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:6px;font-family:monospace;font-size:13px;" />
+      <input type="text" id="siem-endpoint" placeholder="https://splunk.example.com:8088/services/collector" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:6px;font-family:var(--mono);font-size:13px;" />
     </div>
     <div style="margin-bottom:16px;">
       <label style="display:block;font-size:13px;margin-bottom:6px;">Auth token (HEC token / API key)</label>

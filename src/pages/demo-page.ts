@@ -64,7 +64,7 @@ export function renderDemoPage(baseUrl: string): string {
 .demo-example:hover{border-color:var(--accent);box-shadow:0 4px 14px rgba(31,95,224,0.08);}
 .demo-ex-label{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-0.01em;}
 .demo-ex-desc{font-size:12px;color:var(--text-dim);}
-.demo-ex-preview{font-size:11px;color:var(--text-soft);background:var(--surface2);padding:4px 6px;border-radius:4px;font-family:'JetBrains Mono','SF Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.demo-ex-preview{font-size:11px;color:var(--text-soft);background:var(--surface2);padding:4px 6px;border-radius:4px;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
 /* ── Input ── */
 .demo-input-row{margin-bottom:14px;}
@@ -90,7 +90,7 @@ export function renderDemoPage(baseUrl: string): string {
 .demo-cat-badge{padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;}
 .demo-recs{font-size:14px;color:var(--text-dim);line-height:1.6;}
 .demo-recs strong{color:var(--text);}
-.demo-flags{margin-top:16px;padding:14px;background:var(--surface2);border-radius:8px;font:12px/1.55 'JetBrains Mono','SF Mono',monospace;color:var(--text-dim);overflow-x:auto;white-space:pre-wrap;word-break:break-word;}
+.demo-flags{margin-top:16px;padding:14px;background:var(--surface2);border-radius:8px;font:12px/1.55 var(--mono);color:var(--text-dim);overflow-x:auto;white-space:pre-wrap;word-break:break-word;}
 
 /* ── Sign up CTA ── */
 .demo-cta{display:none;margin-top:20px;padding:24px;text-align:center;border:2px solid var(--accent);border-radius:12px;background:linear-gradient(135deg,var(--accent-dim),var(--surface));}

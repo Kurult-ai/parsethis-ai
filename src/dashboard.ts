@@ -22,7 +22,7 @@ export function getDashboardHTML(demoKey: string): string {
       --green-dim: #065f46;
     }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-family: 'Lexend', -apple-system, system-ui, sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.6;

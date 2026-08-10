@@ -591,7 +591,7 @@ export function renderAdminDashboardPage(baseUrl: string): string {
         }
         .admin-kicker {
           color: var(--green);
-          font: 600 13px 'JetBrains Mono', monospace;
+          font: 600 13px var(--mono);
           text-transform: uppercase;
           letter-spacing: 0.06em;
           margin-bottom: 6px;
@@ -633,7 +633,7 @@ export function renderAdminDashboardPage(baseUrl: string): string {
         textarea,
         .admin-code,
         .admin-output {
-          font-family: 'JetBrains Mono', monospace;
+          font-family: var(--mono);
           font-size: 12px;
         }
         .admin-status {

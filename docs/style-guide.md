@@ -40,6 +40,9 @@ photon-ring hovers — on data surfaces amber stays warn-tier.
 
 ## 2. Typography
 
+> Canonical spec: `docs/typography.md` — tokens, weight ceilings, the one
+> loader URL, and the full type scale. This section is the narrative summary.
+
 - **Display / h1 / editorial turns:** Instrument Serif 400 (italic for the
   turn). Serif appears at the two editorial moments per page — the opening
   statement and the closer — never for body or UI.

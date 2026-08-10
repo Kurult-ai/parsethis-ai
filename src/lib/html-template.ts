@@ -168,7 +168,9 @@ export function renderPage(options: PageOptions): string {
       --ring: #3d7bff;
       --radius: 8px;
       --shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
-      --serif: 'Instrument Serif', serif;
+      --serif: 'Instrument Serif', Georgia, serif;
+      --sans: 'Lexend', -apple-system, system-ui, sans-serif;
+      --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
     }
     body {
       font-family: 'Lexend', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -461,7 +463,7 @@ export function renderPage(options: PageOptions): string {
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 16px 48px 16px 16px;
-      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      font-family: var(--mono);
       font-size: 13px;
       color: #b7f0ce;
       white-space: pre-wrap;
@@ -475,7 +477,7 @@ export function renderPage(options: PageOptions): string {
       background: var(--surface2);
       padding: 2px 6px;
       border-radius: 4px;
-      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      font-family: var(--mono);
       font-size: 0.85em;
     }
     pre code {
@@ -727,7 +729,7 @@ export function renderPage(options: PageOptions): string {
       padding: 4px 12px;
       border-radius: 6px;
       font-size: 12px;
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: var(--sans);
       cursor: pointer;
       opacity: 0;
       transition: opacity 0.15s ease, background 0.15s ease;

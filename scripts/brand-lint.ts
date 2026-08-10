@@ -12,7 +12,7 @@
  *   4. Certification overclaims (§4): "SOC 2 certified", "SOC 2 compliant",
  *      "SOC2 certified", "ISO 27001 certified", "HIPAA compliant".
  *      Only "-aligned" / "alignment" / "in progress" phrasings are allowed.
- *   5. Legacy fonts must not come back (§8): 'DM Sans', 'Inter', 'Roboto',
+ *   5. Legacy/banned fonts must not come back (see docs/typography.md) (§8): 'DM Sans', 'Inter', 'Roboto',
  *      'Arial' as a leading font-family in src/pages or the shell template.
  *   6. The stated-limits sentence must appear on core marketing pages (§3.3):
  *      landing, pricing, technology, trust.
@@ -98,7 +98,7 @@ const COPY_CHECKS: Array<{ rule: string; pattern: RegExp }> = [
 const FONT_CHECKS: Array<{ rule: string; pattern: RegExp }> = [
   {
     rule: "§8 legacy/banned font",
-    pattern: /font-family:\s*['"]?(DM Sans|Inter|Roboto|Arial)\b/,
+    pattern: /font-family:\s*['"]?(DM Sans|Inter|Roboto|Arial|JetBrains Mono)\b/,
   },
 ];
 
