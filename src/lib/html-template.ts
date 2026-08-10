@@ -182,7 +182,7 @@ export function renderPage(options: PageOptions): string {
     }
     /* Approach Vector — the platform scene. A faint spacetime grid above; below
        the fold, a vast black planet whose limb carries a slowly rotating
-       multicolor corona (140s revolution, 14s breathe). Geometry matches the
+       multicolor corona (45s revolution, 14s breathe). Geometry matches the
        approved mockup: ring band 84-95% of a 338vw circle centered 131vw below
        the viewport. */
     body::before {
@@ -199,7 +199,7 @@ export function renderPage(options: PageOptions): string {
         rgba(255,138,61,.33) 82%, rgba(255,217,160,.44) 100%);
       -webkit-mask: radial-gradient(closest-side, transparent 0 84.2%, rgba(0,0,0,.9) 85%, #000 86%, rgba(0,0,0,.35) 90%, transparent 95.5%);
       mask: radial-gradient(closest-side, transparent 0 84.2%, rgba(0,0,0,.9) 85%, #000 86%, rgba(0,0,0,.35) 90%, transparent 95.5%);
-      animation: coronaSpin 140s linear infinite, coronaBreathe 14s ease-in-out infinite alternate;
+      animation: coronaSpin 45s linear infinite, coronaBreathe 14s ease-in-out infinite alternate;
     }
     @keyframes coronaSpin { to { transform: translateX(-50%) rotate(360deg); } }
     @keyframes coronaBreathe { from { opacity: .62; } to { opacity: .9; } }
