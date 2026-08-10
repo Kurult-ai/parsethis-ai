@@ -249,54 +249,14 @@ Verification required before reporting done:
   .hf-grain { position: absolute; inset: 0; z-index: 3; pointer-events: none; opacity: .05; mix-blend-mode: overlay; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.7'/%3E%3C/svg%3E"); }
 
   /* ── the boundary gate (event horizon) ── */
-  .hf-scene { position: absolute; top: 0; right: 0; bottom: 0; width: 52%; z-index: 4; pointer-events: none; }
-  .hf-lane { position: absolute; left: 0; right: 8%; top: 50%; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.10) 20%, rgba(255,255,255,.16) 46%, rgba(255,255,255,.10) 60%, transparent 95%); }
-  .hf-disc { position: absolute; left: 46%; top: 50%; transform: translate(-50%,-50%) rotate(-9deg); width: min(430px, 34vw); height: 34px; border-radius: 50%; background: radial-gradient(50% 50% at 50% 50%, rgba(255,196,130,.16), rgba(255,180,84,.05) 62%, transparent 75%); filter: blur(5px); z-index: 1; }
-  .hf-ring { position: absolute; left: 46%; top: 50%; transform: translate(-50%,-50%); width: min(300px, 24vw); height: min(300px, 24vw); border-radius: 50%; border: 1px solid rgba(255,255,255,.12); display: grid; place-items: center; animation: ringPulse 12s ease-in-out infinite; }
-  @keyframes ringPulse {
-    0% { box-shadow: 0 0 100px rgba(255,93,93,.20), inset 0 0 56px rgba(255,93,93,.09); }
-    7%, 48% { box-shadow: 0 0 60px rgba(255,180,84,.15), inset 0 0 40px rgba(255,180,84,.06); }
-    54% { box-shadow: 0 0 110px rgba(255,93,93,.22), inset 0 0 60px rgba(255,93,93,.10); }
-    62%, 96% { box-shadow: 0 0 64px rgba(255,180,84,.16), inset 0 0 42px rgba(255,180,84,.065); }
-    100% { box-shadow: 0 0 100px rgba(255,93,93,.20), inset 0 0 56px rgba(255,93,93,.09); }
-  }
-  .hf-ring-arc { position: absolute; inset: -1px; border-radius: 50%; background: conic-gradient(from 0deg, transparent 0 70%, rgba(255,180,84,0) 70%, rgba(255,180,84,.8) 86%, rgba(255,217,160,.95) 94%, transparent 100%); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 1.5px)); mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 1.5px)); animation: arcSpin 14s linear infinite; }
-  @keyframes arcSpin { to { transform: rotate(360deg); } }
-  .hf-ring-core { width: 96px; height: 96px; display: grid; place-items: center; filter: drop-shadow(0 0 26px rgba(255,180,84,.35)) drop-shadow(0 14px 44px rgba(255,180,84,.18)); }
-  .hf-core-mark { width: 100%; height: 100%; display: block; }
-
-  .hf-p { position: absolute; top: 50%; left: -2%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: var(--amber); color: var(--amber); box-shadow: 0 0 12px rgba(255,180,84,.65); opacity: 0; animation: pathA 12s linear infinite; }
-  .hf-p::after { content: ""; position: absolute; right: 70%; top: 50%; transform: translateY(-50%); width: 52px; height: 2px; border-radius: 2px; background: linear-gradient(270deg, currentColor, transparent); opacity: .45; }
-  ${buildPathKeyframes()}
-  .p1 { animation-delay: 0s; } .p2 { animation-name: pathB; animation-delay: 1.6s; } .p3 { animation-name: pathC; animation-delay: 3s; }
-  .p4 { animation-name: pathD; animation-delay: 4.6s; } .p5 { animation-name: pathE; animation-delay: 6.2s; } .p6 { animation-name: pathF; animation-delay: 7.8s; }
-  .p7 { animation-name: pathB; animation-delay: 9.2s; } .p8 { animation-name: pathF; animation-delay: 10.6s; }
-  .hf-bad { animation-name: blockHit; }
-  @keyframes blockHit {
-    0% { left: -2%; opacity: 0; transform: translateY(-70px) scale(1); background: var(--amber); color: var(--amber); box-shadow: 0 0 12px rgba(255,180,84,.65); }
-    6% { opacity: 1; }
-    20% { left: 12%; transform: translateY(-60px) scale(1); }
-    34% { left: 22%; transform: translateY(-46px) scale(1); background: var(--amber); }
-    42% { left: 28%; transform: translateY(-34px) scale(1); background: var(--red); color: var(--red); box-shadow: 0 0 18px rgba(255,93,93,.9); }
-    47% { left: 30%; transform: translateY(-30px) scaleX(2.9) scaleY(.5); box-shadow: 0 0 26px rgba(255,93,93,.9); opacity: .9; }
-    55% { left: 35%; transform: translateY(-22px) scaleX(.06) scaleY(.06); opacity: 0; }
-    100% { left: 35%; opacity: 0; transform: translateY(-22px) scale(.06); }
-  }
-  @keyframes blockHitLow {
-    0% { left: -2%; opacity: 0; transform: translateY(84px) scale(1); background: var(--amber); color: var(--amber); box-shadow: 0 0 12px rgba(255,180,84,.65); }
-    6% { opacity: 1; }
-    20% { left: 12%; transform: translateY(72px) scale(1); }
-    34% { left: 23%; transform: translateY(54px) scale(1); background: var(--amber); }
-    42% { left: 29%; transform: translateY(40px) scale(1); background: var(--red); color: var(--red); box-shadow: 0 0 18px rgba(255,93,93,.9); }
-    47% { left: 31%; transform: translateY(36px) scaleX(2.9) scaleY(.5); box-shadow: 0 0 26px rgba(255,93,93,.9); opacity: .9; }
-    55% { left: 36%; transform: translateY(26px) scaleX(.06) scaleY(.06); opacity: 0; }
-    100% { left: 36%; opacity: 0; transform: translateY(26px) scale(.06); }
-  }
-  .b1 { animation-delay: 6.8s; animation-duration: 12s; }
-  .b2 { animation-name: blockHitLow; animation-delay: 1.2s; animation-duration: 12s; }
-  .hf-readout { position: absolute; left: 46%; top: calc(50% + min(170px, 14vw)); transform: translateX(-50%); display: flex; gap: 22px; font-family: var(--mono); font-size: 11px; letter-spacing: .12em; white-space: nowrap; }
-  .hf-readout .ok { color: var(--green); opacity: .85; }
-  .hf-readout .no { color: var(--red); opacity: .75; }
+  /* ── lensed black hole (lightweight WebGL shader; homage to
+        steeltroops-ai/blackhole-simulation — design lineage:
+        ~/Downloads/parse-resend-variants-2026-08-09/hero-blackhole-sim.html) ── */
+  #bh { position: absolute; right: 6%; top: 50%; transform: translateY(-50%) rotate(-45deg); width: min(860px, 56vw); aspect-ratio: 1; z-index: 4; pointer-events: none;
+        -webkit-mask-image: radial-gradient(circle closest-side, #000 52%, transparent 96%); mask-image: radial-gradient(circle closest-side, #000 52%, transparent 96%); }
+  .hf-bh-receipt { position: absolute; right: 6%; bottom: 10%; z-index: 4; font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em; pointer-events: none; }
+  .hf-bh-receipt b { font-weight: 500; color: var(--green); }
+  .hf-bh-receipt span { color: var(--gray-dim); }
 
   /* ── sections ── */
   section { padding: 92px 0; position: relative; }
@@ -415,10 +375,11 @@ Verification required before reporting done:
   .frow a:hover { color: var(--white); }
   .limits { margin-top: 16px; max-width: 82ch; }
 
+  @media (max-width: 1100px) {
+    #bh, .hf-bh-receipt { display: none; }
+  }
   @media (max-width: 900px) {
-    .hf-scene { width: 100%; opacity: .34; }
     .hf-copy { max-width: 100%; }
-    .hf-readout { display: none; }
     .bento, .gov { grid-template-columns: 1fr; }
     .pa-articles { grid-template-columns: 1fr; }
     .rowi { grid-template-columns: 1fr; gap: 8px; padding: 20px 4px; }
@@ -436,8 +397,8 @@ Verification required before reporting done:
     .install-body code { font-size: 12px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .hf-ring, .hf-ring-arc, .hf-p, .hf-scroll, .cube::before, .term .cur, .aura-line::before, body::after { animation: none; }
-    .hf-p, .shoot { display: none; }
+    .hf-scroll, .cube::before, .term .cur, .aura-line::before, body::after { animation: none; }
+    .shoot { display: none; }
     .sec-center, .closer { opacity: 1; transform: none; transition: none; }
   }
   </style>
@@ -459,10 +420,9 @@ Verification required before reporting done:
 </header>
 
 <div class="hf">
-  
-  <div class="hf-scene" aria-hidden="true">
-    <div class="hf-readout"><span class="ok">allowed · receipted</span><span class="no">blocked · receipted</span></div>
-  </div>
+
+  <canvas id="bh" aria-hidden="true"></canvas>
+  <div class="hf-bh-receipt" aria-hidden="true"><b>every crossing</b> <span>· receipted</span></div>
 
   <div class="wrap hf-inner">
     <div class="hf-copy">
@@ -678,6 +638,116 @@ curl -s ${baseUrl}/v1/parse \\
   });
 })();
 
+// Lensed black hole hero — lightweight homage to steeltroops-ai/blackhole-simulation:
+// one raw-WebGL fragment shader, iterative geodesic bending, thin accretion disc
+// with Doppler beaming, photon ring from the loop, lensed procedural starfield,
+// slow orbit + hue drift. No framework, DPR capped, pauses offscreen.
+// Source mockup: ~/Downloads/parse-resend-variants-2026-08-09/hero-blackhole-sim.html
+(function(){
+  var canvas = document.getElementById('bh');
+  if (!canvas) return;
+  var still = new URLSearchParams(location.search).has('still');
+  var gl = canvas.getContext('webgl', { alpha:true, antialias:false, depth:false, stencil:false, powerPreference:'low-power', preserveDrawingBuffer: still });
+  if (!gl) return;
+  var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var vs = 'attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }';
+  var fs = \`
+precision highp float;
+uniform vec2 R; uniform float T;
+
+mat3 hueRot(float a){
+  float c = cos(a), s = sin(a);
+  return mat3(.299,.587,.114,.299,.587,.114,.299,.587,.114)
+       + c * (mat3(1,0,0,0,1,0,0,0,1) - mat3(.299,.587,.114,.299,.587,.114,.299,.587,.114))
+       + s * mat3(-.3,-.588,.886, .143,-.353,.258, -.787,.715,.072);
+}
+float hash(vec3 q){ return fract(sin(dot(q, vec3(127.1,311.7,74.7))) * 43758.5453); }
+vec3 stars(vec3 d){
+  vec3 q = normalize(d);
+  vec3 cell = floor(q * 90.);
+  float h = hash(cell);
+  float star = smoothstep(.995, 1., h) * (.35 + .45 * hash(cell + 1.3));
+  return vec3(star) * vec3(.85, .9, 1.);
+}
+void main(){
+  vec2 uv = (gl_FragCoord.xy - .5 * R) / R.y;
+  vec3 ro = vec3(0., .55, -7.2);
+  vec3 rd = normalize(vec3(uv.x, uv.y - .04, 1.05));
+  float ca = -.10;
+  mat3 tilt = mat3(1.,0.,0., 0.,cos(ca),-sin(ca), 0.,sin(ca),cos(ca));
+  ro = tilt * ro; rd = tilt * rd;
+  float yaw = T * .06;
+  mat3 orb = mat3(cos(yaw),0.,sin(yaw), 0.,1.,0., -sin(yaw),0.,cos(yaw));
+  ro = orb * ro; rd = orb * rd;
+
+  vec3 p = ro, v = rd;
+  vec3 col = vec3(0.);
+  float captured = 0.;
+  float w = 1.;
+  float jit = .9 + .2 * hash(vec3(gl_FragCoord.xy, 7.));
+
+  for (int i = 0; i < 110; i++) {
+    float r = length(p);
+    if (r < .9) { captured = 1.; break; }
+    float dt = clamp(.05 + .055 * r, .06, .3) * jit;
+    vec3 acc = -1.55 * p / (r * r * r * r);
+    v += acc * dt;
+    vec3 pp = p;
+    p += v * dt;
+    if (pp.y * p.y < 0.) {
+      float t = pp.y / (pp.y - p.y);
+      vec3 hit = mix(pp, p, t);
+      float hr = length(hit.xz);
+      if (hr > 1.3 && hr < 4.6) {
+        float ang = atan(hit.z, hit.x);
+        float doppler = 1. + .6 * sin(ang) / sqrt(hr);
+        float arms = sin(ang * 2. - hr * 3.5 + T * 1.1);
+        float fine = sin(ang * 9. - hr * 11. + T * 2.2);
+        float bands = .72 + .28 * arms + .10 * fine;
+        float glow = pow(1.55 / hr, 2.2) * bands * doppler;
+        vec3 disc = mix(vec3(1.0,.78,.42), vec3(1.0,.45,.16), clamp((hr-1.3)/3.3, 0., 1.));
+        disc = mix(disc, vec3(1.02,.98,.9), clamp((doppler - 1.)*.5, 0., .35));
+        col += disc * glow * .55 * w;
+        w *= .5;
+      }
+    }
+  }
+  if (captured < .5) col += stars(v) * .8;
+  col = clamp(hueRot(T * .026) * col, 0., 1.3);
+  float vig = smoothstep(1.15, .45, length(uv));
+  gl_FragColor = vec4(col * vig, 1.);
+}\`;
+
+  function shader(type, src){ var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s)); return s; }
+  var prog = gl.createProgram();
+  gl.attachShader(prog, shader(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog); gl.useProgram(prog);
+  var buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  var loc = gl.getAttribLocation(prog, 'p');
+  gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  var uR = gl.getUniformLocation(prog, 'R'), uT = gl.getUniformLocation(prog, 'T');
+
+  function size(){
+    var dpr = Math.min(devicePixelRatio || 1, 1.25);
+    var w = canvas.clientWidth * dpr, h = canvas.clientHeight * dpr;
+    if (canvas.width !== w) { canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h); }
+  }
+  var visible = true, raf = 0;
+  new IntersectionObserver(function (e) { visible = e[0].isIntersecting; if (visible && !raf && !still && !reduced) loop(); }).observe(canvas);
+  function frame(t){
+    size();
+    gl.uniform2f(uR, canvas.width, canvas.height);
+    gl.uniform1f(uT, t * .001);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  function loop(){ raf = requestAnimationFrame(function (ts) { frame(ts); raf = 0; if (visible) loop(); }); }
+  if (still || reduced) { var tSec = parseFloat(new URLSearchParams(location.search).get('t')) || 9; size(); frame(tSec * 1000); window.__bhOK = (gl.getError() === 0); window.__bhShot = function () { return canvas.toDataURL('image/png'); }; } else loop();
+})();
 
 </script>
 
@@ -685,34 +755,3 @@ curl -s ${baseUrl}/v1/parse \\
 </html>`;
 }
 
-/** Six curved packet trajectories converging on the gate and fanning out. */
-function buildPathKeyframes(): string {
-  const amber = "background: var(--amber); color: var(--amber); box-shadow: 0 0 12px rgba(255,180,84,.65);";
-  const green = "background: var(--green); color: var(--green); box-shadow: 0 0 14px rgba(61,220,132,.8);";
-  const paths: Array<[string, Record<number, number>]> = [
-    ["pathA", { 0: -88, 18: -72, 32: -40, 45: -6, 62: 14, 78: 30, 96: 40 }],
-    ["pathB", { 0: 96, 18: 76, 32: 42, 45: 8, 62: -18, 78: -38, 96: -52 }],
-    ["pathC", { 0: -34, 18: -10, 32: 12, 45: 4, 62: -10, 78: -24, 96: -28 }],
-    ["pathD", { 0: 58, 18: 52, 32: 30, 45: 5, 62: 26, 78: 48, 96: 62 }],
-    ["pathE", { 0: 14, 18: 10, 32: 6, 45: 2, 62: -6, 78: -30, 96: -46 }],
-    ["pathF", { 0: -60, 18: -52, 32: -30, 45: -4, 62: 4, 78: 8, 96: 6 }],
-  ];
-  return paths
-    .map(([name, ys]) => {
-      const seg = (pct: number) => (pct <= 45 ? (-2 + 50 * pct / 46) : (46 + 48 * (pct - 47) / 49));
-      return `@keyframes ${name} {
-    0% { left: -2%; opacity: 0; transform: translateY(${ys[0]}px); ${amber} }
-    6% { opacity: 1; }
-    18% { left: ${seg(18).toFixed(1)}%; transform: translateY(${ys[18]}px); }
-    32% { left: ${seg(32).toFixed(1)}%; transform: translateY(${ys[32]}px); }
-    45% { left: 44%; transform: translateY(${ys[45]}px); ${amber} }
-    47% { left: 46%; transform: translateY(0px); ${green} }
-    62% { left: ${seg(62).toFixed(1)}%; transform: translateY(${ys[62]}px); }
-    78% { left: ${seg(78).toFixed(1)}%; transform: translateY(${ys[78]}px); }
-    88% { opacity: 1; }
-    96% { left: 94%; opacity: 0; transform: translateY(${ys[96]}px); background: var(--green); }
-    100% { left: 94%; opacity: 0; }
-  }`;
-    })
-    .join("\n  ");
-}
