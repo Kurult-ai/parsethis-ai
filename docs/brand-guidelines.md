@@ -167,26 +167,32 @@ marketing copy — the brand claims section here should mirror those statuses.
 
 ## 6. Logo
 
-- The mark is the **Total Eclipse** (adopted 2026-08-09, succeeds the
-  Event Horizon mark): a deep black disc at totality, a warm orange-yellow
-  corona around the limb — gold `#ffd9a0` at the edge through amber
-  `#ffb454` to deep orange `#ff8a3d` at the fade — and the diamond-ring
-  flare `#fff3d6` at the upper-right limb. The reading: Parse stands
-  between raw power and everything else; what passes the boundary is
-  deliberate, visible, and receipted. Source of truth is `src/lib/logo.ts`.
+- The mark is the **Lensed Fold** (adopted 2026-08-10, succeeds the
+  Total Eclipse mark): the landing animation's silhouette as geometry — the
+  black shadow, a hairline photon ring `#fff3d6`, and the accretion disc
+  folded by gravitational lensing: the near-side band sweeping across the
+  front, the far side bent over the top and under the bottom. One radial
+  gradient serves every element, following the disc temperature ramp — hot
+  `#fff3d6` at the hole through gold `#ffd9a0` and amber `#ffb454` to deep
+  orange `#ff8a3d` outward. The reading: the boundary is where everything
+  is decided, and what crosses it is visible and receipted. Source of
+  truth is `src/lib/logo.ts` (parametric geometry — generated, not drawn).
   Do not redraw it per surface.
-- The mark must read on both dark and light grounds: the disc stays pure
-  black with the hairline gold rim; the corona carries the identity.
-- The corona is all-warm — no blue in the mark. Corona amber/gold in
+- The mark must read on both dark and light grounds: the shadow stays pure
+  black behind the ring; the fold carries the identity. The favicon uses
+  the bold cut (`getFaviconCutSvg`) — arches dropped, weights raised.
+- The fold is all-warm — no blue in the mark. Fold amber/gold in
   atmosphere/logo contexts does not violate the risk-color rule (§7); on
   data surfaces, amber remains reserved for warn-tier content.
-- The flare sits at 40° on the upper-right limb, always. It is part of the
-  mark, not a decoration to move or multiply.
+- The Doppler highlight sits on the band's right tip, always — the
+  approaching side is brighter. It is part of the mark's physics, not a
+  decoration to move or multiply.
+- The mark's tilt is −24°, matching the hero canvas. No further rotation.
 - Clearspace: half the mark's diameter on all sides. Minimum size 16px
-  (favicon-tested).
+  (favicon-tested, via the bold cut).
 - Don'ts: no shields, locks, robots, or hoodie iconography attached to the
-  mark; no rotation; no extra glows beyond the built-in gradient; never
-  place a red element inside the pupil.
+  mark; no extra glows beyond the built-in gradient; never place a red
+  element inside the shadow.
 
 ## 7. Color
 
@@ -334,6 +340,9 @@ Appendix — approved short descriptions:
   the aerospace-instrument face), wordmark-only: header lockup, footer
   brand, console masthead, lockup SVG, OG image. UI text stays Schibsted;
   §8 gains the wordmark rule.
+- **v1.7 (2026-08-10):** Logo replaced with the **Lensed Fold** mark: the
+  hero animation's lensed-disc silhouette as parametric geometry (band,
+  arches, photon ring, Doppler tip); favicon moved to the bold cut.
 - **v1.6 (2026-08-09):** Logo replaced with the **Total Eclipse** mark:
   deep black disc, orange-yellow corona, diamond-ring flare at the
   upper-right limb. The mark is now all-warm — Parse Blue no longer appears

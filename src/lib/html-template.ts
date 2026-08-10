@@ -54,7 +54,7 @@ export function renderPage(options: PageOptions): string {
   const canonicalUrl = `${baseUrl}${path}`;
   const safeTitle = escapeHtml(title);
   const safeDesc = escapeHtml(description);
-  const ogImg = ogImage || `${baseUrl}/og-image.svg?v=eclipse`;
+  const ogImg = ogImage || `${baseUrl}/og-image.svg?v=fold`;
 
   // --- JSON-LD blocks ---
   let jsonLdBlocks = "";
@@ -135,7 +135,7 @@ export function renderPage(options: PageOptions): string {
   <meta name="twitter:description" content="${safeDesc}">
   <meta name="twitter:image" content="${escapeHtml(ogImg)}">
   <meta name="theme-color" content="#000000">
-  <link rel="icon" href="/favicon.svg?v=eclipse" type="image/svg+xml">
+  <link rel="icon" href="/favicon.svg?v=fold" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Lexend:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Saira:wght@500;600;700&display=swap" rel="stylesheet">

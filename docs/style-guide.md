@@ -111,11 +111,12 @@ sweep, scroll-hue. Never scroll-jacking or parallax.
 
 ## 6. The logo in the system
 
-The Total Eclipse mark (see brand guidelines §6) is the only place the full
-corona gradient and diamond-ring flare appear at rest. The gate animation on
-the landing uses the mark as its core — product surfaces may echo the
-eclipse (black disc + gold rim) for "core"/"origin" elements, but never
-redraw the corona or the flare as decoration.
+The Lensed Fold mark (see brand guidelines §6) is the only place the full
+fold — band, arches, ring, Doppler tip — appears at rest. The landing hero
+renders the same physics the mark abstracts (the lensed disc and its
+receipts), so the two rhyme by construction. Product surfaces may echo the
+hole (black disc + gold ring) for "core"/"origin" elements, but never
+redraw the band or the arches as decoration.
 
 ## 7. Light surfaces
 

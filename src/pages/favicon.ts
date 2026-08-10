@@ -1,5 +1,5 @@
-import { getLogoIconSvg } from "../lib/logo.js";
+import { getFaviconCutSvg } from "../lib/logo.js";
 
 export function getFaviconSvg(): string {
-  return getLogoIconSvg();
+  return getFaviconCutSvg();
 }
