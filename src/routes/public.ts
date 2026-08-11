@@ -47,6 +47,7 @@ import { renderBillingDashboardPage } from "../pages/billing.js";
 import { renderAgentDashboardPage } from "../pages/agent-dashboard.js";
 import { renderTrustPage } from "../pages/trust-page.js";
 import { renderTrustPackagePage } from "../pages/trust-package.js";
+import { renderDpaPage } from "../pages/dpa.js";
 import { renderAboutPage } from "../pages/about.js";
 import { renderPromptGuardLandingPage } from "../pages/prompt-guard-landing.js";
 import { renderPromptGuardPlaygroundPage } from "../pages/prompt-guard-playground.js";
@@ -935,6 +936,12 @@ publicRoutes.get("/docs/trust-package.md", (c) => {
   }
 });
 
+// DPA — Data Processing Agreement
+publicRoutes.get("/dpa", (c) => {
+  const baseUrl = getBaseUrl(c);
+  return c.html(renderDpaPage(baseUrl));
+});
+
 // About page
 publicRoutes.get("/about", (c) => {
   return c.html(renderAboutPage(getBaseUrl(c)));
@@ -1641,6 +1648,28 @@ ${DATA_FLOW_HTML}
   <li><strong>Analytics:</strong> We do not use third-party analytics cookies or trackers</li>
   <li><strong>Marketing:</strong> We do not send marketing emails or use your data for advertising</li>
 </ul>
+
+<h2 id="gdpr">GDPR and UK Data Protection</h2>
+
+<p class="answer-capsule">Parse for Agents processes personal data on behalf of its customers as a data processor under Article 28 of the GDPR. Our Data Processing Agreement is available at <a href="/dpa">/dpa</a>.</p>
+
+<h3>Lawful basis</h3>
+<p class="answer-capsule">We process personal data under the lawful bases of <strong>contract</strong> (providing the screening service) and <strong>legitimate interests</strong> (security, fraud prevention, network integrity).</p>
+
+<h3>International data transfers</h3>
+<p class="answer-capsule">Personal data may be transferred from the EEA/UK to the United States under the <strong>Standard Contractual Clauses</strong> (SCCs). See our <a href="/dpa">DPA</a> for the full transfer mechanism and a Transfer Impact Assessment summary.</p>
+
+<h3>Data residency</h3>
+<p class="answer-capsule">Processing currently occurs in the United States. An EU/UK region is on our roadmap. Customers requiring EU residency today can use <code>mode: "pattern-only"</code> to ensure prompt text never leaves their infrastructure.</p>
+
+<h3>Sub-processors</h3>
+<p class="answer-capsule">See the <a href="/trust#subprocessors">sub-processor list on our Trust page</a> or the full <a href="/dpa#sub-processors">DPA sub-processor table</a> with GDPR adequacy status.</p>
+
+<h3>Your rights</h3>
+<p class="answer-capsule">You have the right to access, rectify, erase, restrict processing of, and port your personal data. To exercise these rights, contact <a href="mailto:privacy@parsethis.ai">privacy@parsethis.ai</a>.</p>
+
+<h3>Data Protection Officer</h3>
+<p class="answer-capsule">For data protection inquiries, contact <a href="mailto:dpo@parsethis.ai">dpo@parsethis.ai</a>.</p>
 
 <h2>Children's Privacy</h2>
 

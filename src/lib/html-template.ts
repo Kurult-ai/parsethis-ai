@@ -683,6 +683,7 @@ export function renderPage(options: PageOptions): string {
           <a href="/changelog">Changelog</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
+          <a href="/dpa">DPA</a>
           <a href="/acceptable-use">Acceptable Use</a>
           <a href="/refund">Refunds</a>
         </div>

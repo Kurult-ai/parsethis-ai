@@ -124,6 +124,7 @@ export function renderTrustPage(baseUrl: string): string {
 <div class="trust-contact-box">
   <h3>Need this for your vendor risk assessment?</h3>
   <p>The full trust package is available as a <a href="/trust-package">downloadable document</a>. You can also <a href="/docs/trust-package.md" download>download the Markdown source</a>.</p>
+  <p>Our <a href="/dpa">Data Processing Agreement (DPA)</a> covers GDPR Article 28, SCCs, sub-processor adequacy, and breach notification.</p>
   <p>Programmatic security posture: <code>GET /v1/security/headers</code></p>
   <a href="mailto:security@parsethis.ai" class="btn btn-primary">Contact Security</a>
 </div>
@@ -258,11 +259,13 @@ ${DATA_FLOW_HTML}
 
 <div class="table-wrapper">
   <table>
-    <thead><tr><th>Subprocessor</th><th>Purpose</th><th>Data Accessed</th></tr></thead>
+    <thead><tr><th>Subprocessor</th><th>Purpose</th><th>Location</th><th>Sees prompt text?</th><th>GDPR adequacy</th></tr></thead>
     <tbody>
-      <tr><td>OpenRouter</td><td>Routes the semantic analysis layer (Layer 2) to a model provider, and runs the prompt when <code>execute: true</code></td><td>Prompt text. What OpenRouter and the providers behind it retain is set by their policies, not ours.</td></tr>
-      <tr><td>Stripe</td><td>Subscription billing</td><td>Payment metadata only. Card details go to Stripe directly; Parse never holds them.</td></tr>
-      <tr><td>Cloud infrastructure (compute, Postgres, Redis)</td><td>Hosting and storage</td><td>Whatever Parse stores, listed in <a href="#storage">Data Storage</a>. Prompt text is not among it for the screening endpoints.</td></tr>
+      <tr><td>OpenRouter</td><td>Routes the semantic analysis layer (Layer 2) to a model provider, and runs the prompt when <code>execute: true</code></td><td>US</td><td>Only in full mode</td><td>SCCs</td></tr>
+      <tr><td>Cloudflare</td><td>CDN, tunnel, DDoS protection</td><td>Global edge</td><td>No</td><td>SCCs + CISPE</td></tr>
+      <tr><td>Stripe</td><td>Subscription billing</td><td>US / Ireland</td><td>No</td><td>SCCs + PCI-DSS</td></tr>
+      <tr><td>PostgreSQL (self-hosted)</td><td>Screening event storage</td><td>US (Mac Mini)</td><td>Metadata only</td><td>N/A (self-hosted)</td></tr>
+      <tr><td>Redis (self-hosted)</td><td>Rate limiting, caching, queues</td><td>US (Mac Mini)</td><td>No</td><td>N/A (self-hosted)</td></tr>
     </tbody>
   </table>
 </div>

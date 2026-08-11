@@ -429,6 +429,7 @@ Required verification:
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.enterprise.requestsPerMinute.toLocaleString()} req/min</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Custom SLAs</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.enterprise.sandboxExecutionsPerHour.toLocaleString()} sandbox/hr</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><a href="/dpa">DPA + SCCs</a></li>
         <li style="padding:6px 0;">Dedicated support</li>
       </ul>
       <a href="mailto:${PRODUCT.contactEmail}?subject=Enterprise%20Plan" class="btn btn-outline" style="width:100%;text-align:center;">Contact Sales</a>
