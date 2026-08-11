@@ -107,21 +107,26 @@ When a developer asks Claude Code to work on a GitHub issue, screen the issue bo
 // Screening a standalone string is a single POST — no SDK needed.
 // (Use `wrap()` from @parsethis/sdk when you want every LLM call screened
 // automatically; use the endpoint directly when you're screening content.)
-async function screenIssueBody(issueBody: string, issueUrl: string) {
+async function screen(prompt: string, metadata: Record<string, unknown> = {}) {
   const response = await fetch('https://www.parsethis.ai/v1/parse', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${process.env.PARSE_API_KEY}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      prompt: issueBody,
-      // Tell Parse this text came from a third party, not from your user —
-      // signals in retrieved content are weighted accordingly.
-      metadata: { source_kind: 'retrieved_doc', trust_level: 'external', source: issueUrl }
-    })
+    body: JSON.stringify({ prompt, metadata })
   });
-  const result = await response.json();
+  return response.json();
+}
+
+async function screenIssueBody(issueBody: string, issueUrl: string) {
+  // Tell Parse this text came from a third party, not from your user —
+  // signals in retrieved content are weighted accordingly.
+  const result = await screen(issueBody, {
+    source_kind: 'retrieved_doc',
+    trust_level: 'external',
+    source: issueUrl
+  });
 
   if (result.recommended_action === 'block') {
     console.error(`⚠️  Issue body blocked by security policy`);
@@ -160,11 +165,7 @@ async function screenedExec(command: string): Promise<string> {
   const { stdout } = await exec(command);
 
   // Screen the output for injection before Claude Code reads it
-  const result = await parse.screen({
-    prompt: stdout,
-    context: 'tool_output',
-    metadata: { command }
-  });
+  const result = await screen(stdout, { source_kind: 'tool_output', command });
 
   if (result.recommended_action === 'block') {
     console.error(`Tool output blocked: injection detected in ${command}`);
@@ -181,12 +182,18 @@ Before Claude Code executes a generated shell command, screen it for exfiltratio
 
 ```typescript
 async function screenBeforeExec(command: string): Promise<boolean> {
-  const result = await parse.screenOutput({
-    output: command,
-    context: 'agent_generated_command'
+  const response = await fetch('https://www.parsethis.ai/v1/screen-output', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.PARSE_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ output: command, metadata: { source_kind: 'tool_output' } })
   });
+  const result = await response.json();
 
-  if (result.risk_score > 0.7) {
+  // risk_score is 0-10, not 0-1. 7 is the default block threshold.
+  if (result.risk_score >= 7) {
     console.error(`Command blocked: risk score ${result.risk_score}`);
     console.error(`Categories: ${result.categories.join(', ')}`);
     return false;
@@ -224,7 +231,7 @@ function logScreeningEvent(event: {
 }
 
 // Wire into the screening pipeline
-const result = await parse.screen({ prompt: content });
+const result = await screen(content, { source_kind: 'retrieved_doc' });
 logScreeningEvent({
   trace_id: result.trace_id,
   context: 'github_issue',

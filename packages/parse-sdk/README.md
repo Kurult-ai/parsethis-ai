@@ -6,7 +6,7 @@ Two implementations live here:
 
 | Language | Directory | Distribution name |
 |----------|-----------|-------------------|
-| TypeScript / Node | [`ts/`](ts/) | `@parsethis/sdk` on npm |
+| TypeScript / Node | [`ts/`](ts/) | `@parsethis/sdk` (not published yet) |
 | Python | [`python/`](python/) | `parse-agents`, imported as `parse_agents` |
 
 ## Quickstart

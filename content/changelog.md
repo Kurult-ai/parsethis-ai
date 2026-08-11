@@ -10,7 +10,9 @@ author: "Parse"
 # Changelog
 
 What changed in the Parse API and the surfaces around it. Newest first. Dates are the
-day the change went live.
+day the change landed in the repository. Entries reach www.parsethis.ai on the next
+deploy, so the newest entries may describe behaviour the live service does not have
+yet.
 
 ## 2026-08-11
 

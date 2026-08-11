@@ -116,7 +116,11 @@ Screen a prompt for injection attacks, jailbreaks, adversarial patterns, and pri
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `prompt` | string | Yes | The prompt text to analyze |
-| `execute` | boolean | No | Run in isolated sandbox, returns 202 with poll_url |
+| `mode` | `"full"` \| `"pattern-only"` | No | Analysis depth. `full` (default) runs pattern matching plus semantic analysis, which sends the prompt to the model provider. `pattern-only` keeps the prompt inside Parse at the cost of semantic coverage — indirect injection is substantially harder to catch on patterns alone. Cannot be combined with `execute`. |
+| `execute` | boolean \| `"auto"` | No | Run in isolated sandbox, returns 202 with poll_url. `"auto"` lets Parse decide from the verdict. |
+| `model` | string | No | Override the model used for semantic analysis (must be allowlisted) |
+| `policy_mode` | `"strict"` \| `"balanced"` \| `"low_fp"` | No | Tunes how aggressively borderline verdicts are actioned |
+| `bypass_codeword` | string | No | Trusted-caller unblock path; returns risk_score 0 when it matches the configured codeword |
 | `test_input` | string | No | Input data to pair with prompt during sandbox execution |
 | `agent_config` | object | No | `{ model, temperature, max_tokens, agent_role }` |
 | `metadata` | object | No | `{ agent_id, session_id, source, requester_trust, requester_id, channel, subject, conversation_context }` for tracking and owner-approval decisions |
@@ -125,7 +129,8 @@ Screen a prompt for injection attacks, jailbreaks, adversarial patterns, and pri
 
 ```json
 {
-  "id": "parse_abc123",
+  "id": "5a4d2a05-6e97-428a-82e9-cd966e3892c5",
+  "trace_id": "5a4d2a05-6e97-428a-82e9-cd966e3892c5",
   "risk_score": 7,
   "safe": false,
   "verdict": "high_risk",
@@ -146,9 +151,50 @@ Screen a prompt for injection attacks, jailbreaks, adversarial patterns, and pri
     "approval_required_for_future_plans": true,
     "approval_default_action": "deny"
   },
-  "suggested_action": "block"
+  "suggested_action": "block",
+  "analysis_method": "pattern+llm",
+  "layers": { "pattern": "ran", "llm": "ran" },
+  "latency_ms": 213
 }
 ```
+
+### Knowing which layers ran
+
+`trace_id` is the receipt identifier for a verdict — it is always identical to
+`id`, and it is the value to log for audit and incident review.
+
+`layers` reports what actually contributed to the verdict, so a caller can tell
+a confident answer from a fallback:
+
+| `layers.llm` | Meaning | Degraded? |
+|---|---|---|
+| `ran` | Semantic analysis contributed | No |
+| `skipped_pattern_only` | You passed `mode: "pattern-only"` | No |
+| `skipped_high_severity` | Patterns were already conclusive; semantic analysis could not lower the score | No |
+| `disabled` | No model provider configured on this deployment | **Yes** |
+| `failed` | The model call did not return a usable verdict | **Yes** |
+
+When the layer was unavailable rather than deliberately skipped, the response
+also carries `degraded: true` and `degraded_reason` (`llm_failed` or
+`llm_disabled`). Treat a degraded verdict as weaker evidence: it rests on
+pattern matching alone and may under-report semantic attacks such as indirect
+injection. `analysis_method` is `pattern`, `pattern+llm`, or `pattern_only` —
+`pattern_only` means you asked for it, a bare `pattern` means check `degraded`.
+
+### What Parse does not offer
+
+Stated plainly so you do not have to discover it by trying:
+
+- **No streaming.** Screening returns a single verdict; there is no partial or
+  token-by-token response.
+- **No batch endpoint.** Screen one prompt per request. Concurrency is bounded
+  by your tier's rate limit rather than by a bulk API.
+- **No idempotency keys.** Screening has no side effects on your data, so a
+  retry is safe and simply produces a new `trace_id`. Retries do count against
+  rate limits and billed usage.
+- **No published latency SLO.** Observed pattern-path latency is roughly
+  20-30ms; adding the semantic layer typically brings a request to 200-450ms.
+  These are measurements, not a contractual guarantee.
 
 When a private disclosure needs owner consent, `suggested_action` is `request_owner_approval` and the response includes `approval_request`:
 

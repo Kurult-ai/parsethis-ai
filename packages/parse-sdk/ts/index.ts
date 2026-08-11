@@ -95,12 +95,20 @@ export class ParseScreeningError extends Error {
   public readonly riskScore: number;
   public readonly flags: unknown[];
   public readonly categories: string[];
+  /** Receipt identifier for this verdict. Log it — incident review starts here. */
+  public readonly traceId?: string;
+  /** True when the verdict was reached without semantic analysis. */
+  public readonly degraded?: boolean;
+  public readonly degradedReason?: string;
 
   constructor(message: string, details: {
     verdict: string;
     riskScore: number;
     flags: unknown[];
     categories: string[];
+    traceId?: string;
+    degraded?: boolean;
+    degradedReason?: string;
   }) {
     super(message);
     this.name = "ParseScreeningError";
@@ -108,6 +116,9 @@ export class ParseScreeningError extends Error {
     this.riskScore = details.riskScore;
     this.flags = details.flags;
     this.categories = details.categories;
+    this.traceId = details.traceId;
+    this.degraded = details.degraded;
+    this.degradedReason = details.degradedReason;
   }
 }
 
@@ -116,9 +127,19 @@ export class ParseScreeningError extends Error {
 interface ParseApiResponse {
   risk_score: number;
   safe: boolean;
-  verdict: "safe" | "low_risk" | "medium_risk" | "high_risk" | "critical";
+  /** "block" is returned by the kill switch for a frozen agent, outside the risk bands. */
+  verdict: "safe" | "low_risk" | "medium_risk" | "high_risk" | "critical" | "block";
   flags: unknown[];
   categories: string[];
+  /** Receipt identifier — log this for incident review. */
+  trace_id?: string;
+  /** Present when the semantic layer did not contribute; the verdict rests on patterns alone. */
+  degraded?: boolean;
+  degraded_reason?: "llm_failed" | "llm_disabled";
+  layers?: { pattern: "ran"; llm: string };
+  analysis_method?: string;
+  frozen?: boolean;
+  recommended_action?: string;
 }
 
 interface ScreenOutputResponse {
@@ -280,7 +301,35 @@ function interceptAsync(
         config,
       );
 
-      if (parseResp && (parseResp.verdict === "critical" || parseResp.verdict === "high_risk")) {
+      // A degraded verdict was reached without semantic analysis. Under
+      // failClosed the caller has asked not to proceed on a weaker signal than
+      // the one they are paying for, so surface it rather than passing a
+      // pattern-only "safe" through as if the full pipeline had run.
+      if (parseResp?.degraded && config.failClosed) {
+        throw new ParseScreeningError(
+          `Parse screening was degraded (${parseResp.degraded_reason ?? "unknown"}); ` +
+            `the verdict used pattern matching only. Refusing to proceed under failClosed.`,
+          {
+            verdict: parseResp.verdict,
+            riskScore: parseResp.risk_score,
+            flags: parseResp.flags,
+            categories: parseResp.categories,
+            traceId: parseResp.trace_id,
+            degraded: true,
+            degradedReason: parseResp.degraded_reason,
+          },
+        );
+      }
+
+      // "block" comes from the frozen-agent kill switch and is not one of the
+      // risk bands; gating on the bands alone made the kill switch a no-op here.
+      if (
+        parseResp &&
+        (parseResp.verdict === "critical" ||
+          parseResp.verdict === "high_risk" ||
+          parseResp.verdict === "block" ||
+          parseResp.recommended_action === "block")
+      ) {
         stats.blockedCalls++;
         if (config.failClosed) {
           throw new ParseScreeningError(
@@ -290,6 +339,7 @@ function interceptAsync(
               riskScore: parseResp.risk_score,
               flags: parseResp.flags,
               categories: parseResp.categories,
+              traceId: parseResp.trace_id,
             },
           );
         }

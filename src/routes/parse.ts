@@ -433,6 +433,24 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
       requestId: result.id,
       detail: result.degraded_reason,
     });
+    // Counter so /status can report the layer's real health rather than
+    // inferring it from a key being configured. Best-effort: a screening
+    // verdict must never fail because bookkeeping did.
+    if (isRedisAvailable()) {
+      void (async () => {
+        try {
+          const connected = await ensureRedisConnected();
+          if (!connected) return;
+          const redis = getRedis();
+          const day = new Date().toISOString().slice(0, 10);
+          const key = `screening:llm_degraded:${day}`;
+          const count = await redis.incr(key);
+          if (count === 1) await redis.expire(key, 35 * 24 * 60 * 60);
+        } catch {
+          // ignore — telemetry only
+        }
+      })();
+    }
   }
 
   // ── Custom Rules Engine (Layer 4: org-specific compliance rules) ──

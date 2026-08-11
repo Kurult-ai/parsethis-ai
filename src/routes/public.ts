@@ -2112,7 +2112,8 @@ publicRoutes.get("/refund", (c) => {
 // each dependency answers. It reports state; it does not expose memory
 // figures, connection strings, or anything else from /health/detail.
 
-type PublicDependencyStatus = "operational" | "down" | "not_configured";
+// "degraded" = reachable but not doing its job; distinct from "down".
+type PublicDependencyStatus = "operational" | "degraded" | "down" | "not_configured";
 
 interface PublicDependency {
   name: string;
@@ -2169,15 +2170,44 @@ async function collectPublicDependencies(): Promise<PublicDependency[]> {
     detail: "Backs rate limits and short-lived counters.",
   });
 
-  // Semantic analysis layer. Callers already see this per request as
-  // layers.llm, so reporting it here tells them nothing new about the deploy.
-  deps.push({
-    name: "Semantic analysis layer",
-    status: process.env.OPENROUTER_API_KEY ? "operational" : "not_configured",
-    detail: process.env.OPENROUTER_API_KEY
-      ? "Layer 2 model scoring is configured. Per-request status is reported in layers.llm."
-      : "No model provider configured — screening runs on pattern matching alone.",
-  });
+  // Semantic analysis layer. A configured key proves nothing: the outage this
+  // page exists to surface was the model failing at runtime *while* the key was
+  // set. Report the observed degraded count instead of the configuration.
+  if (!process.env.OPENROUTER_API_KEY) {
+    deps.push({
+      name: "Semantic analysis layer",
+      status: "not_configured",
+      detail: "No model provider configured — screening runs on pattern matching alone.",
+    });
+  } else {
+    let degradedToday: number | null = null;
+    if (isRedisAvailable()) {
+      try {
+        const connected = await withTimeout(ensureRedisConnected(), 1_500, false);
+        if (connected) {
+          const day = new Date().toISOString().slice(0, 10);
+          const raw = await withTimeout(
+            getRedis().get(`screening:llm_degraded:${day}`),
+            1_500,
+            null as string | null
+          );
+          degradedToday = raw === null ? 0 : Number(raw) || 0;
+        }
+      } catch {
+        degradedToday = null;
+      }
+    }
+    deps.push({
+      name: "Semantic analysis layer",
+      status: degradedToday === null ? "operational" : degradedToday > 0 ? "degraded" : "operational",
+      detail:
+        degradedToday === null
+          ? "Configured. Recent health could not be read; per-request status is reported in layers.llm."
+          : degradedToday > 0
+            ? `${degradedToday} screening call(s) fell back to pattern matching today. Per-request status is reported in layers.llm.`
+            : "No screening calls have fallen back to pattern matching today.",
+    });
+  }
 
   return deps;
 }
@@ -2197,7 +2227,7 @@ publicRoutes.get("/status", async (c) => {
   const deployment = getDeploymentMetadata();
   const uptimeSeconds = Math.floor(process.uptime());
   const deps = await collectPublicDependencies();
-  const degraded = deps.some((d) => d.status === "down");
+  const degraded = deps.some((d) => d.status === "down" || d.status === "degraded");
   const overall: "operational" | "degraded" = degraded ? "degraded" : "operational";
 
   const accept = c.req.header("Accept") || "";
@@ -2222,9 +2252,15 @@ publicRoutes.get("/status", async (c) => {
 
   const badge = (status: PublicDependencyStatus): string => {
     const label =
-      status === "operational" ? "Operational" : status === "down" ? "Down" : "Not configured";
+      status === "operational" ? "Operational"
+        : status === "degraded" ? "Degraded"
+        : status === "down" ? "Down"
+        : "Not configured";
     const color =
-      status === "operational" ? "var(--green, #3fb950)" : status === "down" ? "var(--red, #f85149)" : "var(--text-dim)";
+      status === "operational" ? "var(--green, #3fb950)"
+        : status === "degraded" ? "var(--yellow, #d29922)"
+        : status === "down" ? "var(--red, #f85149)"
+        : "var(--text-dim)";
     return `<span style="color:${color};font-weight:600">${label}</span>`;
   };
 
@@ -2236,7 +2272,7 @@ publicRoutes.get("/status", async (c) => {
     .join("\n      ");
 
   const buildRows = [
-    ["Overall", badge(overall === "operational" ? "operational" : "down")],
+    ["Overall", badge(overall)],
     ["Version", `<code>${SERVICE_VERSION}</code>`],
     ["Commit", `<code>${deployment.commit}</code>`],
     ["Build time", `<code>${deployment.build_time}</code>`],

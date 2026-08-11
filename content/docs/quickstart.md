@@ -170,7 +170,7 @@ import OpenAI from 'openai';
 const openai = new OpenAI();
 const screened = wrap(openai, {
   apiKey: process.env.PARSE_API_KEY,
-  failClosed: true,  // block on Parse errors in production
+  failClosed: true,  // throw when Parse returns a block verdict
 });
 
 // Every call is now automatically screened before and after the LLM
