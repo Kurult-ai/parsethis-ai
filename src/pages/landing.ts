@@ -507,7 +507,7 @@ curl -s ${baseUrl}/v1/parse \\
         <button type="button" class="copybtn" id="pa-cp">COPY</button>
       </div>
       <div class="install-foot" id="pa-insfoot"><b>then:</b> wrap your agent — screening runs at every trust boundary.</div>
-      <div class="install-foot" style="margin-top:8px;font-size:13px;color:var(--gray);"><b>10x faster, zero data egress:</b> Add <code style="color:var(--gold);background:rgba(255,180,84,.07);padding:1px 4px;border-radius:3px;">"mode":"pattern-only"</code> for sub-400ms deterministic screening with no prompt text sent to any third party. <a href="/trust#where-your-prompt-text-goes" style="color:var(--amber);">Learn more →</a></div>
+      <div class="install-foot" style="margin-top:8px;font-size:13px;color:var(--gray);"><b>10x faster, zero data egress:</b> Add <code style="color:var(--gold);background:rgba(255,180,84,.07);padding:1px 4px;border-radius:3px;">"mode":"pattern-only"</code> for deterministic screening with no prompt text sent to any third party. <a href="/trust#where-your-prompt-text-goes" style="color:var(--amber);">Learn more →</a></div>
     </div>
     <div class="bento">
       <div class="bcard"><h3>Test Lab</h3><p>Blind fixtures probe whether your agent resists injection — before your customers do.</p><a class="more" href="/playground">Open the test lab →</a></div>
@@ -903,13 +903,14 @@ curl -s ${baseUrl}/v1/parse \\
   // the hue it starts at (that drift was zero at T=0, so this IS the start
   // colour). Brightness still varies — Doppler beaming and redshift are
   // physics, not palette.
-  // Slow drift across warm hues only. Measured against this palette, the hue
-  // rotation maps: -0.45 gold (49 deg) -> 0 amber (29 deg) -> +0.12 ember red
-  // (12 deg) -> +0.18 and beyond turns pink, which is what the old ±0.3 swing
-  // did and why it was cut. This stays inside -0.40..+0.10 with margin.
-  // Two frequencies so it wanders instead of ticking like a metronome; the
+  // Slow drift from amber through pink into purple — no yellow. Measured
+  // against this palette, the hue rotation maps:
+  //   -0.30 gold 45deg | +0.02 amber 26deg | +0.20 pink 344deg
+  //   +0.30 purple 300deg | +0.40 blue 270deg (too far)
+  // The drift runs +0.02..+0.32, so it never reaches the gold end and stops
+  // short of blue. Two frequencies so it wanders instead of ticking; the
   // shader clock runs at FAST (0.25), so these are ~180s and ~81s of wall time.
-  '  col = clamp(hueRot(-.11 + .14 * sin(T * .14) + .05 * sin(T * .31)) * col, 0., 1.3);',
+  '  col = clamp(hueRot(.17 + .11 * sin(T * .14) + .04 * sin(T * .31)) * col, 0., 1.3);',
   // borderless: alpha carries the scene — empty space is transparent, the
   // shadow stays opaque, and a radial falloff dissolves the glow before the
   // canvas edge so nothing ever clips. The falloff must be radial, not a
