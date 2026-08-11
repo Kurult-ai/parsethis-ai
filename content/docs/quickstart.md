@@ -215,9 +215,25 @@ For TypeScript apps, use the Parse SDK to wrap your LLM client with automatic sc
 npm install @parsethis/sdk
 ```
 
-Python runtime and no Node? The hosted MCP server needs no SDK at all — see the
-Hermes tab above, or call the three REST endpoints directly (they are plain
-JSON over HTTPS; `curl` examples throughout this page).
+Python runtime and no Node? Two options: the hosted MCP server needs no SDK at
+all (see the Hermes tab above), or install the Python client:
+
+```bash
+pip install parsethis-ai
+```
+
+```python
+from parse_agents import screen_prompt
+
+# owner's chat message: fast, correction-tolerant
+result = screen_prompt(
+    message,
+    mode="pattern-only",
+    metadata={"source_kind": "user", "requester_trust": "owner"},
+)
+# third-party content (RAG, tool output): strict, no metadata
+result = screen_prompt(retrieved_doc)   # PARSE_API_KEY read from env
+```
 
 ```typescript
 import { wrap } from '@parsethis/sdk';

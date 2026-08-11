@@ -1,6 +1,12 @@
-# parsethis — Parse Python client
+# parsethis-ai — Parse Python client
 
-Screen untrusted text before your agent gives it authority. Two ways in:
+Screen untrusted text before your agent gives it authority.
+
+```bash
+pip install parsethis-ai
+```
+
+The import module is `parse_agents`. Two ways in:
 
 ## Direct screening (Hermes, custom agent loops)
 
