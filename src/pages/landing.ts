@@ -790,6 +790,12 @@ curl -s ${baseUrl}/v1/parse \\
   'uniform vec4 pA[3];',   // head xyz, w: kernel radius
   'uniform vec4 pB[3];',   // tail xyz, w: brightness
   'uniform vec4 pC[3];',   // observed rgb
+  'mat3 hueRot(float a){',
+  '  float c = cos(a), s = sin(a);',
+  '  return mat3(.299,.587,.114,.299,.587,.114,.299,.587,.114)',
+  '       + c * (mat3(1,0,0,0,1,0,0,0,1) - mat3(.299,.587,.114,.299,.587,.114,.299,.587,.114))',
+  '       + s * mat3(-.3,-.588,.886, .143,-.353,.258, -.787,.715,.072);',
+  '}',
   'float hash(vec3 q){ return fract(sin(dot(q, vec3(127.1,311.7,74.7))) * 43758.5453); }',
   'vec3 stars(vec3 d){',
   '  vec3 q = normalize(d);',
@@ -897,7 +903,13 @@ curl -s ${baseUrl}/v1/parse \\
   // the hue it starts at (that drift was zero at T=0, so this IS the start
   // colour). Brightness still varies — Doppler beaming and redshift are
   // physics, not palette.
-  '  col = clamp(col, 0., 1.3);',
+  // Slow drift across warm hues only. Measured against this palette, the hue
+  // rotation maps: -0.45 gold (49 deg) -> 0 amber (29 deg) -> +0.12 ember red
+  // (12 deg) -> +0.18 and beyond turns pink, which is what the old ±0.3 swing
+  // did and why it was cut. This stays inside -0.40..+0.10 with margin.
+  // Two frequencies so it wanders instead of ticking like a metronome; the
+  // shader clock runs at FAST (0.25), so these are ~180s and ~81s of wall time.
+  '  col = clamp(hueRot(-.11 + .14 * sin(T * .14) + .05 * sin(T * .31)) * col, 0., 1.3);',
   // borderless: alpha carries the scene — empty space is transparent, the
   // shadow stays opaque, and a radial falloff dissolves the glow before the
   // canvas edge so nothing ever clips. The falloff must be radial, not a
