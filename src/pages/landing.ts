@@ -669,7 +669,10 @@ curl -s ${baseUrl}/v1/parse \\
   if (!canvas) return;
   var qs = new URLSearchParams(location.search);
   var still = qs.has('still');
-  var FAST = parseFloat(qs.get('fast')) || 1;
+  // Global time scale. 0.25 = quarter speed: it slows the shader clock (camera
+  // yaw, hue drift, Keplerian pattern rotation) and the particle sim together,
+  // so the physics stays self-consistent. ?fast=1 restores real-time.
+  var FAST = parseFloat(qs.get('fast')) || 0.25;
   var DEBUG = qs.has('debug');
   var gl = canvas.getContext('webgl', { alpha:true, antialias:false, depth:false, stencil:false, powerPreference:'low-power', preserveDrawingBuffer: still });
   if (!gl) return;
@@ -875,9 +878,12 @@ curl -s ${baseUrl}/v1/parse \\
   '  }',
   '  col = clamp(hueRot(sin(T * .045) * .3) * col, 0., 1.3);',
   // borderless: alpha carries the scene — empty space is transparent, the
-  // shadow stays opaque, and a square-shaped falloff dissolves the glow
-  // before the canvas edge so nothing ever clips.
-  '  float edge = smoothstep(.5, .33, max(abs(uv.x), abs(uv.y)));',
+  // shadow stays opaque, and a radial falloff dissolves the glow before the
+  // canvas edge so nothing ever clips. The falloff must be radial, not a
+  // max-norm square: the faint star/glow haze covers the whole quad, so a
+  // square mask ends on straight contours that the 45° canvas rotation
+  // renders as a visible diagonal seam across the hero.
+  '  float edge = smoothstep(.5, .3, length(uv));',
   '  col *= edge;',
   '  float aa = clamp(max(col.r, max(col.g, col.b)) * 2.4 + captured, 0., 1.) * edge;',
   '  gl_FragColor = vec4(col, aa);',
@@ -1122,7 +1128,7 @@ curl -s ${baseUrl}/v1/parse \\
   }
   function loop(){
     raf = requestAnimationFrame(function(ts){
-      var dt = lastTs ? Math.min((ts - lastTs) * .001, .05) * FAST : .016;
+      var dt = (lastTs ? Math.min((ts - lastTs) * .001, .05) : .016) * FAST;
       lastTs = ts;
       frame(ts * FAST, dt);
       raf = 0;
