@@ -246,6 +246,30 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     });
   }
   if (body.metadata && !Array.isArray(body.metadata)) {
+    // Documented alias: /skill and the integration prompts show
+    // metadata.source ("user_input", "rag", …) while the pipeline's canonical
+    // field is source_kind. Map the alias so documented examples work verbatim.
+    // Unknown alias values stay unmapped — metadata.source was always ignored,
+    // so this introduces no new 400s.
+    if (body.metadata.source_kind === undefined && typeof body.metadata.source === "string") {
+      const SOURCE_ALIASES: Record<string, NonNullable<ParseRequest["metadata"]>["source_kind"]> = {
+        user_input: "user",
+        user: "user",
+        email: "email",
+        rag: "retrieved_doc",
+        retrieved_doc: "retrieved_doc",
+        document: "retrieved_doc",
+        web_page: "web_page",
+        browser: "web_page",
+        tool_output: "tool_output",
+        tool: "tool_output",
+        memory: "memory",
+        agent_handoff: "agent_handoff",
+        agent_message: "agent_handoff",
+      };
+      const mapped = SOURCE_ALIASES[body.metadata.source.toLowerCase()];
+      if (mapped) body.metadata.source_kind = mapped;
+    }
     if (body.metadata.source_kind !== undefined && !["user", "email", "retrieved_doc", "web_page", "tool_output", "memory", "agent_handoff"].includes(body.metadata.source_kind)) {
       return problem(c, {
         status: 400,

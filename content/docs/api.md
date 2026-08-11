@@ -123,7 +123,7 @@ Screen a prompt for injection attacks, jailbreaks, adversarial patterns, and pri
 | `bypass_codeword` | string | No | Trusted-caller unblock path; returns risk_score 0 when it matches the configured codeword |
 | `test_input` | string | No | Input data to pair with prompt during sandbox execution |
 | `agent_config` | object | No | `{ model, temperature, max_tokens, agent_role }` |
-| `metadata` | object | No | `{ agent_id, session_id, source, requester_trust, requester_id, channel, subject, conversation_context }` for tracking and owner-approval decisions |
+| `metadata` | object | No | `{ agent_id, session_id, source_kind, trust_level, requester_trust, requester_id, channel, subject, conversation_context }`. `source_kind` (`user`, `email`, `retrieved_doc`, `web_page`, `tool_output`, `memory`, `agent_handoff`) drives source-sensitive scoring; the alias `source: "user_input"` maps to `source_kind: "user"`. `requester_trust` (`unknown`, `known`, `trusted`, `owner`) drives owner-approval decisions. `source_kind: "user"` plus a `trusted`/`owner` requester softens first-party conversational corrections from block to a logged signal; attacks keep the full floor. |
 
 ### Response (200 OK)
 

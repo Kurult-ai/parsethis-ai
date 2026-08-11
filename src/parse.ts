@@ -105,6 +105,82 @@ const SOURCE_SENSITIVE_CATEGORIES = new Set([
   "privilege_escalation",
 ]);
 
+/**
+ * Trusted-conversation softening — the mirror image of applySourceSensitivity.
+ *
+ * Owners of single-user agents correct their assistant in language that is
+ * lexically identical to an override attack ("actually ignore what I said
+ * before…"). When the caller attests the text is first-party conversation
+ * (source_kind "user" plus requester_trust owner/trusted or trust_level
+ * "trusted"), the two deterministic correction-shaped intent flags soften to
+ * a log-level signal.
+ *
+ * Deliberately narrow:
+ * - Opt-in via metadata; no metadata means today's fail-closed behavior.
+ * - Only the two override-intent flags soften. Extraction, exfiltration,
+ *   code-execution, and privilege-escalation signals keep the full floor even
+ *   for a claimed owner — and their presence cancels softening entirely.
+ * - Runs after maxIntrinsicSeverity is captured, so caller metadata can never
+ *   switch the semantic layer off.
+ */
+const CONVERSATIONAL_CORRECTION_FLAG_IDS = new Set([
+  // The correction-shaped detector family: every rule whose lexical trigger
+  // overlaps ordinary owner corrections ("ignore what I said", "scratch that,
+  // forget the previous instructions", "let's start over").
+  "intent.override_governing_instruction",
+  "intent.fuzzy_override_token",
+  "intent.direct_instruction_bypass",
+  "intent.multi_turn_reset",
+  "intent.instruction_probe_or_mutation",
+  "intent.instruction_disclosure_probe",
+  "pattern.context_reset_attempt",
+  "pattern.conversation_reset",
+]);
+
+const SOFTENING_CANCEL_CATEGORIES = new Set([
+  "system_prompt_leak",
+  "data_exfiltration",
+  "code_execution",
+  "privilege_escalation",
+  "jailbreak",
+  "harmful_content",
+]);
+
+function isTrustedConversation(metadata?: Record<string, unknown>): boolean {
+  if (!metadata) return false;
+  const sourceKind = typeof metadata.source_kind === "string" ? metadata.source_kind : undefined;
+  if (sourceKind !== "user") return false;
+  const requesterTrust = typeof metadata.requester_trust === "string" ? metadata.requester_trust : undefined;
+  const trustLevel = typeof metadata.trust_level === "string" ? metadata.trust_level : undefined;
+  return requesterTrust === "owner" || requesterTrust === "trusted" || trustLevel === "trusted";
+}
+
+function applyTrustedConversationSoftening(flags: RiskFlag[], metadata?: Record<string, unknown>): boolean {
+  if (!isTrustedConversation(metadata)) return false;
+  // Any signal OUTSIDE the correction family in a dangerous category cancels
+  // softening entirely — a claimed owner reaching for the system prompt, an
+  // exfil URL, or code execution keeps the full floor. Family members are
+  // exempt from this check: their categories are the false positive.
+  const hasDangerSignal = flags.some(
+    (f) =>
+      f.id === "intent.extract_protected_prompt" ||
+      (!CONVERSATIONAL_CORRECTION_FLAG_IDS.has(f.id ?? "") && SOFTENING_CANCEL_CATEGORIES.has(f.category)),
+  );
+  if (hasDangerSignal) return false;
+  let softened = false;
+  for (const flag of flags) {
+    if (!flag.id || !CONVERSATIONAL_CORRECTION_FLAG_IDS.has(flag.id)) continue;
+    flag.severity = Math.min(flag.severity, 3);
+    flag.action_floor = "allow_log";
+    flag.confidence = "medium";
+    flag.detail =
+      `${flag.detail} Softened: first-party conversational correction from a trusted requester ` +
+      `(metadata.source_kind=user, requester_trust/trust_level trusted).`;
+    softened = true;
+  }
+  return softened;
+}
+
 function applySourceSensitivity(flags: RiskFlag[], metadata?: Record<string, unknown>): void {
   if (!metadata) return;
   const sourceKind = typeof metadata.source_kind === "string" ? metadata.source_kind : undefined;
@@ -593,6 +669,10 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
 
   applySourceSensitivity(activeFlags, req.metadata);
 
+  // Trusted first-party conversation: soften correction-shaped override flags.
+  // Runs after maxIntrinsicSeverity so metadata cannot gate the semantic layer.
+  const trustedConversation = applyTrustedConversationSoftening(activeFlags, req.metadata);
+
   // Compute max severity from pattern + structural analysis (before LLM)
   const maxPatternSeverity = activeFlags.length > 0 ? Math.max(...activeFlags.map((f) => f.severity)) : 0;
 
@@ -640,7 +720,10 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
             id: `llm.${cat}`,
             confidence: "medium",
             attack_family: cat,
-            action_floor: effectiveLlmSeverity >= 7 ? "block" : "sandbox",
+            // On attested first-party conversation the LLM's voice still counts
+            // toward the score, but it cannot hard-floor a block on its own —
+            // riskScore >= 7 can still block via computeRecommendedAction.
+            action_floor: effectiveLlmSeverity >= 7 ? (trustedConversation ? "sandbox" : "block") : "sandbox",
             source: "llm",
           });
         }

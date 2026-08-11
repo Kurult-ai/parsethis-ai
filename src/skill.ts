@@ -53,7 +53,8 @@ Content-Type: application/json
   "prompt": "<the prompt to check>",
   "execute": true,
   "metadata": {
-    "source": "user_input",
+    "source_kind": "user",
+    "trust_level": "trusted",
     "requester_trust": "unknown",
     "requester_id": "<optional>",
     "channel": "<optional>",
@@ -71,6 +72,11 @@ Content-Type: application/json
 
 NOTE: You do NOT need to send your system prompt.
 \`agent_role\` is an optional description of your function.
+
+Metadata that changes screening behavior:
+- \`source_kind\` — where the text came from: \`user\`, \`email\`, \`retrieved_doc\`, \`web_page\`, \`tool_output\`, \`memory\`, \`agent_handoff\`. Third-party sources get amplified scoring (indirect-injection threat model). The alias \`source: "user_input"\` is accepted and mapped to \`source_kind: "user"\`.
+- \`requester_trust\` — who is asking: \`unknown\`, \`known\`, \`trusted\`, \`owner\`. Drives owner-approval decisions.
+- First-party conversation softening: when \`source_kind\` is \`user\` AND the requester is \`trusted\`/\`owner\` (or \`trust_level: "trusted"\`), ordinary correction language from the owner ("actually ignore what I said before...") softens from block to a log-level signal. Extraction, exfiltration, and code-execution signals keep the full floor regardless of claimed trust. Send NO metadata to keep strict fail-closed screening on every surface.
 
 Latency: synchronous screening calls take ~2-4 seconds when the LLM analysis layer fires; pattern-only matches return in <100ms. If your agent's request timeout is under 5 seconds, set \`execute: false\` to return after screening without waiting on sandbox execution, or use the async flow below.
 Risk taxonomy: ${DETECTION_FACTS.riskCategoryCount} categories (${DETECTION_FACTS.riskCategories.join(", ")}). Production detection uses deterministic pattern matching, structural analysis, optional LLM semantic analysis, and optional sandbox execution.
