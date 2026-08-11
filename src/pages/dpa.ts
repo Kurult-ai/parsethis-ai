@@ -90,14 +90,14 @@ export function renderDpaPage(baseUrl: string): string {
   <li><strong>Surveillance risk:</strong> Parse operates on self-hosted infrastructure (Mac Mini), not AWS/GCP/Azure. No government access beyond what is legally compelled.</li>
   <li><strong>Encryption:</strong> All data in transit uses TLS 1.3. Prompt text is processed ephemerally and not persisted for the screening endpoints.</li>
   <li><strong>Access controls:</strong> Single-tenant infrastructure with no third-party administrative access.</li>
-  <li><strong>Supplementary measures:</strong> Pattern-only mode eliminates transfer of prompt text entirely when used.</li>
+  <li><strong>Supplementary measures:</strong> Pattern-only mode prevents onward transfer of prompt text to the semantic-analysis subprocessor (OpenRouter, US) when used. Prompt text is still transferred to Parse for processing in the United States.</li>
 </ul>
 
 <h2 id="data-residency">5. Data Residency</h2>
-<p class="answer-capsule">Processing currently occurs on infrastructure hosted in the United States (Mac Mini M4, behind Cloudflare's edge network). An EU/UK region is on the roadmap. Customers requiring EU residency today can:</p>
+<p class="answer-capsule">Processing currently occurs on infrastructure hosted in the United States (Mac Mini M4, behind Cloudflare's edge network). An EU/UK region is on the roadmap. <strong>Parse cannot offer EU data residency today:</strong> using the hosted API means prompt text is transferred to and processed in the United States, and the transfer is governed by the SCCs in Section 4 rather than avoided. Customers who need to reduce or eliminate that transfer can:</p>
 <ul>
-  <li>Use <code>mode: "pattern-only"</code> to ensure prompt text never leaves their infrastructure</li>
-  <li>Self-host Parse using the open-source <code>prompt-guard</code> library</li>
+  <li>Pass <code>mode: "pattern-only"</code> per request, which runs the deterministic layer only. Prompt text still reaches Parse in the United States, but is not forwarded to the semantic-analysis subprocessor (OpenRouter, US). This narrows the transfer chain; it does not keep prompt text on the customer's own infrastructure.</li>
+  <li>Run the open-source <code>prompt-guard</code> pattern library inside their own environment. This is a standalone component, not the Parse platform: it performs local pattern screening only, without the hosted registry, policy engine, receipts, or semantic layer. Prompt text never leaves the customer's infrastructure in this configuration, because Parse is not in the request path at all.</li>
 </ul>
 
 <h2 id="security">6. Security Measures</h2>

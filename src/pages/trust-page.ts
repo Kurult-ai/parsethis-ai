@@ -270,7 +270,7 @@ ${DATA_FLOW_HTML}
     </tbody>
   </table>
 </div>
-<p style="font-size: 14px; color: var(--text-dim);">Any caller on any tier can keep prompt text away from OpenRouter by passing <code>mode: "pattern-only"</code> per request, which runs Layer 1 only. There is no account-level or tier-level switch for this today — the control is per request. New subprocessors are announced 30 days in advance.</p>
+<p style="font-size: 14px; color: var(--text-dim);">Any caller on any tier can keep prompt text away from OpenRouter by passing <code>mode: "pattern-only"</code> per request, which runs Layer 1 only. Organizations can also make this the default for every request by setting <code>defaultMode</code> to <code>pattern-only</code> on their screening policy (<code>PUT /v1/policy</code>), so the control does not have to be repeated per call. Prompt text still reaches Parse in the United States in either case — pattern-only prevents the onward transfer to OpenRouter, not the transfer to Parse. New subprocessors are announced 30 days in advance.</p>
 </div>
 
 <!-- ─── 4. Vulnerability Disclosure Policy ───────────────────────────────── -->
