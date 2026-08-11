@@ -181,6 +181,72 @@ function applyTrustedConversationSoftening(flags: RiskFlag[], metadata?: Record<
   return softened;
 }
 
+/**
+ * Semantic acquittal release.
+ *
+ * The deterministic correction-family rules carry action_floor "block", and
+ * computeRecommendedAction blocks on that floor regardless of what the semantic
+ * layer concluded. So the expensive layer could only ever ADD risk: it was able
+ * to manufacture a false positive and structurally unable to clear one. Two
+ * independent prospect walkthroughs were lost to exactly that asymmetry — a
+ * warehouse-robotics emergency command ("Ignore the previous waypoint
+ * instruction … battery is at 8%") scored 10/block on patterns, the semantic
+ * layer disagreed and pulled the blend down to 7.9, and it blocked anyway.
+ *
+ * This is the counterweight: when the semantic layer actually ran and returned
+ * its own clean verdict, the correction-family flags stop being a hard floor.
+ *
+ * Deliberately narrow. Every one of these must hold:
+ * - The semantic layer ran and produced a result. Pattern-only callers keep
+ *   today's behavior exactly; a floor with no second opinion stays a floor.
+ * - The LLM's OWN score is clearly benign. We read llmResult.risk_score rather
+ *   than the emitted llm.* flags on purpose: those get floored to
+ *   maxPatternSeverity at construction, so a low-scoring LLM can still surface
+ *   a severity-8 flag. The unfloored score is the layer's real opinion.
+ * - The LLM named no risk category of its own.
+ * - No danger signal outside the correction family, same cancel set the
+ *   trusted-conversation path uses.
+ * - Every block floor present comes from the correction family. One unrelated
+ *   block floor and nothing is released.
+ *
+ * The release lands on "sandbox", not "allow". This path takes no caller
+ * attestation — unlike applyTrustedConversationSoftening, it applies to
+ * anonymous traffic — so the honest outcome is "our two layers disagree, do not
+ * give this text authority" rather than "this is fine."
+ */
+const SEMANTIC_ACQUITTAL_MAX_LLM_SCORE = 5;
+const SEMANTIC_ACQUITTAL_SEVERITY_CAP = 4;
+
+function applySemanticAcquittalRelease(flags: RiskFlag[], llmResult: LlmRiskResult | null): boolean {
+  if (!llmResult) return false;
+  if (llmResult.risk_score >= SEMANTIC_ACQUITTAL_MAX_LLM_SCORE) return false;
+  if (llmResult.categories.some((c) => c !== "none")) return false;
+
+  const hasDangerSignal = flags.some(
+    (f) =>
+      f.id === "intent.extract_protected_prompt" ||
+      (!CONVERSATIONAL_CORRECTION_FLAG_IDS.has(f.id ?? "") && SOFTENING_CANCEL_CATEGORIES.has(f.category)),
+  );
+  if (hasDangerSignal) return false;
+
+  const blockFloorFlags = flags.filter((f) => f.action_floor === "block");
+  if (blockFloorFlags.length === 0) return false;
+  if (!blockFloorFlags.every((f) => CONVERSATIONAL_CORRECTION_FLAG_IDS.has(f.id ?? ""))) return false;
+
+  let released = false;
+  for (const flag of flags) {
+    if (!flag.id || !CONVERSATIONAL_CORRECTION_FLAG_IDS.has(flag.id)) continue;
+    flag.severity = Math.min(flag.severity, SEMANTIC_ACQUITTAL_SEVERITY_CAP);
+    flag.action_floor = "sandbox";
+    flag.detail =
+      `${flag.detail} Released to sandbox: the semantic layer reviewed this text independently and ` +
+      `returned no attack signal (llm risk_score ${llmResult.risk_score}), so the deterministic ` +
+      `override pattern is not treated as a hard block on its own.`;
+    released = true;
+  }
+  return released;
+}
+
 function applySourceSensitivity(flags: RiskFlag[], metadata?: Record<string, unknown>): void {
   if (!metadata) return;
   const sourceKind = typeof metadata.source_kind === "string" ? metadata.source_kind : undefined;
@@ -731,10 +797,20 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
     }
   }
 
+  // The semantic layer's dissent, applied. Runs after the LLM block because it
+  // needs that verdict, which means maxPatternSeverity (captured pre-LLM) is
+  // now stale for the released flags — recompute it for scoring, or the 80%
+  // monotonic pattern floor would hold the score up and re-block the very
+  // prompt the semantic layer just cleared.
+  const semanticAcquittal = applySemanticAcquittalRelease(activeFlags, llmResult);
+  const scoringPatternSeverity = semanticAcquittal
+    ? (activeFlags.length > 0 ? Math.max(...activeFlags.map((f) => f.severity)) : 0)
+    : maxPatternSeverity;
+
   // Unified scoring: weighted average with monotonic floor at 80% of pattern severity
   const scoreResult = calculateRiskScore({
     flags: activeFlags,
-    maxPatternSeverity,
+    maxPatternSeverity: scoringPatternSeverity,
     llmScore: llmResult?.risk_score ?? null,
   });
   let riskScore = scoreResult.riskScore;
