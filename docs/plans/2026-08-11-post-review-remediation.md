@@ -267,6 +267,50 @@ then 2 and 3 (both auth-path, both have live reproductions), then 5 and 6
 (copy and coverage, one sitting), then Phase 4 behind its own adversarial
 review. Phase 7 unblocks on operator decisions.
 
+## Post-deploy measurement (2026-08-11, after `3acbdef` went live)
+
+**The fastHash change delivered nothing in production, and the reason is a
+bigger finding than the change itself.** Measured against the live service:
+
+| Request | TTFB |
+|---|---|
+| `GET /health` (no auth) | ~88 ms |
+| `POST /v1/parse`, invalid key → 401 | ~84 ms |
+| `POST /v1/parse`, valid key | **333–455 ms, p50 ~380 ms** |
+
+Identical to the pre-deploy baseline. The ~290 ms on the successful-auth path is
+still a bcrypt compare — measured at **218 ms at cost 12 on this hardware**, so
+it is the bulk of it. Three things chain together:
+
+1. **Self-service keys are not being created in Postgres.** `createApiKey`
+   falls back to a Redis record when the DB create fails or times out, and every
+   key I generated came back with a `redis_*` id — the fallback marker. `/status`
+   nonetheless reports Database: operational, so this is a failing *create*
+   specifically, not an outage. Worth finding out why before anything else here.
+2. **The fallback lookup path never populates the prefix cache.** On a cache
+   miss, `validateApiKeyDetailed` checks Redis fallback records, matches with
+   `bcrypt.compare`, and returns — it never reaches the DB branch, which is the
+   only place that writes `cacheApiKey`. Verified directly: `EXISTS
+   apikey:<prefix>` is 0 immediately after a successful authenticated call, and
+   the only `apikey:*` key in production Redis is the new negative-cache entry.
+3. **So the fastHash fast path can never engage.** It only applies on a prefix
+   cache hit, and for fallback-created keys there are never any hits.
+
+The fix is small — have the fallback-hit path write the prefix cache with
+`fastHash`, exactly as the DB path does — but it changes production auth
+behaviour and needs the revocation interaction thought through first
+(`invalidateApiKeyCache` is called on revoke, so a cached fallback record should
+be cleared correctly, but that wants a test before it ships). Do not ship it as
+a drive-by.
+
+Also observed live: the **semantic analysis layer is currently degraded**
+(`/status` overall: degraded). Unrelated to this work; flagged because it means
+full-mode screening is falling back to pattern matching right now.
+
+`LATENCY_FACTS` has been corrected to the measured numbers and now states this
+cause rather than the earlier, wrong claim that bcrypt had been removed from the
+hot path.
+
 ## Opened by the implementation (2026-08-11)
 
 Two debts created while making CI green. Both are deliberate and documented in

@@ -87,22 +87,27 @@ export const LATENCY_FACTS = {
     },
   },
   endToEnd: {
-    status: "provisional_pre_fasthash" as const,
+    status: "measured_post_deploy" as const,
     patternOnly: {
-      priorP50Ms: 400,
-      sampleMs: [328, 400, 446],
-      basis: "n=3 caller-measured samples, pre-fastHash",
+      priorP50Ms: 380,
+      sampleMs: [333, 351, 361, 364, 381, 382, 416, 434, 455],
+      basis: "n=9 caller-measured samples against production, 2026-08-11 post-deploy",
     },
     full: {
       priorRangeMs: [2400, 7200] as const,
-      basis: "handful of caller-measured samples, pre-fastHash",
+      basis: "handful of caller-measured samples; dominated by the model call",
     },
   },
   measuredAt: "2026-08-11",
   method: "detection = the latency_ms response field; end-to-end = curl -w time_starttransfer (client to first byte)",
   note:
-    "Detection figures are point samples, not percentiles. End-to-end figures predate the "
-    + "fastHash auth change and are stale on the high side — re-measure after the next deploy.",
+    "Detection figures are point samples, not percentiles. End-to-end was re-measured after the "
+    + "fastHash deploy and did NOT improve: ~380ms p50, against ~88ms for an unauthenticated "
+    + "/health and ~84ms for a rejected key. The ~290ms sits on the successful-auth path and is "
+    + "still a bcrypt compare (~218ms on this hardware) — self-service keys live as Redis fallback "
+    + "records, and that lookup path matches on bcrypt and returns without ever populating the "
+    + "prefix cache, so the fastHash fast path never engages in production. Fixing that is the "
+    + "next real latency win; see the post-review plan.",
 } as const;
 
 export const ACTION_ROUTER = [
