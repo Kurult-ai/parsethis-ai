@@ -1669,7 +1669,7 @@ ${DATA_FLOW_HTML}
 <p class="answer-capsule">You have the right to access, rectify, erase, restrict processing of, and port your personal data. To exercise these rights, contact <a href="mailto:privacy@parsethis.ai">privacy@parsethis.ai</a>.</p>
 
 <h3>Data Protection Officer</h3>
-<p class="answer-capsule">For data protection inquiries, contact <a href="mailto:dpo@parsethis.ai">dpo@parsethis.ai</a>.</p>
+<p class="answer-capsule">For data protection inquiries, contact <a href="mailto:d@kurult.ai">d@kurult.ai</a>.</p>
 
 <h2>Children's Privacy</h2>
 

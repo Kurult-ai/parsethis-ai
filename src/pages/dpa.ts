@@ -18,7 +18,7 @@ export function renderDpaPage(baseUrl: string): string {
 </div>
 
 <h2 id="parties">1. Parties</h2>
-<p class="answer-capsule">This DPA is between <strong>${PRODUCT.name}</strong> (operating as Danservfinn), ("<strong>Processor</strong>" or "<strong>Parse</strong>") and the entity that has subscribed to the Parse service ("<strong>Customer</strong>" or "<strong>Controller</strong>").</p>
+<p class="answer-capsule">This DPA is between <strong>${PRODUCT.name}</strong>, operated by Daniel Finn ("<strong>Processor</strong>" or "<strong>Parse</strong>") and the entity that has subscribed to the Parse service ("<strong>Customer</strong>" or "<strong>Controller</strong>").</p>
 
 <h2 id="processing-activities">2. Processing Activities</h2>
 <p class="answer-capsule">Parse processes the following categories of personal data on behalf of the Customer:</p>
@@ -133,7 +133,7 @@ export function renderDpaPage(baseUrl: string): string {
 <ul>
   <li>The nature of the breach and categories of data affected</li>
   <li>The likely consequences and measures taken</li>
-  <li>Contact details of the Data Protection Officer</li>
+  <li>Contact details: <a href="mailto:d@kurult.ai">d@kurult.ai</a></li>
 </ul>
 
 <h2 id="audit">10. Audit Rights</h2>
@@ -148,7 +148,7 @@ export function renderDpaPage(baseUrl: string): string {
 <h2 id="dpo">11. Data Protection Officer</h2>
 <p class="answer-capsule">For data protection inquiries, contact:</p>
 <ul>
-  <li><strong>Email:</strong> <a href="mailto:dpo@parsethis.ai">dpo@parsethis.ai</a></li>
+  <li><strong>Email:</strong> <a href="mailto:d@kurult.ai">d@kurult.ai</a></li>
   <li><strong>Privacy:</strong> <a href="mailto:privacy@parsethis.ai">privacy@parsethis.ai</a></li>
 </ul>
 
