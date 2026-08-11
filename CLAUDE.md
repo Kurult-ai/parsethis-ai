@@ -98,7 +98,7 @@ Three-layer defense:
 
 ### Billing (`src/stripe.ts`, `src/routes/billing.ts`)
 - Stripe SDK v22 integration with checkout sessions, customer portal, webhook handling
-- Tiers: Free (default), Pro ($49/mo, 10K requests), Team ($199/mo, 50K requests)
+- Tiers: Free (default), Solo ($12/mo, 2K requests), Pro ($49/mo, 10K requests), Team ($199/mo, 50K requests)
 - Webhook events: checkout.session.completed, invoice.paid, customer.subscription.updated/deleted
 - Usage tracking via Redis INCR on `billing:usage:{apiKeyId}:{YYYY-MM}` keys
 
@@ -147,7 +147,7 @@ When a feature ships, flip its entry in `FEATURE_STATUS`
 
 Requires: `DATABASE_URL`, `REDIS_URL`, `OPENROUTER_API_KEY`
 Optional: `SANDBOX_URL`, `SANDBOX_HMAC_SECRET`, `ANALYSIS_MODEL`, `DEFAULT_MODEL`, `ALLOWED_ORIGINS`
-Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_TEAM_PRICE_ID`, `STRIPE_AUDIT_PRICE_ID`
+Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SOLO_PRICE_ID`, `STRIPE_PRO_PRICE_ID`, `STRIPE_TEAM_PRICE_ID`, `STRIPE_AUDIT_PRICE_ID`
 
 ## Testing
 

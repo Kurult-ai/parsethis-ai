@@ -297,6 +297,8 @@ Required verification:
   <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:16px 0 24px;font-size:13px;">
     <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Free $0</span>
     <span style="color:var(--text-dim);">→</span>
+    <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Solo $12/mo</span>
+    <span style="color:var(--text-dim);">→</span>
     <span style="background:rgba(47,111,237,0.10);border:1px solid rgba(47,111,237,0.30);border-radius:20px;padding:4px 14px;font-weight:600;">Audit $47</span>
     <span style="color:var(--text-dim);">→</span>
     <span style="background:var(--surface);border:1px solid var(--accent);border-radius:20px;padding:4px 14px;font-weight:600;">Pro $49/mo</span>
@@ -326,6 +328,24 @@ Required verification:
         <li style="padding:6px 0;">${PLAN_LIMITS.free.sandboxExecutionsPerHour} sandbox/hr</li>
       </ul>
       <a href="/v1/keys/generate" class="btn btn-outline" style="width:100%;text-align:center;">Install Parse — free</a>
+    </div>
+
+    <!-- Solo -->
+    <div class="card" style="display:flex;flex-direction:column;gap:12px;position:relative;">
+      <span class="badge" style="position:absolute;top:-10px;right:16px;background:var(--surface);border:1px solid var(--border);">For one agent</span>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Solo</div>
+        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$12<span style="font-size:14px;font-weight:400;color:var(--text-dim);">/mo</span></div>
+        <div style="font-size:13px;color:var(--text-dim);">2K requests included</div>
+      </div>
+      <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.solo.requestsPerMinute} req/min</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Non-expiring key</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Evidence spans in flags</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">$0.005/overage request</li>
+        <li style="padding:6px 0;">${PLAN_LIMITS.solo.sandboxExecutionsPerHour} sandbox/hr</li>
+      </ul>
+      <a href="/v1/billing/checkout" class="btn btn-outline" style="width:100%;text-align:center;" onclick="event.preventDefault();(async()=>{try{const k=localStorage.getItem('pfa_key');if(k){const r=await fetch('/v1/billing/checkout',{method:'POST',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'},body:JSON.stringify({tier:'solo'})});if(r.ok){const d=await r.json();if(d.url){window.location=d.url;return;}}}const r2=await fetch('/v1/billing/signup-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier:'solo'})});if(!r2.ok){const err=await r2.json().catch(()=>({}));alert(err.error||'Signup failed');return;}const d2=await r2.json();if(d2.key)localStorage.setItem('pfa_key',d2.key);if(d2.checkout_url){window.location=d2.checkout_url;}else{window.location='mailto:${PRODUCT.contactEmail}?subject=Solo%20Plan';}}catch{window.location='mailto:${PRODUCT.contactEmail}?subject=Solo%20Plan';}})();">Start Solo</a>
     </div>
 
     <!-- $47 Security Audit (one-time) -->
@@ -691,9 +711,9 @@ Content-Type: application/json
 `;
 
   return renderPage({
-    title: "Pricing — Free → $47 Audit → $49 Pro → $199 Team → $999 Compliance → $4,999 Volume → Implementation",
+    title: "Pricing — Free → $12 Solo → $47 Audit → $49 Pro → $199 Team → $999 Compliance → $4,999 Volume → Implementation",
     description:
-      `${PRODUCT.name} value ladder: Free tier, $47 one-time Security Audit, Pro $49/mo, Team $199/mo, Compliance $999/mo, Volume $4,999/mo (1M requests included, $4K per additional million), and custom Implementation ($3K–$15K). ${PRODUCT.name} also offers x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}.`,
+      `${PRODUCT.name} value ladder: Free tier, Solo $12/mo (one agent, 2K requests, non-expiring key), $47 one-time Security Audit, Pro $49/mo, Team $199/mo, Compliance $999/mo, Volume $4,999/mo (1M requests included, $4K per additional million), and custom Implementation ($3K–$15K). ${PRODUCT.name} also offers x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}.`,
     path: "/pricing",
     content,
     baseUrl,

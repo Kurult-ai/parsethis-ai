@@ -196,7 +196,7 @@ billingRoutes.post("/v1/billing/signup-checkout", async (c) => {
     .catch(() => ({} as { tier?: string; name?: string }));
   const tier = body.tier;
   if (!tier || !Object.prototype.hasOwnProperty.call(TIER_CONFIG, tier)) {
-    return c.json({ error: "Invalid tier. Must be 'pro', 'team', or 'compliance'" }, 400);
+    return c.json({ error: "Invalid tier. Must be 'solo', 'pro', 'team', or 'compliance'" }, 400);
   }
 
   const ip =
@@ -273,7 +273,7 @@ billingRoutes.post("/v1/billing/checkout", authMiddleware("evaluate"), async (c)
   const tier = body.tier;
 
   if (!tier || !Object.prototype.hasOwnProperty.call(TIER_CONFIG, tier)) {
-    return c.json({ error: "Invalid tier. Must be 'pro', 'team', or 'compliance'" }, 400);
+    return c.json({ error: "Invalid tier. Must be 'solo', 'pro', 'team', or 'compliance'" }, 400);
   }
 
   const apiKey = c.get("apiKey");

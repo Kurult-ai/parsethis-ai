@@ -15,6 +15,7 @@ export const PRODUCT = {
 
 export const PLAN_LIMITS = {
   free: { requestsPerMinute: 10, sandboxExecutionsPerHour: 5, label: "Free" },
+  solo: { requestsPerMinute: 30, sandboxExecutionsPerHour: 10, label: "Solo" },
   pro: { requestsPerMinute: 100, sandboxExecutionsPerHour: 50, label: "Pro" },
   team: { requestsPerMinute: 500, sandboxExecutionsPerHour: 200, label: "Team" },
   compliance: { requestsPerMinute: 500, sandboxExecutionsPerHour: 500, label: "Compliance" },

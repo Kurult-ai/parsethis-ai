@@ -220,6 +220,7 @@ export interface ApiKeyRecord {
 
 const TIER_RATE_LIMITS: Record<string, number> = {
   free: PLAN_LIMITS.free.requestsPerMinute,
+  solo: PLAN_LIMITS.solo.requestsPerMinute,
   pro: PLAN_LIMITS.pro.requestsPerMinute,
   team: PLAN_LIMITS.team.requestsPerMinute,
   compliance: PLAN_LIMITS.compliance.requestsPerMinute,
