@@ -689,7 +689,7 @@ res = session.post("https://www.parsethis.ai/v1/parse", json={"prompt": "..."})<
       </tbody>
     </table>
   </div>
-  <p class="pricing-muted"><sup>*</sup> Latency figures are provisional, caller-measured end to end, and predate a change to the authentication path that removed most of the per-request overhead &mdash; so they are stale on the high side. Every response carries a <code>latency_ms</code> field with the in-process detection time; measure your own path before committing to a budget. See <a href="/technology">Technology</a>.</p>
+  <p class="pricing-muted"><sup>*</sup> Latency figures are caller-measured end to end against production, and provisional &mdash; a small sample rather than a fitted distribution. Most of that time is not detection: every response carries a <code>latency_ms</code> field with the in-process detection time, which is a small fraction of it. Measure your own path before committing to a budget. See <a href="/technology">Technology</a>.</p>
 
   <h3>How to enforce pattern-only at the org level</h3>
   <pre><code>PUT /v1/policy

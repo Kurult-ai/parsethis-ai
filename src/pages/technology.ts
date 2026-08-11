@@ -340,7 +340,7 @@ export function renderTechnologyPage(baseUrl: string): string {
           </table>
         </div>
         <p><em>Detection</em> is the time Parse spends deciding — the <code>latency_ms</code> field in every response, and the number to trust because you can read it on your own traffic. The pattern-only figures are a small number of point samples, not fitted percentiles. <em>End-to-end</em> is what your client waits, including TLS, our edge and tunnel, authentication and serialization.</p>
-        <p class="tech-note"><sup>*</sup> End-to-end figures are provisional. They predate a change to the authentication path that removed most of the per-request overhead, so they are stale on the high side; we are re-measuring and will publish firm percentiles once we have a real distribution rather than a handful of samples. Budget against the end-to-end column, and measure your own path before you commit to a latency budget. Full mode also varies with model provider response time.</p>
+        <p class="tech-note"><sup>*</sup> End-to-end figures are caller-measured against production and provisional &mdash; a small sample, not a fitted distribution. Most of that time is not detection: an unauthenticated health check returns in well under a tenth of the pattern-only figure, and the remainder sits on our authentication path, which we are working on. We will publish firm percentiles when we have a real distribution to publish. Budget against the end-to-end column, and measure your own path before committing to a latency budget. Full mode also varies with model provider response time.</p>
         <div class="tech-note">For hot-path screening, use <code>mode: "pattern-only"</code>. For batch analysis, use full mode.</div>
       </div>
     </div>
