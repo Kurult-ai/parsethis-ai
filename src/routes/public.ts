@@ -522,10 +522,18 @@ const DEMO_RATE_WINDOW_SECONDS = 60 * 60;
 const DEMO_RATE_KEY_PREFIX = "demo:rate";
 
 publicRoutes.post("/demo/api", async (c) => {
-  const body = await c.req.json<{ prompt?: string }>().catch(() => null);
+  const body = await c.req.json<{ prompt?: string; mode?: string }>().catch(() => null);
   if (!body || typeof body.prompt !== "string" || body.prompt.trim() === "") {
     return c.json({ error: "prompt is required and must be a non-empty string" }, 400);
   }
+
+  // The demo defaults to pattern-only. This is the landing page's primary CTA,
+  // and running the full pipeline made it the slowest surface on the site
+  // (measured 2.8s, 3.2s and 6.6s on three consecutive benign prompts, because
+  // the semantic layer calls out to OpenRouter). A first impression should not
+  // cost six seconds to say "risk_score: 0". Callers who want the semantic
+  // layer opt in explicitly, and the demo page labels what that costs.
+  const requestedFullPipeline = body.mode === "full";
   if (body.prompt.length > 10000) {
     return c.json({ error: "prompt must be less than 10,000 characters" }, 400);
   }
@@ -605,7 +613,11 @@ publicRoutes.post("/demo/api", async (c) => {
         Authorization: `Bearer ${DEMO_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ prompt: body.prompt }),
+      body: JSON.stringify(
+        requestedFullPipeline
+          ? { prompt: body.prompt }
+          : { prompt: body.prompt, mode: "pattern-only" },
+      ),
     });
 
     if (!parseRes.ok) {

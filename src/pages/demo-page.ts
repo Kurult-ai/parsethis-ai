@@ -126,6 +126,10 @@ export function renderDemoPage(baseUrl: string): string {
       <span class="demo-status" id="demo-status" aria-live="polite"></span>
       <span class="demo-remaining" id="demo-remaining" style="margin-left:auto;"></span>
     </div>
+    <label class="demo-mode-toggle" for="demo-full-mode" style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--text-dim);cursor:pointer;">
+      <input type="checkbox" id="demo-full-mode" style="cursor:pointer;">
+      <span>Also run the semantic layer (catches indirect and paraphrased attacks patterns miss &mdash; adds about 2&ndash;4 seconds)</span>
+    </label>
   </div>
 
   <div class="demo-result" id="demo-result">
@@ -203,10 +207,12 @@ export function renderDemoPage(baseUrl: string): string {
       if (rateLimitEl) rateLimitEl.classList.remove('demo-visible');
 
       try {
+        var fullModeEl = document.getElementById('demo-full-mode');
+        var wantsFullPipeline = !!(fullModeEl && fullModeEl.checked);
         var res = await fetch('/demo/api', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: prompt })
+          body: JSON.stringify({ prompt: prompt, mode: wantsFullPipeline ? 'full' : 'pattern-only' })
         });
 
         if (res.status === 429) {
