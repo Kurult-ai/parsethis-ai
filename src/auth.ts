@@ -437,6 +437,7 @@ export function authMiddleware(requiredScope?: string) {
       expires_in_days: apiKeyRecord.expiresAt
         ? Math.max(0, Math.ceil((new Date(apiKeyRecord.expiresAt).getTime() - Date.now()) / 86_400_000))
         : null,
+      key_prefix: apiKeyRecord.keyPrefix,
     });
 
     // Resolve environment from X-Parse-Environment header (default: production)

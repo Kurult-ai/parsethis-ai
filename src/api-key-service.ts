@@ -495,6 +495,26 @@ export async function revokeApiKey(id: string): Promise<void> {
   await invalidateApiKeyCache(key.keyPrefix);
 }
 
+/**
+ * Revoke a Redis-fallback key (id "redis_…") that has no DB row. Keys issued
+ * while Postgres was unreachable live only in the per-prefix fallback bucket;
+ * self-revoke must reach them or DELETE /v1/keys/self 404s on exactly the
+ * keys most likely to need revoking.
+ */
+export async function revokeFallbackApiKey(prefix: string, id: string): Promise<boolean> {
+  try {
+    const records = await getFallbackRecords(prefix);
+    const record = records.find((item) => item.id === id && !item.revokedAt);
+    if (!record) return false;
+    record.revokedAt = new Date();
+    await storeFallbackRecord(record);
+    await invalidateApiKeyCache(prefix).catch(() => {});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function listApiKeys(userId: string): Promise<ApiKeyRecord[]> {
   if (isLocalKeyGenerationTestMode()) {
     return Array.from(localTestKeysByPrefix.values())

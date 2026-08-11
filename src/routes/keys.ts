@@ -96,7 +96,12 @@ keysRoutes.delete("/v1/keys/self", authMiddleware(), async (c) => {
     });
   }
 
-  const deleted = await deleteApiKey(apiKey.id);
+  let deleted = await deleteApiKey(apiKey.id);
+  // Keys issued via the Redis fallback path (id "redis_…") have no DB row.
+  if (!deleted && apiKey.key_prefix) {
+    const { revokeFallbackApiKey } = await import("../api-key-service.js");
+    deleted = await revokeFallbackApiKey(apiKey.key_prefix, apiKey.id);
+  }
   if (!deleted) {
     auditLog({ action: "self_revoke_failed", apiKeyId: apiKey.id, detail: "Key not found or already revoked", ip });
     return problem(c, {

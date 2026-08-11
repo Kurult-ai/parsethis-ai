@@ -28,6 +28,8 @@ export interface ApiKeyContext {
   role?: string;
   /** Whole days until the key expires; null for non-expiring keys (master, demo, x402). */
   expires_in_days?: number | null;
+  /** Key prefix (pfa_live_xxxx) — needed to revoke Redis-fallback keys that have no DB row. */
+  key_prefix?: string;
 }
 
 export type AppEnv = {
