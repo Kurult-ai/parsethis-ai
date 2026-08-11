@@ -5,6 +5,8 @@
  * All email is sent from hello@parsethis.ai via Resend API.
  */
 
+import { DETECTION_FACTS, LATENCY_FACTS } from "./product-facts.js";
+
 const RESEND_API = "https://api.resend.com/emails";
 const FROM_ADDRESS = "hello@parsethis.ai";
 const FROM_NAME = "Parse";
@@ -232,7 +234,7 @@ export function nurtureSocialProofEmail(): { subject: string; html: string } {
 
         <h2 style="font-size: 17px; font-weight: 600; margin-bottom: 12px;">Detection layers</h2>
         <ol style="font-size: 14px; color: #5a6678; line-height: 1.8; margin-bottom: 24px;">
-          <li><strong>Pattern engine</strong> — 126+ deterministic rules across 9 risk categories, with text normalization against obfuscation (~0.3ms p95).</li>
+          <li><strong>Pattern engine</strong> — ${DETECTION_FACTS.patternRuleCount} deterministic injection patterns plus intent detectors across ${DETECTION_FACTS.riskCategoryCount} risk categories, with text normalization against obfuscation (~${LATENCY_FACTS.detection.patternOnly.p50Ms}ms detection, p50).</li>
           <li><strong>Structural analysis</strong> — encoded payloads, hidden content, callback URLs, tool-result JSON injection.</li>
           <li><strong>Semantic analysis</strong> — LLM scoring that reads intent when configured and useful.</li>
           <li><strong>Sandbox execution</strong> — suspicious content runs in an isolated decoy agent (optional, contained).</li>

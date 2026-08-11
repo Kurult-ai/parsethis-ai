@@ -119,7 +119,7 @@ curl https://www.parsethis.ai/v1/compliance/coverage \
   "parse_categories": ["prompt_injection", "indirect_injection"],
   "parse_capabilities": [
     "4-layer detection pipeline (pattern, structural, semantic, sandbox)",
-    "126+ pattern rules",
+    "108 deterministic injection patterns plus intent detectors",
     "indirect injection detection",
     "nonce-tagged delimiters"
   ],

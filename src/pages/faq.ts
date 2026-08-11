@@ -63,7 +63,12 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "How fast is prompt screening?",
     answer:
-      "Pattern matching is the fastest path and usually completes in milliseconds. Full hosted analysis may add LLM latency when semantic analysis is configured. Sandbox execution is asynchronous and can add a few seconds depending on prompt complexity. Agents should set explicit timeouts and choose fail-open or fail-closed behavior by trust boundary.",
+      "Two numbers, because they answer different questions. Detection — the time Parse spends deciding, reported as latency_ms in every response — is single-digit milliseconds in pattern-only mode. End-to-end, what your client actually waits, adds TLS, our edge and tunnel, authentication, rate limiting and serialization on top of that. Budget against the end-to-end figure and use latency_ms to see how much of it is the detector. Full mode adds the semantic layer's model call, which is seconds rather than milliseconds. Sandbox execution is asynchronous. Current measured figures for both clocks are published on the Technology page. Agents should set explicit timeouts and choose fail-open or fail-closed behavior per trust boundary.",
+  },
+  {
+    question: "Can I self-host Parse or run it on-premises?",
+    answer:
+      "Not the platform, and it is worth being direct about that. Parse is a hosted control plane: the agent registry, versioned policy, receipts and evidence trail exist because verdicts are recorded centrally, and a self-hosted copy would not produce the audit artifact the product is for. There is no on-premises or air-gapped distribution today. Two options exist if data movement is the concern. Passing mode: \"pattern-only\" per request — or setting defaultMode to pattern-only on your org policy — runs the deterministic layer only, so prompt text is never forwarded to the semantic-analysis provider; it still reaches Parse in the United States. If prompt text must never leave your infrastructure at all, run the open-source prompt-guard library inside your own environment. That is a standalone pattern-screening component, not Parse: no registry, policy engine, receipts or semantic layer, and no hosted API in the request path.",
   },
 
   // --- Integration (5 items) ---

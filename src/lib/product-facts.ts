@@ -37,6 +37,42 @@ export const DETECTION_FACTS = {
     "Parse is a defensive screening layer for honest agents. It reduces prompt-injection risk but does not guarantee protection, replace least-privilege permissions, or prevent a malicious caller from bypassing screening.",
 } as const;
 
+/**
+ * Latency, with the clock named.
+ *
+ * Three different pattern-only numbers used to ship at once — "~0.3ms p95",
+ * "~5ms p50, measured on production infrastructure", and "<400ms p50" — none
+ * of them saying which clock they were on. They were all true and they
+ * described different things: the first two are in-process detection time (the
+ * `latency_ms` field in the response), the third is what a caller actually
+ * waits. A prospect who measures 400ms against a page promising 5ms stops
+ * believing every other number on the site, which is exactly what happened.
+ *
+ * So: two clocks, both named, one source. `detection` is what Parse spends
+ * deciding. `endToEnd` is what the caller experiences, including TLS, the
+ * Cloudflare tunnel, auth, rate limiting and serialization. Publish both, and
+ * never let a page quote `detection` in a context where a reader will assume
+ * `endToEnd`.
+ *
+ * Re-measure endToEnd whenever the request path changes, with:
+ *   curl -w '%{time_starttransfer}' -X POST .../v1/parse -H 'Authorization: ...'
+ */
+export const LATENCY_FACTS = {
+  detection: {
+    patternOnly: { p50Ms: 3, p95Ms: 8, clock: "in-process detection (response latency_ms)" },
+    full: { p50Ms: 2000, p95Ms: 7000, clock: "in-process detection (response latency_ms)" },
+  },
+  endToEnd: {
+    patternOnly: { p50Ms: 400, p95Ms: 450, clock: "caller-measured, TLS to response" },
+    full: { p50Ms: 2400, p95Ms: 7200, clock: "caller-measured, TLS to response" },
+  },
+  measuredAt: "2026-08-11",
+  note:
+    "End-to-end figures are pre-fastHash measurements taken from production. The per-request bcrypt "
+    + "compare that dominated them has been removed; re-measure and update this constant after the "
+    + "next deploy.",
+} as const;
+
 export const ACTION_ROUTER = [
   {
     trigger: "Untrusted user input, RAG content, browser output, email, documents, webhook bodies, or tool results before an agent acts",

@@ -213,6 +213,10 @@ Required verification:
         <p class="pricing-muted"><code>POST /v1/screen-output</code></p>
       </div>
     </div>
+    <div class="pricing-bundle-note" style="margin-top:18px;padding:16px 18px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02);">
+      <p style="margin:0 0 8px;font-size:14px;"><strong>What the call includes.</strong> A screening call is priced above the raw classifier endpoints sold by the hyperscalers, and it should be compared for what it carries, not per invocation alone.</p>
+      <p class="pricing-muted" style="margin:0;font-size:13.5px;">Every verdict is recorded against a registered agent, evaluated under your versioned policy, and returned with a receipt — category, score, action and <code>trace_id</code> — that your auditor can read and your SIEM can ingest. That evidence trail, the agent registry, the enforcement dial and the OWASP LLM / NIST AI RMF / EU AI Act / ISO 42001 crosswalk are the product. Screening is the mechanism underneath it. If you need a bare classifier call and nothing around it, a commodity endpoint will be cheaper per request; if you need to show someone what your agents did and under which rule, that is what you are buying here.</p>
+    </div>
     <div class="pricing-fact-strip" aria-label="x402 payment rail">
       <div class="pricing-fact">
         <span class="pricing-label">Asset</span>

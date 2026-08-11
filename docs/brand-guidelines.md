@@ -36,7 +36,7 @@ policy surface, the screening pipeline, and the evidence trail — together.
 | Pillar | Claim | Proof points |
 |--------|-------|--------------|
 | **Govern** | Every agent is on the record and under policy. | Agent registry (CRUD, heartbeats, decommission) · enforcement dial (monitor/warn/block) per environment · versioned policy revisions with diffs · policy packs (OWASP-aligned presets) · data grants & data-source registry · egress control · volume budgets · approval matrix · kill switch · signed identity (agent keypairs) · SSO |
-| **Enforce** | Untrusted text is screened before it gets authority. | 4-layer pipeline (pattern ~0.3ms p95, structural & contextual analysis, semantic, sandbox) · 9 risk categories · 126+ pattern rules + contextual & intent detectors · risk 0–10 · 4 surfaces (input, tool output, generated output, handoff) · gateway proxy (OpenAI-compatible) |
+| **Enforce** | Untrusted text is screened before it gets authority. | 4-layer pipeline (pattern detection ~3ms p50 in-process, structural & contextual analysis, semantic, sandbox) · 9 risk categories · 108 injection patterns + contextual & intent detectors · risk 0–10 · 4 surfaces (input, tool output, generated output, handoff) · gateway proxy (OpenAI-compatible) |
 | **Prove** | Every decision leaves evidence an auditor can read. | Receipt on 100% of verdicts (category, score, action, trace ID) · coverage attestation · SIEM forwarding (Splunk, Datadog, Elastic, Sentinel, webhook) · evidence pack export · framework crosswalk (OWASP LLM Top 10, NIST AI RMF, EU AI Act, ISO 42001, SOC 2) · compliance dashboard · SOC 2-aligned controls at /trust · pre-answered vendor questionnaire |
 
 The mechanism mantra — **"screen before authority"** — stays. It describes the
@@ -116,11 +116,21 @@ active voice):
 ## 4. Claims and proof
 
 - Every public claim must be verifiable in the product or docs today.
-  Approved numeric claims: pattern layer ~0.3ms p95, 126+ pattern rules, 9
+  Approved numeric claims: 108 deterministic injection patterns plus intent
+  detectors (derive from `DETECTION_FACTS.patternRuleCount`, never hardcode), 9
   risk categories, 4 detection layers, risk scale 0–10, receipt on every
-  verdict, free tier 10 req/min, 30-day self-serve keys, x402 from $0.005
-  (USDC on Base), Pro $49/10K, Team $199/50K, Compliance $999/mo, Security
-  Audit $47 one-time.
+  verdict, free tier 10 req/min, rolling 30-day self-serve keys (use renews the
+  key; 30 idle days expires it, failing closed with a 401), x402 from $0.005
+  (USDC on Base), Solo $12/2K, Pro $49/10K, Team $199/50K, Compliance $999/mo,
+  Volume $4,999/1M then $4K per additional million, Security Audit $47
+  one-time, Implementation $3K–$15K one-time.
+- **Latency claims must name their clock.** Quote them from `LATENCY_FACTS`
+  (`src/lib/product-facts.ts`), which separates *detection* (in-process, the
+  `latency_ms` response field) from *end-to-end* (what a caller measures). Three
+  incompatible pattern-only figures once shipped simultaneously because the
+  clock was left implicit; a prospect who reproduces a number and misses by 40×
+  discounts every other claim on the page. Never quote a detection figure where
+  a reader will read it as end-to-end.
 - **Four screening surfaces:** input (`POST /v1/parse`), output
   (`POST /v1/screen-output`), handoff (`POST /v1/agent/trust/verify`),
   generated-output re-screen. All four produce the same receipt structure.

@@ -1,6 +1,6 @@
 import { renderPage } from "../lib/html-template.js";
 import { organizationSchema, breadcrumbSchema, webAPISchema } from "../lib/schema.js";
-import { PRODUCT, X402_PAYMENT } from "../lib/product-facts.js";
+import { LATENCY_FACTS, PRODUCT, X402_PAYMENT } from "../lib/product-facts.js";
 
 export function renderTechnologyPage(baseUrl: string): string {
   const content = `
@@ -330,15 +330,15 @@ export function renderTechnologyPage(baseUrl: string): string {
         <div class="table-wrapper">
           <table>
             <thead>
-              <tr><th>Mode</th><th>p50</th><th>p95</th><th>Prompt text leaves Parse?</th></tr>
+              <tr><th>Mode</th><th>Detection (p50 / p95)</th><th>End-to-end (p50 / p95)</th><th>Prompt text leaves Parse?</th></tr>
             </thead>
             <tbody>
-              <tr><td><strong>Pattern-only</strong></td><td>~5ms</td><td>~10ms</td><td>No</td></tr>
-              <tr><td><strong>Full</strong> (pattern + semantic)</td><td>~3,000ms</td><td>~10,000ms</td><td>Yes (to OpenRouter)</td></tr>
+              <tr><td><strong>Pattern-only</strong></td><td>~${LATENCY_FACTS.detection.patternOnly.p50Ms}ms / ~${LATENCY_FACTS.detection.patternOnly.p95Ms}ms</td><td>~${LATENCY_FACTS.endToEnd.patternOnly.p50Ms}ms / ~${LATENCY_FACTS.endToEnd.patternOnly.p95Ms}ms</td><td>No</td></tr>
+              <tr><td><strong>Full</strong> (pattern + semantic)</td><td>~${LATENCY_FACTS.detection.full.p50Ms.toLocaleString()}ms / ~${LATENCY_FACTS.detection.full.p95Ms.toLocaleString()}ms</td><td>~${LATENCY_FACTS.endToEnd.full.p50Ms.toLocaleString()}ms / ~${LATENCY_FACTS.endToEnd.full.p95Ms.toLocaleString()}ms</td><td>Yes (to OpenRouter)</td></tr>
             </tbody>
           </table>
         </div>
-        <p>Measured on production infrastructure. Your latency may vary with payload length and model provider response time.</p>
+        <p><strong>Two clocks, both measured on production infrastructure.</strong> <em>Detection</em> is the time Parse spends deciding — the <code>latency_ms</code> field in every response. <em>End-to-end</em> is what your client waits, including TLS, our edge and tunnel, authentication, rate limiting and serialization. Budget against the end-to-end column; the detection column tells you how much of it is the detector. Your latency will vary with payload length and, in full mode, model provider response time.</p>
         <div class="tech-note">For hot-path screening, use <code>mode: "pattern-only"</code>. For batch analysis, use full mode.</div>
       </div>
     </div>
