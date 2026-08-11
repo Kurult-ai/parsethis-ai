@@ -231,8 +231,10 @@ Verification required before reporting done:
      The copy and the animation sit next to each other, never on top of
      each other, so no scrim is needed and the text keeps a plain dark
      background. */
-  .hf-inner { position: relative; z-index: 5; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: center; }
-  .hf-copy { max-width: 560px; }
+  /* Wider than the 1120px .wrap the rest of the page uses — the hero carries
+     two columns, so it needs more room than a single centred text column. */
+  .hf-inner { position: relative; z-index: 5; width: 100%; max-width: 1300px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: center; }
+  .hf-copy { max-width: 600px; }
   .hf-art { position: relative; width: 100%; aspect-ratio: 1; }
   .hf h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(46px, 6vw, 82px); line-height: 1.02; letter-spacing: -0.01em; color: var(--white); }
   .hf h1 em { font-style: italic; }
@@ -270,10 +272,7 @@ Verification required before reporting done:
      right edge (harmless — body has overflow-x: clip and the canvas corners are
      transparent) and keeps the copy column clear, which is what "the copy sits
      beside the art, not on it" requires. */
-  #bh { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-45deg); width: 132%; aspect-ratio: 1; z-index: 4; pointer-events: none; }
-  .hf-bh-receipt { position: absolute; left: 50%; bottom: 1%; transform: translateX(-50%); z-index: 5; white-space: nowrap; font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em; pointer-events: none; }
-  .hf-bh-receipt b { font-weight: 500; color: var(--green); }
-  .hf-bh-receipt span { color: var(--gray-dim); }
+  #bh { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-45deg); width: 148%; aspect-ratio: 1; z-index: 4; pointer-events: none; }
 
   /* ── subtle 50vw glow behind every header ── */
   .hf h1, .sec-center h2, .closer h2 { position: relative; }
@@ -404,7 +403,6 @@ Verification required before reporting done:
 
   @media (max-width: 1100px) {
     .hf-inner { gap: 28px; }
-    .hf-bh-receipt { display: none; }
   }
   @media (max-width: 900px) {
     /* Too narrow for two columns: stack them, copy above the art, both
@@ -469,7 +467,6 @@ Verification required before reporting done:
     </div>
     <div class="hf-art">
       <canvas id="bh" aria-hidden="true"></canvas>
-      <div class="hf-bh-receipt" id="receipt" aria-hidden="true"><b>every crossing</b> <span>· receipted</span></div>
     </div>
   </div>
 
@@ -952,9 +949,7 @@ curl -s ${baseUrl}/v1/parse \\
   var OBS = qs.get('obs') === 'distant' ? 'distant' : 'infall';
   var slots = [];
   for (var i = 0; i < MAXP; i++) slots.push({ active:false });
-  var crossings = 0, nextSpawn = 1.0, simT = 0;
-  var receiptEl = document.getElementById('receipt');
-  var receiptTimer = null;
+  var nextSpawn = 1.0, simT = 0;
 
   function spawn(t){
     var s = null;
@@ -969,7 +964,7 @@ curl -s ${baseUrl}/v1/parse \\
     s.e2 = rotAxis([0,0,1], ax, tiltAmt);
     s.r = r0; s.pr = (rng()-.5)*.016; s.phi = rng()*Math.PI*2;
     s.L = Lcirc(r0);
-    s.mode = 'inspiral'; s.fade = 1; s.active = true; s.receipted = false;
+    s.mode = 'inspiral'; s.fade = 1; s.active = true; s.counted = false;
     s.born = t; s.prev = null; s.frozeT = 0; s.crossT = 0;
     if (DEBUG) console.log('[bh] spawn r0=' + r0.toFixed(2) + ' tilt=' + (tiltAmt*180/Math.PI).toFixed(1) + '° t=' + t.toFixed(1) + 's');
   }
@@ -1000,18 +995,6 @@ curl -s ${baseUrl}/v1/parse \\
     var r = (rr !== undefined) ? rr : s.r;
     var c = Math.cos(s.phi), n = Math.sin(s.phi);
     return [ s.e1[0]*r*c + s.e2[0]*r*n, s.e1[1]*r*c + s.e2[1]*r*n, s.e1[2]*r*c + s.e2[2]*r*n ];
-  }
-
-  function sealCrossing(){
-    crossings++;
-    if (!receiptEl) return;
-    receiptEl.classList.add('pulse');
-    receiptEl.innerHTML = '<b>crossing #' + crossings + ' sealed</b> <span>· r = 1.0 R<sub>s</sub></span>';
-    clearTimeout(receiptTimer);
-    receiptTimer = setTimeout(function(){
-      receiptEl.classList.remove('pulse');
-      receiptEl.innerHTML = '<b>every crossing</b> <span>· receipted · ' + crossings + ' sealed</span>';
-    }, 2400);
   }
 
   function stepParticle(s, dtWall, T){
@@ -1057,16 +1040,16 @@ curl -s ${baseUrl}/v1/parse \\
 
     if (s.r <= RS * 1.004) {
       if (OBS === 'infall') {
-        if (!s.receipted) { s.receipted = true; sealCrossing(); if (DEBUG) console.log('[bh] crossed horizon t=' + simT.toFixed(1) + 's · E drift ' + Math.abs(energy(s) - E_ISCO).toExponential(1) + ' (invariant audit)'); }
+        if (!s.counted) { s.counted = true; if (DEBUG) console.log('[bh] crossed horizon t=' + simT.toFixed(1) + 's · E drift ' + Math.abs(energy(s) - E_ISCO).toExponential(1) + ' (invariant audit)'); }
         s.r = RS * 1.002; s.mode = 'fade'; s.crossT = simT;
       } else {
-        if (!s.receipted) { s.receipted = true; sealCrossing(); if (DEBUG) console.log('[bh] frozen at horizon t=' + simT.toFixed(1) + 's'); }
+        if (!s.counted) { s.counted = true; if (DEBUG) console.log('[bh] frozen at horizon t=' + simT.toFixed(1) + 's'); }
         s.r = RS * 1.02; s.mode = 'frozen'; s.frozeT = simT;
       }
     } else if (OBS === 'distant' && s.mode === 'plunge') {
       var ff = 1 - RS/s.r;
       if (ff < 0.03) { // integrator hit the asymptote: visually frozen
-        if (!s.receipted) { s.receipted = true; sealCrossing(); }
+        s.counted = true;
         s.mode = 'frozen'; s.frozeT = simT;
       }
     }
@@ -1177,16 +1160,16 @@ curl -s ${baseUrl}/v1/parse \\
     // scripted states across the lifecycle
     var A = slots[0]; A.active = true; A.mode = 'inspiral'; A.fade = 1;
     A.e1 = rotAxis([1,0,0], [1,0,0], .24); A.e2 = rotAxis([0,0,1], [1,0,0], .24);
-    A.r = 4.1; A.pr = -.01; A.L = Lcirc(4.1); A.phi = 2.0; A.prev = null; A.receipted = true;
+    A.r = 4.1; A.pr = -.01; A.L = Lcirc(4.1); A.phi = 2.0; A.prev = null; A.counted = true;
     var B = slots[1]; B.active = true; B.mode = 'plunge'; B.fade = 1;
     B.e1 = rotAxis([1,0,0], [0,0,1], -.18); B.e2 = rotAxis([0,0,1], [0,0,1], -.18);
     // exact plunging-stream state at r=1.8: conserved (E_ISCO, L_ISCO),
     // pr from E² = pr² + f(1 + L²/r²)
-    B.r = 1.8; B.L = L_ISCO; B.phi = 4.4; B.prev = null; B.receipted = true;
+    B.r = 1.8; B.L = L_ISCO; B.phi = 4.4; B.prev = null; B.counted = true;
     B.pr = -Math.sqrt(Math.max(E_ISCO*E_ISCO - (1 - RS/B.r)*(1 + B.L*B.L/(B.r*B.r)), 0));
     var C = slots[2]; C.active = true; C.mode = 'frozen'; C.fade = .55;
     C.e1 = [1,0,0]; C.e2 = [0,0,1];
-    C.r = 1.02; C.pr = 0; C.L = L_ISCO; C.phi = .8; C.prev = null; C.receipted = true;
+    C.r = 1.02; C.pr = 0; C.L = L_ISCO; C.phi = .8; C.prev = null; C.counted = true;
     size();
     // two priming frames so world velocities (streaks) exist
     frame(tSec * 1000 - 16, 0);
