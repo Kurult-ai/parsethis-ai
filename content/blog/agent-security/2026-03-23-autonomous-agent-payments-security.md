@@ -123,9 +123,20 @@ Add a validation layer between your agent and the x402 payment processor. This l
 ### Architecture
 
 ```python
+async def screen(api_key: str, text: str, metadata: dict) -> dict:
+    """POST /v1/parse — returns risk_score 0-10, verdict, flags, categories."""
+    async with httpx.AsyncClient() as http:
+        res = await http.post(
+            "https://www.parsethis.ai/v1/parse",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={"prompt": text, "metadata": metadata},
+        )
+        return res.json()
+
+
 class X402SecurityLayer:
     def __init__(self, parse_api_key: str):
-        self.parse_client = ParseClient(api_key=parse_api_key)
+        self.parse_api_key = parse_api_key
         self.transaction_monitor = TransactionMonitor()
         self.policy_engine = PaymentPolicyEngine()
 
@@ -161,11 +172,12 @@ class X402SecurityLayer:
 
         # 4. Prompt injection check on agent's reasoning
         if 'reasoning' in agent_context:
-            injection_check = await self.parse_client.detect_prompt_injection(
-                prompt=agent_context['reasoning'],
-                context={'agent': agent_id, 'source': 'payment_authorization'}
+            injection_check = await screen(
+                self.parse_api_key,
+                agent_context['reasoning'],
+                {'agent_id': agent_id, 'source': 'payment_authorization'}
             )
-            if injection_check.risk_score > 0.5:
+            if injection_check["risk_score"] >= 5:
                 return ValidationResult(
                     allowed=False,
                     reason="Agent reasoning indicates potential compromise"
@@ -517,24 +529,39 @@ Parse provides the security layer your autonomous payment pipeline needs:
 
 **Integration:**
 ```typescript
-import { ParseAgents } from '@parsethis/agents';
+import { wrap, ParseScreeningError } from '@parsethis/sdk';
+import OpenAI from 'openai';
 
-const client = new ParseAgents('your_api_key');
-
-// Validate agent's payment authorization decision
-const validation = await client.validateAgentOutput({
-  agent: 'procurement-bot-7',
-  output: agentReasoning,
-  context: {
-    transaction: paymentDetails,
-    authority_scope: 'vendor_payments'
-  }
+// Every prompt the payment agent sends is screened before the LLM sees it,
+// and every response is screened before the agent acts on it.
+const screened = wrap(new OpenAI(), {
+  apiKey: process.env.PARSE_API_KEY,
+  agentId: 'procurement-bot-7',
+  failClosed: true,   // a block verdict throws instead of returning
 });
 
-if (!validation.safe) {
-  console.log('Payment blocked:', validation.reason);
-  return { authorized: false };
+try {
+  const decision = await screened.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: paymentRequest }],
+  });
+} catch (e) {
+  if (e instanceof ParseScreeningError) {
+    console.log('Payment blocked:', e.verdict, e.categories);
+    return { authorized: false };
+  }
+  throw e;
 }
+```
+
+To screen the agent's reasoning at an explicit checkpoint rather than on every
+call, post it to `/v1/screen-output` instead:
+
+```bash
+curl -s -X POST https://www.parsethis.ai/v1/screen-output \
+  -H "Authorization: Bearer $PARSE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"output":"<agent reasoning>","metadata":{"agent_id":"procurement-bot-7"}}'
 ```
 
 ## Actionable Takeaways

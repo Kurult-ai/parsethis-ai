@@ -1,5 +1,5 @@
 /**
- * @parse-agents/sdk — Hermes Agent Middleware Adapter
+ * @parsethis/sdk — Hermes Agent Middleware Adapter
  *
  * Drop-in middleware for [Hermes Agent](https://hermes-agent.nousresearch.com)
  * that automatically screens every tool call through the Parse API.
@@ -10,11 +10,11 @@
  *
  * @example
  * ```typescript
- * import { createParseMiddleware } from "@parse-agents/sdk/adapters/hermes-middleware";
+ * import { createParseMiddleware } from "@parsethis/sdk/adapters/hermes-middleware";
  *
  * const parseMiddleware = createParseMiddleware({
  *   parseApiKey: process.env.PARSE_API_KEY!,
- *   parseBaseUrl: "https://parsethis.ai",
+ *   parseBaseUrl: "https://www.parsethis.ai",
  *   agentId: "billing-bot",
  *   environment: "production",
  *   failPosture: "fail_closed",
@@ -33,7 +33,7 @@ export type FailPosture = "fail_open" | "fail_closed";
 export interface ParseAdapterConfig {
   /** Parse API key (starts with `parse_`). */
   parseApiKey: string;
-  /** Base URL of the Parse API. Defaults to `https://parsethis.ai`. */
+  /** Base URL of the Parse API. Defaults to `https://www.parsethis.ai`. */
   parseBaseUrl?: string;
   /** Identifier for the agent being screened. */
   agentId: string;
@@ -174,7 +174,7 @@ async function parseFetch<T extends object>(
   payload: Record<string, unknown>,
   config: ParseAdapterConfig,
 ): Promise<T | null> {
-  const baseUrl = (config.parseBaseUrl ?? "https://parsethis.ai").replace(/\/+$/, "");
+  const baseUrl = (config.parseBaseUrl ?? "https://www.parsethis.ai").replace(/\/+$/, "");
   const url = `${baseUrl}${endpoint}`;
   const timeout = config.parseTimeoutMs ?? 10_000;
 

@@ -1,24 +1,22 @@
 /**
- * @parse-agents/sdk — Drop-in interceptor for OpenAI and Anthropic clients.
+ * @parsethis/sdk — Drop-in interceptor for OpenAI and Anthropic clients.
  *
  * Wraps any OpenAI-compatible or Anthropic-compatible client so that every
  * `chat.completions.create()` or `messages.create()` call is automatically
- * screened by the Parse API (https://parsethis.ai).
+ * screened by the Parse API (https://www.parsethis.ai).
  *
  * @example
  * ```typescript
  * import OpenAI from "openai";
- * import { wrap } from "@parse-agents/sdk";
+ * import { wrap } from "@parsethis/sdk";
  *
- * const client = wrap(new OpenAI({ apiKey: "..." }), {
- *   agentId: "billing-bot",
- *   environment: "production",
- *   parseApiKey: "parse_...",
- *   parseBaseUrl: "https://parsethis.ai",
+ * const screened = wrap(new OpenAI(), {
+ *   apiKey: process.env.PARSE_API_KEY,
+ *   failClosed: true,
  * });
  *
  * // Every call is now screened — no further code changes needed.
- * const res = await client.chat.completions.create({ ... });
+ * const res = await screened.chat.completions.create({ ... });
  * ```
  */
 
@@ -27,23 +25,69 @@
 export type FailPosture = "fail_open" | "fail_closed";
 
 export interface ParseSdkConfig {
-  /** Parse API key (starts with `parse_`). */
-  parseApiKey: string;
-  /** Base URL of the Parse API. Defaults to `https://parsethis.ai`. */
+  /** Parse API key (starts with `parse_`). Required, unless `parseApiKey` is given. */
+  apiKey?: string;
+  /** Legacy alias for `apiKey`. Used only when `apiKey` is absent. */
+  parseApiKey?: string;
+  /** Base URL of the Parse API. Defaults to `https://www.parsethis.ai`. */
   parseBaseUrl?: string;
-  /** Identifier for the agent being screened. */
-  agentId: string;
-  /** Deployment environment tag, e.g. `production`, `staging`. */
-  environment: string;
+  /** Identifier for the agent being screened. Defaults to `"default"`. */
+  agentId?: string;
+  /** Deployment environment tag, e.g. `production`, `staging`. Defaults to `"production"`. */
+  environment?: string;
   /** Optional data source IDs the agent is accessing (data governance). */
   dataSources?: string[];
-  /** Behaviour when the Parse API returns a block verdict.
-   *  `"fail_closed"` throws; `"fail_open"` returns a safe placeholder response. */
+  /** Throw `ParseScreeningError` on a block verdict instead of returning a safe
+   *  placeholder response. Defaults to `false` (fail open). */
+  failClosed?: boolean;
+  /** Legacy alias for `failClosed`. `"fail_closed"` is the same as `failClosed: true`.
+   *  Used only when `failClosed` is absent. */
   failPosture?: FailPosture;
   /** Whether to screen LLM output after the call. Default `true`. */
   screenOutput?: boolean;
   /** Timeout (ms) for Parse API calls. Default `10_000`. */
   parseTimeoutMs?: number;
+}
+
+/** Fully-defaulted config used internally once `wrap()` has normalized the input. */
+interface ResolvedConfig {
+  apiKey: string;
+  parseBaseUrl: string;
+  agentId: string;
+  environment: string;
+  dataSources: string[];
+  failClosed: boolean;
+  screenOutput: boolean;
+  parseTimeoutMs: number;
+}
+
+/**
+ * Normalize the two accepted spellings of each option into one internal shape.
+ *
+ * `apiKey` / `failClosed` are the documented names and win when both are set;
+ * `parseApiKey` / `failPosture` remain accepted for older integrations.
+ */
+function resolveConfig(config: ParseSdkConfig): ResolvedConfig {
+  const apiKey = config.apiKey ?? config.parseApiKey;
+  if (typeof apiKey !== "string" || apiKey.trim() === "") {
+    throw new Error(
+      "Parse SDK: a Parse API key is required. Pass `apiKey` (preferred) or " +
+        "`parseApiKey` (legacy) to wrap(), e.g. " +
+        "wrap(openai, { apiKey: process.env.PARSE_API_KEY }). " +
+        "Create a key at https://www.parsethis.ai/docs/quickstart",
+    );
+  }
+
+  return {
+    apiKey,
+    parseBaseUrl: config.parseBaseUrl ?? "https://www.parsethis.ai",
+    agentId: config.agentId ?? "default",
+    environment: config.environment ?? "production",
+    dataSources: config.dataSources ?? [],
+    failClosed: config.failClosed ?? config.failPosture === "fail_closed",
+    screenOutput: config.screenOutput !== false,
+    parseTimeoutMs: config.parseTimeoutMs ?? 10_000,
+  };
 }
 
 export class ParseScreeningError extends Error {
@@ -85,7 +129,8 @@ interface ScreenOutputResponse {
   categories: string[];
 }
 
-interface UsageStats {
+/** Cumulative counters tracked per wrapped client. */
+export interface UsageStats {
   totalCalls: number;
   blockedCalls: number;
   totalTokens: number;
@@ -170,21 +215,20 @@ function extractTokens(response: unknown): number {
 async function parseCall<T extends object>(
   endpoint: string,
   payload: Record<string, unknown>,
-  config: ParseSdkConfig,
+  config: ResolvedConfig,
 ): Promise<T | null> {
-  const baseUrl = (config.parseBaseUrl ?? "https://parsethis.ai").replace(/\/+$/, "");
+  const baseUrl = config.parseBaseUrl.replace(/\/+$/, "");
   const url = `${baseUrl}${endpoint}`;
-  const timeout = config.parseTimeoutMs ?? 10_000;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
+  const timer = setTimeout(() => controller.abort(), config.parseTimeoutMs);
 
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${config.parseApiKey}`,
+        Authorization: `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify(payload),
       signal: controller.signal,
@@ -210,7 +254,7 @@ async function parseCall<T extends object>(
 function interceptAsync(
   original: (...args: unknown[]) => Promise<unknown>,
   kind: "prompt" | "message",
-  config: ParseSdkConfig,
+  config: ResolvedConfig,
   stats: UsageStats,
 ): (...args: unknown[]) => Promise<unknown> {
   return async function (...args: unknown[]) {
@@ -228,7 +272,7 @@ function interceptAsync(
           metadata: {
             agent_id: config.agentId,
             environment: config.environment,
-            data_sources: config.dataSources ?? [],
+            data_sources: config.dataSources,
             source: "sdk",
             source_kind: "user",
           },
@@ -238,7 +282,7 @@ function interceptAsync(
 
       if (parseResp && (parseResp.verdict === "critical" || parseResp.verdict === "high_risk")) {
         stats.blockedCalls++;
-        if (config.failPosture === "fail_closed") {
+        if (config.failClosed) {
           throw new ParseScreeningError(
             `Input blocked by Parse (verdict=${parseResp.verdict}, risk=${parseResp.risk_score})`,
             {
@@ -262,7 +306,7 @@ function interceptAsync(
     if (tokens > 0) stats.totalTokens += tokens;
 
     // ── Post-call output screening ──
-    if (config.screenOutput !== false) {
+    if (config.screenOutput) {
       const outputText = extractOutputText(result);
       if (outputText) {
         await parseCall<ScreenOutputResponse>(
@@ -273,7 +317,7 @@ function interceptAsync(
             metadata: {
               agent_id: config.agentId,
               environment: config.environment,
-              data_sources: config.dataSources ?? [],
+              data_sources: config.dataSources,
               source: "sdk",
             },
           },
@@ -343,67 +387,91 @@ function makeSafeResponse(
 
 // ─── wrap() ─────────────────────────────────────────────────────────────────
 
+/** Hidden key used to read usage stats back off a wrapped client. */
+const PARSE_STATS = Symbol.for("parse.sdk.stats");
+
+/** How deep to follow nested client namespaces looking for a `create` method. */
+const MAX_PROXY_DEPTH = 4;
+
+/**
+ * Decide which screening shape a `create` method at `path` belongs to.
+ * `path` is the property chain walked so far, e.g. `["chat", "completions"]`.
+ */
+function kindForPath(path: string[]): "prompt" | "message" | null {
+  const dotted = path.join(".");
+  // openai.chat.completions.create, openai.beta.chat.completions.create
+  if (dotted === "completions" || dotted.endsWith("chat.completions")) return "prompt";
+  // openai.responses.create
+  if (dotted === "responses" || dotted.endsWith(".responses")) return "prompt";
+  // anthropic.messages.create, anthropic.beta.messages.create
+  if (dotted === "messages" || dotted.endsWith(".messages")) return "message";
+  return null;
+}
+
+/** Recursively proxy a client namespace so nested `create` calls are screened. */
+function proxyNamespace(
+  target: object,
+  path: string[],
+  config: ResolvedConfig,
+  stats: UsageStats,
+): object {
+  return new Proxy(target, {
+    get(obj, prop) {
+      if (prop === PARSE_STATS) return stats;
+
+      // Read against the raw target, not the proxy, so classes with private
+      // fields keep working.
+      const value = Reflect.get(obj, prop);
+      if (typeof prop === "symbol") return value;
+      const name = prop;
+
+      if (typeof value === "function") {
+        if (name === "create") {
+          const kind = kindForPath(path);
+          if (kind !== null) {
+            return interceptAsync(
+              (...args: unknown[]) => Reflect.apply(value, obj, args),
+              kind,
+              config,
+              stats,
+            );
+          }
+        }
+        return value.bind(obj);
+      }
+
+      if (value != null && typeof value === "object" && path.length < MAX_PROXY_DEPTH) {
+        return proxyNamespace(value, [...path, name], config, stats);
+      }
+
+      return value;
+    },
+  });
+}
+
 /**
  * Wrap an OpenAI or Anthropic client so every `chat.completions.create()`
  * and `messages.create()` call is screened by the Parse API.
  *
+ * @param client - Any OpenAI- or Anthropic-compatible client.
+ * @param config - Parse configuration. `apiKey` is required; everything else
+ *                 has a default.
  * @returns A Proxy over the original client. Non-intercepted calls pass through.
+ * @throws {Error} If no Parse API key is supplied.
  */
 export function wrap<T extends object>(client: T, config: ParseSdkConfig): T {
+  const resolved = resolveConfig(config);
   const stats: UsageStats = { totalCalls: 0, blockedCalls: 0, totalTokens: 0 };
-
-  return new Proxy(client as Record<string | symbol, unknown>, {
-    get(target, prop, receiver) {
-      const value = Reflect.get(target, prop, receiver);
-      if (value == null || typeof value !== "object") return value;
-
-      // Wrap nested objects that contain `create` methods
-      return new Proxy(value, {
-        get(nestedTarget, nestedProp, nestedReceiver) {
-          const fn = Reflect.get(nestedTarget, nestedProp, nestedReceiver);
-          if (typeof fn !== "function") return fn;
-
-          // Determine which kind of call this is
-          let kind: "prompt" | "message" | null = null;
-
-          // Detect OpenAI: target.chat.completions.create
-          // At the top level we're already on `chat` or `messages`
-          if (nestedProp === "create") {
-            const targetName = String(prop);
-            if (targetName === "chat" || targetName === "beta") {
-              kind = "prompt"; // openai.chat.completions.create
-            } else if (targetName === "messages") {
-              kind = "message"; // anthropic.messages.create
-            } else if (targetName === "completions") {
-              kind = "prompt"; // openai.chat.completions.create (deeper level)
-            }
-          }
-
-          if (kind === null) {
-            // Not a method we need to intercept — call through
-            return fn.bind(nestedTarget);
-          }
-
-          return interceptAsync(
-            (...args: unknown[]) => Reflect.apply(fn, nestedTarget, args),
-            kind,
-            config,
-            stats,
-          );
-        },
-      });
-    },
-  }) as unknown as T;
+  return proxyNamespace(client, [], resolved, stats) as T;
 }
 
 // ─── Utility: get usage stats ───────────────────────────────────────────────
 
 /**
- * Retrieve cumulative usage statistics for a wrapped client.
- * Since `wrap()` returns a Proxy, this helper reads the internal stats
- * by re-wrapping. In practice, pass the config object to track stats
- * externally or use the `getStats()` method attached to the wrapped client.
+ * Retrieve cumulative usage statistics for a client returned by `wrap()`.
+ * Returns `null` for an unwrapped client.
  */
-export function getStats(config: ParseSdkConfig & { _stats?: UsageStats }): UsageStats | null {
-  return config._stats ?? null;
+export function getStats(wrappedClient: object): UsageStats | null {
+  const stats = (wrappedClient as Record<symbol, unknown>)[PARSE_STATS];
+  return (stats as UsageStats | undefined) ?? null;
 }

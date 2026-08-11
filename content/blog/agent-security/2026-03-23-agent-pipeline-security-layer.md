@@ -88,23 +88,31 @@ The first line of defense: validate all inputs before they reach your agents.
 ### Architecture
 
 ```python
+async def screen(api_key: str, text: str, metadata: dict) -> dict:
+    """POST /v1/parse — returns risk_score 0-10, verdict, flags, categories."""
+    async with httpx.AsyncClient() as http:
+        res = await http.post(
+            "https://www.parsethis.ai/v1/parse",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={"prompt": text, "metadata": metadata},
+        )
+        return res.json()
+
+
 class SecurityGateway:
     def __init__(self, parse_api_key: str):
-        self.parse_client = ParseClient(api_key=parse_api_key)
+        self.parse_api_key = parse_api_key
         self.policy_engine = PolicyEngine()
 
     async def validate_input(self, user_input: str, agent_context: dict) -> ValidationResult:
         # 1. Prompt injection detection
-        injection_result = await self.parse_client.detect_prompt_injection(
-            prompt=user_input,
-            context=agent_context
-        )
+        injection_result = await screen(self.parse_api_key, user_input, agent_context)
 
-        if injection_result.risk_score > 0.7:
+        if injection_result["risk_score"] >= 7:
             return ValidationResult(
                 allowed=False,
                 reason="Prompt injection detected",
-                indicators=injection_result.indicators
+                indicators=injection_result["categories"]
             )
 
         # 2. Policy enforcement
@@ -240,7 +248,7 @@ Scan agent outputs for data leaks, credentials, and malicious instructions befor
 ```python
 class OutputSanitizationLayer:
     def __init__(self, parse_api_key: str):
-        self.parse_client = ParseClient(api_key=parse_api_key)
+        self.parse_api_key = parse_api_key
         self.pii_detector = PIIDetector()
         self.credential_scanner = CredentialScanner()
 
@@ -251,12 +259,13 @@ class OutputSanitizationLayer:
         destination: str
     ) -> SanitizedOutput:
         # 1. Scan for prompt injection in output (agent compromise indicator)
-        injection_check = await self.parse_client.detect_prompt_injection(
-            prompt=agent_output,
-            context={'agent': agent_name, 'source': 'agent_output'}
+        injection_check = await screen(
+            self.parse_api_key,
+            agent_output,
+            {'agent_id': agent_name, 'source': 'agent_output'}
         )
 
-        if injection_check.risk_score > 0.5:
+        if injection_check["risk_score"] >= 5:
             # Agent may be compromised; quarantine output
             return SanitizedOutput(
                 safe=False,
@@ -433,34 +442,34 @@ Parse for Agents provides the runtime security layer your pipeline needs:
 
 **Integration:**
 ```typescript
-import { ParseAgents } from '@parsethis/agents';
+import { wrap, ParseScreeningError } from '@parsethis/sdk';
+import OpenAI from 'openai';
 
-const client = new ParseAgents('your_api_key');
-
-// Secure an agent input
-const validation = await client.validateInput({
-  prompt: userQuery,
-  agent: 'customer_support',
-  context: { tools: ['database_query'] }
+// Wrapping the client screens every prompt before the LLM sees it and
+// every response before your pipeline acts on it.
+const screened = wrap(new OpenAI(), {
+  apiKey: process.env.PARSE_API_KEY,
+  agentId: 'customer_support',
+  failClosed: true,
 });
 
-if (!validation.allowed) {
-  console.log('Blocked:', validation.reason);
-  return;
-}
-
-// Sanitize an agent output
-const sanitized = await client.sanitizeOutput({
-  output: agentResponse,
-  agent: 'customer_support',
-  rules: ['block_credentials', 'redact_pii']
-});
-
-if (!sanitized.safe) {
-  console.log('Output blocked:', sanitized.reason);
-  return;
+try {
+  const response = await screened.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: userQuery }],
+  });
+} catch (e) {
+  if (e instanceof ParseScreeningError) {
+    console.log('Blocked:', e.verdict, e.categories);
+    return;
+  }
+  throw e;
 }
 ```
+
+For explicit control over a single trust boundary, call the REST endpoints
+directly: `POST /v1/parse` to screen an input and `POST /v1/screen-output`
+to screen an output.
 
 ## Actionable Takeaways
 

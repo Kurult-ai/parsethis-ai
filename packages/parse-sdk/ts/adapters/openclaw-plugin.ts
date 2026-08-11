@@ -1,5 +1,5 @@
 /**
- * @parse-agents/sdk — OpenClaw Plugin Adapter
+ * @parsethis/sdk — OpenClaw Plugin Adapter
  *
  * Drop-in plugin for [OpenClaw](https://github.com/kurultai/openclaw) that
  * wraps agent creation and hooks into the agent lifecycle to screen every
@@ -13,11 +13,11 @@
  *
  * @example
  * ```typescript
- * import { ParseOpenClawPlugin } from "@parse-agents/sdk/adapters/openclaw-plugin";
+ * import { ParseOpenClawPlugin } from "@parsethis/sdk/adapters/openclaw-plugin";
  *
  * const plugin = new ParseOpenClawPlugin({
  *   parseApiKey: process.env.PARSE_API_KEY!,
- *   parseBaseUrl: "https://parsethis.ai",
+ *   parseBaseUrl: "https://www.parsethis.ai",
  *   agentId: "research-agent",
  *   environment: "production",
  *   failPosture: "fail_closed",
@@ -36,7 +36,7 @@ export type FailPosture = "fail_open" | "fail_closed";
 export interface ParseAdapterConfig {
   /** Parse API key (starts with `parse_`). */
   parseApiKey: string;
-  /** Base URL of the Parse API. Defaults to `https://parsethis.ai`. */
+  /** Base URL of the Parse API. Defaults to `https://www.parsethis.ai`. */
   parseBaseUrl?: string;
   /** Identifier for the agent being screened. */
   agentId: string;
@@ -184,7 +184,7 @@ async function parseFetch<T extends object>(
   payload: Record<string, unknown>,
   config: ParseAdapterConfig,
 ): Promise<T | null> {
-  const baseUrl = (config.parseBaseUrl ?? "https://parsethis.ai").replace(/\/+$/, "");
+  const baseUrl = (config.parseBaseUrl ?? "https://www.parsethis.ai").replace(/\/+$/, "");
   const url = `${baseUrl}${endpoint}`;
   const timeout = config.parseTimeoutMs ?? 10_000;
 

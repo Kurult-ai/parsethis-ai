@@ -21,6 +21,90 @@ Generate an API key at `POST /v1/keys/generate` (no auth required). Keys expire 
 
 ---
 
+## Parse SDK
+
+The endpoints below can be called directly, or reached through the SDK, which
+wraps an OpenAI or Anthropic client so every call is screened without changing
+your call sites.
+
+```bash
+npm install @parsethis/sdk
+```
+
+```typescript
+import { wrap } from '@parsethis/sdk';
+import OpenAI from 'openai';
+
+const openai = new OpenAI();
+const screened = wrap(openai, {
+  apiKey: process.env.PARSE_API_KEY,
+  failClosed: true,
+});
+
+const response = await screened.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: userInput }],
+});
+```
+
+`wrap(client, config)` returns a proxy over the original client. Each
+`chat.completions.create()` and `messages.create()` call sends its prompt to
+`POST /v1/parse` first, and its response to `POST /v1/screen-output` after.
+Everything else on the client passes through untouched.
+
+### Configuration
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `apiKey` | string | *(required)* | Parse API key. `wrap()` throws if it is missing. |
+| `parseBaseUrl` | string | `https://www.parsethis.ai` | Parse API base URL |
+| `agentId` | string | `"default"` | Agent identifier recorded on every screening event |
+| `environment` | string | `"production"` | Deployment environment tag |
+| `dataSources` | string[] | `[]` | Data source IDs for governance |
+| `failClosed` | boolean | `false` | Throw `ParseScreeningError` on a block verdict instead of returning a placeholder |
+| `screenOutput` | boolean | `true` | Screen the LLM output after the call |
+| `parseTimeoutMs` | number | `10000` | Timeout for Parse API calls |
+
+Two earlier names are still accepted: `parseApiKey` for `apiKey`, and
+`failPosture: "fail_closed"` for `failClosed: true`. When both spellings are
+present, the names in the table win.
+
+### Fail-closed and fail-open
+
+The setting decides what happens on a `critical` or `high_risk` verdict.
+
+| | `failClosed: false` (default) | `failClosed: true` |
+|---|---|---|
+| Block verdict | Returns a placeholder response with `_parse.blocked === true`; the LLM is never called | Throws `ParseScreeningError` carrying `verdict`, `riskScore`, `flags`, `categories` |
+| Safe verdict | Call proceeds | Call proceeds |
+| Parse unreachable, timed out, or non-2xx | Call proceeds | Call proceeds |
+
+Transport failures are not block verdicts. Neither setting turns a Parse outage
+into a failed LLM call, so an unreachable Parse API cannot take your agent
+down — and cannot screen it either. Alert on the failure rate if screening
+coverage is a compliance requirement.
+
+```typescript
+import { ParseScreeningError } from '@parsethis/sdk';
+
+try {
+  await screened.chat.completions.create({ ... });
+} catch (e) {
+  if (e instanceof ParseScreeningError) {
+    console.error('Blocked:', e.verdict, e.riskScore, e.categories);
+  }
+}
+```
+
+Framework adapters ship in the same package:
+`@parsethis/sdk/adapters/hermes-middleware` screens Hermes Agent tool calls, and
+`@parsethis/sdk/adapters/openclaw-plugin` screens the OpenClaw agent lifecycle.
+
+Step-by-step setup, including the Python SDK, is in the
+[quickstart](/docs/quickstart).
+
+---
+
 ## POST /v1/parse
 
 Screen a prompt for injection attacks, jailbreaks, adversarial patterns, and private-disclosure requests that require owner approval. This is the primary endpoint for prompt safety screening.

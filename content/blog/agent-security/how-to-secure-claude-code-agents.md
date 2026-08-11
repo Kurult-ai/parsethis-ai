@@ -104,20 +104,24 @@ pnpm add @parsethis/sdk
 When a developer asks Claude Code to work on a GitHub issue, screen the issue body first:
 
 ```typescript
-import { ParseClient } from '@parsethis/sdk';
-
-const parse = new ParseClient({
-  apiKey: process.env.PARSE_API_KEY!,
-  baseUrl: 'https://www.parsethis.ai'
-});
-
+// Screening a standalone string is a single POST — no SDK needed.
+// (Use `wrap()` from @parsethis/sdk when you want every LLM call screened
+// automatically; use the endpoint directly when you're screening content.)
 async function screenIssueBody(issueBody: string, issueUrl: string) {
-  // Screen the issue content for prompt injection
-  const result = await parse.screen({
-    prompt: issueBody,
-    context: 'github_issue',
-    metadata: { source: issueUrl }
+  const response = await fetch('https://www.parsethis.ai/v1/parse', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.PARSE_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      prompt: issueBody,
+      // Tell Parse this text came from a third party, not from your user —
+      // signals in retrieved content are weighted accordingly.
+      metadata: { source_kind: 'retrieved_doc', trust_level: 'external', source: issueUrl }
+    })
   });
+  const result = await response.json();
 
   if (result.recommended_action === 'block') {
     console.error(`⚠️  Issue body blocked by security policy`);
