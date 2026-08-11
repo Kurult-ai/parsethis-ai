@@ -270,7 +270,7 @@ Verification required before reporting done:
      right edge (harmless — body has overflow-x: clip and the canvas corners are
      transparent) and keeps the copy column clear, which is what "the copy sits
      beside the art, not on it" requires. */
-  #bh { position: absolute; left: 58%; top: 50%; transform: translate(-50%, -50%) rotate(-45deg); width: 132%; aspect-ratio: 1; z-index: 4; pointer-events: none; }
+  #bh { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-45deg); width: 132%; aspect-ratio: 1; z-index: 4; pointer-events: none; }
   .hf-bh-receipt { position: absolute; left: 50%; bottom: 1%; transform: translateX(-50%); z-index: 5; white-space: nowrap; font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em; pointer-events: none; }
   .hf-bh-receipt b { font-weight: 500; color: var(--green); }
   .hf-bh-receipt span { color: var(--gray-dim); }
