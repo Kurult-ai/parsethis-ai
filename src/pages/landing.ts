@@ -227,12 +227,17 @@ Verification required before reporting done:
 
   /* ── full-viewport hero ── */
   .hf { position: relative; min-height: 100dvh; display: flex; align-items: center; overflow: hidden; }
-  .hf-inner { position: relative; z-index: 5; width: 100%; }
-  .hf-copy { max-width: 620px; margin: 0 auto; text-align: center; }
+  /* Two columns side by side, the pair centred by .wrap's auto margins.
+     The copy and the animation sit next to each other, never on top of
+     each other, so no scrim is needed and the text keeps a plain dark
+     background. */
+  .hf-inner { position: relative; z-index: 5; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: center; }
+  .hf-copy { max-width: 560px; }
+  .hf-art { position: relative; width: 100%; aspect-ratio: 1; }
   .hf h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(46px, 6vw, 82px); line-height: 1.02; letter-spacing: -0.01em; color: var(--white); }
   .hf h1 em { font-style: italic; }
-  .hf-lede { margin: 26px auto 36px; font-size: 19px; color: var(--gray); line-height: 1.6; max-width: 52ch; }
-  .hf-cta { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+  .hf-lede { margin: 26px 0 36px; font-size: 19px; color: var(--gray); line-height: 1.6; max-width: 52ch; }
+  .hf-cta { display: flex; gap: 12px; flex-wrap: wrap; }
   .hf-fine { margin-top: 22px; font-family: var(--mono); font-size: 13.5px; color: var(--gray-dim); }
   .hf-scroll { position: absolute; left: 50%; transform: translateX(-50%); bottom: 26px; z-index: 5; font-family: var(--mono); font-size: 10.5px; letter-spacing: .3em; text-transform: uppercase; color: var(--gray-dim); text-align: center; line-height: 1.8; animation: hfBob 2.6s ease-in-out infinite; }
   @keyframes hfBob { 50% { transform: translateX(-50%) translateY(6px); } }
@@ -253,23 +258,20 @@ Verification required before reporting done:
   /* ── lensed black hole (lightweight WebGL shader; homage to
         steeltroops-ai/blackhole-simulation — design lineage:
         ~/Downloads/parse-resend-variants-2026-08-09/hero-blackhole-sim.html) ── */
-  /* Centred hero: the copy sits inside the shadow with the ring around it.
-     Enlarged from 62vw deliberately — at the old size the photon ring cut
-     straight through the headline and the fine print (measured 1.1:1). */
-  #bh { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-45deg); width: min(1560px, 108vw); aspect-ratio: 1; z-index: 4; pointer-events: none; }
-  /* Scrim between the canvas (z4) and the copy (z5). Without it the lede and
-     fine print land on the disc at ~2:1; with it every text element clears
-     WCAG AA and the ring still reads. */
-  /* Two layers in one overlay, both above the canvas:
-     1. the centre scrim, and
-     2. a bottom fade — the hole is wider than the hero is tall, so its mask is
-        still fully opaque where .hf's overflow clips it. Without the fade that
-        clip is a hard horizontal line across the page. */
-  .hf::after { content: ""; position: absolute; inset: 0; z-index: 4; pointer-events: none;
-    background:
-      radial-gradient(ellipse min(590px, 47vw) min(340px, 40vh) at 50% 50%, rgba(4,4,5,.90), rgba(4,4,5,.74) 52%, rgba(4,4,5,.34) 74%, transparent 88%),
-      linear-gradient(to bottom, transparent 62%, rgba(0,0,0,.72) 86%, var(--black) 100%); }
-  .hf-bh-receipt { position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 5; font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em; pointer-events: none; }
+  /* Sized against its own column, not the viewport. The alpha mask is a circle
+     inscribed in the canvas square, so the 45deg rotation does not change the
+     visible extent — only the transparent corners overhang. The bright ring is
+     roughly two thirds of the canvas width, hence the >100% here. No scrim:
+     the copy sits beside the art, not on it. */
+  /* Biased right of its column, not centred in it. At 132% the canvas is ~81px
+     wider than the column on each side; centred, that put the bright ring ~41px
+     into the copy column and washed out the end of the lede and the install
+     line at 1440x900. Pushing the centre to 58% sends the overhang off the
+     right edge (harmless — body has overflow-x: clip and the canvas corners are
+     transparent) and keeps the copy column clear, which is what "the copy sits
+     beside the art, not on it" requires. */
+  #bh { position: absolute; left: 58%; top: 50%; transform: translate(-50%, -50%) rotate(-45deg); width: 132%; aspect-ratio: 1; z-index: 4; pointer-events: none; }
+  .hf-bh-receipt { position: absolute; left: 50%; bottom: 1%; transform: translateX(-50%); z-index: 5; white-space: nowrap; font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em; pointer-events: none; }
   .hf-bh-receipt b { font-weight: 500; color: var(--green); }
   .hf-bh-receipt span { color: var(--gray-dim); }
 
@@ -401,14 +403,18 @@ Verification required before reporting done:
   .limits { margin-top: 16px; max-width: 82ch; }
 
   @media (max-width: 1100px) {
-    /* Centring and size come from the base rule (108vw already tracks the
-       viewport). Narrow screens only need a little weight taken out, since
-       the copy is wider than the shadow here and sits on the disc. */
-    #bh { opacity: .62; }
+    .hf-inner { gap: 28px; }
     .hf-bh-receipt { display: none; }
   }
   @media (max-width: 900px) {
-    .hf-copy { max-width: 100%; }
+    /* Too narrow for two columns: stack them, copy above the art, both
+       centred. The art keeps a fixed share of the viewport so it cannot
+       push the copy off the first screen. */
+    .hf-inner { grid-template-columns: 1fr; gap: 8px; justify-items: center; }
+    .hf-copy { max-width: 100%; text-align: center; }
+    .hf-lede { margin-left: auto; margin-right: auto; }
+    .hf-cta { justify-content: center; }
+    .hf-art { width: min(420px, 78vw); }
     .bento, .gov { grid-template-columns: 1fr; }
     .pa-articles { grid-template-columns: 1fr; }
     .rowi { grid-template-columns: 1fr; gap: 8px; padding: 20px 4px; }
@@ -450,9 +456,6 @@ Verification required before reporting done:
 
 <div class="hf">
 
-  <canvas id="bh" aria-hidden="true"></canvas>
-  <div class="hf-bh-receipt" id="receipt" aria-hidden="true"><b>every crossing</b> <span>· receipted</span></div>
-
   <div class="wrap hf-inner">
     <div class="hf-copy">
       <h1>${hero.l1}<br><em>${hero.l2}</em></h1>
@@ -463,6 +466,10 @@ Verification required before reporting done:
         <a class="btn btn-ghost btn-lg" href="/docs">Documentation</a>
       </div>
       <div class="hf-fine">npm install @parsethis/sdk · or point any MCP runtime at parsethis.ai/mcp · no credit card</div>
+    </div>
+    <div class="hf-art">
+      <canvas id="bh" aria-hidden="true"></canvas>
+      <div class="hf-bh-receipt" id="receipt" aria-hidden="true"><b>every crossing</b> <span>· receipted</span></div>
     </div>
   </div>
 
