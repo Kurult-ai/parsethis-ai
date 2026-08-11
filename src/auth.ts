@@ -14,6 +14,7 @@ import type { AppEnv, ScreeningPolicy } from "./types.js";
 import { auditLog } from "./lib/audit-log.js";
 import { problem, ErrorCode } from "./lib/problem-response.js";
 import { isAuthFailureLimited, recordAuthFailure } from "./lib/auth-dos-guard.js";
+import { PLAN_LIMITS } from "./lib/product-facts.js";
 
 /** Timing-safe string comparison to prevent timing attacks on key validation */
 function safeCompare(a: string, b: string): boolean {
@@ -208,7 +209,7 @@ export function authMiddleware(requiredScope?: string) {
             url: `${baseUrl}/v1/keys/generate`,
             auth_required: false,
             body: { name: "string (optional)" },
-            note: "Returns API key valid for 30 days. No auth needed.",
+            note: "Returns an API key that renews while in use and expires after 30 idle days. No auth needed.",
           },
           docs: `${baseUrl}/llms.txt`,
           skill_prompt: `${baseUrl}/skill`,
@@ -435,6 +436,24 @@ export function authMiddleware(requiredScope?: string) {
       const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
       // Task 11.1: audit-log all rate limit hits
       auditLog({ action: "rate_limit_exceeded", apiKeyId: apiKeyRecord.id, detail: `API key rate limit (${apiKeyRecord.rateLimit}/min) exceeded`, ip });
+      // A free key hitting its ceiling is the highest-intent moment in the
+      // funnel: the caller is blocked right now and a paid plan is the fix.
+      // Naming the next tier here costs nothing and saves them hunting for it.
+      // Paid tiers get the bare problem body — a Team key bursting past its
+      // limit does not want to be sold a $12 plan.
+      const upgradeHint =
+        (apiKeyRecord.tier ?? "free") === "free"
+          ? {
+              upgradeUrl: "/pricing#solo",
+              upgrade: {
+                tier: "solo",
+                message:
+                  `Free is ${apiKeyRecord.rateLimit} req/min. Solo is ${PLAN_LIMITS.solo.requestsPerMinute} req/min `
+                  + `and ${PLAN_LIMITS.solo.requestsPerMonth.toLocaleString("en-US")} screenings for `
+                  + `$${PLAN_LIMITS.solo.pricePerMonth}/mo.`,
+              },
+            }
+          : {};
       return problem(c, {
         status: 429,
         title: "Rate limit exceeded",
@@ -443,6 +462,7 @@ export function authMiddleware(requiredScope?: string) {
         retryable: true,
         retry_after_seconds: retryAfter,
         limit: apiKeyRecord.rateLimit,
+        ...upgradeHint,
       });
     }
 
