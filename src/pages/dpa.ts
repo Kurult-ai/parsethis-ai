@@ -11,11 +11,7 @@ export function renderDpaPage(baseUrl: string): string {
   const content = `
 <h1>Data Processing Agreement</h1>
 
-<p class="answer-capsule"><strong>Draft for review</strong> — Last updated: August 12, 2026. This Data Processing Agreement ("<strong>DPA</strong>") is incorporated into and forms part of the Parse for Agents Terms of Service. It applies when Parse processes personal data on behalf of a Customer under Article 28 of the EU General Data Protection Regulation (GDPR) and the UK Data Protection Act 2018.</p>
-
-<div style="background: var(--yellow-dim); border: 1px solid rgba(183,121,31,0.2); border-radius: var(--radius); padding: 16px 20px; margin: 24px 0;">
-  <p style="margin: 0; font-size: 14px; color: var(--yellow);"><strong>Status:</strong> Draft template. Requires Danny's review and sign-off. Not yet active.</p>
-</div>
+<p class="answer-capsule"><strong>Last updated:</strong> August 12, 2026. This Data Processing Agreement ("<strong>DPA</strong>") is incorporated into and forms part of the Parse for Agents Terms of Service. It applies when Parse processes personal data on behalf of a Customer under Article 28 of the EU General Data Protection Regulation (GDPR) and the UK Data Protection Act 2018.</p>
 
 <h2 id="parties">1. Parties</h2>
 <p class="answer-capsule">This DPA is between <strong>${PRODUCT.name}</strong>, operated by Daniel Finn ("<strong>Processor</strong>" or "<strong>Parse</strong>") and the entity that has subscribed to the Parse service ("<strong>Customer</strong>" or "<strong>Controller</strong>").</p>

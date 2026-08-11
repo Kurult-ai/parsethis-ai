@@ -125,6 +125,7 @@ export function renderTrustPage(baseUrl: string): string {
   <h3>Need this for your vendor risk assessment?</h3>
   <p>The full trust package is available as a <a href="/trust-package">downloadable document</a>. You can also <a href="/docs/trust-package.md" download>download the Markdown source</a>.</p>
   <p>Our <a href="/dpa">Data Processing Agreement (DPA)</a> covers GDPR Article 28, SCCs, sub-processor adequacy, and breach notification.</p>
+  <p>Security contact also published at <a href="/.well-known/security.txt">/.well-known/security.txt</a> (RFC 9116).</p>
   <p>Programmatic security posture: <code>GET /v1/security/headers</code></p>
   <a href="mailto:security@parsethis.ai" class="btn btn-primary">Contact Security</a>
 </div>

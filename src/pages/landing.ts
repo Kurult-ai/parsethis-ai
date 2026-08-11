@@ -421,7 +421,7 @@ Verification required before reporting done:
   <div class="wrap nav">
     <a class="logo" href="/">${getLogoMarkSvg()}Parse</a>
     <nav class="nav-links">
-      <a href="/playground">Playground</a><a href="/docs">Docs</a><a href="/technology">Technology</a><a href="/pricing">Pricing</a><a href="/blog">Blog</a><a href="/about">About</a>
+      <a href="/demo">Try it</a><a href="/docs">Docs</a><a href="/technology">Technology</a><a href="/pricing">Pricing</a><a href="/blog">Blog</a><a href="/about">About</a>
     </nav>
     <div class="nav-right">
       <a class="btn btn-ghost" href="/admin/login">Sign in</a>
@@ -485,9 +485,10 @@ curl -s ${baseUrl}/v1/parse \\
         <button type="button" class="copybtn" id="pa-cp">COPY</button>
       </div>
       <div class="install-foot" id="pa-insfoot"><b>then:</b> wrap your agent — screening runs at every trust boundary.</div>
+      <div class="install-foot" style="margin-top:8px;font-size:13px;color:var(--gray);"><b>10x faster, zero data egress:</b> Add <code style="color:var(--gold);background:rgba(255,180,84,.07);padding:1px 4px;border-radius:3px;">"mode":"pattern-only"</code> for sub-400ms deterministic screening with no prompt text sent to any third party. <a href="/trust#where-your-prompt-text-goes" style="color:var(--amber);">Learn more →</a></div>
     </div>
     <div class="bento">
-      <div class="bcard"><h3>Test Lab</h3><p>Blind fixtures probe whether your agent resists injection — before your customers do.</p><a class="more" href="/playground">Open the playground →</a></div>
+      <div class="bcard"><h3>Test Lab</h3><p>Blind fixtures probe whether your agent resists injection — before your customers do.</p><a class="more" href="/playground">Open the test lab →</a></div>
       <div class="bcard"><h3>Monitor first, block later</h3><p>Ship in monitor mode, then dial to block per environment. Every change is versioned.</p><a class="more" href="/docs">Read about the dial →</a></div>
     </div>
   </div>

@@ -195,6 +195,13 @@ export function renderAboutPage(baseUrl: string): string {
 </section>
 
 <section class="about-section">
+  <h2>Responsible AI</h2>
+  <p>Human-in-the-loop is not a feature flag — it is the default. When Parse encounters an ambiguous case, it returns <code>request_owner_approval</code> instead of guessing. The human operator always has the final say on whether to proceed, block, or investigate further. Screening narrows the decision space; it does not make the decision.</p>
+  <p>AI should facilitate human creativity, not replace human judgment. Screening is a guardrail that lets teams move faster with confidence — the same way a seatbelt lets you drive at highway speeds. It catches the cases where untrusted text is trying to steer an agent off course, so the humans building and operating agents can focus on the work that actually requires their judgment.</p>
+  <p>Transparency is a value, not a marketing tactic. Our <code>/llms.txt</code> file includes a <em>What Not To Claim</em> section that documents what Parse does not prevent. We publish our limitations, our detection gaps, and our security posture openly — because a security tool that hides its blind spots is more dangerous than one that names them.</p>
+</section>
+
+<section class="about-section">
   <h2>Who we serve</h2>
   <p>Parse is built for the people doing the work:</p>
   <ul>
@@ -202,6 +209,7 @@ export function renderAboutPage(baseUrl: string): string {
     <li><strong>Engineering teams</strong> building autonomous agents that process untrusted data from the web, documents, email, or tool APIs</li>
     <li><strong>Independent developers</strong> who want screening and receipts without enterprise sales friction or vendor lock-in</li>
     <li><strong>Security teams</strong> evaluating agent deployments and needing audit evidence, policy enforcement, and risk visibility</li>
+    <li><strong>Design systems teams</strong> building AI-assisted tooling use Parse to screen contractor documentation and external content before it reaches their component-generation agents</li>
   </ul>
 </section>
 

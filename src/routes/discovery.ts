@@ -199,6 +199,11 @@ ${prices}
 - Agent card: ${baseUrl}/.well-known/agent-card.json
 - Skill prompt: ${baseUrl}/skill
 - Pricing manifest: ${baseUrl}/v1/pricing
+- Security contact: ${baseUrl}/.well-known/security.txt
+
+## URL Parameters
+
+- \`?still\` on the landing page: freezes the hero WebGL animation for screenshots, QA, and reduced-motion accessibility. No functional change.
 
 ## Human Documentation
 

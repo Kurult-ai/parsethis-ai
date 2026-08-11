@@ -942,6 +942,20 @@ publicRoutes.get("/dpa", (c) => {
   return c.html(renderDpaPage(baseUrl));
 });
 
+// Developer-muscle-memory redirects
+publicRoutes.get("/api", (c) => c.redirect("/docs/api", 301));
+publicRoutes.get("/quickstart", (c) => c.redirect("/docs/quickstart", 301));
+publicRoutes.get("/guides", (c) => c.redirect("/docs", 301));
+
+// RFC 9116 security.txt
+publicRoutes.get("/.well-known/security.txt", (c) => {
+  return c.text(
+    `Contact: mailto:security@parsethis.ai\nPreferred-Languages: en\nCanonical: https://www.parsethis.ai/.well-known/security.txt\nPolicy: https://www.parsethis.ai/trust#vulnerability-disclosure\n`,
+    200,
+    { "Content-Type": "text/plain" }
+  );
+});
+
 // About page
 publicRoutes.get("/about", (c) => {
   return c.html(renderAboutPage(getBaseUrl(c)));
