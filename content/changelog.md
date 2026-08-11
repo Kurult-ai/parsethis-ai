@@ -16,11 +16,17 @@ yet.
 
 ## 2026-08-11
 
-**SDK package renamed to `@parsethis/sdk`.** The TypeScript SDK was published in the
-repository as `@parse-agents/sdk` while the install line in the docs and on the landing
-page said `@parsethis/sdk`. The package now carries the name we market, builds to
-compiled JavaScript with type declarations rather than shipping raw TypeScript, and
-declares its repository and homepage.
+**`npm install @parsethis/sdk` now works.** The install line on the landing page and in
+the quickstart pointed at a package that was never published — the source existed in the
+repository under a different name, `@parse-agents/sdk`. The package is now published to
+npm as `@parsethis/sdk@0.1.0`, builds to compiled JavaScript with type declarations
+rather than shipping raw TypeScript, and declares its repository and homepage.
+
+Two bugs surfaced while packaging it. `wrap()` only proxied one level deep, so
+`openai.chat.completions.create` — the call every example uses — was never screened; only
+Anthropic's `messages.create` worked. And the documented options `apiKey` and `failClosed`
+did not match the code, which expected `parseApiKey` and `failPosture`; the documented
+names are now the primary ones, with the old names kept as aliases.
 
 **Benign security-log text no longer trips the screener.** Text that *mentions* a
 privileged command was scored the same as text that *instructs* the agent to run one, so
