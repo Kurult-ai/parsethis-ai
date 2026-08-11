@@ -1,10 +1,45 @@
 import "dotenv/config";
+import { execFileSync } from "node:child_process";
 import { serve } from "@hono/node-server";
 import { app } from "./app.js";
 import { cleanup } from "./auth.js";
 import { disconnectDb } from "./db.js";
 import { getRedis, disconnectRedis } from "./redis.js";
 import { runMigrations } from "./migrate.js";
+
+// ── Deployment identity ──────────────────────────────────────────────────
+// Production runs `node --import tsx src/index.ts` straight from the checkout,
+// so none of the platform build variables (RAILWAY_GIT_COMMIT_SHA and friends)
+// are ever set and /health and /status reported commit "unknown". Read the SHA
+// from git once at boot instead.
+//
+// getDeploymentMetadata() reads process.env on every call rather than caching at
+// import time, so populating the variables here — before the server accepts a
+// request — is enough for every route that reports build identity.
+function populateBuildInfo(): void {
+  if (!process.env.PARSE_COMMIT_SHA) {
+    try {
+      const sha = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+        cwd: process.cwd(),
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 5_000,
+      }).trim();
+      if (sha) process.env.PARSE_COMMIT_SHA = sha;
+    } catch {
+      // No git binary, or the deploy is not a checkout (tarball, container
+      // layer). Leave it unset so build-info falls back to "unknown" — a
+      // missing commit must never stop the service from booting.
+    }
+  }
+  if (!process.env.PARSE_BUILD_TIME) {
+    // Running from source, so the build is the boot: there is no separate
+    // compile step whose timestamp would be more accurate.
+    process.env.PARSE_BUILD_TIME = new Date().toISOString();
+  }
+}
+
+populateBuildInfo();
 
 const port = parseInt(process.env.PORT || "3000");
 

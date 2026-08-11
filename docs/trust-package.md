@@ -1,7 +1,7 @@
 # Parse Trust Package
 
-**Version:** 1.0  
-**Last Updated:** 2026-08-08  
+**Version:** 1.1  
+**Last Updated:** 2026-08-11  
 **Contact:** security@parsethis.ai
 
 ---
@@ -94,30 +94,69 @@ Optional isolated execution environment (`src/lib/sandbox-client.ts`) for suspic
                             └──────────────┘
 ```
 
-### 1.3 Data Storage: What Parse Stores vs Discards
+### 1.3 Data Storage and Retention
 
-| Data Element | Stored? | Format | Retention |
-|---|---|---|---|
-| **Screening verdict** (risk_score, safe, categories, flags) | ✅ Yes | Structured JSON in Postgres `AuditEvent` table | 90 days (screening events) |
-| **Request metadata** (timestamp, API key ID, request ID, endpoint) | ✅ Yes | Structured columns in `AuditEvent` | 90 days |
-| **Prompt SHA-256 hash** (for deduplication and correlation) | ✅ Yes | Hex-encoded SHA-256 digest | 90 days |
-| **Prompt plaintext** (Compliance tier) | ❌ No | Only SHA-256 hash stored | N/A — never stored |
-| **Prompt plaintext** (other tiers) | ⚠️ Transient only | In-memory during processing, discarded after response | 0 seconds persisted |
-| **Compliance receipts** (signed evidence records) | ✅ Yes | Structured JSON with cryptographic signature | 1 year |
-| **Policy configuration** (auto-block threshold, screen-all) | ✅ Yes | Per API key in Postgres | Until key revocation |
-| **API keys** | ✅ Yes | bcrypt-hashed, key prefix stored for lookup | Until revocation/expiration |
-| **Billing usage counters** | ✅ Yes | Redis INCR counters (per key per month) | 13 months |
+These are the same figures rendered on [/privacy](https://www.parsethis.ai/privacy) and
+[/trust](https://www.parsethis.ai/trust); all three read from one source
+(`src/lib/retention-facts.ts`).
 
-### 1.4 Retention Defaults
+Storage does not vary by plan. Free, Pro, Team, and Compliance keys are handled identically — the tier changes rate limits, cost caps, and which fields come back in the response, not what Parse writes down.
 
-| Data Category | Default Retention | Configurable? |
+| Endpoint | Is the prompt text stored? | What Parse records |
 |---|---|---|
-| Screening events (`AuditEvent` table) | 90 days | ✅ Via compliance tier settings |
-| Compliance receipts | 1 year (365 days) | ❌ Fixed for audit integrity |
-| SIEM-forwarded logs | Per customer SIEM retention | ✅ Customer-controlled |
-| Rate limit counters (Redis) | 2 minutes (TTL auto-expire) | ❌ System-defined |
-| API key records | Until revocation or expiration | ✅ Via key management |
-| Support ticket records | 1 year | ✅ Upon request |
+| `POST /v1/parse`, `POST /v1/screen-output`, `POST /v1/agent/trust/verify` | **No.** The `ScreeningEvent` table has no column for prompt or output text, and none for a hash of it. | Risk score, verdict, categories, screening mode, latency, blocked flag, enforcement mode, request ID, matched rule IDs, caller-supplied metadata labels (`source_kind`, `trust_level`, `intended_action`), API key ID, timestamp. |
+| `POST /v1/evaluate` | **Yes, while the run is in flight.** On completion Parse overwrites its copy with the first 100 characters of the prompt plus a SHA-256 of the whole prompt. Those first 100 characters stay readable. | Evaluation results, model name, token counts, cost, and the redacted prompt. |
+| Audit log (written by every screened call) | **No.** The prompt's length is recorded as a number; the text is not. | Action, API key ID, risk score, verdict, prompt length, categories, rule IDs, request ID, caller IP address. |
+| Compliance receipts | **No.** | Verdict, risk score, matched rule IDs, agent ID, policy version, receipt hash chain. |
+| Policy configuration | Not applicable | Auto-block threshold, screen-all flag, enforcement mode, custom rules, per API key. |
+| API keys | Not applicable | bcrypt hash plus a lookup prefix. The full key is never written down. |
+
+### 1.4 Retention
+
+| Record | Stated retention | How it is enforced today |
+|---|---|---|
+| Screening events | 90 days | By hand. No scheduled purge job is implemented; records are deleted on request. |
+| Audit events, including the caller IP | 90 days | By hand, as above. |
+| Compliance receipts | 1 year, fixed so the hash chain stays verifiable | By hand, as above. |
+| Redacted `/v1/evaluate` records | The 500 most recent, then dropped | Automatic. Held in server memory, so a restart clears them. |
+| Rate-limit counters (Redis) | The length of the rate-limit window | Automatic, via Redis key expiry. |
+| Billing usage counters (Redis) | Per key per month | Automatic, via Redis key expiry. |
+| API keys | Until revoked, or the expiry set at creation (30 days by default for self-service keys) | Automatic on expiry. |
+| SIEM-forwarded logs | Whatever the customer's SIEM is configured to keep | Customer-controlled. |
+
+Read the third column literally. The retention periods are policy, not a job on a timer.
+Nothing in the codebase deletes screening events, audit events, or receipts on a schedule
+today. We would rather say so than imply a lifecycle we have not built. To have data
+removed, email privacy@parsethis.ai — deletion requests are completed within 30 days.
+
+### 1.5 Where Prompt Text Goes
+
+Screening runs on Parse's own infrastructure. Prompt text leaves it in three cases, all listed here.
+
+| Recipient | When it receives the prompt | How to prevent it |
+|---|---|---|
+| **OpenRouter** — routes the semantic analysis layer | On `POST /v1/parse` and `POST /v1/screen-output`, the text is sent for scoring. Parse skips the call when the caller passes `mode: "pattern-only"`, when a pattern already matched at severity 9 or above and settles the verdict, or when the deployment has no OpenRouter key configured. | Pass `"mode": "pattern-only"`. |
+| **OpenRouter** — runs the prompt against a model | Only when the caller passes `execute: true`, which asks Parse to run the prompt on purpose and screen the output. | Omit `execute`. It is off by default. `mode: "pattern-only"` does *not* turn it off. |
+| **The execution sandbox** — isolated runner, configured per deployment | Only on the same `execute: true` path, which sends the prompt and any `test_input`. | Omit `execute`. |
+| **Stripe** | Never. Stripe sees subscription and payment metadata; card details go to Stripe directly and Parse never holds them. | — |
+
+What OpenRouter and the model providers behind it do with text they receive is governed
+by their policies, not ours. Pattern-only mode keeps the text away from them entirely.
+
+```json
+POST /v1/parse
+{
+  "prompt": "...",
+  "mode": "pattern-only"
+}
+```
+
+Pattern-only screening is a real trade: pattern matching alone under-reports paraphrased
+and indirect attacks that the semantic layer catches. Every response reports which layers
+ran, and a pattern-only response carries `layers.llm: "skipped_pattern_only"`.
+
+The control is per request, available on every tier. There is no account-level or
+tier-level switch for it today.
 
 ---
 
@@ -203,15 +242,17 @@ Parse enforces the following security headers on all responses (see `GET /v1/sec
 
 Parse uses the following third-party services to deliver the platform:
 
-| Subprocessor | Purpose | Data Accessed | Location |
-|---|---|---|---|
-| **None for v1 core processing** | — | — | — |
+| Subprocessor | Purpose | Data Accessed |
+|---|---|---|
+| **OpenRouter** | Routes the semantic analysis layer (Layer 2) to a model provider, and runs the prompt when `execute: true` | Prompt text |
+| **Stripe** | Subscription billing | Payment metadata only; no card data |
+| **Cloud infrastructure** (compute, Postgres, Redis) | Hosting and storage | Whatever Parse stores, listed in section 1.3 — prompt text is not among it for the screening endpoints |
 
 **Notes:**
 
-- For LLM semantic analysis (Layer 2), Parse uses **OpenRouter** as the model router. OpenRouter receives the prompt text transiently for inference and does not store it beyond the request lifecycle. Customers on the Compliance tier can disable LLM analysis entirely, operating on Layers 1 and 3 only.
-- **Stripe** is used for subscription billing (Team and Compliance tiers). Stripe processes payment card data directly; Parse never sees or stores raw card numbers.
-- **Cloud infrastructure** (compute, database, Redis) is hosted on standard cloud providers. No customer prompt data is shared with infrastructure providers beyond what is necessary for compute and storage.
+- OpenRouter is the only subprocessor that receives prompt text. What it and the model providers behind it retain is governed by their policies, not ours. Any caller on any tier can keep prompt text away from OpenRouter by passing `mode: "pattern-only"` per request, which runs Layer 1 only. There is no account-level or tier-level switch for this today — the control is per request.
+- **Stripe** processes payment card data directly; Parse never sees or stores raw card numbers.
+- **Cloud infrastructure** is hosted on standard cloud providers. No prompt text is shared with infrastructure providers beyond what section 1.3 lists as stored.
 
 If additional subprocessors are added in the future, customers will be notified at least 30 days in advance via security@parsethis.ai.
 
@@ -284,8 +325,8 @@ Parse is pursuing SOC 2 Type II certification. The audit is **in progress** with
 | | CC9: Risk Mitigation | Rate limiting, sandbox isolation, SSRF guards, 3-layer defense pipeline | ✅ Implemented |
 | **Availability** | A1: Availability | Multi-instance deployment, Redis HA fallback, health check endpoints | ⚠️ Partial |
 | **Processing Integrity** | PI1: Processing Integrity | Deterministic scoring, nonce-tagged LLM delimiters, verdict aggregation | ✅ Implemented |
-| **Confidentiality** | C1: Confidentiality | TLS in transit, bcrypt/AES-256 for secrets, SHA-256 prompt hashing (compliance tier), no plaintext prompt storage | ✅ Implemented |
-| **Privacy** | P1–P8: Privacy | Data retention policies (90-day screening, 1-year receipts), data governance module, approval matrix | ✅ Implemented |
+| **Confidentiality** | C1: Confidentiality | TLS in transit, bcrypt/AES-256 for secrets, no prompt storage on the screening endpoints | ✅ Implemented |
+| **Privacy** | P1–P8: Privacy | Documented retention (section 1.4), data governance module, approval matrix. Retention is enforced by hand today; a scheduled purge job is not implemented | ⚠️ Partial |
 
 ### 5.3 Additional Frameworks (Roadmap)
 
@@ -345,13 +386,16 @@ Yes. All connections use TLS 1.2+. HSTS is enforced with `max-age=31536000; incl
 Yes. Secrets are encrypted using AES-256-GCM. Database connections use TLS. API keys are bcrypt-hashed.
 
 **13. Do you store customer prompt data?**  
-No. On the Compliance tier, prompts are never stored in plaintext — only their SHA-256 hash is retained for deduplication and correlation. On other tiers, prompt text exists transiently in memory during processing and is discarded immediately after the response is sent.
+The screening endpoints (`/v1/parse`, `/v1/screen-output`, `/v1/agent/trust/verify`) do not: the screening event table has no column for prompt text or a hash of it, on every tier. `/v1/evaluate` does, for the length of the run — on completion the stored copy is overwritten with the first 100 characters plus a SHA-256 of the full prompt, and those characters remain readable. See section 1.3 for the per-endpoint breakdown.
 
 **14. What is your data retention policy?**  
-Screening events: 90 days. Compliance receipts: 1 year. Rate limit counters: auto-expire (TTL). API key records: until revocation. Data retention is configurable on the Compliance tier.
+Stated retention: screening events 90 days, audit events 90 days, compliance receipts 1 year, API keys until revocation or expiry. Enforcement is manual — no scheduled purge job is implemented yet, so deletion happens on request rather than on a timer. Rate-limit counters and the in-memory `/v1/evaluate` records expire automatically. See section 1.4.
 
 **15. Do you support customer data deletion requests?**  
-Yes. Customers can request data deletion via support@parsethis.ai or through the API. Deletion is completed within 30 days.
+Yes. Customers can request data deletion via privacy@parsethis.ai or hello@parsethis.ai. Deletion is completed within 30 days.
+
+**15b. Does prompt text leave your infrastructure?**  
+Yes, for the semantic analysis layer: prompt text is sent to OpenRouter for model scoring unless the caller passes `mode: "pattern-only"`, a pattern already matched at severity 9 or above, or the deployment has no OpenRouter key. Prompt text also reaches OpenRouter and the execution sandbox when the caller opts in with `execute: true`, which is off by default. See section 1.5.
 
 ### Network Security
 

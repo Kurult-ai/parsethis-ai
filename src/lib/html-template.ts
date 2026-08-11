@@ -678,7 +678,9 @@ export function renderPage(options: PageOptions): string {
           <a href="/openapi.json">OpenAPI</a>
           <a href="/pricing">Pricing</a>
           <a href="/trust">Trust</a>
+          <a href="/security">Security</a>
           <a href="/status">Status</a>
+          <a href="/changelog">Changelog</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
           <a href="/acceptable-use">Acceptable Use</a>
