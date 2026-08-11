@@ -321,7 +321,7 @@ ${DATA_FLOW_HTML}
       <tr><td><strong>Availability</strong></td><td>A1: Availability</td><td>Multi-instance, Redis HA, health endpoints</td><td>⚠️ Partial</td></tr>
       <tr><td><strong>Processing Integrity</strong></td><td>PI1: Processing Integrity</td><td>Deterministic scoring, nonce-tagged LLM delimiters</td><td>✅</td></tr>
       <tr><td><strong>Confidentiality</strong></td><td>C1: Confidentiality</td><td>TLS, bcrypt/AES-256, no prompt storage on the screening endpoints</td><td>✅</td></tr>
-      <tr><td><strong>Privacy</strong></td><td>P1–P8</td><td>Documented retention, data governance, approval matrix. Retention is enforced by hand; a scheduled purge job is not implemented</td><td>⚠️ Partial</td></tr>
+      <tr><td><strong>Privacy</strong></td><td>P1–P8</td><td>Documented retention enforced by a daily purge job, data governance, approval matrix</td><td>✅ Implemented</td></tr>
     </tbody>
   </table>
 </div>
@@ -410,7 +410,7 @@ ${DATA_FLOW_HTML}
 </div>
 <div class="qa-block">
   <p class="q"><span class="qnum">14.</span>What is your data retention policy?</p>
-  <p class="a">Stated retention: screening events ${RETENTION.screeningEventsDays} days, audit events ${RETENTION.auditEventsDays} days, compliance receipts 1 year, API keys until revocation or expiry. Enforcement is manual — no scheduled purge job is implemented yet, so deletion happens on request rather than on a timer. Rate-limit counters and the in-memory <code>/v1/evaluate</code> records expire automatically. See <a href="#retention">Retention</a>.</p>
+  <p class="a">Stated retention: screening events ${RETENTION.screeningEventsDays} days, audit events ${RETENTION.auditEventsDays} days, compliance receipts 1 year, API keys until revocation or expiry. A daily purge job deletes records past each window. Rate-limit counters and the in-memory <code>/v1/evaluate</code> records expire automatically. See <a href="#retention">Retention</a>.</p>
 </div>
 <div class="qa-block">
   <p class="q"><span class="qnum">15.</span>Do you support customer data deletion requests?</p>
@@ -478,7 +478,7 @@ ${DATA_FLOW_HTML}
 </div>
 <div class="qa-block">
   <p class="q"><span class="qnum">27.</span>Are logs retained and protected?</p>
-  <p class="a">Yes, in access-controlled, encrypted storage. Stated retention is ${RETENTION.screeningEventsDays} days for screening logs and 1 year for compliance receipts, enforced by hand rather than by a scheduled job — see <a href="#retention">Retention</a>.</p>
+  <p class="a">Yes, in access-controlled, encrypted storage. Stated retention is ${RETENTION.screeningEventsDays} days for screening logs and 1 year for compliance receipts, enforced by a daily purge job — see <a href="#retention">Retention</a>.</p>
 </div>
 <div class="qa-block">
   <p class="q"><span class="qnum">28.</span>Is request traceability supported?</p>

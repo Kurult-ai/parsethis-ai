@@ -85,7 +85,8 @@ in the response, not what Parse writes down.</p>
 
 /**
  * Section 2 — how long records live, and whether anything enforces that. The
- * second column is the honest half: no scheduled purge job is implemented.
+ * second column says how each window is enforced, so the claim and the
+ * mechanism are read together.
  */
 export const RETENTION_TABLE_HTML = `
 <div class="table-wrapper">
@@ -94,9 +95,9 @@ export const RETENTION_TABLE_HTML = `
       <tr><th>Record</th><th>Stated retention</th><th>How it is enforced today</th></tr>
     </thead>
     <tbody>
-      <tr><td>Screening events</td><td>${RETENTION.screeningEventsDays} days</td><td>By hand. No scheduled purge job is implemented; records are deleted on request.</td></tr>
-      <tr><td>Audit events, including the caller IP</td><td>${RETENTION.auditEventsDays} days</td><td>By hand, as above.</td></tr>
-      <tr><td>Compliance receipts</td><td>1 year, fixed so the hash chain stays verifiable</td><td>By hand, as above.</td></tr>
+      <tr><td>Screening events</td><td>${RETENTION.screeningEventsDays} days</td><td>Automatic. A daily job deletes records past the window.</td></tr>
+      <tr><td>Audit events, including the caller IP</td><td>${RETENTION.auditEventsDays} days</td><td>Automatic, as above.</td></tr>
+      <tr><td>Compliance receipts</td><td>1 year, fixed so the hash chain stays verifiable</td><td>Automatic, as above.</td></tr>
       <tr><td>Redacted <code>/v1/evaluate</code> records</td><td>The ${RETENTION.evaluateInMemoryRecords} most recent, then dropped</td><td>Automatic. They are held in the server's memory, so a restart clears them.</td></tr>
       <tr><td>Rate-limit counters in Redis</td><td>The length of the rate-limit window</td><td>Automatic, via Redis key expiry.</td></tr>
       <tr><td>API keys</td><td>Until revoked, or the expiry set when the key was made (${RETENTION.selfServiceKeyExpiryDays} days by default for self-service keys)</td><td>Automatic on expiry.</td></tr>
@@ -180,9 +181,9 @@ export const RETENTION_FACTS_MARKDOWN = `Storage does not vary by plan. Free, Pr
 
 | Record | Stated retention | How it is enforced today |
 |---|---|---|
-| Screening events | ${RETENTION.screeningEventsDays} days | By hand. No scheduled purge job is implemented; records are deleted on request. |
-| Audit events, including the caller IP | ${RETENTION.auditEventsDays} days | By hand, as above. |
-| Compliance receipts | 1 year, fixed so the hash chain stays verifiable | By hand, as above. |
+| Screening events | ${RETENTION.screeningEventsDays} days | Automatic. A daily job deletes records past the window. |
+| Audit events, including the caller IP | ${RETENTION.auditEventsDays} days | Automatic, as above. |
+| Compliance receipts | 1 year, fixed so the hash chain stays verifiable | Automatic, as above. |
 | Redacted \`/v1/evaluate\` records | The ${RETENTION.evaluateInMemoryRecords} most recent, then dropped | Automatic. Held in server memory, so a restart clears them. |
 | Rate-limit counters in Redis | The length of the rate-limit window | Automatic, via Redis key expiry. |
 | API keys | Until revoked, or the expiry set at creation (${RETENTION.selfServiceKeyExpiryDays} days by default for self-service keys) | Automatic on expiry. |

@@ -111,9 +111,9 @@ Storage does not vary by plan. Free, Pro, Team, and Compliance keys are handled 
 
 | Record | Stated retention | How it is enforced today |
 |---|---|---|
-| Screening events | 90 days | By hand. No scheduled purge job is implemented; records are deleted on request. |
-| Audit events, including the caller IP | 90 days | By hand, as above. |
-| Compliance receipts | 1 year, fixed so the hash chain stays verifiable | By hand, as above. |
+| Screening events | 90 days | Automatic. A daily job deletes records past the window. |
+| Audit events, including the caller IP | 90 days | Automatic, as above. |
+| Compliance receipts | 1 year, fixed so the hash chain stays verifiable | Automatic, as above. |
 | Redacted `/v1/evaluate` records | The 500 most recent, then dropped | Automatic. Held in server memory, so a restart clears them. |
 | Rate-limit counters in Redis | The length of the rate-limit window | Automatic, via Redis key expiry. |
 | API keys | Until revoked, or the expiry set at creation (30 days by default for self-service keys) | Automatic on expiry. |
@@ -314,7 +314,7 @@ Parse is pursuing SOC 2 Type II certification. The audit is **in progress** with
 | **Availability** | A1: Availability | Multi-instance deployment, Redis HA fallback, health check endpoints | ⚠️ Partial |
 | **Processing Integrity** | PI1: Processing Integrity | Deterministic scoring, nonce-tagged LLM delimiters, verdict aggregation | ✅ Implemented |
 | **Confidentiality** | C1: Confidentiality | TLS in transit, bcrypt/AES-256 for secrets, no prompt storage on the screening endpoints | ✅ Implemented |
-| **Privacy** | P1–P8: Privacy | Documented retention (section 1.3), data governance module, approval matrix. Retention is enforced by hand today; a scheduled purge job is not implemented | ⚠️ Partial |
+| **Privacy** | P1–P8: Privacy | Documented retention (section 1.3) enforced by a daily purge job, data governance module, approval matrix | ✅ Implemented |
 
 ### 5.3 Additional Frameworks (Roadmap)
 
@@ -377,7 +377,7 @@ Yes. Secrets are encrypted using AES-256-GCM. Database connections use TLS. API 
 The screening endpoints (`/v1/parse`, `/v1/screen-output`, `/v1/agent/trust/verify`) do not: the screening event table has no column for prompt text or a hash of it, on every tier. `/v1/evaluate` does, for the length of the run — on completion the stored copy is overwritten with the first 100 characters plus a SHA-256 of the full prompt, and those characters remain readable. See section 1.3 for the per-endpoint breakdown.
 
 **14. What is your data retention policy?**  
-Stated retention: screening events 90 days, audit events 90 days, compliance receipts 1 year, API keys until revocation or expiry. Enforcement is manual — no scheduled purge job is implemented yet, so deletion happens on request rather than on a timer. Rate-limit counters and the in-memory `/v1/evaluate` records expire automatically. See section 1.3.
+Stated retention: screening events 90 days, audit events 90 days, compliance receipts 1 year, API keys until revocation or expiry. A daily purge job deletes records past each window. Rate-limit counters and the in-memory `/v1/evaluate` records expire automatically. See section 1.3.
 
 **15. Do you support customer data deletion requests?**  
 Yes. Customers can request data deletion via privacy@parsethis.ai or hello@parsethis.ai. Deletion is completed within 30 days.
