@@ -60,7 +60,7 @@ in the response, not what Parse writes down.</p>
       </tr>
       <tr>
         <td><code>POST /v1/evaluate</code></td>
-        <td><strong>Yes, while the run is in flight.</strong> When the evaluation finishes, Parse overwrites its copy with the first ${RETENTION.evaluatePlaintextPrefixChars} characters of your prompt plus a SHA-256 of the whole prompt. Those first ${RETENTION.evaluatePlaintextPrefixChars} characters stay readable.</td>
+        <td><strong>Yes, while the run is in flight.</strong> When the evaluation ends, successfully or not, Parse overwrites its copy with the first ${RETENTION.evaluatePlaintextPrefixChars} characters of your prompt plus a SHA-256 of the whole prompt. Those first ${RETENTION.evaluatePlaintextPrefixChars} characters stay readable.</td>
         <td>Evaluation results, model name, token counts, cost, and the redacted prompt described to the left.</td>
       </tr>
       <tr>
@@ -173,7 +173,7 @@ export const RETENTION_FACTS_MARKDOWN = `Storage does not vary by plan. Free, Pr
 | Endpoint | Is the prompt text stored? | What Parse records |
 |---|---|---|
 | \`POST /v1/parse\`, \`POST /v1/screen-output\`, \`POST /v1/agent/trust/verify\` | **No.** The screening event table has no column for prompt or output text, and none for a hash of it. | Risk score, verdict, categories, screening mode, latency, blocked flag, enforcement mode, request ID, matched rule IDs, caller-supplied metadata labels (\`source_kind\`, \`trust_level\`, \`intended_action\`), API key ID, timestamp. |
-| \`POST /v1/evaluate\` | **Yes, while the run is in flight.** On completion Parse overwrites its copy with the first ${RETENTION.evaluatePlaintextPrefixChars} characters of the prompt plus a SHA-256 of the whole prompt. Those first ${RETENTION.evaluatePlaintextPrefixChars} characters stay readable. | Evaluation results, model name, token counts, cost, and the redacted prompt. |
+| \`POST /v1/evaluate\` | **Yes, while the run is in flight.** When the run ends, successfully or not, Parse overwrites its copy with the first ${RETENTION.evaluatePlaintextPrefixChars} characters of the prompt plus a SHA-256 of the whole prompt. Those first ${RETENTION.evaluatePlaintextPrefixChars} characters stay readable. | Evaluation results, model name, token counts, cost, and the redacted prompt. |
 | Audit log (written by every screened call) | **No.** The prompt's length is recorded as a number; the text is not. | Action, API key ID, risk score, verdict, prompt length, categories, rule IDs, request ID, caller IP address. |
 | Compliance receipts | **No.** | Verdict, risk score, matched rule IDs, agent ID, policy version, receipt hash chain. |
 | API keys | Not applicable | bcrypt hash plus a lookup prefix. The full key is never written down. |

@@ -114,6 +114,10 @@ evaluateRoutes.post("/v1/evaluate", authMiddleware("evaluate"), billableUsageMid
     if (r) {
       r.status = "failed";
       r.error = { code: "internal_error", message: err.message };
+      // Redact on the failure path too. Only the success path did, so a run
+      // that threw kept the raw prompt readable for the life of the record —
+      // the opposite of what the retention copy promises.
+      r.prompt = redactPrompt(r.prompt);
     }
   });
 

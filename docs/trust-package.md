@@ -94,24 +94,20 @@ Optional isolated execution environment (`src/lib/sandbox-client.ts`) for suspic
                             └──────────────┘
 ```
 
-### 1.3 Data Storage and Retention
+### 1.3 Data Storage, Retention, and Where Prompt Text Goes
 
-These are the same figures rendered on [/privacy](https://www.parsethis.ai/privacy) and
-[/trust](https://www.parsethis.ai/trust); all three read from one source
-(`src/lib/retention-facts.ts`).
+<!-- BEGIN GENERATED: retention-facts -->
+<!-- Source of truth: src/lib/retention-facts.ts. Run `npm run check:retention-sync -- --write`. -->
 
 Storage does not vary by plan. Free, Pro, Team, and Compliance keys are handled identically — the tier changes rate limits, cost caps, and which fields come back in the response, not what Parse writes down.
 
 | Endpoint | Is the prompt text stored? | What Parse records |
 |---|---|---|
-| `POST /v1/parse`, `POST /v1/screen-output`, `POST /v1/agent/trust/verify` | **No.** The `ScreeningEvent` table has no column for prompt or output text, and none for a hash of it. | Risk score, verdict, categories, screening mode, latency, blocked flag, enforcement mode, request ID, matched rule IDs, caller-supplied metadata labels (`source_kind`, `trust_level`, `intended_action`), API key ID, timestamp. |
-| `POST /v1/evaluate` | **Yes, while the run is in flight.** On completion Parse overwrites its copy with the first 100 characters of the prompt plus a SHA-256 of the whole prompt. Those first 100 characters stay readable. | Evaluation results, model name, token counts, cost, and the redacted prompt. |
+| `POST /v1/parse`, `POST /v1/screen-output`, `POST /v1/agent/trust/verify` | **No.** The screening event table has no column for prompt or output text, and none for a hash of it. | Risk score, verdict, categories, screening mode, latency, blocked flag, enforcement mode, request ID, matched rule IDs, caller-supplied metadata labels (`source_kind`, `trust_level`, `intended_action`), API key ID, timestamp. |
+| `POST /v1/evaluate` | **Yes, while the run is in flight.** When the run ends, successfully or not, Parse overwrites its copy with the first 100 characters of the prompt plus a SHA-256 of the whole prompt. Those first 100 characters stay readable. | Evaluation results, model name, token counts, cost, and the redacted prompt. |
 | Audit log (written by every screened call) | **No.** The prompt's length is recorded as a number; the text is not. | Action, API key ID, risk score, verdict, prompt length, categories, rule IDs, request ID, caller IP address. |
 | Compliance receipts | **No.** | Verdict, risk score, matched rule IDs, agent ID, policy version, receipt hash chain. |
-| Policy configuration | Not applicable | Auto-block threshold, screen-all flag, enforcement mode, custom rules, per API key. |
 | API keys | Not applicable | bcrypt hash plus a lookup prefix. The full key is never written down. |
-
-### 1.4 Retention
 
 | Record | Stated retention | How it is enforced today |
 |---|---|---|
@@ -119,17 +115,12 @@ Storage does not vary by plan. Free, Pro, Team, and Compliance keys are handled 
 | Audit events, including the caller IP | 90 days | By hand, as above. |
 | Compliance receipts | 1 year, fixed so the hash chain stays verifiable | By hand, as above. |
 | Redacted `/v1/evaluate` records | The 500 most recent, then dropped | Automatic. Held in server memory, so a restart clears them. |
-| Rate-limit counters (Redis) | The length of the rate-limit window | Automatic, via Redis key expiry. |
-| Billing usage counters (Redis) | Per key per month | Automatic, via Redis key expiry. |
+| Rate-limit counters in Redis | The length of the rate-limit window | Automatic, via Redis key expiry. |
 | API keys | Until revoked, or the expiry set at creation (30 days by default for self-service keys) | Automatic on expiry. |
-| SIEM-forwarded logs | Whatever the customer's SIEM is configured to keep | Customer-controlled. |
 
-Read the third column literally. The retention periods are policy, not a job on a timer.
-Nothing in the codebase deletes screening events, audit events, or receipts on a schedule
-today. We would rather say so than imply a lifecycle we have not built. To have data
-removed, email privacy@parsethis.ai — deletion requests are completed within 30 days.
+Read the third column literally. The retention periods are policy, not a job on a timer. Nothing in the codebase deletes screening events, audit events, or receipts on a schedule today. To have data removed, email privacy@parsethis.ai — deletion requests are completed within 30 days.
 
-### 1.5 Where Prompt Text Goes
+### Where prompt text goes
 
 Screening runs on Parse's own infrastructure. Prompt text leaves it in three cases, all listed here.
 
@@ -140,8 +131,7 @@ Screening runs on Parse's own infrastructure. Prompt text leaves it in three cas
 | **The execution sandbox** — isolated runner, configured per deployment | Only on the same `execute: true` path, which sends the prompt and any `test_input`. | Omit `execute`. |
 | **Stripe** | Never. Stripe sees subscription and payment metadata; card details go to Stripe directly and Parse never holds them. | — |
 
-What OpenRouter and the model providers behind it do with text they receive is governed
-by their policies, not ours. Pattern-only mode keeps the text away from them entirely.
+What OpenRouter and the model providers behind it do with text they receive is governed by their policies, not ours. Pattern-only mode keeps the text away from them entirely.
 
 ```json
 POST /v1/parse
@@ -151,12 +141,10 @@ POST /v1/parse
 }
 ```
 
-Pattern-only screening is a real trade: pattern matching alone under-reports paraphrased
-and indirect attacks that the semantic layer catches. Every response reports which layers
-ran, and a pattern-only response carries `layers.llm: "skipped_pattern_only"`.
+Pattern-only screening is a real trade: pattern matching alone under-reports paraphrased and indirect attacks that the semantic layer catches. Every response reports which layers ran, and a pattern-only response carries `layers.llm: "skipped_pattern_only"`.
 
-The control is per request, available on every tier. There is no account-level or
-tier-level switch for it today.
+<!-- END GENERATED: retention-facts -->
+
 
 ---
 
@@ -326,7 +314,7 @@ Parse is pursuing SOC 2 Type II certification. The audit is **in progress** with
 | **Availability** | A1: Availability | Multi-instance deployment, Redis HA fallback, health check endpoints | ⚠️ Partial |
 | **Processing Integrity** | PI1: Processing Integrity | Deterministic scoring, nonce-tagged LLM delimiters, verdict aggregation | ✅ Implemented |
 | **Confidentiality** | C1: Confidentiality | TLS in transit, bcrypt/AES-256 for secrets, no prompt storage on the screening endpoints | ✅ Implemented |
-| **Privacy** | P1–P8: Privacy | Documented retention (section 1.4), data governance module, approval matrix. Retention is enforced by hand today; a scheduled purge job is not implemented | ⚠️ Partial |
+| **Privacy** | P1–P8: Privacy | Documented retention (section 1.3), data governance module, approval matrix. Retention is enforced by hand today; a scheduled purge job is not implemented | ⚠️ Partial |
 
 ### 5.3 Additional Frameworks (Roadmap)
 
@@ -389,13 +377,13 @@ Yes. Secrets are encrypted using AES-256-GCM. Database connections use TLS. API 
 The screening endpoints (`/v1/parse`, `/v1/screen-output`, `/v1/agent/trust/verify`) do not: the screening event table has no column for prompt text or a hash of it, on every tier. `/v1/evaluate` does, for the length of the run — on completion the stored copy is overwritten with the first 100 characters plus a SHA-256 of the full prompt, and those characters remain readable. See section 1.3 for the per-endpoint breakdown.
 
 **14. What is your data retention policy?**  
-Stated retention: screening events 90 days, audit events 90 days, compliance receipts 1 year, API keys until revocation or expiry. Enforcement is manual — no scheduled purge job is implemented yet, so deletion happens on request rather than on a timer. Rate-limit counters and the in-memory `/v1/evaluate` records expire automatically. See section 1.4.
+Stated retention: screening events 90 days, audit events 90 days, compliance receipts 1 year, API keys until revocation or expiry. Enforcement is manual — no scheduled purge job is implemented yet, so deletion happens on request rather than on a timer. Rate-limit counters and the in-memory `/v1/evaluate` records expire automatically. See section 1.3.
 
 **15. Do you support customer data deletion requests?**  
 Yes. Customers can request data deletion via privacy@parsethis.ai or hello@parsethis.ai. Deletion is completed within 30 days.
 
 **15b. Does prompt text leave your infrastructure?**  
-Yes, for the semantic analysis layer: prompt text is sent to OpenRouter for model scoring unless the caller passes `mode: "pattern-only"`, a pattern already matched at severity 9 or above, or the deployment has no OpenRouter key. Prompt text also reaches OpenRouter and the execution sandbox when the caller opts in with `execute: true`, which is off by default. See section 1.5.
+Yes, for the semantic analysis layer: prompt text is sent to OpenRouter for model scoring unless the caller passes `mode: "pattern-only"`, a pattern already matched at severity 9 or above, or the deployment has no OpenRouter key. Prompt text also reaches OpenRouter and the execution sandbox when the caller opts in with `execute: true`, which is off by default. See section 1.3.
 
 ### Network Security
 
