@@ -228,11 +228,11 @@ Verification required before reporting done:
   /* ── full-viewport hero ── */
   .hf { position: relative; min-height: 100dvh; display: flex; align-items: center; overflow: hidden; }
   .hf-inner { position: relative; z-index: 5; width: 100%; }
-  .hf-copy { max-width: 620px; }
+  .hf-copy { max-width: 620px; margin: 0 auto; text-align: center; }
   .hf h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(46px, 6vw, 82px); line-height: 1.02; letter-spacing: -0.01em; color: var(--white); }
   .hf h1 em { font-style: italic; }
-  .hf-lede { margin: 26px 0 36px; font-size: 19px; color: var(--gray); line-height: 1.6; max-width: 52ch; }
-  .hf-cta { display: flex; gap: 12px; flex-wrap: wrap; }
+  .hf-lede { margin: 26px auto 36px; font-size: 19px; color: var(--gray); line-height: 1.6; max-width: 52ch; }
+  .hf-cta { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
   .hf-fine { margin-top: 22px; font-family: var(--mono); font-size: 13.5px; color: var(--gray-dim); }
   .hf-scroll { position: absolute; left: 50%; transform: translateX(-50%); bottom: 26px; z-index: 5; font-family: var(--mono); font-size: 10.5px; letter-spacing: .3em; text-transform: uppercase; color: var(--gray-dim); text-align: center; line-height: 1.8; animation: hfBob 2.6s ease-in-out infinite; }
   @keyframes hfBob { 50% { transform: translateX(-50%) translateY(6px); } }
@@ -253,8 +253,23 @@ Verification required before reporting done:
   /* ── lensed black hole (lightweight WebGL shader; homage to
         steeltroops-ai/blackhole-simulation — design lineage:
         ~/Downloads/parse-resend-variants-2026-08-09/hero-blackhole-sim.html) ── */
-  #bh { position: absolute; right: 4%; top: 50%; transform: translateY(-50%) rotate(-45deg); width: min(980px, 62vw); aspect-ratio: 1; z-index: 4; pointer-events: none; }
-  .hf-bh-receipt { position: absolute; right: 6%; bottom: 10%; z-index: 4; font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em; pointer-events: none; }
+  /* Centred hero: the copy sits inside the shadow with the ring around it.
+     Enlarged from 62vw deliberately — at the old size the photon ring cut
+     straight through the headline and the fine print (measured 1.1:1). */
+  #bh { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-45deg); width: min(1560px, 108vw); aspect-ratio: 1; z-index: 4; pointer-events: none; }
+  /* Scrim between the canvas (z4) and the copy (z5). Without it the lede and
+     fine print land on the disc at ~2:1; with it every text element clears
+     WCAG AA and the ring still reads. */
+  /* Two layers in one overlay, both above the canvas:
+     1. the centre scrim, and
+     2. a bottom fade — the hole is wider than the hero is tall, so its mask is
+        still fully opaque where .hf's overflow clips it. Without the fade that
+        clip is a hard horizontal line across the page. */
+  .hf::after { content: ""; position: absolute; inset: 0; z-index: 4; pointer-events: none;
+    background:
+      radial-gradient(ellipse min(590px, 47vw) min(340px, 40vh) at 50% 50%, rgba(4,4,5,.90), rgba(4,4,5,.74) 52%, rgba(4,4,5,.34) 74%, transparent 88%),
+      linear-gradient(to bottom, transparent 62%, rgba(0,0,0,.72) 86%, var(--black) 100%); }
+  .hf-bh-receipt { position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 5; font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em; pointer-events: none; }
   .hf-bh-receipt b { font-weight: 500; color: var(--green); }
   .hf-bh-receipt span { color: var(--gray-dim); }
 
@@ -386,7 +401,10 @@ Verification required before reporting done:
   .limits { margin-top: 16px; max-width: 82ch; }
 
   @media (max-width: 1100px) {
-    #bh { right: 50%; transform: translate(50%, -50%) rotate(-45deg); width: min(760px, 118vw); opacity: .5; }
+    /* Centring and size come from the base rule (108vw already tracks the
+       viewport). Narrow screens only need a little weight taken out, since
+       the copy is wider than the shadow here and sits on the disc. */
+    #bh { opacity: .62; }
     .hf-bh-receipt { display: none; }
   }
   @media (max-width: 900px) {
@@ -403,7 +421,7 @@ Verification required before reporting done:
     .nav-links { display: none; }
     .nav-right .btn-ghost { display: none; }
     .nav { gap: 14px; }
-    .hf-cta { flex-direction: column; align-items: flex-start; }
+    .hf-cta { flex-direction: column; align-items: center; }
     .term pre { font-size: 12.5px; padding: 18px 16px; }
     .install-body code { font-size: 12px; }
   }
@@ -768,12 +786,6 @@ curl -s ${baseUrl}/v1/parse \\
   'uniform vec4 pA[3];',   // head xyz, w: kernel radius
   'uniform vec4 pB[3];',   // tail xyz, w: brightness
   'uniform vec4 pC[3];',   // observed rgb
-  'mat3 hueRot(float a){',
-  '  float c = cos(a), s = sin(a);',
-  '  return mat3(.299,.587,.114,.299,.587,.114,.299,.587,.114)',
-  '       + c * (mat3(1,0,0,0,1,0,0,0,1) - mat3(.299,.587,.114,.299,.587,.114,.299,.587,.114))',
-  '       + s * mat3(-.3,-.588,.886, .143,-.353,.258, -.787,.715,.072);',
-  '}',
   'float hash(vec3 q){ return fract(sin(dot(q, vec3(127.1,311.7,74.7))) * 43758.5453); }',
   'vec3 stars(vec3 d){',
   '  vec3 q = normalize(d);',
@@ -876,7 +888,12 @@ curl -s ${baseUrl}/v1/parse \\
   '    col += vec3(1.02, .95, .84) * ring * .5;',
   '    col += stars(v) * .8;',
   '  }',
-  '  col = clamp(hueRot(sin(T * .045) * .3) * col, 0., 1.3);',
+  // Palette is fixed. This used to ride a hue rotation of sin(T * .045) * .3,
+  // which drifted the whole scene ±.3rad on a ~140s cycle; the hole now keeps
+  // the hue it starts at (that drift was zero at T=0, so this IS the start
+  // colour). Brightness still varies — Doppler beaming and redshift are
+  // physics, not palette.
+  '  col = clamp(col, 0., 1.3);',
   // borderless: alpha carries the scene — empty space is transparent, the
   // shadow stays opaque, and a radial falloff dissolves the glow before the
   // canvas edge so nothing ever clips. The falloff must be radial, not a
