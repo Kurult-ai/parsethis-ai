@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcrypt";
 import { prisma } from "./db.js";
-import { cacheApiKey, getCachedApiKey, invalidateApiKeyCache } from "./result-store.js";
+import { backfillApiKeyFastHash, cacheApiKey, getCachedApiKey, invalidateApiKeyCache } from "./result-store.js";
 import { isNegativelyCached, recordNegativeCache } from "./lib/auth-dos-guard.js";
 import { PLAN_LIMITS } from "./lib/product-facts.js";
 import { abandonRedisConnection, ensureRedisConnected, getRedis } from "./redis.js";
@@ -427,7 +427,11 @@ export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKe
       } else {
         valid = await bcrypt.compare(bearerToken, record.keyHash);
         if (valid) {
-          cacheApiKey(prefix, { ...record, keyHash: record.keyHash, fastHash: fastKeyHash(bearerToken) }).catch(() => {});
+          // Update-only: patches fastHash onto the existing cached candidate
+          // and does nothing if the bucket has since been invalidated. A
+          // create-or-update here would resurrect a key revoked during the
+          // ~250ms bcrypt window, with revokedAt null and a fresh TTL.
+          backfillApiKeyFastHash(prefix, record.id, fastKeyHash(bearerToken)).catch(() => {});
         }
       }
       if (!valid) continue;

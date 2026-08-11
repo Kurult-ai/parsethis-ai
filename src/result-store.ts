@@ -136,6 +136,53 @@ export async function cacheApiKey(keyHash: string, metadata: unknown): Promise<v
   );
 }
 
+/**
+ * Patch `fastHash` onto an already-cached candidate. Never creates a bucket,
+ * never inserts a new candidate, never resets the TTL.
+ *
+ * The general cacheApiKey merge is a create-or-update, which is wrong for a
+ * fire-and-forget backfill: the writer carries a snapshot read moments earlier,
+ * so if a revoke (or a rolling-expiry invalidation) lands in between, the write
+ * recreates the bucket it just deleted — with revokedAt null and a fresh 300s
+ * TTL. That resurrects a revoked key until the entry expires again, reproduced
+ * live. An update-only path cannot: no bucket, no candidate, no write.
+ *
+ * KEEPTTL matters too. The merge script's `SET ... EX 300` restarts the whole
+ * bucket's lifetime on every write, so a backfill for one candidate silently
+ * extended every sibling's cache entry.
+ *
+ * Returns true when a candidate was actually patched.
+ */
+export async function backfillApiKeyFastHash(
+  keyHash: string,
+  id: string,
+  fastHash: string,
+): Promise<boolean> {
+  if (!isRedisAvailable()) return false;
+  const connected = await ensureRedisConnected();
+  if (!connected) return false;
+  const redis = getRedis();
+  const patchScript = `
+    local raw = redis.call("GET", KEYS[1])
+    if not raw then return 0 end
+    local ok, parsed = pcall(cjson.decode, raw)
+    if not ok or type(parsed) ~= "table" then return 0 end
+    local candidates = parsed["candidates"]
+    if type(candidates) ~= "table" then return 0 end
+    for index = 1, #candidates do
+      local existing = candidates[index]
+      if type(existing) == "table" and existing["id"] == ARGV[1] then
+        existing["fastHash"] = ARGV[2]
+        redis.call("SET", KEYS[1], cjson.encode({ candidates = candidates }), "KEEPTTL")
+        return 1
+      end
+    end
+    return 0
+  `;
+  const patched = await redis.eval(patchScript, 1, apiKeyCacheKey(keyHash), id, fastHash);
+  return patched === 1;
+}
+
 export async function getCachedApiKey(keyHash: string): Promise<unknown | null> {
   if (!isRedisAvailable()) return null;
   const connected = await ensureRedisConnected();
