@@ -6,6 +6,7 @@ import { cleanup } from "./auth.js";
 import { disconnectDb } from "./db.js";
 import { getRedis, disconnectRedis } from "./redis.js";
 import { runMigrations } from "./migrate.js";
+import { runSemanticPreflight } from "./lib/semantic-preflight.js";
 
 // ── Deployment identity ──────────────────────────────────────────────────
 // Production runs `node --import tsx src/index.ts` straight from the checkout,
@@ -67,6 +68,15 @@ void runMigrations().catch((err) => {
     console.warn("[migrate] continuing startup with degraded database-dependent routes");
   }
 });
+
+// Ask the model provider, once, whether it will actually answer us — and say
+// so in the log. The semantic layer has twice been silently dead in production
+// (a placeholder key, then a bad one) with every response still looking
+// complete, and both times the first signal was a customer's screening call
+// failing. Same non-blocking shape as migrations above: a bad model key must
+// cost us the semantic layer, never the API. runSemanticPreflight resolves
+// rather than throwing, so nothing here can take the process down.
+void runSemanticPreflight();
 
 function shutdown(signal: string) {
   console.log(`\n${signal} received. Shutting down gracefully...`);

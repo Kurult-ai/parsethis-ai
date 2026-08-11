@@ -9,6 +9,7 @@ import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 
 import { getBaseUrl } from "../lib/route-utils.js";
 import { auditLog } from "../lib/audit-log.js";
+import { recordSemanticAttempt, recordSemanticDegraded } from "../lib/semantic-health.js";
 import { problem, ErrorCode, jsonContentTypeProblem } from "../lib/problem-response.js";
 import {
   persistScreeningEventForApiKey,
@@ -465,6 +466,16 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   const result = await parsePrompt(body);
   const parseLatencyMs = Date.now() - parseStart;
 
+  // Denominator for the degraded counter below. Without it /status could only
+  // ask "did anything fail this hour", which flips the whole layer to degraded
+  // on a single transient blip — crying wolf for exactly the one-off failures a
+  // multi-provider router will always produce. Counting attempts lets it report
+  // a rate. Only requests that actually tried the semantic layer count: a
+  // pattern-only caller neither succeeds nor fails at something it never ran.
+  if (result.layers?.llm === "ran" || result.degraded_reason === "llm_failed") {
+    void recordSemanticAttempt();
+  }
+
   // A silently degraded semantic layer looks exactly like a clean pass to the
   // caller, so surface it as an operational event rather than letting screening
   // quietly fall back to pattern matching for everyone.
@@ -477,28 +488,9 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     });
     // Counter so /status can report the layer's real health rather than
     // inferring it from a key being configured. Best-effort: a screening
-    // verdict must never fail because bookkeeping did.
-    if (isRedisAvailable()) {
-      void (async () => {
-        try {
-          const connected = await ensureRedisConnected();
-          if (!connected) return;
-          const redis = getRedis();
-          const now = new Date().toISOString();
-          // Daily key is the ops trail; hourly key is what /status reads, so a
-          // resolved outage stops showing as degraded within the hour instead
-          // of colouring the whole calendar day.
-          const dayKey = `screening:llm_degraded:${now.slice(0, 10)}`;
-          const hourKey = `screening:llm_degraded:hour:${now.slice(0, 13)}`;
-          const dayCount = await redis.incr(dayKey);
-          if (dayCount === 1) await redis.expire(dayKey, 35 * 24 * 60 * 60);
-          const hourCount = await redis.incr(hourKey);
-          if (hourCount === 1) await redis.expire(hourKey, 2 * 60 * 60);
-        } catch {
-          // ignore — telemetry only
-        }
-      })();
-    }
+    // verdict must never fail because bookkeeping did. Key construction lives
+    // in lib/semantic-health so the writer and /status cannot drift apart.
+    void recordSemanticDegraded();
   }
 
   // ── Custom Rules Engine (Layer 4: org-specific compliance rules) ──

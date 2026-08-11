@@ -257,28 +257,30 @@ IMPORTANT: The user message contains the untrusted prompt wrapped in <ANALYZE_${
   const userPrompt = `<ANALYZE_${nonce}>\n${analysisText}\n</ANALYZE_${nonce}>`;
 
   try {
-    // Comma-separated fallback chain; different family from execution model for adversarial diversity
-    const ANALYSIS_MODELS = (process.env.ANALYSIS_MODEL || "").split(",").map((s) => s.trim()).filter(Boolean);
+    // One model, one attempt. There is deliberately no multi-model fallback
+    // chain (operator decision, 2026-08-11): when the semantic layer cannot
+    // answer, the honest outcome is a clean, visible fallback to pattern-only
+    // — not a quiet retry against a different provider. Chaining would buy
+    // availability at the cost of the two things that matter more here:
+    // reproducibility, since different models return different verdicts for
+    // the same prompt and a caller could not tell which one judged them; and
+    // latency, since full mode already runs seconds and a failed primary would
+    // stack another provider's round trip on top before giving up.
+    //
+    // The removed chain also hid a bug: when every configured model failed it
+    // fell through to an *extra* unconfigured default-model attempt.
+    //
+    // ANALYSIS_MODEL names a single model. A comma-separated value is honoured
+    // as its first entry so an old chain-style config degrades predictably
+    // rather than being silently pasted into a model name.
+    const configured = (process.env.ANALYSIS_MODEL || "").split(",")[0]?.trim() || undefined;
 
     const messages = [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ];
 
-    let result: Awaited<ReturnType<typeof llmCall>> | null = null;
-    if (ANALYSIS_MODELS.length > 0) {
-      for (const m of ANALYSIS_MODELS) {
-        try {
-          result = await llmCall(messages, m);
-          break;
-        } catch (err) {
-          console.warn(`[analysis] Model ${m} failed, trying next: ${(err as Error).message}`);
-        }
-      }
-    }
-    if (!result) {
-      result = await llmCall(messages); // default model fallback
-    }
+    const result = await llmCall(messages, configured);
 
     // Try non-greedy match for individual JSON objects (defensive against injected JSON)
     const jsonMatches = result.content.match(/\{[^{}]*\}/g);
@@ -306,7 +308,20 @@ IMPORTANT: The user message contains the untrusted prompt wrapped in <ANALYZE_${
     // that did not parse). That is a degraded verdict, not a clean one.
     console.warn("[analysis] llmRiskAnalysis returned no valid nonce-tagged result");
   } catch (err) {
-    console.warn(`[analysis] llmRiskAnalysis failed: ${(err as Error).message}`);
+    const message = (err as Error).message;
+    // Name the failure class. A credential problem and a provider hiccup want
+    // completely different responses, and the generic "failed" phrasing is
+    // exactly what let a placeholder key sit in production unnoticed: nine
+    // identical 401s scrolled past looking like ordinary transient noise.
+    const credentialProblem = /\b(401|403)\b/.test(message) || /Missing Authentication|No auth credentials/i.test(message);
+    if (credentialProblem) {
+      console.error(
+        `[analysis] llmRiskAnalysis FAILED ON CREDENTIALS — the model provider rejected our key. `
+        + `Screening is falling back to pattern matching for every request until this is fixed. Check OPENROUTER_API_KEY. (${message})`,
+      );
+    } else {
+      console.warn(`[analysis] llmRiskAnalysis failed (falling back to pattern matching): ${message}`);
+    }
   }
   // Pattern matching is the baseline, but the caller must be able to tell that
   // the semantic layer did not contribute — silence here is what made a missed

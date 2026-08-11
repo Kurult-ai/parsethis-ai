@@ -97,7 +97,39 @@ should fail fast to pattern-only, not spend three retries getting rejected
 three times. Distinguish "retryable transient" from "terminal auth failure" so
 the two do not share a code path.
 
-### Phase 4 — Configure the model fallback chain that already exists (P2)
+### Phase 4 — ~~Configure the model fallback chain~~ REVERSED: no chain (operator decision, 2026-08-11)
+
+**Superseded. Do not implement the section below.** The operator's call is: no
+fallback chain — fail gracefully instead. Implemented that way, and the unused
+chain code was *removed* rather than configured.
+
+The reasoning is better than the original plan's. Chaining buys availability at
+the cost of the two properties that matter more for a screening product:
+
+- **Reproducibility.** Different models return different verdicts for the same
+  prompt. With a chain, a caller who is blocked cannot tell which model judged
+  them, and the same prompt can screen differently minute to minute depending
+  on which provider was healthy. For an audit product whose output is evidence,
+  that is worse than an honest gap.
+- **Latency.** Full mode already runs seconds. A failed primary would stack a
+  second provider's round trip on top before giving up, making the worst case
+  markedly worse — the opposite of graceful.
+
+So: one model, one attempt. When it cannot answer, fall back to pattern-only
+**visibly** — `degraded: true`, `degraded_reason`, the `layers.llm` status, the
+hourly counter, and a credential-specific log line. Removing the chain also
+deleted a latent bug: when every configured model failed, the old code fell
+through to an *extra* unconfigured default-model attempt.
+
+For the same reason, no aggressive retry was added. A bounded retry on the same
+model is defensible, but three retries against a several-second call turns a
+transient blip into a much worse p95, and the plan's own framing is that a
+transient should degrade cleanly rather than be papered over.
+
+<details>
+<summary>Original Phase 4 text, superseded — kept for the record</summary>
+
+#### Configure the model fallback chain that already exists (P2)
 
 `src/parse.ts:261` builds `ANALYSIS_MODELS` from a comma-separated
 `ANALYSIS_MODEL` env var and iterates it as a fallback chain
@@ -113,6 +145,8 @@ OpenAI or Anthropic secondary). This is mostly an operator/config change plus a
 test that the chain actually advances on a primary failure. Note the cost trade:
 a secondary provider may be pricier per call, and it only fires on primary
 failure, so the expected cost increase is small — quantify it before enabling.
+
+</details>
 
 ### Phase 5 — Alert on sustained degradation (P2)
 

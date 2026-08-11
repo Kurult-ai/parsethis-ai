@@ -15,7 +15,7 @@ export const PRODUCT = {
 
 export const PLAN_LIMITS = {
   free: { requestsPerMinute: 10, sandboxExecutionsPerHour: 5, label: "Free" },
-  solo: { requestsPerMinute: 30, sandboxExecutionsPerHour: 10, label: "Solo" },
+  solo: { requestsPerMinute: 30, sandboxExecutionsPerHour: 10, label: "Solo", requestsPerMonth: 2_000, pricePerMonth: 12 },
   pro: { requestsPerMinute: 100, sandboxExecutionsPerHour: 50, label: "Pro" },
   team: { requestsPerMinute: 500, sandboxExecutionsPerHour: 200, label: "Team" },
   compliance: { requestsPerMinute: 500, sandboxExecutionsPerHour: 500, label: "Compliance" },
@@ -38,40 +38,30 @@ export const DETECTION_FACTS = {
 } as const;
 
 /**
- * Latency, with the clock named.
+ * Latency, with the clock named — and published honestly, which turns out to
+ * mean publishing very little as a firm number, because a firm number is not
+ * what we have.
  *
- * Three different pattern-only numbers used to ship at once — "~0.3ms p95",
- * "~5ms p50, measured on production infrastructure", and "<400ms p50" — none
- * of them saying which clock they were on. They were all true and they
- * described different things: the first two are in-process detection time (the
- * `latency_ms` field in the response), the third is what a caller actually
- * waits. A prospect who measures 400ms against a page promising 5ms stops
- * believing every other number on the site, which is exactly what happened.
+ * Two clocks, one source. `detection` is what Parse spends deciding (the
+ * `latency_ms` field on every response). `endToEnd` is what the caller waits,
+ * including TLS, the tunnel, auth and serialization. Never let a page quote
+ * `detection` where a reader will read it as `endToEnd`: three mutually
+ * inconsistent pattern-only figures once shipped simultaneously because the
+ * clock was left implicit, and a prospect who measures 400ms against a page
+ * promising 5ms stops believing everything else on it.
  *
- * So: two clocks, both named, one source. `detection` is what Parse spends
- * deciding. `endToEnd` is what the caller experiences, including TLS, the
- * Cloudflare tunnel, auth, rate limiting and serialization. Publish both, and
- * never let a page quote `detection` in a context where a reader will assume
- * `endToEnd`.
+ * Two corrections are baked in here, both of which were shipped wrong first:
+ *  - Detection figures are labelled as the point samples they are. An earlier
+ *    version fitted p50/p95 percentiles to two samples and produced a full-mode
+ *    row whose implied overhead shrank at the tail, which is not physical.
+ *  - End-to-end is NOT improved by the fastHash auth change. It was re-measured
+ *    after that deployed and did not move; see `note` for why. Do not
+ *    reintroduce the claim that the bcrypt compare was removed from the hot
+ *    path — it still runs, via the Redis fallback lookup.
  *
  * Re-measure endToEnd whenever the request path changes, with:
  *   curl -w '%{time_starttransfer}' -X POST .../v1/parse -H 'Authorization: ...'
  */
-// Latency, published honestly — which turns out to mean publishing very little
-// as a firm number, because a firm number is not what we have yet.
-//
-// The first version of this constant fitted p50/p95 percentiles to two point
-// samples (3ms and 8ms) and shipped a full-mode row whose implied overhead
-// shrank at the tail — the exact "number a prospect can't reproduce" failure the
-// walkthrough punished, reproduced inside the fix for it. So:
-//
-//  - Detection figures are labelled as the point samples they are, not
-//    percentiles. The real ground truth is the `latency_ms` field on every
-//    response; tell people to read their own.
-//  - End-to-end figures are marked provisional. They predate the fastHash auth
-//    change, which removed the ~250ms per-request bcrypt compare that dominated
-//    them, so they are stale on the high side and must be re-measured after the
-//    next deploy before any of them is presented as firm.
 export const LATENCY_FACTS = {
   detection: {
     patternOnly: {
