@@ -1,5 +1,13 @@
 # Parse Claims Gate Review
 
+> **Superseded on the pattern-rule count (2026-08-11).** This review repeatedly
+> cites "126+ pattern rules" as the approved value and, at O4/C6 below, directs
+> other documents to be *changed to* that number. It is wrong. The live count is
+> derived from `INJECTION_PATTERNS.length` via `DETECTION_FACTS.patternRuleCount`
+> — 108 injection patterns at the time of writing, plus separate contextual and
+> intent detectors. Never hardcode it. The rest of this audit stands; treat every
+> "126+" below as a historical record of the error, not an instruction.
+
 **Date:** 2026-08-09
 **Reviewer:** Automated + manual audit
 **Scope:** All public-facing copy — landing page, pricing page, technology page, docs pages, docs markdown, product-facts constants

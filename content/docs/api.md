@@ -192,9 +192,16 @@ Stated plainly so you do not have to discover it by trying:
 - **No idempotency keys.** Screening has no side effects on your data, so a
   retry is safe and simply produces a new `trace_id`. Retries do count against
   rate limits and billed usage.
-- **No published latency SLO.** Observed pattern-path latency is roughly
-  20-30ms; adding the semantic layer typically brings a request to 200-450ms.
-  These are measurements, not a contractual guarantee.
+- **No published latency SLO.** Two different clocks get quoted, so be explicit
+  about which you are budgeting against. *Detection* — the `latency_ms` field on
+  every response — is the time Parse spends deciding: single-digit milliseconds
+  on the pattern path, seconds when the semantic layer runs its model call.
+  *End-to-end* is what your client waits, and it also includes TLS, our edge,
+  authentication and serialization. Our current end-to-end samples predate a
+  change to the authentication path that removed most of the per-request
+  overhead, so we are not publishing a firm figure until it is re-measured.
+  Read `latency_ms` on your own traffic and measure your own path. These are
+  measurements, not a contractual guarantee.
 
 When a private disclosure needs owner consent, `suggested_action` is `request_owner_approval` and the response includes `approval_request`:
 

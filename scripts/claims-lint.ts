@@ -182,6 +182,75 @@ interface Violation {
   matchedTerm: string;
   line: number;
   snippet: string;
+  /** Guidance shown under the violation. Defaults to the qualifier advice. */
+  advice?: string;
+}
+
+/**
+ * Numeric-claim rules.
+ *
+ * Two numbers have drifted repeatedly because they were typed into pages
+ * instead of derived: the pattern-rule count (pages said "126+" while
+ * INJECTION_PATTERNS.length was 108) and latency (three mutually inconsistent
+ * pattern-only figures shipped simultaneously, on two different clocks, none of
+ * them labelled). Both were found by prospects rather than by us.
+ *
+ * A page template must interpolate DETECTION_FACTS / LATENCY_FACTS rather than
+ * hardcode either. These patterns deliberately match the literal digits only —
+ * a `${LATENCY_FACTS...}` interpolation contains no bare number and passes.
+ */
+const NUMERIC_CLAIM_RULES: Array<{ id: string; pattern: RegExp; advice: string }> = [
+  {
+    id: "hardcoded-pattern-rule-count",
+    // "126+ pattern rules", "108 injection patterns", "100+ patterns"
+    pattern: /\b\d{2,4}\s*\+?\s*(?:deterministic\s+)?(?:injection\s+)?(?:pattern|rule)s?\b/i,
+    advice:
+      "Derive it: interpolate DETECTION_FACTS.patternRuleCount from lib/product-facts.js. "
+      + "Hardcoding this is how pages came to claim 126+ while the real count was 108.",
+  },
+  {
+    id: "hardcoded-latency-claim",
+    // "sub-400ms", "<400ms p50", "~5ms p50", "2-5s p50", "under 200ms"
+    pattern: /(?:\bsub-|\bunder\s+|[<~]\s*)\d+(?:\.\d+)?\s*(?:ms|s)\b|\b\d+(?:\.\d+)?\s*(?:ms|s)\s*p(?:50|95|99)\b/i,
+    advice:
+      "Derive it from LATENCY_FACTS, and name the clock — detection (the latency_ms "
+      + "response field) and end-to-end are different numbers. Unlabelled figures are "
+      + "how three inconsistent pattern-only latencies shipped at once.",
+  },
+];
+
+/** Lines that legitimately contain such a figure (i.e. not a customer-facing claim). */
+function isNumericClaimExempt(line: string): boolean {
+  // An interpolation is the correct form — never flag it.
+  if (/\$\{[^}]*(?:LATENCY_FACTS|DETECTION_FACTS)[^}]*\}/.test(line)) return true;
+  // Explicit opt-out for a reviewed, deliberately literal figure.
+  if (/claims-lint-allow-numeric/.test(line)) return true;
+  // Source comments are not published copy. These files are TS templates, and
+  // the animation code legitimately discusses shader cycle durations in seconds.
+  // Only what ships to a reader can be a false claim.
+  const trimmed = line.trim();
+  if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) return true;
+  return false;
+}
+
+function checkNumericClaims(filePath: string, lines: string[]): Violation[] {
+  const violations: Violation[] = [];
+  lines.forEach((line, index) => {
+    if (isNumericClaimExempt(line)) return;
+    for (const rule of NUMERIC_CLAIM_RULES) {
+      const match = rule.pattern.exec(line);
+      if (!match) continue;
+      violations.push({
+        file: filePath.replace(repoRoot + "/", ""),
+        featureName: rule.id,
+        matchedTerm: match[0].trim(),
+        line: index + 1,
+        snippet: line.trim().slice(0, 160),
+        advice: rule.advice,
+      });
+    }
+  });
+  return violations;
 }
 
 function checkFile(
@@ -291,10 +360,13 @@ function main(): void {
   console.log(`[claims-lint] Scanning ${pageFiles.length} page file(s) in ${pagesDir.replace(repoRoot + "/", "")}...`);
   console.log(`[claims-lint] Watching ${nonShippedTerms.length} non-shipped feature terms...`);
 
+  console.log(`[claims-lint] Watching ${NUMERIC_CLAIM_RULES.length} numeric-claim rule(s) (derive, don't hardcode)...`);
+
   const allViolations: Violation[] = [];
   for (const file of pageFiles) {
     const violations = checkFile(file, nonShippedTerms);
     allViolations.push(...violations);
+    allViolations.push(...checkNumericClaims(file, readFileSync(file, "utf-8").split("\n")));
   }
 
   if (allViolations.length === 0) {
@@ -316,7 +388,7 @@ function main(): void {
     for (const v of fileViolations) {
       console.error(`     Line ${v.line}: references "${v.featureName}" (matched: "${v.matchedTerm}")`);
       console.error(`     > ${v.snippet}`);
-      console.error(`     Add a qualifier like "in development", "coming soon", or "on the roadmap".`);
+      console.error(`     ${v.advice ?? 'Add a qualifier like "in development", "coming soon", or "on the roadmap".'}`);
       console.error("");
     }
   }

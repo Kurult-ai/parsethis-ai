@@ -183,7 +183,7 @@ override attack ("actually ignore what I said before…"). Deploy per boundary:
 
 | Boundary | Mode | Metadata to send |
 |---|---|---|
-| Owner's own messages | `"mode": "pattern-only"` (<100ms, prompts never leave the pipeline) | `{"source_kind": "user", "requester_trust": "owner"}` |
+| Owner's own messages | `"mode": "pattern-only"` (fastest path; prompt text is never forwarded to the semantic-analysis provider) | `{"source_kind": "user", "requester_trust": "owner"}` |
 | Retrieved docs, web pages, email | full pipeline (default) | `{"source_kind": "retrieved_doc"}` (or `web_page`, `email`) |
 | Tool output | full pipeline (default) | `{"source_kind": "tool_output"}` |
 | Another agent's messages | `/v1/agent/trust/verify` | — |

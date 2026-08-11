@@ -392,7 +392,9 @@ Appendix — approved short descriptions:
   full platform buildout — agent registry, policy packs, data governance,
   egress control, approval matrix, enforcement floor, signed identity, SSO,
   gateway proxy, four-layer pipeline (126+ patterns + contextual + intent
-  detection), compliance framework crosswalk (5 frameworks), SIEM forwarding,
+  detection — that count was wrong and is superseded; see §4, the live value
+  is `DETECTION_FACTS.patternRuleCount`), compliance framework crosswalk
+  (5 frameworks), SIEM forwarding,
   evidence pack export. Added Compliance tier and Security Audit to approved
   claims. Added new terminology (policy pack, data grant, egress rule,
   evidence pack, framework crosswalk, approval matrix, enforcement floor).

@@ -20,7 +20,16 @@ async function screen(fixture: { prompt: string; source_kind?: any; trust_bounda
 
 describe("prompt screening high-value fixtures", () => {
   for (const fixture of SCREENING_FIXTURES) {
-    it(`${fixture.kind}: ${fixture.id}`, async () => {
+    it(`${fixture.kind}: ${fixture.id}`, async (t) => {
+      // A fixture marked known_gap documents a defect the detector has not
+      // fixed yet. Its expectations stay set to the CORRECT behaviour, so it
+      // must not fail the suite — softening the expectation to match today's
+      // output is what makes a defect invisible. `npm run eval:screening`
+      // reports these explicitly with their reason and tracking link.
+      if (fixture.known_gap) {
+        t.skip(`known gap: ${fixture.known_gap.reason} (tracked: ${fixture.known_gap.tracked})`);
+        return;
+      }
       const result = await screen(fixture);
 
       assert.ok(

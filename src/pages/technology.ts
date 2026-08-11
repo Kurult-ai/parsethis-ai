@@ -261,6 +261,7 @@ export function renderTechnologyPage(baseUrl: string): string {
           <li>Keep tools and credentials least-privilege.</li>
           <li>Log <code>trace_id</code> for incident review.</li>
           <li>Test the same boundary in the playground.</li>
+          <li>Parse runs hosted &mdash; there is no on-premises or air-gapped build. If prompt text cannot leave your network, use the open-source <code>prompt-guard</code> library instead; <code>mode: "pattern-only"</code> keeps text away from the semantic-analysis provider but still sends it to Parse. <a href="/faq">Details</a>.</li>
         </ul>
         <div class="tech-note">Detection reduces risk; it does not replace permissions, output validation, or review.</div>
       </div>

@@ -1,6 +1,6 @@
 import { renderPage } from "../lib/html-template.js";
 import { organizationSchema } from "../lib/schema.js";
-import { PLAN_LIMITS, PRODUCT, X402_ENDPOINTS, X402_PAYMENT, x402EndpointList } from "../lib/product-facts.js";
+import { LATENCY_FACTS, PLAN_LIMITS, PRODUCT, X402_ENDPOINTS, X402_PAYMENT, x402EndpointList } from "../lib/product-facts.js";
 
 export function renderPricingPage(baseUrl: string): string {
   const parsePrice = X402_ENDPOINTS.parse.price;
@@ -674,14 +674,14 @@ res = session.post("https://www.parsethis.ai/v1/parse", json={"prompt": "..."})<
       <tbody>
         <tr>
           <td><strong>Full</strong> (pattern + semantic)</td>
-          <td>~2&ndash;5s p50</td>
+          <td>~${(LATENCY_FACTS.endToEnd.full.priorRangeMs[0] / 1000).toLocaleString("en-US")}&ndash;${(LATENCY_FACTS.endToEnd.full.priorRangeMs[1] / 1000).toLocaleString("en-US")}s<sup>*</sup></td>
           <td>Yes &mdash; routed to OpenRouter for semantic analysis</td>
           <td>Maximum &mdash; catches paraphrased and indirect injection</td>
           <td>✅ Set as org default</td>
         </tr>
         <tr>
           <td><strong>Pattern-only</strong></td>
-          <td>&lt;400ms p50</td>
+          <td>~${LATENCY_FACTS.endToEnd.patternOnly.priorP50Ms}ms<sup>*</sup></td>
           <td><strong>No</strong> &mdash; text never reaches a third party</td>
           <td>High &mdash; catches direct injection, boundary manipulation, on-chain planted instructions</td>
           <td>✅ Set as org default</td>
@@ -689,6 +689,7 @@ res = session.post("https://www.parsethis.ai/v1/parse", json={"prompt": "..."})<
       </tbody>
     </table>
   </div>
+  <p class="pricing-muted"><sup>*</sup> Latency figures are provisional, caller-measured end to end, and predate a change to the authentication path that removed most of the per-request overhead &mdash; so they are stale on the high side. Every response carries a <code>latency_ms</code> field with the in-process detection time; measure your own path before committing to a budget. See <a href="/technology">Technology</a>.</p>
 
   <h3>How to enforce pattern-only at the org level</h3>
   <pre><code>PUT /v1/policy
@@ -697,6 +698,10 @@ Content-Type: application/json
 
 { "defaultMode": "pattern-only" }</code></pre>
   <p class="pricing-muted">Once set, every screening request for that key is forced into pattern-only mode regardless of the per-request <code>mode</code> field. Individual engineers cannot opt out.</p>
+
+  <h3>Can we self-host or run this on-premises?</h3>
+  <p class="pricing-muted">Not the platform, and it is worth saying plainly rather than leaving you to find out. Parse is a hosted control plane &mdash; the agent registry, versioned policy and audit receipts exist because verdicts are recorded centrally, and a self-hosted copy would not produce the evidence trail the product is for. There is no on-premises or air-gapped distribution today.</p>
+  <p class="pricing-muted">If data movement is the concern: <code>mode: "pattern-only"</code> (per request, or as your org default above) runs the deterministic layer only, so prompt text is never forwarded to the semantic-analysis provider &mdash; though it does still reach Parse in the United States. If prompt text must never leave your infrastructure at all, run the open-source <code>prompt-guard</code> library in your own environment: that is a standalone pattern-screening component, not Parse, with no registry, policy engine, receipts or semantic layer. See the <a href="/faq">FAQ</a> and <a href="/trust">Trust</a> for the full data-flow picture.</p>
 </div>
 
 <!-- Chunk 8: Free endpoints -->

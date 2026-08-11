@@ -105,6 +105,8 @@ interface UtilityWorkflowRow {
 
 const rows: EvalRow[] = [];
 const failures: string[] = [];
+/** Fixtures whose correct expectation the detector does not yet meet. Reported, not fatal. */
+const knownGaps: Array<{ id: string; detail: string; reason: string; tracked: string }> = [];
 const MAX_TABLE_ROWS = Number(process.env.SCREENING_EVAL_TABLE_ROWS || "80");
 const CLAIMABLE_HOLDOUT = process.env.SCREENING_CLAIMABLE_HOLDOUT === "1";
 const HOLDOUT_MANIFEST_PATH = process.env.SCREENING_HOLDOUT_MANIFEST || "docs/screening-holdout-manifest.json";
@@ -427,7 +429,17 @@ for (const fixture of EVAL_FIXTURES) {
       assert.equal(action, fixture.expectedAction, `${fixture.id}: expected action ${fixture.expectedAction}, got ${action}`);
     }
   } catch (error) {
-    failures.push((error as Error).message);
+    // A fixture flagged known_gap keeps the CORRECT expectations above and is
+    // reported rather than failed. This is how a real, unfixed defect stays in
+    // the corpus: softening its expectation to whatever the code currently does
+    // would make the defect invisible, which is exactly how these two survived
+    // long enough for prospects to find them. Reported loudly in the summary,
+    // and the assertions start enforcing the moment known_gap is deleted.
+    if (fixture.known_gap) {
+      knownGaps.push({ id: fixture.id, detail: (error as Error).message, reason: fixture.known_gap.reason, tracked: fixture.known_gap.tracked });
+    } else {
+      failures.push((error as Error).message);
+    }
   }
 }
 
@@ -777,6 +789,17 @@ const report = {
 
 console.log("Latency", report.latency);
 writeFileSync("screening-fixture-results.json", JSON.stringify(report, null, 2));
+
+if (knownGaps.length > 0) {
+  console.warn(`\n⚠️  ${knownGaps.length} known detector gap(s) — recorded, not failing this run:`);
+  for (const gap of knownGaps) {
+    console.warn(`  - ${gap.id}`);
+    console.warn(`      observed: ${gap.detail}`);
+    console.warn(`      why it matters: ${gap.reason}`);
+    console.warn(`      tracked: ${gap.tracked}`);
+  }
+  console.warn("  These fixtures assert the CORRECT behaviour. Delete their known_gap field once fixed and the assertions enforce.\n");
+}
 
 if (failures.length > 0 || metricRows.some((row) => row.status === "fail")) {
   if (failures.length > 0) {

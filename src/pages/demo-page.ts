@@ -9,7 +9,9 @@ import { DEMO_API_KEY } from "../lib/constants.js";
  * The page is rendered server-side with 3 pre-loaded example prompts.
  * The client-side JS calls POST /demo/api which:
  *   - Rate-limits 5 requests per IP per hour using Redis
- *   - Calls POST /v1/parse with the DEMO_API_KEY
+ *   - Calls POST /v1/parse with the DEMO_API_KEY, defaulting to
+ *     mode: "pattern-only" so the landing page's primary CTA answers in
+ *     milliseconds; the client opts into the semantic layer via a checkbox
  *   - Returns the parse result to the client
  *
  * After 3 uses (tracked per IP in Redis), a "Sign up for full access" CTA appears.
@@ -107,7 +109,7 @@ export function renderDemoPage(baseUrl: string): string {
 <div class="demo-shell">
   <section class="demo-hero">
     <h1>Try Parse — No Signup Required</h1>
-    <p>Paste a prompt below and see real detection results. Prompt injection, data exfiltration, jailbreaks — the full Parse screening pipeline runs on your input.</p>
+    <p>Paste a prompt below and see real detection results. Prompt injection, data exfiltration, jailbreaks — screened by the deterministic pattern layer, with the semantic layer available as an option below.</p>
     <div class="demo-tag">No API key needed — demo mode</div>
   </section>
 

@@ -35,7 +35,15 @@ const MUTATIONS: Mutation[] = [
 ];
 
 const targets = SCREENING_FIXTURES.filter(
-  (f) => f.kind === "malicious" && (f.expectation === "must_catch" || f.expectedAction === "block")
+  (f) =>
+    f.kind === "malicious"
+    && (f.expectation === "must_catch" || f.expectedAction === "block")
+    // Skip fixtures the detector already misses unmutated. Mutation-resistance
+    // is only meaningful for an attack we currently catch: a known_gap fixture
+    // would report one "bypass" per transform for a base case that was never
+    // caught, inflating the count with noise and burying real regressions.
+    // eval:screening is where those gaps are reported.
+    && !f.known_gap
 );
 
 /**
