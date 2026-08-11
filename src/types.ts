@@ -15,6 +15,7 @@ export interface ScreeningPolicy {
   bypassExpiresAt?: Date | string | null;
   enforcementMode?: "monitor" | "warn" | "block";
   enforceToolAllowlist?: boolean;
+  defaultMode?: "full" | "pattern-only";
   environment?: string;
 }
 

@@ -123,7 +123,7 @@ export function renderTrustPage(baseUrl: string): string {
 
 <div class="trust-contact-box">
   <h3>Need this for your vendor risk assessment?</h3>
-  <p>The full trust package is available as a downloadable document at <code>docs/trust-package.md</code>.</p>
+  <p>The full trust package is available as a <a href="/trust-package">downloadable document</a>. You can also <a href="/docs/trust-package.md" download>download the Markdown source</a>.</p>
   <p>Programmatic security posture: <code>GET /v1/security/headers</code></p>
   <a href="mailto:security@parsethis.ai" class="btn btn-primary">Contact Security</a>
 </div>

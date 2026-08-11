@@ -142,6 +142,11 @@ model ScreeningPolicy {
   // block   = dangerous content is actually blocked (current behavior)
   enforcementMode        String   @default("block") @map("enforcement_mode")
 
+  // Org-enforceable default screening mode: "full" | "pattern-only"
+  // pattern-only = skip LLM analysis entirely so prompt text never reaches a
+  // third-party model provider. When set, per-request mode is overridden.
+  defaultMode            String   @default("full") @map("default_mode")
+
   // Tool Allowlist Enforcement: when true, screening requests are checked
   // against the agent's registered tools (AgentRegistry.tools[]). Tools
   // referenced in metadata.tool_permissions or body.tools that aren't in the

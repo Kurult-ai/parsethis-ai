@@ -1,5 +1,5 @@
 /** Canonical external URLs — single source of truth */
-export const CONTACT_EMAIL = "d@kurult.ai";
+export const CONTACT_EMAIL = "danservfinn@gmail.com";
 
 /**
  * Demo API key used by the public /demo page and Prompt Guard playground.

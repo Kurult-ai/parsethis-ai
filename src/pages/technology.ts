@@ -250,7 +250,7 @@ export function renderTechnologyPage(baseUrl: string): string {
     "confidence": "high"
   },
   "trace_id": "prs_7fd2",
-  "latency_ms": 31
+  "latency_ms": 1800
 }</code></pre>
       </div>
       <div class="tech-panel">
@@ -321,6 +321,30 @@ export function renderTechnologyPage(baseUrl: string): string {
   </section>
 
   <section class="tech-final">
+    <div>
+      <h2 id="latency">Measured latency.</h2>
+      <p class="tech-section-intro">Two screening modes with distinct latency profiles.</p>
+    </div>
+    <div class="tech-grid">
+      <div class="tech-panel">
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr><th>Mode</th><th>p50</th><th>p95</th><th>Prompt text leaves Parse?</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>Pattern-only</strong></td><td>~5ms</td><td>~10ms</td><td>No</td></tr>
+              <tr><td><strong>Full</strong> (pattern + semantic)</td><td>~3,000ms</td><td>~10,000ms</td><td>Yes (to OpenRouter)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Measured on production infrastructure. Your latency may vary with payload length and model provider response time.</p>
+        <div class="tech-note">For hot-path screening, use <code>mode: "pattern-only"</code>. For batch analysis, use full mode.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tech-section tech-cta">
     <div>
       <h2>Build with a clear trust boundary.</h2>
       <p>Use Parse where untrusted text is about to gain authority.</p>

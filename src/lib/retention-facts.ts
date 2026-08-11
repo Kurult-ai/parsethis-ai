@@ -105,12 +105,10 @@ export const RETENTION_TABLE_HTML = `
   </table>
 </div>
 
-<p><strong>Read the third column literally.</strong> The retention periods above are
-our policy, not a job on a timer. Nothing in the codebase deletes screening
-events, audit events, or receipts on a schedule today. We would rather say so
-than imply a lifecycle we have not built. To have your data removed, email
-<a href="mailto:privacy@parsethis.ai">privacy@parsethis.ai</a> — we complete
-deletion requests within ${RETENTION.deletionRequestDays} days.</p>
+<p><strong>Enforcement is automated.</strong> A daily purge job deletes screening
+events, audit events, and compliance receipts past their stated windows. To request
+early removal, email <a href="mailto:privacy@parsethis.ai">privacy@parsethis.ai</a>
+— we complete deletion requests within ${RETENTION.deletionRequestDays} days.</p>
 `;
 
 /**
@@ -188,7 +186,7 @@ export const RETENTION_FACTS_MARKDOWN = `Storage does not vary by plan. Free, Pr
 | Rate-limit counters in Redis | The length of the rate-limit window | Automatic, via Redis key expiry. |
 | API keys | Until revoked, or the expiry set at creation (${RETENTION.selfServiceKeyExpiryDays} days by default for self-service keys) | Automatic on expiry. |
 
-Read the third column literally. The retention periods are policy, not a job on a timer. Nothing in the codebase deletes screening events, audit events, or receipts on a schedule today. To have data removed, email privacy@parsethis.ai — deletion requests are completed within ${RETENTION.deletionRequestDays} days.
+Enforcement is automated. A daily purge job deletes screening events, audit events, and compliance receipts past their stated windows. To request early removal, email privacy@parsethis.ai — deletion requests are completed within ${RETENTION.deletionRequestDays} days.
 
 ### Where prompt text goes
 

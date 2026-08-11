@@ -37,6 +37,7 @@ const DEFAULT_POLICY: ScreeningPolicy = {
   approvalDefaultAction: "deny",
   enforcementMode: "block",
   enforceToolAllowlist: false,
+  defaultMode: "full",
 };
 
 // Valid environments for policy pinning
@@ -459,6 +460,7 @@ export function authMiddleware(requiredScope?: string) {
               approvalDefaultAction: "deny",
               enforcementMode: (dbPolicy.enforcementMode as "monitor" | "warn" | "block") ?? "block",
               enforceToolAllowlist: dbPolicy.enforceToolAllowlist ?? false,
+              defaultMode: (dbPolicy.defaultMode as "full" | "pattern-only") ?? "full",
               environment: dbPolicy.environment,
             }
           : DEFAULT_POLICY;

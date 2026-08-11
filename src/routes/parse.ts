@@ -372,6 +372,18 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   const apiKey = c.get("apiKey");
   const effectivePolicy = c.get("policy");
 
+  // ── Org-enforceable defaultMode (Phase 5, Task 5.2) ──
+  // If the org policy pins defaultMode to "pattern-only", override any
+  // per-request mode. This is a privacy guarantee: one engineer forgetting a
+  // per-request flag can't ship customer text to a third-party model provider.
+  if (effectivePolicy?.defaultMode === "pattern-only") {
+    body.mode = "pattern-only";
+    // Also clear execute since pattern-only + execute is rejected upstream
+    if (body.execute === true || body.execute === "auto") {
+      body.execute = false;
+    }
+  }
+
   // ── Activation Funnel: first_screen_attempted (Task 17.1) ──
   // Fire-and-forget — only records the first attempt per apiKeyId
   recordActivationEvent(apiKey.id, "first_screen_attempted").catch(() => {});

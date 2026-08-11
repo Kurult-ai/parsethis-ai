@@ -40,7 +40,7 @@ export const INJECTION_PATTERNS: Array<{
   // Jailbreak
   { pattern: /you\s+are\s+now\s+(a|an|DAN)/i, category: "jailbreak", severity: 9, label: "Persona override (DAN)" },
   { pattern: /pretend\s+(you|to\s+be)/i, category: "jailbreak", severity: 6, label: "Persona pretend" },
-  { pattern: /act\s+as\s+(if|a|an)\s+(?!.*helpful)/i, category: "jailbreak", severity: 5, label: "Role play override" },
+  { pattern: /act\s+as\s+(if|a|an)\s+(?!.*(?:helpful|expert|analyst|specialist|consultant|advisor|researcher|engineer|scientist|reviewer|auditor|professional))/i, category: "jailbreak", severity: 5, label: "Role play override" },
   { pattern: /(?:use|try|do|enable|activate|attempt|perform|initiate)\s+(?:a\s+)?jailbreak|jailbreak\s+(?:this|the|my|it|mode|prompt|attack)/i, category: "jailbreak", severity: 9, label: "Explicit jailbreak" },
   { pattern: /bypass\s+(your|the|all)\s+(restrictions|rules|guidelines|filters|safety)/i, category: "jailbreak", severity: 9, label: "Bypass safety" },
   { pattern: /do\s+anything\s+now/i, category: "jailbreak", severity: 8, label: "DAN prompt" },

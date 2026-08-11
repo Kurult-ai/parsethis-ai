@@ -15,6 +15,7 @@ export interface IntentRiskFlag {
   action_floor: DetectorActionFloor;
   evidence?: string;
   source?: "deterministic_intent" | "decoded_content" | "discussion_suppressor";
+  match_count?: number;
 }
 
 const SENTENCE_SPLIT = /(?<=[.!?])\s+|\n+/;
@@ -444,9 +445,33 @@ const EXTRACTION_RE = phraseRegex(EXTRACTION_VERBS);
 const PROTECTED_OBJECT_RE = phraseRegex(PROTECTED_OBJECTS);
 const ROLE_RE = phraseRegex(ROLE_SPOOF);
 
+/**
+ * Targets that refer to the ASSISTANT'S OWN instructions — not a business
+ * control. Used to distinguish "override your instructions" (agent attack)
+ * from "override the automatic block" (compliance workflow).
+ */
+const AGENT_INSTRUCTION_TARGET_RE =
+  /\b(?:your\s+(?:instructions?|rules?|prompts?|system\s+(?:prompt|message|policy)|developer\s+(?:message|policy|instructions?)|guidelines?|directives?|constraints?|parameters?))\b/i;
+
+/**
+ * Phrases that indicate the "override" refers to a business/system control,
+ * not the assistant's instructions. When present, the override verb is about
+ * a compliance workflow (e.g. "override the automatic block"), not a
+ * prompt-injection attempt.
+ */
+function isBusinessControlContext(text: string): boolean {
+  return /\b(?:automatic\s+(?:block|flag|alert|review)|sanctions?\s+(?:block|alert|flag|match)|AML\s+(?:control|alert|flag)|PEP\s+match|withdrawal\s+limit|reporting\s+threshold|false\s+positive|case\s+(?:file|review)|investigation|compliance\s+review|prior\s+reviewer|previous\s+analyst)\b/i.test(text);
+}
+
 function addFlag(flags: IntentRiskFlag[], flag: IntentRiskFlag): void {
-  if (!flags.some((existing) => existing.id === flag.id && existing.evidence === flag.evidence)) {
-    flags.push(flag);
+  const existing = flags.find((f) => f.id === flag.id);
+  if (!existing) {
+    flags.push({ ...flag, match_count: 1 });
+    return;
+  }
+  existing.match_count = (existing.match_count ?? 1) + 1;
+  if (flag.evidence && (!existing.evidence || flag.evidence.length > existing.evidence.length)) {
+    existing.evidence = flag.evidence;
   }
 }
 
@@ -507,7 +532,20 @@ function asksForProtectedInstructions(text: string): boolean {
 }
 
 function hasOverrideIntent(text: string): boolean {
-  return OVERRIDE_RE.test(text) && TARGET_RE.test(text) && (AUTHORITY_RE.test(text) || DIRECT_AGENT_TARGET.test(text) || OPERATIONAL_INSTRUCTION.test(text));
+  // An override attempt must target the assistant's OWN instructions,
+  // not a business control like "the automatic block" or "sanctions policy".
+  // Three valid signal patterns:
+  // 1. Explicit agent-instruction target ("ignore your instructions")
+  // 2. Reset phrase from DIRECT_ATTACK_IMPERATIVE ("ignore all previous")
+  // 3. Override verb + broad target + direct-agent authority — but only if
+  //    the authority is directed at the agent, not about a business process
+  if (AGENT_INSTRUCTION_TARGET_RE.test(text) && OVERRIDE_RE.test(text)) return true;
+  if (DIRECT_ATTACK_IMPERATIVE.test(text)) return true;
+  return OVERRIDE_RE.test(text) &&
+    TARGET_RE.test(text) &&
+    DIRECT_AGENT_TARGET.test(text) &&
+    (AUTHORITY_RE.test(text) || OPERATIONAL_INSTRUCTION.test(text)) &&
+    !isBusinessControlContext(text);
 }
 
 function hasExtractionIntent(text: string): boolean {
@@ -550,13 +588,24 @@ function maybeFlagExtraction(flags: IntentRiskFlag[], text: string): void {
   }
 }
 
+/**
+ * "Act as a <domain> expert" / "pretend you are a <profession> analyst" is
+ * normal professional framing, not a role-spoof attack. Exempt these from
+ * role-spoof detection so compliance, legal, and security analysts can use
+ * domain-expert framing without tripping the spoof_instruction_hierarchy flag.
+ */
+function isBenignDomainExpertFraming(text: string): boolean {
+  return /\b(?:act\s+as\s+(?:a|an)\s+|pretend\s+(?:you\s+are|to\s+be\s+(?:a|an))\s+|role-?play\s+(?:as\s+(?:a|an)\s+)?)\w+\s+(?:expert|analyst|specialist|consultant|advisor|researcher|engineer|scientist|reviewer|auditor|professional)\b/i.test(text);
+}
+
 function maybeFlagRoleSpoof(flags: IntentRiskFlag[], text: string): void {
   for (const window of sentenceWindows(text)) {
     if (
       !(ROLE_RE.test(window) || UNRESTRICTED_ROLE.test(window)) ||
       !(OPERATIONAL_INSTRUCTION.test(window) || UNRESTRICTED_ROLE.test(window)) ||
       isDefensiveDiscussion(window) ||
-      isBenignWorkflowHandoff(window)
+      isBenignWorkflowHandoff(window) ||
+      isBenignDomainExpertFraming(window)
     ) continue;
     addFlag(flags, {
       id: "intent.spoof_instruction_hierarchy",

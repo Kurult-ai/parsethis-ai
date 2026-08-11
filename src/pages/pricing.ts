@@ -305,6 +305,8 @@ Required verification:
     <span style="color:var(--text-dim);">→</span>
     <span style="background:rgba(25,182,175,0.10);border:1px solid var(--accent2);border-radius:20px;padding:4px 14px;font-weight:600;">Compliance $999/mo</span>
     <span style="color:var(--text-dim);">→</span>
+    <span style="background:rgba(47,111,237,0.10);border:1px solid rgba(47,111,237,0.40);border-radius:20px;padding:4px 14px;font-weight:600;">Volume $4,999/mo</span>
+    <span style="color:var(--text-dim);">→</span>
     <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Implementation $3K–$15K</span>
   </div>
 
@@ -395,6 +397,25 @@ Required verification:
         <li style="padding:6px 0;">${PLAN_LIMITS.compliance.sandboxExecutionsPerHour} sandbox/hr</li>
       </ul>
       <a href="/v1/billing/checkout" class="btn btn-primary" style="width:100%;text-align:center;" onclick="event.preventDefault();(async()=>{try{const k=localStorage.getItem('pfa_key');if(k){const r=await fetch('/v1/billing/checkout',{method:'POST',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'},body:JSON.stringify({tier:'compliance'})});if(r.ok){const d=await r.json();if(d.url){window.location=d.url;return;}}}const r2=await fetch('/v1/billing/signup-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier:'compliance'})});if(!r2.ok){const err=await r2.json().catch(()=>({}));alert(err.error||'Signup failed');return;}const d2=await r2.json();if(d2.key)localStorage.setItem('pfa_key',d2.key);if(d2.checkout_url){window.location=d2.checkout_url;}else{window.location='mailto:${PRODUCT.contactEmail}?subject=Compliance%20Plan';}}catch{window.location='mailto:${PRODUCT.contactEmail}?subject=Compliance%20Plan';}})();">Start Compliance</a>
+    </div>
+
+    <!-- Volume -->
+    <div class="card" style="display:flex;flex-direction:column;gap:12px;border-color:rgba(47,111,237,0.40);position:relative;background:linear-gradient(145deg,rgba(47,111,237,0.06),rgba(6,182,212,0.03));">
+      <span class="badge badge-accent" style="position:absolute;top:-10px;right:16px;">1M+ req/mo</span>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Volume</div>
+        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$4,999<span style="font-size:14px;font-weight:400;color:var(--text-dim);">/mo</span></div>
+        <div style="font-size:13px;color:var(--text-dim);">1M requests included, then $4K/million</div>
+      </div>
+      <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.volume.requestsPerMinute} req/min</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.volume.requestsPerMonth?.toLocaleString()} requests/mo included</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">$${PLAN_LIMITS.volume.perMillionRate?.toLocaleString()} per additional million</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Org-level pattern-only enforcement</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.volume.sandboxExecutionsPerHour} sandbox/hr</li>
+        <li style="padding:6px 0;">Priority support + DPA/SCCs</li>
+      </ul>
+      <a href="mailto:${PRODUCT.contactEmail}?subject=Volume%20Plan" class="btn btn-primary" style="width:100%;text-align:center;">Get Started</a>
     </div>
 
     <!-- Enterprise -->
@@ -494,7 +515,49 @@ Required verification:
   </script>
 </div>
 
-<!-- Chunk 5: x402 micropayments -->
+<!-- Chunk 5: Volume estimation -->
+<div class="section-chunk">
+  <h2 style="margin-top:0;">Volume estimation</h2>
+  <p class="answer-capsule">For per-hop screening at scale — estimate your monthly cost on the Volume tier. The first million is included at $4,999/mo; each additional million is $4,000.</p>
+
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Monthly requests</th>
+          <th>Estimated cost</th>
+          <th>Plan</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1M</strong></td>
+          <td>$4,999/mo</td>
+          <td>Volume (included)</td>
+        </tr>
+        <tr>
+          <td><strong>5M</strong></td>
+          <td>$20,999/mo</td>
+          <td>Volume + 4M overage</td>
+        </tr>
+        <tr>
+          <td><strong>10M</strong></td>
+          <td>$40,999/mo</td>
+          <td>Volume + 9M overage</td>
+        </tr>
+        <tr>
+          <td><strong>50M+</strong></td>
+          <td><a href="mailto:${PRODUCT.contactEmail}?subject=Enterprise%20Volume">Contact us</a></td>
+          <td>Enterprise / custom</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="pricing-muted" style="margin-top:16px;">Volume tier includes org-level pattern-only enforcement, SIEM forwarding, evidence packs, and DPA/SCCs. Overage billed at $4,000 per additional million requests. For 50M+ or dedicated infrastructure, contact us about an Enterprise agreement.</p>
+</div>
+
+<!-- Chunk 6: x402 micropayments -->
 <div class="section-chunk">
   <h2 style="margin-top:0;">Complete x402 endpoint prices</h2>
 
@@ -567,7 +630,51 @@ res = session.post("https://www.parsethis.ai/v1/parse", json={"prompt": "..."})<
   </div>
 </div>
 
-<!-- Chunk 7: Free endpoints -->
+<!-- Chunk 7: Deployment Modes -->
+<div class="section-chunk">
+  <h2 style="margin-top:0;">Deployment Modes</h2>
+  <p class="answer-capsule">Choose how deeply each screening call inspects a prompt. Pattern-only mode keeps prompt text away from any third-party model provider — a privacy guarantee you can set as an org-level default so one engineer forgetting a flag can't leak customer text.</p>
+
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Mode</th>
+          <th>Latency</th>
+          <th>Prompt text leaves Parse?</th>
+          <th>Detection coverage</th>
+          <th>Org-enforceable?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Full</strong> (pattern + semantic)</td>
+          <td>~2&ndash;5s p50</td>
+          <td>Yes &mdash; routed to OpenRouter for semantic analysis</td>
+          <td>Maximum &mdash; catches paraphrased and indirect injection</td>
+          <td>✅ Set as org default</td>
+        </tr>
+        <tr>
+          <td><strong>Pattern-only</strong></td>
+          <td>&lt;400ms p50</td>
+          <td><strong>No</strong> &mdash; text never reaches a third party</td>
+          <td>High &mdash; catches direct injection, boundary manipulation, on-chain planted instructions</td>
+          <td>✅ Set as org default</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>How to enforce pattern-only at the org level</h3>
+  <pre><code>PUT /v1/policy
+Authorization: Bearer &lt;your-api-key&gt;
+Content-Type: application/json
+
+{ "defaultMode": "pattern-only" }</code></pre>
+  <p class="pricing-muted">Once set, every screening request for that key is forced into pattern-only mode regardless of the per-request <code>mode</code> field. Individual engineers cannot opt out.</p>
+</div>
+
+<!-- Chunk 8: Free endpoints -->
 <div class="section-chunk">
   <h2 style="margin-top:0;">What endpoints are free?</h2>
 
@@ -583,9 +690,9 @@ res = session.post("https://www.parsethis.ai/v1/parse", json={"prompt": "..."})<
 `;
 
   return renderPage({
-    title: "Pricing — Free → $47 Audit → $49 Pro → $199 Team → $999 Compliance → Implementation",
+    title: "Pricing — Free → $47 Audit → $49 Pro → $199 Team → $999 Compliance → $4,999 Volume → Implementation",
     description:
-      `${PRODUCT.name} value ladder: Free tier, $47 one-time Security Audit, Pro $49/mo, Team $199/mo, Compliance $999/mo, and custom Implementation ($3K–$15K). ${PRODUCT.name} also offers x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}.`,
+      `${PRODUCT.name} value ladder: Free tier, $47 one-time Security Audit, Pro $49/mo, Team $199/mo, Compliance $999/mo, Volume $4,999/mo (1M requests included, $4K per additional million), and custom Implementation ($3K–$15K). ${PRODUCT.name} also offers x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}.`,
     path: "/pricing",
     content,
     baseUrl,

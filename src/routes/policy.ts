@@ -42,6 +42,7 @@ export const DEFAULT_POLICY: ScreeningPolicy = {
   approvalDefaultAction: "deny",
   enforcementMode: "block",
   enforceToolAllowlist: false,
+  defaultMode: "full",
   environment: "production",
 };
 
@@ -69,6 +70,7 @@ function formatPolicyResponse(policy: ScreeningPolicy, tier: string) {
     approvalDefaultAction: policy.approvalDefaultAction ?? "deny",
     enforcementMode: policy.enforcementMode ?? "block",
     enforceToolAllowlist: policy.enforceToolAllowlist ?? false,
+    defaultMode: policy.defaultMode ?? "full",
     environment: policy.environment ?? "production",
     tier,
     max_threshold: MAX_THRESHOLD_BY_TIER[tier] ?? MAX_THRESHOLD_BY_TIER.free,
@@ -93,6 +95,7 @@ function dbPolicyToScreeningPolicy(dbPolicy: any): ScreeningPolicy {
     approvalDefaultAction: "deny",
     enforcementMode: (dbPolicy.enforcementMode as "monitor" | "warn" | "block") ?? "block",
     enforceToolAllowlist: dbPolicy.enforceToolAllowlist ?? false,
+    defaultMode: (dbPolicy.defaultMode as "full" | "pattern-only") ?? "full",
     environment: dbPolicy.environment,
   };
 }
@@ -248,6 +251,13 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
     }
   }
 
+  // Validate defaultMode (org-enforceable pattern-only)
+  if (body.defaultMode !== undefined) {
+    if (!["full", "pattern-only"].includes(body.defaultMode)) {
+      return c.json({ error: "defaultMode must be 'full' or 'pattern-only'" }, 400);
+    }
+  }
+
   // Build update data from provided fields
   const updateData: Record<string, unknown> = {};
   if (body.screenUserInput !== undefined) updateData.screenUserInput = Boolean(body.screenUserInput);
@@ -258,6 +268,7 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
   if (body.executeInSandbox !== undefined) updateData.executeInSandbox = Boolean(body.executeInSandbox);
   if (body.enforcementMode !== undefined) updateData.enforcementMode = body.enforcementMode;
   if (body.enforceToolAllowlist !== undefined) updateData.enforceToolAllowlist = Boolean(body.enforceToolAllowlist);
+  if (body.defaultMode !== undefined) updateData.defaultMode = body.defaultMode;
   if (body.bypassCodeword !== undefined) {
     if (body.bypassCodeword === null || body.bypassCodeword === "") {
       updateData.bypassCodewordHash = null;
@@ -336,6 +347,7 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
           approvalDefaultAction: "deny",
           enforcementMode: (existingDb.enforcementMode as "monitor" | "warn" | "block") ?? "block",
           enforceToolAllowlist: existingDb.enforceToolAllowlist ?? false,
+          defaultMode: (existingDb.defaultMode as "full" | "pattern-only") ?? "full",
         })
       : {};
 

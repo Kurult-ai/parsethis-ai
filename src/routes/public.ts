@@ -1,6 +1,9 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import bcrypt from "bcrypt";
 import { createApiKey, deleteApiKey, isOwnerTeamKey } from "../auth.js";
 import { countSelfServiceKeys, isLocalKeyGenerationTestMode, validateApiKey as validateGeneratedApiKey } from "../api-key-service.js";
@@ -43,6 +46,7 @@ import { recordActivationEvent, getActivationFunnel, type ActivationEvent } from
 import { renderBillingDashboardPage } from "../pages/billing.js";
 import { renderAgentDashboardPage } from "../pages/agent-dashboard.js";
 import { renderTrustPage } from "../pages/trust-page.js";
+import { renderTrustPackagePage } from "../pages/trust-package.js";
 import { renderAboutPage } from "../pages/about.js";
 import { renderPromptGuardLandingPage } from "../pages/prompt-guard-landing.js";
 import { renderPromptGuardPlaygroundPage } from "../pages/prompt-guard-playground.js";
@@ -906,6 +910,31 @@ publicRoutes.get("/trust", (c) => {
   return c.html(renderTrustPage(baseUrl));
 });
 
+// Trust Package — downloadable HTML rendering of docs/trust-package.md
+publicRoutes.get("/trust-package", (c) => {
+  const baseUrl = getBaseUrl(c);
+  return c.html(renderTrustPackagePage(baseUrl));
+});
+
+// Alias: /docs/trust-package serves the same page
+publicRoutes.get("/docs/trust-package", (c) => {
+  const baseUrl = getBaseUrl(c);
+  return c.html(renderTrustPackagePage(baseUrl));
+});
+
+// Raw markdown download
+publicRoutes.get("/docs/trust-package.md", (c) => {
+  const mdPath = join(dirname(fileURLToPath(import.meta.url)), "../../docs/trust-package.md");
+  try {
+    const md = readFileSync(mdPath, "utf-8");
+    return new Response(md, {
+      headers: { "Content-Type": "text/markdown; charset=utf-8" },
+    });
+  } catch {
+    return c.text("Trust package not found.", 404);
+  }
+});
+
 // About page
 publicRoutes.get("/about", (c) => {
   return c.html(renderAboutPage(getBaseUrl(c)));
@@ -925,7 +954,8 @@ publicRoutes.get("/docs", (c) => {
 <ul>
   <li><a href="/get-started">Install Parse</a> — generate a key, copy a runtime snippet, make your first screened call. Under three minutes, no account.</li>
   <li><a href="/docs/quickstart">Quickstart</a> — paste-into-your-agent install prompts for Claude Code, Hermes, OpenClaw, Codex, and Cursor. Agents can fetch it as markdown.</li>
-  <li><a href="/playground">Playground</a> — test screening interactively against real injection attempts.</li>
+  <li><a href="/demo">Try it</a> — paste a prompt, get a verdict in 30 seconds. No key required.</li>
+  <li><a href="/playground">Pilot harness</a> — connect a live agent for session-level screening.</li>
   <li><a href="/demo">Demo</a> — try a screening call with no key at all.</li>
 </ul>
 
