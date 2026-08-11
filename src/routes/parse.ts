@@ -442,10 +442,16 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
           const connected = await ensureRedisConnected();
           if (!connected) return;
           const redis = getRedis();
-          const day = new Date().toISOString().slice(0, 10);
-          const key = `screening:llm_degraded:${day}`;
-          const count = await redis.incr(key);
-          if (count === 1) await redis.expire(key, 35 * 24 * 60 * 60);
+          const now = new Date().toISOString();
+          // Daily key is the ops trail; hourly key is what /status reads, so a
+          // resolved outage stops showing as degraded within the hour instead
+          // of colouring the whole calendar day.
+          const dayKey = `screening:llm_degraded:${now.slice(0, 10)}`;
+          const hourKey = `screening:llm_degraded:hour:${now.slice(0, 13)}`;
+          const dayCount = await redis.incr(dayKey);
+          if (dayCount === 1) await redis.expire(dayKey, 35 * 24 * 60 * 60);
+          const hourCount = await redis.incr(hourKey);
+          if (hourCount === 1) await redis.expire(hourKey, 2 * 60 * 60);
         } catch {
           // ignore — telemetry only
         }

@@ -2185,9 +2185,11 @@ async function collectPublicDependencies(): Promise<PublicDependency[]> {
       try {
         const connected = await withTimeout(ensureRedisConnected(), 1_500, false);
         if (connected) {
-          const day = new Date().toISOString().slice(0, 10);
+          // Read the hourly key: a fault that has stopped should stop being
+          // reported, or the page cries wolf for the rest of the day.
+          const hour = new Date().toISOString().slice(0, 13);
           const raw = await withTimeout(
-            getRedis().get(`screening:llm_degraded:${day}`),
+            getRedis().get(`screening:llm_degraded:hour:${hour}`),
             1_500,
             null as string | null
           );
@@ -2204,8 +2206,8 @@ async function collectPublicDependencies(): Promise<PublicDependency[]> {
         degradedToday === null
           ? "Configured. Recent health could not be read; per-request status is reported in layers.llm."
           : degradedToday > 0
-            ? `${degradedToday} screening call(s) fell back to pattern matching today. Per-request status is reported in layers.llm.`
-            : "No screening calls have fallen back to pattern matching today.",
+            ? `${degradedToday} screening call(s) fell back to pattern matching in the last hour. Per-request status is reported in layers.llm.`
+            : "No screening calls have fallen back to pattern matching in the last hour.",
     });
   }
 
