@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test src/**/*.test.ts",
     "check:landing-scripts": "node --import tsx scripts/check-landing-scripts.mts",
+    "check:evasion": "node --import tsx scripts/check-evasion-mutations.mts",
     "check:walkthrough": "node --import tsx scripts/check-prospect-walkthrough.mts",
     "eval:screening": "node --import tsx scripts/evaluate-screening-fixtures.ts",
     "smoke:parse": "node scripts/smoke-parse.mjs",

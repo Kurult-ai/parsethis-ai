@@ -195,6 +195,20 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
       retryable: false,
     });
   }
+  // pattern-only is a privacy guarantee, not a speed setting: it exists so a
+  // caller can keep prompt text away from the model provider. Sandbox execution
+  // forwards that text regardless, so honouring only half the request would make
+  // the guarantee false. Refuse the combination rather than silently breaking it.
+  if (body.mode === "pattern-only" && (body.execute === true || body.execute === "auto")) {
+    return problem(c, {
+      status: 400,
+      title: "Incompatible options",
+      detail:
+        'mode "pattern-only" cannot be combined with execute. Pattern-only keeps prompt text away from the model provider, and sandbox execution sends it there. Drop execute, or use mode "full".',
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
+  }
   if (body.policy_mode !== undefined && !["strict", "balanced", "low_fp"].includes(body.policy_mode)) {
     return problem(c, {
       status: 400,

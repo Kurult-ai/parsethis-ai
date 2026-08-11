@@ -585,6 +585,12 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
   // it, so a signal in it deserves more weight than the same words typed by the
   // caller. This only amplifies flags that already fired — it cannot create one,
   // so clean traffic is unaffected regardless of source.
+  // Intrinsic severity, measured before any source-based amplification. The
+  // "pattern verdict is already conclusive" fast path must key off this: caller
+  // metadata should never be able to switch the semantic layer off, least of all
+  // for the third-party content that most needs it.
+  const maxIntrinsicSeverity = activeFlags.length > 0 ? Math.max(...activeFlags.map((f) => f.severity)) : 0;
+
   applySourceSensitivity(activeFlags, req.metadata);
 
   // Compute max severity from pattern + structural analysis (before LLM)
@@ -609,7 +615,7 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
   if (usePatternOnly) {
     llmLayerStatus = "skipped_pattern_only";
     analysisMethod = "pattern_only";
-  } else if (maxPatternSeverity >= 9) {
+  } else if (maxIntrinsicSeverity >= 9) {
     // The pattern verdict is already conclusive; semantic analysis cannot lower it.
     llmLayerStatus = "skipped_high_severity";
   } else if (!process.env.OPENROUTER_API_KEY) {
