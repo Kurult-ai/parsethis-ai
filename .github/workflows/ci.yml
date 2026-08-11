@@ -30,6 +30,28 @@ jobs:
 
   typecheck-and-test:
     runs-on: ubuntu-latest
+    # Belt-and-suspenders with REDIS_MAX_RETRIES below: even if a client slips
+    # its retry bound, the job cannot burn the 6-hour default and must report.
+    timeout-minutes: 20
+    services:
+      # The API-key validation cache tests need a real Redis. Without one they
+      # skip — and "still enforces revocation on the fast path" is a security
+      # test that must actually run, not pass by not running.
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      REDIS_URL: redis://127.0.0.1:6379
+      # Bound the retry so any test pointing at an unreachable Redis (e.g.
+      # keygen-local.test.ts's deliberate 127.0.0.1:1) fails fast instead of
+      # hanging the job. Production leaves this unset and retries forever.
+      REDIS_MAX_RETRIES: "3"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -41,8 +63,12 @@ jobs:
       - run: npm run typecheck
       - run: npm run claims-lint
       - run: npm run brand-lint
+      - run: npm run check:landing-scripts
       - run: npm test
       - run: npm run eval:screening
+      - run: npm run check:walkthrough
+      - run: npm run check:evasion
+      - run: npm run check:retention-sync
 
   security-audit:
     runs-on: ubuntu-latest

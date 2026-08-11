@@ -3,6 +3,11 @@ import assert from "node:assert/strict";
 
 process.env.KEY_GENERATION_LOCAL_TEST_MODE = "true";
 process.env.REDIS_URL = "redis://127.0.0.1:1";
+// This suite deliberately points Redis at an unreachable port to exercise the
+// fallback path. Without a retry bound the ioredis client reconnects forever
+// and never rejects, so the whole `npm test` run hangs here. Bound it so a
+// dead Redis fails fast.
+process.env.REDIS_MAX_RETRIES = process.env.REDIS_MAX_RETRIES ?? "2";
 delete process.env.DATABASE_URL;
 
 const { app } = await import("../app.js");

@@ -13,7 +13,7 @@
     "start": "tsx src/index.ts",
     "build": "prisma generate && tsc && node scripts/patch-prisma-dist-imports.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test src/**/*.test.ts",
+    "test": "node scripts/run-tests.mjs",
     "check:landing-scripts": "node --import tsx scripts/check-landing-scripts.mts",
     "check:evasion": "node --import tsx scripts/check-evasion-mutations.mts",
     "check:walkthrough": "node --import tsx scripts/check-prospect-walkthrough.mts",

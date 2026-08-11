@@ -12,6 +12,14 @@ export function getRedis(): Redis {
       connectTimeout: Number(process.env.REDIS_CONNECT_TIMEOUT_MS ?? 1500),
       commandTimeout: Number(process.env.REDIS_COMMAND_TIMEOUT_MS ?? 1500),
       retryStrategy(times) {
+        // Bounded only when REDIS_MAX_RETRIES is set. Unset (production) means
+        // retry forever with backoff — a transient Redis blip must not make the
+        // service give up. Tests and CI set a small bound so an unreachable
+        // Redis (e.g. keygen-local.test.ts's deliberate 127.0.0.1:1) makes
+        // connect() reject and commands fail fast instead of spinning the whole
+        // process, which is what hangs `npm test`.
+        const maxRetries = process.env.REDIS_MAX_RETRIES ? Number(process.env.REDIS_MAX_RETRIES) : Infinity;
+        if (times > maxRetries) return null;
         // Exponential backoff: 500ms, 1s, 2s, 4s, then cap at 5s
         return Math.min(times * 500, 5000);
       },
