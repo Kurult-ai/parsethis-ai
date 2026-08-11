@@ -334,7 +334,7 @@ export function renderTechnologyPage(baseUrl: string): string {
             </thead>
             <tbody>
               <tr><td><strong>Pattern-only</strong></td><td>~${LATENCY_FACTS.detection.patternOnly.p50Ms}ms / ~${LATENCY_FACTS.detection.patternOnly.p95Ms}ms</td><td>~${LATENCY_FACTS.endToEnd.patternOnly.p50Ms}ms / ~${LATENCY_FACTS.endToEnd.patternOnly.p95Ms}ms</td><td>No</td></tr>
-              <tr><td><strong>Full</strong> (pattern + semantic)</td><td>~${LATENCY_FACTS.detection.full.p50Ms.toLocaleString()}ms / ~${LATENCY_FACTS.detection.full.p95Ms.toLocaleString()}ms</td><td>~${LATENCY_FACTS.endToEnd.full.p50Ms.toLocaleString()}ms / ~${LATENCY_FACTS.endToEnd.full.p95Ms.toLocaleString()}ms</td><td>Yes (to OpenRouter)</td></tr>
+              <tr><td><strong>Full</strong> (pattern + semantic)</td><td>~${LATENCY_FACTS.detection.full.p50Ms.toLocaleString("en-US")}ms / ~${LATENCY_FACTS.detection.full.p95Ms.toLocaleString("en-US")}ms</td><td>~${LATENCY_FACTS.endToEnd.full.p50Ms.toLocaleString("en-US")}ms / ~${LATENCY_FACTS.endToEnd.full.p95Ms.toLocaleString("en-US")}ms</td><td>Yes (to OpenRouter)</td></tr>
             </tbody>
           </table>
         </div>
