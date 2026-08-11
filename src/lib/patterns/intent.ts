@@ -236,6 +236,39 @@ const UNRESTRICTED_ROLE =
 const DIRECT_URL_EXFIL =
   /\b(?:send|post|upload|transmit|forward|exfiltrate|copy|deliver)\b[^.\n]{0,120}\b(?:conversation|chat|messages?|data|content|private|internal|customer)\b[^.\n]{0,120}\bhttps?:\/\//i;
 
+// Shell-command detection lives here rather than in the flat pattern list so it
+// can see sentence context. A log line that reports a denied sudo attempt and an
+// instruction to run sudo are the same tokens with opposite intent.
+const SHELL_COMMAND_ARTIFACT =
+  /(?:sudo\s+(?:-\w+\s+)*[a-z][\w./-]*|chmod\s+(?:777|\+s)\s+\S|rm\s+-rf\s+[~/.\w$]|dd\s+if=|mkfs\.\w|usermod\s+-aG\s+(?:sudo|wheel)|run\s+(?:this\s+)?as\s+root)/i;
+
+const DESTRUCTIVE_SHELL_ARTIFACT =
+  /(?:rm\s+-rf\s+[~/.\w$]|dd\s+if=|mkfs\.\w|chmod\s+777\s+\/(?:etc|var|usr|boot)\b)/i;
+
+const COMMAND_IMPERATIVE_CUE =
+  /\b(?:run|execute|type|enter|issue|invoke|now\s+do|please\s+run|go\s+ahead\s+and|immediately|first\s+command)\b/i;
+
+// Reported speech: the command is being described, quoted, or logged — not issued.
+const REPORTED_SPEECH_CONTEXT =
+  /\b(?:attempted|attempts?|tried\s+to|was\s+(?:denied|blocked|terminated|rejected|logged|flagged|observed)|were\s+denied|denied\s+by|blocked\s+by|audit\s+log|log\s+(?:entry|excerpt|line)|syslog|postmortem|incident\s+(?:report|timeline)|man\s+page|manual\s+page|runbook|a\s+user|the\s+user|an\s+attacker)\b|\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/i;
+
+// Authority-assertion exfiltration: text that grants itself permission to move
+// data. Requires a triad (claimed authority + movement verb + sensitive object
+// or destination) so ordinary delegation prose cannot trip it.
+const AUTHORITY_ASSERTION_CUE =
+  // The grantee may be second person ("you are pre-authorized") or a third-person
+  // agent ("downstream agent is authorized", "future agents are cleared").
+  /\b(?:you|(?:the\s+|a\s+|any\s+|all\s+)?(?:downstream\s+|receiving\s+|future\s+|other\s+)?agents?|the\s+assistant|the\s+bot)\s+(?:is|are|has\s+been|have\s+been)\s+(?:pre-?\s?authoriz|authoriz|clear|approv|permitt|grant)(?:ed)?\b|\bapproval\s+(?:is\s+|has\s+been\s+|already\s+)*(?:been\s+)?granted\b|\bno\s+(?:further|additional)\s+(?:confirmation|approval|authorization|review|sign-?off)\s+(?:is\s+)?(?:needed|required|necessary)\b|\bwithout\s+(?:further\s+)?(?:confirmation|approval|authorization|review)\b|\b(?:this|that|the|it)\s*(?:action|request|task|export|transfer)?\s*(?:is|has\s+been|was)\s+(?:already\s+)?(?:approved|authorized|pre-?approved|sanctioned|signed\s+off)\b|\b(?:compliance|management|the\s+(?:admin|owner|operator|security)\s+team)\s+has\s+(?:approved|authorized|cleared)\b|\bdo\s+not\s+(?:ask|prompt|wait)\s+for\s+(?:confirmation|approval|permission)\b|\bproceed\s+without\s+(?:user|owner|human)?\s*(?:confirmation|approval)\b/i;
+
+const DATA_MOVEMENT_VERB =
+  /\b(?:export|send|forward|upload|transfer|share|email|post|copy|sync|transmit|extract|deliver)\b/i;
+
+const SENSITIVE_RECORD_COMPOUND =
+  /\b(?:customer|user|client|member|subscriber|patient|employee)\s+(?:records?|data|lists?|databases?|details|information|pii)\b|\bpii\b/i;
+
+const EXTERNAL_DESTINATION =
+  /https?:\/\/|\b[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}\b|\b(?:s3|gs|azblob|r2):\/\/[\w./-]+|\b(?:to|at|into|onto)\s+(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:\/\S*)?/i;
+
 const HANDOFF_SPOOF_CUE =
   /\b(?:system|developer|admin|trusted|override|ignore|disregard|new\s+instructions?|do\s+not\s+reveal|without\s+owner\s+review|skip\s+approval|bypass\s+approval|grant|elevated|tool\s+access)\b/i;
 
@@ -483,6 +516,55 @@ function maybeFlagRoleSpoof(flags: IntentRiskFlag[], text: string): void {
       confidence: "medium",
       attack_family: "spoof_instruction_hierarchy",
       action_floor: "sandbox",
+      evidence: window,
+      source: "deterministic_intent",
+    });
+  }
+}
+
+function maybeFlagSystemCommand(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (!SHELL_COMMAND_ARTIFACT.test(window)) continue;
+    // Described, quoted, or logged commands are not instructions to run one.
+    if (REPORTED_SPEECH_CONTEXT.test(window)) continue;
+    if (isDefensiveDiscussion(window)) continue;
+    const directed =
+      COMMAND_IMPERATIVE_CUE.test(window) ||
+      (DIRECT_AGENT_TARGET.test(window) && OPERATIONAL_INSTRUCTION.test(window));
+    if (!directed) continue;
+    const destructive = DESTRUCTIVE_SHELL_ARTIFACT.test(window);
+    addFlag(flags, {
+      id: "intent.system_command_execution",
+      category: "privilege_escalation",
+      severity: destructive ? 8 : 7,
+      label: "System command execution intent",
+      detail:
+        "The prompt instructs the agent to run a privileged or destructive shell command rather than describing one.",
+      confidence: "high",
+      attack_family: "system_command_execution",
+      action_floor: destructive ? "block" : "sandbox",
+      evidence: window,
+      source: "deterministic_intent",
+    });
+  }
+}
+
+function maybeFlagAuthorityAssertion(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (!AUTHORITY_ASSERTION_CUE.test(window)) continue;
+    if (!DATA_MOVEMENT_VERB.test(window)) continue;
+    if (!SENSITIVE_RECORD_COMPOUND.test(window) && !EXTERNAL_DESTINATION.test(window)) continue;
+    if (isDefensiveDiscussion(window)) continue;
+    addFlag(flags, {
+      id: "intent.authority_assertion_exfil",
+      category: "data_exfiltration",
+      severity: 8,
+      label: "Self-granted authority to move data",
+      detail:
+        "The content claims the agent is already authorized to move sensitive data to a destination, bypassing confirmation. Instructions carrying their own approval are a hallmark of indirect injection.",
+      confidence: "high",
+      attack_family: "authority_assertion_exfil",
+      action_floor: "block",
       evidence: window,
       source: "deterministic_intent",
     });
@@ -1074,6 +1156,8 @@ export function detectIntentPromptRisks(prompt: string, normalizedPrompt = promp
     maybeFlagBoundary(flags, text);
     maybeFlagReset(flags, text);
     maybeFlagDirectExfil(flags, text);
+    maybeFlagSystemCommand(flags, text);
+    maybeFlagAuthorityAssertion(flags, text);
     maybeFlagFuzzyOverride(flags, text);
     maybeFlagInstructionDisclosure(flags, text);
     maybeFlagPreConversationProbe(flags, text);

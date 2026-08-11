@@ -114,7 +114,7 @@ describe("parsePrompt structure", () => {
     assert.ok(Array.isArray(result.categories));
     assert.ok(result.analyzed_at);
     assert.equal(typeof result.prompt_length, "number");
-    assert.ok(["pattern", "pattern+llm"].includes(result.analysis_method));
+    assert.ok(["pattern", "pattern_only", "pattern+llm"].includes(result.analysis_method));
   });
 });
 

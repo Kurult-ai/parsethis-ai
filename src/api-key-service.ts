@@ -222,6 +222,7 @@ const TIER_RATE_LIMITS: Record<string, number> = {
   free: PLAN_LIMITS.free.requestsPerMinute,
   pro: PLAN_LIMITS.pro.requestsPerMinute,
   team: PLAN_LIMITS.team.requestsPerMinute,
+  compliance: PLAN_LIMITS.compliance.requestsPerMinute,
   enterprise: PLAN_LIMITS.enterprise.requestsPerMinute,
 };
 

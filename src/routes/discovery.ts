@@ -1455,11 +1455,31 @@ discoveryRoutes.get("/openapi.json", (c) => {
               maxLength: 50000,
               description: "The untrusted prompt to screen",
             },
+            mode: {
+              type: "string",
+              enum: ["full", "pattern-only"],
+              default: "full",
+              description:
+                "Analysis depth. \"full\" runs pattern matching plus semantic analysis, which sends the prompt text to the model provider. \"pattern-only\" keeps the prompt inside Parse — nothing is sent to a third party — at the cost of semantic coverage (indirect injection is substantially harder to catch on patterns alone). Use pattern-only for privacy-sensitive traffic.",
+            },
             execute: {
-              type: "boolean",
+              oneOf: [
+                { type: "boolean" },
+                { type: "string", enum: ["auto"] },
+              ],
               default: false,
               description:
-                "Run the prompt in an isolated sandbox after screening. Note: execute:true and execute:\"auto\" require Bearer key authentication; they are not supported for x402 payment callers and return 400 x402.async_unsupported.",
+                "Run the prompt in an isolated sandbox after screening. \"auto\" lets Parse decide based on the screening verdict. Note: execute:true and execute:\"auto\" require Bearer key authentication; they are not supported for x402 payment callers and return 400 x402.async_unsupported.",
+            },
+            model: {
+              type: "string",
+              description:
+                "Override the model used for semantic analysis. Must be on the deployment's allowlist.",
+            },
+            bypass_codeword: {
+              type: "string",
+              description:
+                "Trusted-caller unblock path. When it matches the configured codeword the prompt is returned with risk_score 0. Intended for operators testing their own payloads.",
             },
             test_input: {
               type: "string",
@@ -1513,9 +1533,14 @@ discoveryRoutes.get("/openapi.json", (c) => {
         },
         ParseResponse: {
           type: "object",
-          required: ["id", "risk_score", "verdict", "flags", "latency_ms"],
+          required: ["id", "trace_id", "risk_score", "verdict", "flags", "latency_ms"],
           properties: {
             id: { type: "string", description: "Unique request identifier" },
+            trace_id: {
+              type: "string",
+              description:
+                "Receipt identifier for this verdict — the value to log for audit and incident review. Always identical to `id`.",
+            },
             risk_score: {
               type: "number",
               minimum: 0,
@@ -1558,7 +1583,43 @@ discoveryRoutes.get("/openapi.json", (c) => {
             },
             analysis_method: {
               type: "string",
-              description: "Which layers contributed to the score (e.g. patterns, llm, sandbox).",
+              enum: ["pattern", "pattern+llm", "pattern_only", "pattern+local_classifier"],
+              description:
+                "Which layers contributed to the score. \"pattern_only\" means you requested mode:\"pattern-only\"; a bare \"pattern\" means the semantic layer did not contribute — check `layers` and `degraded` to see why.",
+            },
+            layers: {
+              type: "object",
+              description:
+                "Which analysis layers ran for this request, and why any were skipped.",
+              properties: {
+                pattern: {
+                  type: "string",
+                  enum: ["ran"],
+                  description: "Pattern matching always runs.",
+                },
+                llm: {
+                  type: "string",
+                  enum: [
+                    "ran",
+                    "skipped_pattern_only",
+                    "skipped_high_severity",
+                    "disabled",
+                    "failed",
+                  ],
+                  description:
+                    "Semantic analysis outcome. \"skipped_pattern_only\" = you asked for pattern-only; \"skipped_high_severity\" = the pattern verdict was already conclusive; \"disabled\" = not configured on this deployment; \"failed\" = the call did not return a usable verdict.",
+                },
+              },
+            },
+            degraded: {
+              type: "boolean",
+              description:
+                "True when the semantic layer was unavailable rather than deliberately skipped. The verdict rests on pattern matching alone and may under-report semantic attacks such as indirect injection.",
+            },
+            degraded_reason: {
+              type: "string",
+              enum: ["llm_failed", "llm_disabled"],
+              description: "Present only when degraded is true.",
             },
             policy: {
               $ref: "#/components/schemas/ParseResponsePolicy",

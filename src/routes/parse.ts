@@ -42,6 +42,7 @@ const EXEC_LIMITS: Record<string, number> = {
   free: 5,
   pro: 50,
   team: 200,
+  compliance: 500,
   enterprise: 1000,
 };
 
@@ -49,6 +50,7 @@ const DAILY_COST_CAPS: Record<string, number> = {
   free: 0.50,
   pro: 10,
   team: 50,
+  compliance: 200,
   enterprise: 500,
 };
 
@@ -406,6 +408,18 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   const parseStart = Date.now();
   const result = await parsePrompt(body);
   const parseLatencyMs = Date.now() - parseStart;
+
+  // A silently degraded semantic layer looks exactly like a clean pass to the
+  // caller, so surface it as an operational event rather than letting screening
+  // quietly fall back to pattern matching for everyone.
+  if (result.degraded) {
+    auditLog({
+      action: "screening_llm_degraded",
+      apiKeyId: c.get("apiKey")?.id,
+      requestId: result.id,
+      detail: result.degraded_reason,
+    });
+  }
 
   // ── Custom Rules Engine (Layer 4: org-specific compliance rules) ──
   // Evaluate customer-defined regex rules against the prompt after the 3
@@ -988,7 +1002,9 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   }
 
   // ── Gate score_components to team+ tier (prevents free-tier scoring oracle) ──
-  if (tier !== "team" && tier !== "enterprise" && apiKey.id !== "master") {
+  // Compliance is a paid tier above Team; withholding forensic detail from the
+  // customers who buy Parse for audit evidence defeats the purpose.
+  if (tier !== "team" && tier !== "compliance" && tier !== "enterprise" && apiKey.id !== "master") {
     delete result.score_components;
   }
 
@@ -1040,7 +1056,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   }
 
   // ── Observe mode: separate, more restrictive rate limit for high-risk prompts ──
-  const OBSERVE_LIMITS: Record<string, number> = { free: 2, pro: 10, team: 50, enterprise: 200 };
+  const OBSERVE_LIMITS: Record<string, number> = { free: 2, pro: 10, team: 50, compliance: 100, enterprise: 200 };
   if (observeExec && apiKey.id !== "master" && isRedisAvailable()) {
     try {
       const redis = getRedis();

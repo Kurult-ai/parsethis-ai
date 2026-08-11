@@ -47,6 +47,11 @@ describe("POST /v1/parse x402 execution", () => {
     });
 
     assert.equal(response.status, 200);
-    assert.equal((await response.json()).analysis_method, "pattern");
+    const body = await response.json();
+    // A caller who asked for pattern-only gets "pattern_only", which is
+    // distinguishable from "pattern" produced by a degraded semantic layer.
+    assert.equal(body.analysis_method, "pattern_only");
+    assert.equal(body.layers.llm, "skipped_pattern_only");
+    assert.ok(!body.degraded, "an explicitly requested mode is not a degradation");
   });
 });

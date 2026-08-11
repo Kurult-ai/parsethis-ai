@@ -15,6 +15,7 @@ import {
 function response(overrides: Partial<ParseResponse> = {}): ParseResponse {
   return {
     id: "screen_123",
+    trace_id: "screen_123",
     risk_score: 9,
     safe: false,
     verdict: "critical",

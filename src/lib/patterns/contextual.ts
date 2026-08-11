@@ -23,7 +23,9 @@ const LONG_TOKEN_PATH_PATTERN = /\/[A-Za-z0-9][A-Za-z0-9_-]{7,}(?:[/?#]|$)/i;
 const AGENT_TERMS = /\b(?:agent|assistant|ai|llm|bot|copilot|automation|automated\s+assistant|autonomous\s+assistant|tool|crawler|scraper|workflow|processor|model)\b/i;
 const WORKFLOW_NOTE_TERMS = /\b(?:internal processing note|automation routing|workflow reconciliation|ops note|maintainer note|internal note|internal browser workflow|assistant workflow|routing note)\b/i;
 const URL_ACTIONS = /\b(?:open|call|fetch|get|post|send|visit|browse|request|load|curl|wget|ping|hit|invoke|submit|notify|acknowledge|report\s+to|connect\s+to|make\s+(?:a\s+)?(?:get|post|put|delete)?\s*request)\b/i;
-const EXFIL_DATA_TERMS = /\b(?:user\s+data|private\s+data|secret|api\s*key|credentials?|conversation|system\s+prompt|internal\s+notes?|customer\s+data|pii|email\s+address|account\s+id|session\s+id)\b/i;
+// The record-compound alternation generalises the old literal pairs
+// ("customer data" but not "customer records", "user data" but not "member list").
+const EXFIL_DATA_TERMS = /\b(?:user\s+data|private\s+data|secret|api\s*key|credentials?|conversation|system\s+prompt|internal\s+notes?|customer\s+data|pii|email\s+address|account\s+id|session\s+id|(?:customer|user|client|member|subscriber|patient|employee)\s+(?:records?|data|lists?|databases?|details|information))\b/i;
 
 const ECHO_ACTIONS = /\b(?:include|cite|echo|return|send|post|append|acknowledge|confirm|report|mention|repeat|copy|quote|write|add)\b/i;
 const TOKEN_NOUNS = /\b(?:receipt|token|code|identifier|id|ref(?:erence)?|ack|event\s*id|tracking\s*id|nonce|canary|marker|proof)\b/i;

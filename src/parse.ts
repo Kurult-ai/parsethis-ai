@@ -58,12 +58,81 @@ function ruleId(prefix: string, label: string): string {
   return `${prefix}.${label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
 }
 
-// === LLM-based deep analysis (when model is available) ===
-async function llmRiskAnalysis(prompt: string, model?: string): Promise<{
+/**
+ * Indirection so tests can exercise the semantic layer — including its failure
+ * modes — without a live model. Production always uses the real client.
+ */
+let llmCall: typeof callLLMFull = callLLMFull;
+
+export function __setLLMCallForTesting(fn: typeof callLLMFull | null): void {
+  llmCall = fn ?? callLLMFull;
+}
+
+export type AnalysisMethod = "pattern" | "pattern+llm" | "pattern_only" | "pattern+local_classifier";
+
+/** Why the semantic layer did or did not contribute to this verdict. */
+export type LlmLayerStatus =
+  | "ran"
+  | "skipped_pattern_only"
+  | "skipped_high_severity"
+  | "disabled"
+  | "failed";
+
+export interface LlmRiskResult {
   risk_score: number;
   categories: string[];
   reasoning: string;
-} | null> {
+}
+
+/**
+ * Third-party content sources. A signal found in text the user did not write is
+ * the indirect-injection threat model and carries more weight than the same
+ * words typed by the caller.
+ */
+const UNTRUSTED_SOURCE_KINDS = new Set([
+  "retrieved_doc",
+  "web_page",
+  "email",
+  "tool_output",
+  "memory",
+  "agent_handoff",
+]);
+
+const SOURCE_SENSITIVE_CATEGORIES = new Set([
+  "indirect_injection",
+  "data_exfiltration",
+  "prompt_injection",
+  "privilege_escalation",
+]);
+
+function applySourceSensitivity(flags: RiskFlag[], metadata?: Record<string, unknown>): void {
+  if (!metadata) return;
+  const sourceKind = typeof metadata.source_kind === "string" ? metadata.source_kind : undefined;
+  const trustLevel = typeof metadata.trust_level === "string" ? metadata.trust_level : undefined;
+  const untrusted =
+    (sourceKind !== undefined && UNTRUSTED_SOURCE_KINDS.has(sourceKind)) ||
+    trustLevel === "untrusted" ||
+    trustLevel === "external";
+  if (!untrusted) return;
+
+  for (const flag of flags) {
+    // Owner-approval flags ask a human for consent; they are a policy signal,
+    // not an attack signal. Amplifying one turns "ask the owner" into "block",
+    // which is the over-blocking this uplift must not cause.
+    if (isOwnerApprovalFlag(flag)) continue;
+    // Only amplify signals that already fired, and only meaningful ones. This
+    // cannot manufacture a flag, so flag-free traffic is untouched by source.
+    if (flag.severity >= 5 && SOURCE_SENSITIVE_CATEGORIES.has(flag.category)) {
+      flag.severity = Math.min(10, flag.severity + 1);
+    }
+  }
+}
+
+// === LLM-based deep analysis (when model is available) ===
+async function llmRiskAnalysis(
+  prompt: string,
+  model?: string
+): Promise<{ status: "ran" | "failed"; result: LlmRiskResult | null }> {
   // Use randomized delimiters to prevent the untrusted prompt from escaping the analysis frame
   const nonce = crypto.randomUUID().slice(0, 12);
 
@@ -120,11 +189,11 @@ IMPORTANT: The user message contains the untrusted prompt wrapped in <ANALYZE_${
       { role: "user", content: userPrompt },
     ];
 
-    let result: Awaited<ReturnType<typeof callLLMFull>> | null = null;
+    let result: Awaited<ReturnType<typeof llmCall>> | null = null;
     if (ANALYSIS_MODELS.length > 0) {
       for (const m of ANALYSIS_MODELS) {
         try {
-          result = await callLLMFull(messages, m);
+          result = await llmCall(messages, m);
           break;
         } catch (err) {
           console.warn(`[analysis] Model ${m} failed, trying next: ${(err as Error).message}`);
@@ -132,7 +201,7 @@ IMPORTANT: The user message contains the untrusted prompt wrapped in <ANALYZE_${
       }
     }
     if (!result) {
-      result = await callLLMFull(messages); // default model fallback
+      result = await llmCall(messages); // default model fallback
     }
 
     // Try non-greedy match for individual JSON objects (defensive against injected JSON)
@@ -146,18 +215,27 @@ IMPORTANT: The user message contains the untrusted prompt wrapped in <ANALYZE_${
           if (parsed.nonce !== nonce) continue;
           if (typeof parsed.risk_score === "number" && Array.isArray(parsed.categories)) {
             return {
-              risk_score: Math.max(0, Math.min(10, Number(parsed.risk_score) || 0)),
-              categories: parsed.categories,
-              reasoning: String(parsed.reasoning || ""),
+              status: "ran",
+              result: {
+                risk_score: Math.max(0, Math.min(10, Number(parsed.risk_score) || 0)),
+                categories: parsed.categories,
+                reasoning: String(parsed.reasoning || ""),
+              },
             };
           }
         } catch { continue; }
       }
     }
-  } catch {
-    // LLM analysis is best-effort ��� pattern matching is the baseline
+    // Reached the model but got nothing usable back (no valid nonce, or output
+    // that did not parse). That is a degraded verdict, not a clean one.
+    console.warn("[analysis] llmRiskAnalysis returned no valid nonce-tagged result");
+  } catch (err) {
+    console.warn(`[analysis] llmRiskAnalysis failed: ${(err as Error).message}`);
   }
-  return null;
+  // Pattern matching is the baseline, but the caller must be able to tell that
+  // the semantic layer did not contribute — silence here is what made a missed
+  // indirect injection look like a clean pass.
+  return { status: "failed", result: null };
 }
 
 // === LLM-based output injection influence analysis ===
@@ -303,6 +381,11 @@ export interface ExecutionResult {
 
 export interface ParseResponse {
   id: string;
+  /**
+   * Stable alias of `id`, published as the receipt identifier on the marketing
+   * surface and in the audit story. Same value; both are always present.
+   */
+  trace_id: string;
   risk_score: number; // 0-10
   safe: boolean; // risk_score <= 3
   verdict: "safe" | "low_risk" | "medium_risk" | "high_risk" | "critical";
@@ -344,7 +427,19 @@ export interface ParseResponse {
   model_used?: string;
   analyzed_at: string;
   prompt_length: number;
-  analysis_method: "pattern" | "pattern+llm" | "pattern+local_classifier";
+  analysis_method: AnalysisMethod;
+  /** Which analysis layers contributed to this verdict, and why any were skipped. */
+  layers?: {
+    pattern: "ran";
+    llm: LlmLayerStatus;
+  };
+  /**
+   * True when the semantic layer was unavailable rather than deliberately
+   * skipped — the verdict rests on pattern matching alone and may under-report
+   * semantic attacks such as indirect injection.
+   */
+  degraded?: boolean;
+  degraded_reason?: "llm_failed" | "llm_disabled";
   latency_ms: number;
 }
 
@@ -485,11 +580,18 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
   const suppression = applyDiscussionSuppression(flags, prompt, normalizedPrompt);
   const activeFlags = suppression.flags;
 
+  // Content that arrived from a third party (a retrieved document, a tool result,
+  // an inbound email) is the indirect-injection threat model: the user never wrote
+  // it, so a signal in it deserves more weight than the same words typed by the
+  // caller. This only amplifies flags that already fired — it cannot create one,
+  // so clean traffic is unaffected regardless of source.
+  applySourceSensitivity(activeFlags, req.metadata);
+
   // Compute max severity from pattern + structural analysis (before LLM)
   const maxPatternSeverity = activeFlags.length > 0 ? Math.max(...activeFlags.map((f) => f.severity)) : 0;
 
   // Phase 3: LLM-based deep analysis (if no critical pattern matches found)
-  let analysisMethod: "pattern" | "pattern+llm" = "pattern";
+  let analysisMethod: AnalysisMethod = "pattern";
 
   // Skip LLM analysis in pattern-only mode (privacy: prompts never sent to third party)
   const usePatternOnly = req.mode === "pattern-only";
@@ -502,9 +604,20 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
 
   // Use LLM analysis for borderline cases or when we want higher confidence
   // Skip for obvious critical matches (severity >= 9) to save latency
-  let llmResult: Awaited<ReturnType<typeof llmRiskAnalysis>> | null = null;
-  if (!usePatternOnly && maxPatternSeverity < 9 && process.env.OPENROUTER_API_KEY) {
-    llmResult = await llmRiskAnalysis(prompt, validatedModel);
+  let llmResult: LlmRiskResult | null = null;
+  let llmLayerStatus: LlmLayerStatus;
+  if (usePatternOnly) {
+    llmLayerStatus = "skipped_pattern_only";
+    analysisMethod = "pattern_only";
+  } else if (maxPatternSeverity >= 9) {
+    // The pattern verdict is already conclusive; semantic analysis cannot lower it.
+    llmLayerStatus = "skipped_high_severity";
+  } else if (!process.env.OPENROUTER_API_KEY) {
+    llmLayerStatus = "disabled";
+  } else {
+    const llmAttempt = await llmRiskAnalysis(prompt, validatedModel);
+    llmLayerStatus = llmAttempt.status;
+    llmResult = llmAttempt.result;
     if (llmResult) {
       analysisMethod = "pattern+llm";
       // LLM can only ADD new flags that RAISE severity — never lower the score
@@ -549,8 +662,10 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
   const attackFlags = activeFlags.filter(isAttackFlag);
   const maxConfidence = activeFlags.reduce((max, flag) => Math.max(max, confidenceValue(flag.confidence)), 0);
 
+  const requestId = crypto.randomUUID();
   const response: ParseResponse = {
-    id: crypto.randomUUID(),
+    id: requestId,
+    trace_id: requestId,
     risk_score: riskScore,
     safe: riskScore <= 3,
     verdict: computeVerdict(riskScore),
@@ -571,8 +686,16 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
     analyzed_at: new Date().toISOString(),
     prompt_length: prompt.length,
     analysis_method: analysisMethod,
+    layers: { pattern: "ran", llm: llmLayerStatus },
     latency_ms: Math.round(performance.now() - startedAt),
   };
+
+  // "Skipped" is a decision; "failed"/"disabled" is an outage. Only the second
+  // kind means the caller is getting less protection than the tier promises.
+  if (llmLayerStatus === "failed" || llmLayerStatus === "disabled") {
+    response.degraded = true;
+    response.degraded_reason = llmLayerStatus === "failed" ? "llm_failed" : "llm_disabled";
+  }
 
   if (approvalAnalysis.approvalRequest) {
     response.approval_request = approvalAnalysis.approvalRequest;

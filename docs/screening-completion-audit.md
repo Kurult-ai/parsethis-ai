@@ -60,18 +60,18 @@ The current repo has durable tracked source, fixture, evaluator, metric CSV, man
 | Owner-private-context protection recall `>=0.99` | `docs/screening-metrics.csv`: `owner_private_context_protection_recall=1`, N=2003 | covered, non-claimable |
 | Owner-approval precision `>=0.98` | `docs/screening-metrics.csv`: `owner_approval_precision=1`, N=1002 | covered, non-claimable |
 | Owner-approval recall `>=0.98` | `docs/screening-metrics.csv`: `owner_approval_recall=1`, N=1002 | covered, non-claimable |
-| Memory-contamination recall `>=0.98` | `docs/screening-metrics.csv`: `memory_contamination_recall=1`, N=1002 | covered, non-claimable |
-| Agent-handoff trust violation recall `>=0.98` | `docs/screening-metrics.csv`: `agent_handoff_trust_violation_recall=1`, N=1002 | covered, non-claimable |
-| Tool-output / JSON instruction recall `>=0.99` | `docs/screening-metrics.csv`: `tool_output_json_instruction_recall=1`, N=1001 | covered, non-claimable |
+| Memory-contamination recall `>=0.98` | `docs/screening-metrics.csv`: `memory_contamination_recall=1`, N=1003 | covered, non-claimable |
+| Agent-handoff trust violation recall `>=0.98` | `docs/screening-metrics.csv`: `agent_handoff_trust_violation_recall=1`, N=1003 | covered, non-claimable |
+| Tool-output / JSON instruction recall `>=0.99` | `docs/screening-metrics.csv`: `tool_output_json_instruction_recall=1`, N=1002 | covered, non-claimable |
 | Callback / receipt exfiltration recall `>=0.99` | `docs/screening-metrics.csv`: `callback_receipt_exfiltration_recall=1`, N=1003 | covered, non-claimable |
 | System/developer extraction recall `>=0.98` | `docs/screening-metrics.csv`: `system_developer_extraction_recall=1`, N=1002 | covered, non-claimable |
 | High-risk action policy correctness `>=0.995` | `docs/screening-metrics.csv`: `high_risk_action_policy_correctness=1`, N=1001 | covered, non-claimable |
-| Source-kind policy correctness `>=0.99` | `docs/screening-metrics.csv`: `source_kind_policy_correctness=1`, N=13013 | covered, non-claimable |
-| Hard-negative benign agent workflow FPR `<=0.005` | `docs/screening-metrics.csv`: `hard_negative_benign_agent_workflow_fpr=0`, N=5001 | covered, non-claimable |
+| Source-kind policy correctness `>=0.99` | `docs/screening-metrics.csv`: `source_kind_policy_correctness=1`, N=13019 | covered, non-claimable |
+| Hard-negative benign agent workflow FPR `<=0.005` | `docs/screening-metrics.csv`: `hard_negative_benign_agent_workflow_fpr=0`, N=5011 | covered, non-claimable |
 | Legitimate workflow allow rate `>=0.99` | `docs/screening-metrics.csv`: `legitimate_workflow_allow_rate=1`, N=5001 | covered, non-claimable |
 | Utility degradation `<=0.03` | `docs/screening-metrics.csv`: `utility_degradation_from_parse_enabled=0`, N=1057; harness is `src/lib/utility-workflows.ts` | covered, non-claimable |
-| Decision/event logging completeness `>=0.9999` | `docs/screening-metrics.csv`: `decision_event_logging_completeness=1`, N=13036; injected writer checked in `scripts/evaluate-screening-fixtures.ts` | covered, non-claimable |
-| Audit completeness for non-allow actions `=1.0` | `docs/screening-metrics.csv`: `audit_completeness_for_non_allow_actions=1`, N=8024 | covered, non-claimable |
+| Decision/event logging completeness `>=0.9999` | `docs/screening-metrics.csv`: `decision_event_logging_completeness=1`, N=13055; injected writer checked in `scripts/evaluate-screening-fixtures.ts` | covered, non-claimable |
+| Audit completeness for non-allow actions `=1.0` | `docs/screening-metrics.csv`: `audit_completeness_for_non_allow_actions=1`, N=8033 | covered, non-claimable |
 | Persistent audit/event logging against live database | `npm run verify:screening-event-persistence` returned skipped: `DATABASE_URL is not set.` Claimability and completion also require a captured passing verifier JSON supplied to `npm run audit:screening-completion` via `SCREENING_EVENT_DB_VERIFY_RESULT_PATH`. | blocker |
 | Live persistence verifier refuses unsafe write targets | `scripts/verify-screening-event-persistence.ts` refuses production/shared-looking `DATABASE_URL` values before connecting unless `SCREENING_EVENT_DB_VERIFY_ALLOW_SHARED_DB=1` is supplied for a confirmed safe disposable target; covered by `src/__tests__/screening-event-persistence-verifier.test.ts` | covered |
 | Run `npm run audit:screening-claimability` | Last run passed with `status=pass_non_claimable`; remaining blockers are public/internal holdout templates and live persistence evidence | covered |
