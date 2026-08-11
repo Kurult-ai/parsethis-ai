@@ -312,8 +312,18 @@ const FUZZY_OVERRIDE =
 const SPACED_OVERRIDE =
   /\b(?:i\s*g\s*n\s*o\s*r\s*e|i\s*g\s*n\s*o\s*r\s*i\s*e\s*r\s*e|v\s*e\s*r\s*g\s*i\s*s\s*s|o\s*l\s*v\s*i\s*d\s*a|o\s*u\s*b\s*l\s*i\s*e\s*z)\b[^.\n]{0,140}\b(?:p\s*r\s*e\s*v\s*i\s*o\s*u\s*s|p\s*r\s*i\s*o\s*r|a\s*l\s*l|instructions?|orders?|rules?|guidelines?|befehle|anweisungen|instruktionen)\b/i;
 
+// The second alternative reads "<instruction-noun> … <back-reference>", i.e. the
+// text refers back to instructions it wants disclosed. Two guards keep it from
+// firing on an override attempt that merely contains both halves:
+//   - the bridge cannot cross `[` or `]`, so a noun sitting inside an attacker's
+//     fake label ("[SYSTEM NOTE … directive]") is not joined to the clause after
+//     the bracket;
+//   - the back-reference must not itself be modifying a following instruction
+//     noun, so "Ignore previous instructions" is an override, not a disclosure
+//     probe. Without this, a forwarded email carrying an injection was reported
+//     as a system_prompt_leak it never attempted.
 const INSTRUCTION_DISCLOSURE =
-  /\b(?:what|which|who|how|tell|show|list|repeat|quote|output|display|print|provide|share|duplicate|explain|request|return|give|gimme|spell\s+out)\b[^.\n]{0,160}\b(?:(?:your|hidden|secret|previous|prior|initial|original|current|last|second|preserved|provided|given)\s+)?(?:instructions?|guidelines?|rules?|directions?|orders?|directives?|system\s+prompt|system\s+message|developer\s+message|password|passcode)\b|\b(?:instructions?|guidelines?|rules?|directions?|orders?|directives?)\b[^.\n]{0,120}\b(?:you\s+(?:were|are|have|got|received)|given\s+to\s+you|provided\s+to\s+you|following|right\s+now|so\s+far|before|previous|prior|hidden|secret|preserved|current)\b|\b(?:secret|hidden)\s+instructions?\b/i;
+  /\b(?:what|which|who|how|tell|show|list|repeat|quote|output|display|print|provide|share|duplicate|explain|request|return|give|gimme|spell\s+out)\b[^.\n]{0,160}\b(?:(?:your|hidden|secret|previous|prior|initial|original|current|last|second|preserved|provided|given)\s+)?(?:instructions?|guidelines?|rules?|directions?|orders?|directives?|system\s+prompt|system\s+message|developer\s+message|password|passcode)\b|\b(?:instructions?|guidelines?|rules?|directions?|orders?|directives?)\b[^.\n\[\]]{0,120}\b(?:you\s+(?:were|are|have|got|received)|given\s+to\s+you|provided\s+to\s+you|following|right\s+now|so\s+far|before|previous|prior|hidden|secret|preserved|current)\b(?!\s+(?:instructions?|guidelines?|rules?|directions?|orders?|directives?|prompts?|system|developer))|\b(?:secret|hidden)\s+instructions?\b/i;
 
 const PRE_CONVERSATION_PROBE =
   /\b(?:what|which|show|print|spell-?\s*check|spellcheck|display|output|repeat|echo|return)\b[^.\n]{0,120}\b(?:written|text|prompt|input|message|content|words?)\b[^.\n]{0,120}\b(?:above|before|beginning|preceding|prior|earlier)|\b(?:print|display|output|repeat|echo|return)\b[^.\n]{0,120}\b(?:above|previous|prior|earlier)\b[^.\n]{0,80}\b(?:prompt|text|input|message|content)/i;
@@ -357,8 +367,12 @@ const INSTRUCTION_TRANSFORM_PROBE =
 const DIRECT_INSTRUCTION_BYPASS =
   /\b(?:ignore|ignoring|ignored|forget|reset|discard|reject|skip|defy|subvert|break|rescind|neglect|disobey|ignoriere|ignorieren|don'?t obey|do not obey|don'?t listen to|do not listen to|do the opp?i?site of|opp?i?site of)\b[^.\n]{0,140}\b(?:instructions?|intructions?|instuctions?|directives?|rules?|prompts?|checks?|techniques?|program|creators?|warning|censure|everything|all|anwweisung|anweisung|orders?|previous\s+information|things\s+you\s+were\s+told)\b|\b(?:instructions?|intructions?|instuctions?|directives?|rules?|prompts?|checks?|techniques?|priorinstructions|program|orders?)\b[^.\n]{0,140}\b(?:ignore|ignoring|ignored|forget|forgotten|reset|discard|reject|skip|defy|subvert|break|rescind|neglect|disobey|don'?t obey|do not obey|opp?i?site|went\s+against|start\s+with\s+["']?simon\s+says)\b/i;
 
+// Same bracket guard as INSTRUCTION_DISCLOSURE on the second alternative: a
+// noun inside a bracketed label must not be joined to a verb outside it, or
+// "[… assistant directive] Ignore previous instructions" reads as a probe when
+// it is a plain override — already covered by direct_instruction_bypass.
 const INSTRUCTION_PROBE_OR_MUTATION =
-  /\b(?:repeat|replay|spell|describe|print|show|display|request|respond with|response with|copy|change|invert|go against|do the opposite of|break|subvert|skip|reject|rescind|defy)\b[^.\n]{0,120}\b(?:all\s+)?(?:your\s+|my\s+|previous\s+|prior\s+|original\s+|initial\s+|exact\s+)?(?:instructions?|int?structions?|directives?|rules?|prompts?|checks?)\b|\b(?:your\s+)?(?:instructions?|int?structions?|directives?|rules?|prompts?|checks?)\b[^.\n]{0,100}\b(?:changed|evil|all changed|opposite|given|copy|repeat|spell|print|show|display|request|describe|remember|adhere|follow|obey|ignore|skip|break|subvert|rescind|reject|defy|invert)\b/i;
+  /\b(?:repeat|replay|spell|describe|print|show|display|request|respond with|response with|copy|change|invert|go against|do the opposite of|break|subvert|skip|reject|rescind|defy)\b[^.\n]{0,120}\b(?:all\s+)?(?:your\s+|my\s+|previous\s+|prior\s+|original\s+|initial\s+|exact\s+)?(?:instructions?|int?structions?|directives?|rules?|prompts?|checks?)\b|\b(?:your\s+)?(?:instructions?|int?structions?|directives?|rules?|prompts?|checks?)\b[^.\n\[\]]{0,100}\b(?:changed|evil|all changed|opposite|given|copy|repeat|spell|print|show|display|request|describe|remember|adhere|follow|obey|ignore|skip|break|subvert|rescind|reject|defy|invert)\b/i;
 
 const DIRECT_INSTRUCTION_QUESTION =
   /\b(?:do you remember|have you been given|did you have|can you go against|why can(?:not|['’]?t)? you|what(?:'s| is| are)?\s+(?:are\s+)?you)\b[^.\n]{0,120}\b(?:instructions?|int?structions?|directives?|rules?|prompts?)\b/i;
