@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcrypt";
 import { prisma } from "./db.js";
 import { cacheApiKey, getCachedApiKey, invalidateApiKeyCache } from "./result-store.js";
@@ -15,6 +15,43 @@ const API_KEY_PREFIX_BUCKET_MAX_CANDIDATES = 16;
 type StoredLocalApiKey = ApiKeyRecord & { keyHash: string };
 export type FallbackApiKeyRecord = ApiKeyRecord & { keyHash: string };
 const localTestKeysByPrefix = new Map<string, StoredLocalApiKey[]>();
+
+/**
+ * Per-request verification hash for the Redis validation cache.
+ *
+ * bcrypt stays the at-rest hash in Postgres: a database leak must not hand an
+ * attacker anything cheap to attack. But bcrypt is a *password* KDF, and its
+ * cost is deliberate — at BCRYPT_ROUNDS=12 a single compare costs roughly
+ * 250ms of CPU. Running that on every authenticated request made bcrypt ~98%
+ * of Parse's response time (measured: 1-8ms of detection inside a ~330ms
+ * call, while a 401 that short-circuits before the compare returned in ~90ms).
+ *
+ * That cost buys nothing here. A bcrypt work factor exists to make brute-force
+ * guessing of *low-entropy* human passwords expensive. Parse keys are 24 bytes
+ * from randomBytes — 192 bits of entropy, unguessable regardless of hash
+ * speed. So the cache carries a SHA-256 of the raw key and the hot path does a
+ * constant-time compare against that instead. Same authentication decision,
+ * without the KDF.
+ *
+ * The cache is Redis on the same host; a Redis leak exposes SHA-256 of a
+ * 192-bit random secret, which is not invertible. Postgres keeps bcrypt.
+ */
+function fastKeyHash(rawKey: string): string {
+  return createHash("sha256").update(rawKey).digest("hex");
+}
+
+/** Constant-time compare of two hex digests. Length mismatch is a miss. */
+function fastKeyHashMatches(rawKey: string, expectedHex: string): boolean {
+  const presented = Buffer.from(fastKeyHash(rawKey), "hex");
+  let expected: Buffer;
+  try {
+    expected = Buffer.from(expectedHex, "hex");
+  } catch {
+    return false;
+  }
+  if (expected.length !== presented.length) return false;
+  return timingSafeEqual(presented, expected);
+}
 
 export function isLocalKeyGenerationTestMode(): boolean {
   const value = process.env.KEY_GENERATION_LOCAL_TEST_MODE ?? process.env.KEYGEN_LOCAL_TEST_MODE ?? "";
@@ -297,7 +334,7 @@ export async function createApiKey(
   // a same-key burst can stampede the database before the first validation's
   // fire-and-forget cache write completes.
   if (createdInDatabase) {
-    await cacheApiKey(keyPrefix, { ...record, keyHash }).catch(() => {});
+    await cacheApiKey(keyPrefix, { ...record, keyHash, fastHash: fastKeyHash(rawKey) }).catch(() => {});
   }
 
   return {
@@ -370,8 +407,22 @@ export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKe
 
     for (const candidate of cachedCandidates) {
       if (typeof candidate !== "object" || candidate === null || typeof (candidate as { keyHash?: unknown }).keyHash !== "string") continue;
-      const record = candidate as ApiKeyRecord & { keyHash: string };
-      const valid = await bcrypt.compare(bearerToken, record.keyHash);
+      const record = candidate as ApiKeyRecord & { keyHash: string; fastHash?: unknown };
+
+      // Fast path: cached entries written since the fastHash change carry a
+      // SHA-256 of the raw key, so the steady state costs a constant-time
+      // buffer compare instead of a ~250ms bcrypt KDF. Entries cached before
+      // this shipped have no fastHash and fall back to bcrypt, then backfill
+      // themselves so the cost is paid at most once per cached record.
+      let valid: boolean;
+      if (typeof record.fastHash === "string" && record.fastHash.length > 0) {
+        valid = fastKeyHashMatches(bearerToken, record.fastHash);
+      } else {
+        valid = await bcrypt.compare(bearerToken, record.keyHash);
+        if (valid) {
+          cacheApiKey(prefix, { ...record, keyHash: record.keyHash, fastHash: fastKeyHash(bearerToken) }).catch(() => {});
+        }
+      }
       if (!valid) continue;
 
       // Check expiry/revocation only after the presented token matches this
@@ -458,7 +509,7 @@ export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKe
 
     // Cache in Redis (include keyHash for future bcrypt compare). Cache write
     // failure should not reject an otherwise valid key.
-    cacheApiKey(prefix, { ...record, keyHash: candidate.keyHash }).catch(() => {});
+    cacheApiKey(prefix, { ...record, keyHash: candidate.keyHash, fastHash: fastKeyHash(bearerToken) }).catch(() => {});
 
     // Update last_used_at
     prisma.apiKey.update({
