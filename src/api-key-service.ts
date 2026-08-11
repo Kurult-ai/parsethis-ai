@@ -40,17 +40,23 @@ function fastKeyHash(rawKey: string): string {
   return createHash("sha256").update(rawKey).digest("hex");
 }
 
-/** Constant-time compare of two hex digests. Length mismatch is a miss. */
+/**
+ * Constant-time compare of two hex digests.
+ *
+ * The canonical-form check is load-bearing, not decoration. Buffer.from(hex)
+ * never throws on bad input — it silently truncates at the first invalid
+ * character — so `<digest>zzzz` decodes to the same 32 bytes as `<digest>` and
+ * an uppercase digest decodes identically too. Neither is a bypass (producing
+ * either requires already knowing the digest, which requires the key), but it
+ * meant the only thing standing between a corrupt cache value and an auth
+ * decision was a length check, and the try/catch written as the safety net
+ * could never fire. Reject anything that is not exactly 64 lowercase hex chars.
+ */
+const CANONICAL_SHA256_HEX = /^[0-9a-f]{64}$/;
+
 function fastKeyHashMatches(rawKey: string, expectedHex: string): boolean {
-  const presented = Buffer.from(fastKeyHash(rawKey), "hex");
-  let expected: Buffer;
-  try {
-    expected = Buffer.from(expectedHex, "hex");
-  } catch {
-    return false;
-  }
-  if (expected.length !== presented.length) return false;
-  return timingSafeEqual(presented, expected);
+  if (!CANONICAL_SHA256_HEX.test(expectedHex)) return false;
+  return timingSafeEqual(Buffer.from(fastKeyHash(rawKey), "hex"), Buffer.from(expectedHex, "hex"));
 }
 
 export function isLocalKeyGenerationTestMode(): boolean {

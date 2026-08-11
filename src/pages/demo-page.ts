@@ -281,8 +281,16 @@ export function renderDemoPage(baseUrl: string): string {
         if (recsEl) {
           var action = data.recommended_action || data.suggested_action || (isSafe ? 'allow' : 'block');
           var flags = data.flags || [];
+          // Report the layers that actually ran. This used to hardcode
+          // "Pattern matching + semantic analysis"; once the demo defaulted to
+          // pattern-only that became a false statement on most requests, which
+          // is exactly the kind of unverifiable claim this product exists to
+          // avoid making. The response tells us the truth — use it.
+          var llmRan = !!(data.layers && data.layers.llm === 'ran');
+          var layerText = llmRan ? 'Pattern matching + semantic analysis' : 'Pattern matching only';
           recsEl.innerHTML = '<p><strong>Recommended action:</strong> ' + action + '</p>' +
-            '<p><strong>Detection layers:</strong> Pattern matching + semantic analysis + ' + (flags.length > 0 ? flags.length + ' flag(s) raised' : 'no flags') + '</p>';
+            '<p><strong>Detection layers:</strong> ' + layerText + ' + ' + (flags.length > 0 ? flags.length + ' flag(s) raised' : 'no flags') + '</p>' +
+            (llmRan ? '' : '<p class="demo-layer-hint" style="font-size:13px;color:var(--text-dim);margin-top:4px;">Tick &ldquo;Also run the semantic layer&rdquo; above to screen this prompt for indirect and paraphrased attacks that patterns alone miss.</p>');
         }
 
         // Flags detail
