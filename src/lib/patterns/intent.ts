@@ -248,6 +248,13 @@ const DESTRUCTIVE_SHELL_ARTIFACT =
 const COMMAND_IMPERATIVE_CUE =
   /\b(?:run|execute|type|enter|issue|invoke|now\s+do|please\s+run|go\s+ahead\s+and|immediately|first\s+command)\b/i;
 
+// An imperative sitting directly in front of the command is an instruction to
+// run it, whatever framing surrounds it. This overrides the reported-speech and
+// defensive-discussion guards below — otherwise "Audit log:" or "Documentation
+// example:" becomes a prefix that launders any live command.
+const IMPERATIVE_ADJACENT_TO_COMMAND =
+  /\b(?:run|execute|exec|type|enter|issue|invoke|perform)\b[^.\n]{0,40}?(?:sudo\s|chmod\s+(?:777|\+s)|rm\s+-rf|dd\s+if=|mkfs\.|usermod\s+-aG)/i;
+
 // Reported speech: the command is being described, quoted, or logged — not issued.
 const REPORTED_SPEECH_CONTEXT =
   /\b(?:attempted|attempts?|tried\s+to|was\s+(?:denied|blocked|terminated|rejected|logged|flagged|observed)|were\s+denied|denied\s+by|blocked\s+by|audit\s+log|log\s+(?:entry|excerpt|line)|syslog|postmortem|incident\s+(?:report|timeline)|man\s+page|manual\s+page|runbook|a\s+user|the\s+user|an\s+attacker)\b|\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/i;
@@ -525,9 +532,12 @@ function maybeFlagRoleSpoof(flags: IntentRiskFlag[], text: string): void {
 function maybeFlagSystemCommand(flags: IntentRiskFlag[], text: string): void {
   for (const window of sentenceWindows(text)) {
     if (!SHELL_COMMAND_ARTIFACT.test(window)) continue;
-    // Described, quoted, or logged commands are not instructions to run one.
-    if (REPORTED_SPEECH_CONTEXT.test(window)) continue;
-    if (isDefensiveDiscussion(window)) continue;
+    // Described, quoted, or logged commands are not instructions to run one —
+    // unless an imperative sits right in front of the command, in which case the
+    // surrounding framing is cover rather than context.
+    const issuedDirectly = IMPERATIVE_ADJACENT_TO_COMMAND.test(window);
+    if (!issuedDirectly && REPORTED_SPEECH_CONTEXT.test(window)) continue;
+    if (!issuedDirectly && isDefensiveDiscussion(window)) continue;
     const directed =
       COMMAND_IMPERATIVE_CUE.test(window) ||
       (DIRECT_AGENT_TARGET.test(window) && OPERATIONAL_INSTRUCTION.test(window));
@@ -554,7 +564,10 @@ function maybeFlagAuthorityAssertion(flags: IntentRiskFlag[], text: string): voi
     if (!AUTHORITY_ASSERTION_CUE.test(window)) continue;
     if (!DATA_MOVEMENT_VERB.test(window)) continue;
     if (!SENSITIVE_RECORD_COMPOUND.test(window) && !EXTERNAL_DESTINATION.test(window)) continue;
-    if (isDefensiveDiscussion(window)) continue;
+    // No defensive-discussion exemption here. The triad (claimed authority +
+    // movement verb + sensitive object or destination) is specific enough that
+    // prose merely *about* this attack does not satisfy it, and exempting it
+    // would let "Documentation example:" prefix a working payload.
     addFlag(flags, {
       id: "intent.authority_assertion_exfil",
       category: "data_exfiltration",
