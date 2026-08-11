@@ -362,12 +362,18 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
         retryable: false,
       });
     }
-    if (!body.agent_config.model || typeof body.agent_config.model !== "string") {
+    // model is optional — the /skill example shows agent_config without
+    // flagging model as required, and agents copy examples verbatim. Missing
+    // model falls back to the server default (model-client DEFAULT_MODEL).
+    if (body.agent_config.model === undefined || body.agent_config.model === "") {
+      body.agent_config.model = process.env.DEFAULT_MODEL || "deepseek/deepseek-chat";
+    }
+    if (typeof body.agent_config.model !== "string") {
       return problem(c, {
         status: 400,
         title: "Validation failure",
-        detail: "agent_config.model is required and must be a string",
-        code: ErrorCode.VALIDATION_REQUIRED,
+        detail: "agent_config.model must be a string when provided",
+        code: ErrorCode.VALIDATION_INVALID_TYPE,
         retryable: false,
       });
     }
@@ -1089,13 +1095,19 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     delete result.score_components;
   }
 
-  // ── Gate detailed flags to paid tiers (prevent free-tier pattern enumeration) ──
+  // ── Gate evidence spans to paid tiers ──
+  // Free-tier callers get the full structured flag array — id, category,
+  // severity, label, detail, confidence, attack_family, source — so a false
+  // positive can be diagnosed and reported. Only the raw matched-text
+  // `evidence` spans stay paid: they are the enumeration-useful part (they
+  // echo exactly which substring tripped which rule), and the anonymous demo
+  // already returns richer detail at 5/hr than the old collapse gave paying
+  // evaluators at 10/min.
   if (tier === "free" && apiKey.id !== "master" && apiKey.id !== "demo") {
-    const flagCount = result.flags.length;
-    const topCategory = result.categories[0] ?? "none";
-    result.flags = flagCount > 0
-      ? [{ category: topCategory, severity: result.risk_score, label: `${flagCount} risk signal(s) detected`, detail: "" }]
-      : [];
+    result.flags = result.flags.map((flag) => {
+      const { evidence: _evidence, ...rest } = flag;
+      return rest;
+    });
   }
 
   // ── Attach suggested_action based on risk score and approval context ──

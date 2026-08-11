@@ -2735,6 +2735,7 @@ publicRoutes.post("/v1/keys/generate", async (c) => {
       key: key.key,
       name: key.name,
       scopes: key.scopes,
+      scopes_note: "evaluate covers the screening endpoints (/v1/parse, /v1/screen-output, /v1/agent/trust/verify); analyze covers /v1/analyze; chat covers /v1/chat.",
       created_at: key.created_at,
       expires_at: expiresAt.toISOString(),
       note: "Store this key securely. It will not be shown again in full. Renews automatically while in use; expires after 30 idle days (fails closed with 401). Self-revoke anytime with DELETE /v1/keys/self.",

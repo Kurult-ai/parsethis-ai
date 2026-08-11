@@ -6,6 +6,7 @@ import { verifyTrust } from "../lib/trust-verification/orchestrator.js";
 import { getPricingInfo } from "../x402.js";
 import type { AppEnv } from "../types.js";
 import { PRODUCT, X402_PAYMENT } from "../lib/product-facts.js";
+import { getBaseUrl } from "../lib/route-utils.js";
 import { recordGeoSurfaceHit } from "../lib/geo-analytics.js";
 
 export const mcpRoutes = new Hono<AppEnv>();
@@ -96,7 +97,10 @@ const MCP_TOOLS = [
 
 mcpRoutes.get("/mcp", (c) => {
   recordGeoSurfaceHit(c, "mcp.remote");
-  const baseUrl = `${new URL(c.req.url).origin}`;
+  // getBaseUrl respects x-forwarded-proto — TLS terminates at the proxy, so
+  // the raw request origin is http:// and a security product's discovery
+  // document must not advertise scheme-downgraded URLs.
+  const baseUrl = getBaseUrl(c);
   return c.json({
     service: PRODUCT.name,
     protocol: "mcp-json-rpc",

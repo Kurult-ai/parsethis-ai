@@ -387,6 +387,9 @@ export function authMiddleware(requiredScope?: string) {
 
     // Check scope
     if (requiredScope && !apiKeyRecord.scopes.includes(requiredScope) && !apiKeyRecord.scopes.includes("admin")) {
+      // A self-service key hitting DELETE /v1/keys/:id lands here with a
+      // dead-end admin-scope 403 — but the self-revoke path exists. Point at it.
+      const isKeyManagement = requiredScope === "admin" && new URL(c.req.url).pathname.startsWith("/v1/keys/");
       return problem(c, {
         status: 403,
         title: "Insufficient permissions",
@@ -394,6 +397,7 @@ export function authMiddleware(requiredScope?: string) {
         code: ErrorCode.AUTH_INSUFFICIENT_SCOPE,
         retryable: false,
         required_scope: requiredScope,
+        ...(isKeyManagement ? { self_revoke: "DELETE /v1/keys/self revokes the key you are authenticated with — no admin scope needed." } : {}),
       });
     }
 
