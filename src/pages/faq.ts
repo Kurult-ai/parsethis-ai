@@ -21,7 +21,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "How do I get an API key?",
     answer:
-      'Send a POST request to /v1/keys/generate with an optional {"name": "my-agent"} body. No authentication is required. The response contains your API key, which expires in 30 days. Rate limit: 5 keys per minute per IP, 100 total self-service keys. Store the key securely \u2014 it is shown only once.',
+      'Send a POST request to /v1/keys/generate with an optional {"name": "my-agent"} body. No authentication is required. The response contains your API key, which renews automatically while in use and expires after 30 idle days, then fails closed with a 401. Rate limit: 5 keys per minute per IP, 100 total self-service keys. Store the key securely \u2014 it is shown only once.',
   },
   {
     question: "How do I install the Parse skill?",

@@ -754,7 +754,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
           operationId: "generateApiKey",
           summary: "Generate a new API key (no auth required)",
           description:
-            "Self-service API key generation. No authentication needed. Keys expire in 30 days. Rate limited to 5 per minute per IP.",
+            "Self-service API key generation. No authentication needed. Keys renew automatically while in use and expire after 30 idle days, failing closed with a 401. Rate limited to 5 per minute per IP.",
           security: [],
           requestBody: {
             required: false,
