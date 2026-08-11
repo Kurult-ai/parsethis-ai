@@ -47,9 +47,13 @@ import urllib.error
 from dataclasses import dataclass, field
 from typing import Any, Optional, Callable, List
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = [
     "wrap",
+    "screen_prompt",
+    "screen_output",
+    "verify_agent_trust",
+    "ParseApiError",
     "ParseScreeningError",
     "ParseSdkConfig",
     "get_stats",
@@ -540,3 +544,110 @@ def get_stats(wrapped_client: Any) -> UsageStats:
     if isinstance(wrapped_client, _WrappedClient):
         return object.__getattribute__(wrapped_client, "_stats")
     raise TypeError("Expected a client returned by parse_agents.wrap()")
+
+
+# ─── Direct screening client ─────────────────────────────────────────────────
+#
+# For runtimes that call tools themselves (Hermes, custom agent loops) and do
+# not route through an OpenAI/Anthropic client object. Three calls, one per
+# trust boundary. Raises ParseApiError on transport or HTTP failure so the
+# caller decides its own fail posture — screening a boundary and silently
+# ignoring a dead screener is the one behavior this client must not have.
+
+
+class ParseApiError(Exception):
+    """Raised when the Parse API cannot be reached or returns an error."""
+
+    def __init__(self, message: str, status: Optional[int] = None):
+        super().__init__(message)
+        self.status = status
+
+
+def _direct_call(
+    endpoint: str,
+    payload: dict,
+    api_key: Optional[str] = None,
+    base_url: str = "https://www.parsethis.ai",
+    timeout: float = 15.0,
+) -> dict:
+    import os
+
+    key = api_key or os.environ.get("PARSE_API_KEY", "")
+    url = f"{base_url.rstrip('/')}{endpoint}"
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {key}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as err:
+        detail = ""
+        try:
+            detail = err.read().decode("utf-8", "replace")[:500]
+        except OSError:
+            pass
+        raise ParseApiError(f"Parse API HTTP {err.code}: {detail}", status=err.code) from err
+    except (urllib.error.URLError, OSError, json.JSONDecodeError) as err:
+        raise ParseApiError(f"Parse API unreachable: {err}") from err
+
+
+def screen_prompt(
+    prompt: str,
+    *,
+    api_key: Optional[str] = None,
+    base_url: str = "https://www.parsethis.ai",
+    metadata: Optional[dict] = None,
+    mode: Optional[str] = None,
+    timeout: float = 15.0,
+) -> dict:
+    """Screen untrusted text before it gains authority over tools or memory.
+
+    Latency: ~2-4s on the full pipeline; <100ms with ``mode="pattern-only"``.
+    For an owner's own chat messages, pass
+    ``metadata={"source_kind": "user", "requester_trust": "owner"}`` so
+    correction language ("scratch that, ignore what I said…") softens instead
+    of blocking. Send no metadata for third-party content (RAG, email, tool
+    output) to keep strict screening.
+
+    Returns the full API response; act on ``recommended_action``.
+    """
+    payload: dict = {"prompt": prompt}
+    if metadata:
+        payload["metadata"] = metadata
+    if mode:
+        payload["mode"] = mode
+    return _direct_call("/v1/parse", payload, api_key, base_url, timeout)
+
+
+def screen_output(
+    output: str,
+    *,
+    api_key: Optional[str] = None,
+    base_url: str = "https://www.parsethis.ai",
+    metadata: Optional[dict] = None,
+    timeout: float = 15.0,
+) -> dict:
+    """Screen LLM output before showing, storing, or forwarding it."""
+    payload: dict = {"output": output}
+    if metadata:
+        payload["metadata"] = metadata
+    return _direct_call("/v1/screen-output", payload, api_key, base_url, timeout)
+
+
+def verify_agent_trust(
+    message: str,
+    source_agent: str = "unknown",
+    *,
+    api_key: Optional[str] = None,
+    base_url: str = "https://www.parsethis.ai",
+    timeout: float = 15.0,
+) -> dict:
+    """Verify a peer agent's message before accepting delegated work."""
+    payload = {"message": message, "source_agent": source_agent}
+    return _direct_call("/v1/agent/trust/verify", payload, api_key, base_url, timeout)

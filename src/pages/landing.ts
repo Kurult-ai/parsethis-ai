@@ -444,7 +444,7 @@ Verification required before reporting done:
         ${DEMO_API_KEY ? '<a class="btn btn-ghost btn-lg" href="/demo">Screen a prompt &mdash; no key</a>' : ""}
         <a class="btn btn-ghost btn-lg" href="/docs">Documentation</a>
       </div>
-      <div class="hf-fine">npm install @parsethis/sdk · no credit card, no sales call</div>
+      <div class="hf-fine">npm install @parsethis/sdk · or point any MCP runtime at parsethis.ai/mcp · no credit card</div>
     </div>
   </div>
 

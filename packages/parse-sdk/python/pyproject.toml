@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "parse-agents"
-version = "0.1.0"
-description = "Drop-in interceptor that screens every OpenAI/Anthropic client call with Parse prompt security."
+name = "parsethis"
+version = "0.2.0"
+description = "Parse (parsethis.ai) client: direct prompt/output/trust screening plus a drop-in OpenAI/Anthropic interceptor."
 readme = "README.md"
 license = { text = "ISC" }
 authors = [{ name = "Kurultai" }]

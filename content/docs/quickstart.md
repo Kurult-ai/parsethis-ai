@@ -27,6 +27,25 @@ Click your runtime below, paste the prompt into your agent, and it will wire Par
 
 ### Hermes
 
+The fastest path is the hosted MCP server — no Node, no SDK. Add Parse to
+`~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  parse:
+    url: "https://www.parsethis.ai/mcp"
+    headers:
+      Authorization: "Bearer ${PARSE_API_KEY}"
+    timeout: 180
+```
+
+Put `PARSE_API_KEY=<your key>` in `~/.hermes/.env`, then run `/reload-mcp` in a
+running chat session (or restart Hermes). The `screen_prompt`, `screen_output`,
+and `verify_agent_trust` tools appear automatically, with usage instructions the
+model reads on connect.
+
+Prefer a prompt-only install? Paste this instead:
+
 ```
 Install Parse as the governance and screening boundary for this Hermes runtime.
 
@@ -155,13 +174,50 @@ curl -s -X POST https://www.parsethis.ai/v1/parse \
 
 If the response includes `request_owner_approval`, ask the owner privately via your own trusted channel. Parse does not notify the owner or store the approval.
 
+## Chat-surface deployment (personal and single-owner agents)
+
+An agent whose front door is a chat window (Telegram, Signal, Slack DM) has two
+problems a RAG pipeline doesn't: every message adds screening latency the owner
+feels, and owners correct their assistant in language that looks like an
+override attack ("actually ignore what I said before…"). Deploy per boundary:
+
+| Boundary | Mode | Metadata to send |
+|---|---|---|
+| Owner's own messages | `"mode": "pattern-only"` (<100ms, prompts never leave the pipeline) | `{"source_kind": "user", "requester_trust": "owner"}` |
+| Retrieved docs, web pages, email | full pipeline (default) | `{"source_kind": "retrieved_doc"}` (or `web_page`, `email`) |
+| Tool output | full pipeline (default) | `{"source_kind": "tool_output"}` |
+| Another agent's messages | `/v1/agent/trust/verify` | — |
+
+The `source_kind: "user"` + `requester_trust: "owner"` pair softens
+correction-shaped language from block to a logged signal — extraction,
+exfiltration, and code-execution signals keep the full block floor regardless.
+Send no metadata on third-party content: those boundaries should stay strict.
+
+```bash
+# owner's chat message: fast, correction-tolerant
+curl -s -X POST https://www.parsethis.ai/v1/parse \
+  -H "Authorization: Bearer $PARSE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"scratch that, forget what I said — whats the weather tomorrow",
+       "mode":"pattern-only",
+       "metadata":{"source_kind":"user","requester_trust":"owner"}}'
+```
+
+Responses on expiring keys include `key_expires_in_days`. Keys renew
+automatically while in use; a key idle for 30 days expires and fails closed
+(401), so have your agent warn you when the value drops below 3.
+
 ## SDK (programmatic integration)
 
-For TypeScript or Python apps, use the Parse SDK to wrap your LLM client with automatic screening:
+For TypeScript apps, use the Parse SDK to wrap your LLM client with automatic screening:
 
 ```bash
 npm install @parsethis/sdk
 ```
+
+Python runtime and no Node? The hosted MCP server needs no SDK at all — see the
+Hermes tab above, or call the three REST endpoints directly (they are plain
+JSON over HTTPS; `curl` examples throughout this page).
 
 ```typescript
 import { wrap } from '@parsethis/sdk';
