@@ -57,20 +57,52 @@ export const DETECTION_FACTS = {
  * Re-measure endToEnd whenever the request path changes, with:
  *   curl -w '%{time_starttransfer}' -X POST .../v1/parse -H 'Authorization: ...'
  */
+// Latency, published honestly — which turns out to mean publishing very little
+// as a firm number, because a firm number is not what we have yet.
+//
+// The first version of this constant fitted p50/p95 percentiles to two point
+// samples (3ms and 8ms) and shipped a full-mode row whose implied overhead
+// shrank at the tail — the exact "number a prospect can't reproduce" failure the
+// walkthrough punished, reproduced inside the fix for it. So:
+//
+//  - Detection figures are labelled as the point samples they are, not
+//    percentiles. The real ground truth is the `latency_ms` field on every
+//    response; tell people to read their own.
+//  - End-to-end figures are marked provisional. They predate the fastHash auth
+//    change, which removed the ~250ms per-request bcrypt compare that dominated
+//    them, so they are stale on the high side and must be re-measured after the
+//    next deploy before any of them is presented as firm.
 export const LATENCY_FACTS = {
   detection: {
-    patternOnly: { p50Ms: 3, p95Ms: 8, clock: "in-process detection (response latency_ms)" },
-    full: { p50Ms: 2000, p95Ms: 7000, clock: "in-process detection (response latency_ms)" },
+    patternOnly: {
+      // in-process, the latency_ms field. Two samples: one benign, one block.
+      sampleMs: [3, 8],
+      typicalMs: 3,
+      basis: "point samples of the latency_ms response field (n=2); read latency_ms on your own responses for ground truth",
+    },
+    full: {
+      // Dominated by the semantic-layer model round trip; seconds, model- and
+      // load-dependent. No single figure is meaningful, so we publish none.
+      basis: "dominated by the OpenRouter model call — measure per model",
+    },
   },
   endToEnd: {
-    patternOnly: { p50Ms: 400, p95Ms: 450, clock: "caller-measured, TLS to response" },
-    full: { p50Ms: 2400, p95Ms: 7200, clock: "caller-measured, TLS to response" },
+    status: "provisional_pre_fasthash" as const,
+    patternOnly: {
+      priorP50Ms: 400,
+      sampleMs: [328, 400, 446],
+      basis: "n=3 caller-measured samples, pre-fastHash",
+    },
+    full: {
+      priorRangeMs: [2400, 7200] as const,
+      basis: "handful of caller-measured samples, pre-fastHash",
+    },
   },
   measuredAt: "2026-08-11",
+  method: "detection = the latency_ms response field; end-to-end = curl -w time_starttransfer (client to first byte)",
   note:
-    "End-to-end figures are pre-fastHash measurements taken from production. The per-request bcrypt "
-    + "compare that dominated them has been removed; re-measure and update this constant after the "
-    + "next deploy.",
+    "Detection figures are point samples, not percentiles. End-to-end figures predate the "
+    + "fastHash auth change and are stale on the high side — re-measure after the next deploy.",
 } as const;
 
 export const ACTION_ROUTER = [

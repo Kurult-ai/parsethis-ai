@@ -234,7 +234,7 @@ export function nurtureSocialProofEmail(): { subject: string; html: string } {
 
         <h2 style="font-size: 17px; font-weight: 600; margin-bottom: 12px;">Detection layers</h2>
         <ol style="font-size: 14px; color: #5a6678; line-height: 1.8; margin-bottom: 24px;">
-          <li><strong>Pattern engine</strong> — ${DETECTION_FACTS.patternRuleCount} deterministic injection patterns plus intent detectors across ${DETECTION_FACTS.riskCategoryCount} risk categories, with text normalization against obfuscation (~${LATENCY_FACTS.detection.patternOnly.p50Ms}ms detection, p50).</li>
+          <li><strong>Pattern engine</strong> — ${DETECTION_FACTS.patternRuleCount} deterministic injection patterns plus intent detectors across ${DETECTION_FACTS.riskCategoryCount} risk categories, with text normalization against obfuscation (~${LATENCY_FACTS.detection.patternOnly.typicalMs}ms in-process detection; read <code>latency_ms</code> on your own responses).</li>
           <li><strong>Structural analysis</strong> — encoded payloads, hidden content, callback URLs, tool-result JSON injection.</li>
           <li><strong>Semantic analysis</strong> — LLM scoring that reads intent when configured and useful.</li>
           <li><strong>Sandbox execution</strong> — suspicious content runs in an isolated decoy agent (optional, contained).</li>

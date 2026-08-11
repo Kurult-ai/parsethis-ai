@@ -330,15 +330,16 @@ export function renderTechnologyPage(baseUrl: string): string {
         <div class="table-wrapper">
           <table>
             <thead>
-              <tr><th>Mode</th><th>Detection (p50 / p95)</th><th>End-to-end (p50 / p95)</th><th>Prompt text leaves Parse?</th></tr>
+              <tr><th>Mode</th><th>Detection</th><th>End-to-end<sup>*</sup></th><th>Prompt text leaves Parse?</th></tr>
             </thead>
             <tbody>
-              <tr><td><strong>Pattern-only</strong></td><td>~${LATENCY_FACTS.detection.patternOnly.p50Ms}ms / ~${LATENCY_FACTS.detection.patternOnly.p95Ms}ms</td><td>~${LATENCY_FACTS.endToEnd.patternOnly.p50Ms}ms / ~${LATENCY_FACTS.endToEnd.patternOnly.p95Ms}ms</td><td>No</td></tr>
-              <tr><td><strong>Full</strong> (pattern + semantic)</td><td>~${LATENCY_FACTS.detection.full.p50Ms.toLocaleString("en-US")}ms / ~${LATENCY_FACTS.detection.full.p95Ms.toLocaleString("en-US")}ms</td><td>~${LATENCY_FACTS.endToEnd.full.p50Ms.toLocaleString("en-US")}ms / ~${LATENCY_FACTS.endToEnd.full.p95Ms.toLocaleString("en-US")}ms</td><td>Yes (to OpenRouter)</td></tr>
+              <tr><td><strong>Pattern-only</strong></td><td>${LATENCY_FACTS.detection.patternOnly.sampleMs[0]}&ndash;${LATENCY_FACTS.detection.patternOnly.sampleMs[1]}&nbsp;ms</td><td>~${LATENCY_FACTS.endToEnd.patternOnly.priorP50Ms}&nbsp;ms<sup>*</sup></td><td>No</td></tr>
+              <tr><td><strong>Full</strong> (pattern + semantic)</td><td>seconds (model call)</td><td>~${(LATENCY_FACTS.endToEnd.full.priorRangeMs[0] / 1000).toLocaleString("en-US")}&ndash;${(LATENCY_FACTS.endToEnd.full.priorRangeMs[1] / 1000).toLocaleString("en-US")}&nbsp;s<sup>*</sup></td><td>Yes (to OpenRouter)</td></tr>
             </tbody>
           </table>
         </div>
-        <p><strong>Two clocks, both measured on production infrastructure.</strong> <em>Detection</em> is the time Parse spends deciding — the <code>latency_ms</code> field in every response. <em>End-to-end</em> is what your client waits, including TLS, our edge and tunnel, authentication, rate limiting and serialization. Budget against the end-to-end column; the detection column tells you how much of it is the detector. Your latency will vary with payload length and, in full mode, model provider response time.</p>
+        <p><em>Detection</em> is the time Parse spends deciding — the <code>latency_ms</code> field in every response, and the number to trust because you can read it on your own traffic. The pattern-only figures are a small number of point samples, not fitted percentiles. <em>End-to-end</em> is what your client waits, including TLS, our edge and tunnel, authentication and serialization.</p>
+        <p class="tech-note"><sup>*</sup> End-to-end figures are provisional. They predate a change to the authentication path that removed most of the per-request overhead, so they are stale on the high side; we are re-measuring and will publish firm percentiles once we have a real distribution rather than a handful of samples. Budget against the end-to-end column, and measure your own path before you commit to a latency budget. Full mode also varies with model provider response time.</p>
         <div class="tech-note">For hot-path screening, use <code>mode: "pattern-only"</code>. For batch analysis, use full mode.</div>
       </div>
     </div>
