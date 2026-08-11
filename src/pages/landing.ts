@@ -5,6 +5,7 @@ import {
 import { listBlogPosts } from "../lib/markdown.js";
 import { getLogoMarkSvg } from "../lib/logo.js";
 import { DETECTION_FACTS, PLAN_LIMITS, X402_PAYMENT, X402_ENDPOINTS, PRODUCT } from "../lib/product-facts.js";
+import { DEMO_API_KEY } from "../lib/constants.js";
 
 function escapeHtml(value: string): string {
   return value
@@ -440,6 +441,7 @@ Verification required before reporting done:
       <p class="hf-lede">${hero.lede}</p>
       <div class="hf-cta">
         <a class="btn btn-white btn-lg" href="/get-started">Install Parse</a>
+        ${DEMO_API_KEY ? '<a class="btn btn-ghost btn-lg" href="/demo">Screen a prompt &mdash; no key</a>' : ""}
         <a class="btn btn-ghost btn-lg" href="/docs">Documentation</a>
       </div>
       <div class="hf-fine">npm install @parsethis/sdk · no credit card, no sales call</div>

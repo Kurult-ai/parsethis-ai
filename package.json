@@ -14,6 +14,9 @@
     "build": "prisma generate && tsc && node scripts/patch-prisma-dist-imports.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test src/**/*.test.ts",
+    "check:landing-scripts": "node --import tsx scripts/check-landing-scripts.mts",
+    "check:evasion": "node --import tsx scripts/check-evasion-mutations.mts",
+    "check:walkthrough": "node --import tsx scripts/check-prospect-walkthrough.mts",
     "eval:screening": "node --import tsx scripts/evaluate-screening-fixtures.ts",
     "smoke:parse": "node scripts/smoke-parse.mjs",
     "smoke:exposure": "node scripts/smoke-exposure.mjs",
@@ -35,9 +38,10 @@
     "brand-lint": "node --import tsx scripts/brand-lint.ts",
     "worker": "tsx src/worker.ts",
     "seed": "tsx prisma/seed.ts",
-    "launch:evidence": "node scripts/open-launch-load-evidence.mjs",
     "fleet-provision": "node --import tsx scripts/fleet-provision.ts",
-    "llm-discovery": "node --import tsx scripts/llm-discovery-check.ts"
+    "llm-discovery": "node --import tsx scripts/llm-discovery-check.ts",
+    "check:retention-sync": "node --import tsx scripts/check-retention-sync.mts",
+    "retention:purge": "node --import tsx scripts/retention-purge.mts"
   },
   "keywords": [
     "agents",

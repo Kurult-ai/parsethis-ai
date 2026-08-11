@@ -21,6 +21,90 @@ Generate an API key at `POST /v1/keys/generate` (no auth required). Keys expire 
 
 ---
 
+## Parse SDK
+
+The endpoints below can be called directly, or reached through the SDK, which
+wraps an OpenAI or Anthropic client so every call is screened without changing
+your call sites.
+
+```bash
+npm install @parsethis/sdk
+```
+
+```typescript
+import { wrap } from '@parsethis/sdk';
+import OpenAI from 'openai';
+
+const openai = new OpenAI();
+const screened = wrap(openai, {
+  apiKey: process.env.PARSE_API_KEY,
+  failClosed: true,
+});
+
+const response = await screened.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: userInput }],
+});
+```
+
+`wrap(client, config)` returns a proxy over the original client. Each
+`chat.completions.create()` and `messages.create()` call sends its prompt to
+`POST /v1/parse` first, and its response to `POST /v1/screen-output` after.
+Everything else on the client passes through untouched.
+
+### Configuration
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `apiKey` | string | *(required)* | Parse API key. `wrap()` throws if it is missing. |
+| `parseBaseUrl` | string | `https://www.parsethis.ai` | Parse API base URL |
+| `agentId` | string | `"default"` | Agent identifier recorded on every screening event |
+| `environment` | string | `"production"` | Deployment environment tag |
+| `dataSources` | string[] | `[]` | Data source IDs for governance |
+| `failClosed` | boolean | `false` | Throw `ParseScreeningError` on a block verdict instead of returning a placeholder |
+| `screenOutput` | boolean | `true` | Screen the LLM output after the call |
+| `parseTimeoutMs` | number | `10000` | Timeout for Parse API calls |
+
+Two earlier names are still accepted: `parseApiKey` for `apiKey`, and
+`failPosture: "fail_closed"` for `failClosed: true`. When both spellings are
+present, the names in the table win.
+
+### Fail-closed and fail-open
+
+The setting decides what happens on a `critical` or `high_risk` verdict.
+
+| | `failClosed: false` (default) | `failClosed: true` |
+|---|---|---|
+| Block verdict | Returns a placeholder response with `_parse.blocked === true`; the LLM is never called | Throws `ParseScreeningError` carrying `verdict`, `riskScore`, `flags`, `categories` |
+| Safe verdict | Call proceeds | Call proceeds |
+| Parse unreachable, timed out, or non-2xx | Call proceeds | Call proceeds |
+
+Transport failures are not block verdicts. Neither setting turns a Parse outage
+into a failed LLM call, so an unreachable Parse API cannot take your agent
+down — and cannot screen it either. Alert on the failure rate if screening
+coverage is a compliance requirement.
+
+```typescript
+import { ParseScreeningError } from '@parsethis/sdk';
+
+try {
+  await screened.chat.completions.create({ ... });
+} catch (e) {
+  if (e instanceof ParseScreeningError) {
+    console.error('Blocked:', e.verdict, e.riskScore, e.categories);
+  }
+}
+```
+
+Framework adapters ship in the same package:
+`@parsethis/sdk/adapters/hermes-middleware` screens Hermes Agent tool calls, and
+`@parsethis/sdk/adapters/openclaw-plugin` screens the OpenClaw agent lifecycle.
+
+Step-by-step setup, including the Python SDK, is in the
+[quickstart](/docs/quickstart).
+
+---
+
 ## POST /v1/parse
 
 Screen a prompt for injection attacks, jailbreaks, adversarial patterns, and private-disclosure requests that require owner approval. This is the primary endpoint for prompt safety screening.
@@ -32,7 +116,11 @@ Screen a prompt for injection attacks, jailbreaks, adversarial patterns, and pri
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `prompt` | string | Yes | The prompt text to analyze |
-| `execute` | boolean | No | Run in isolated sandbox, returns 202 with poll_url |
+| `mode` | `"full"` \| `"pattern-only"` | No | Analysis depth. `full` (default) runs pattern matching plus semantic analysis, which sends the prompt to the model provider. `pattern-only` keeps the prompt inside Parse at the cost of semantic coverage — indirect injection is substantially harder to catch on patterns alone. Cannot be combined with `execute`. |
+| `execute` | boolean \| `"auto"` | No | Run in isolated sandbox, returns 202 with poll_url. `"auto"` lets Parse decide from the verdict. |
+| `model` | string | No | Override the model used for semantic analysis (must be allowlisted) |
+| `policy_mode` | `"strict"` \| `"balanced"` \| `"low_fp"` | No | Tunes how aggressively borderline verdicts are actioned |
+| `bypass_codeword` | string | No | Trusted-caller unblock path; returns risk_score 0 when it matches the configured codeword |
 | `test_input` | string | No | Input data to pair with prompt during sandbox execution |
 | `agent_config` | object | No | `{ model, temperature, max_tokens, agent_role }` |
 | `metadata` | object | No | `{ agent_id, session_id, source, requester_trust, requester_id, channel, subject, conversation_context }` for tracking and owner-approval decisions |
@@ -41,7 +129,8 @@ Screen a prompt for injection attacks, jailbreaks, adversarial patterns, and pri
 
 ```json
 {
-  "id": "parse_abc123",
+  "id": "5a4d2a05-6e97-428a-82e9-cd966e3892c5",
+  "trace_id": "5a4d2a05-6e97-428a-82e9-cd966e3892c5",
   "risk_score": 7,
   "safe": false,
   "verdict": "high_risk",
@@ -62,9 +151,50 @@ Screen a prompt for injection attacks, jailbreaks, adversarial patterns, and pri
     "approval_required_for_future_plans": true,
     "approval_default_action": "deny"
   },
-  "suggested_action": "block"
+  "suggested_action": "block",
+  "analysis_method": "pattern+llm",
+  "layers": { "pattern": "ran", "llm": "ran" },
+  "latency_ms": 213
 }
 ```
+
+### Knowing which layers ran
+
+`trace_id` is the receipt identifier for a verdict — it is always identical to
+`id`, and it is the value to log for audit and incident review.
+
+`layers` reports what actually contributed to the verdict, so a caller can tell
+a confident answer from a fallback:
+
+| `layers.llm` | Meaning | Degraded? |
+|---|---|---|
+| `ran` | Semantic analysis contributed | No |
+| `skipped_pattern_only` | You passed `mode: "pattern-only"` | No |
+| `skipped_high_severity` | Patterns were already conclusive; semantic analysis could not lower the score | No |
+| `disabled` | No model provider configured on this deployment | **Yes** |
+| `failed` | The model call did not return a usable verdict | **Yes** |
+
+When the layer was unavailable rather than deliberately skipped, the response
+also carries `degraded: true` and `degraded_reason` (`llm_failed` or
+`llm_disabled`). Treat a degraded verdict as weaker evidence: it rests on
+pattern matching alone and may under-report semantic attacks such as indirect
+injection. `analysis_method` is `pattern`, `pattern+llm`, or `pattern_only` —
+`pattern_only` means you asked for it, a bare `pattern` means check `degraded`.
+
+### What Parse does not offer
+
+Stated plainly so you do not have to discover it by trying:
+
+- **No streaming.** Screening returns a single verdict; there is no partial or
+  token-by-token response.
+- **No batch endpoint.** Screen one prompt per request. Concurrency is bounded
+  by your tier's rate limit rather than by a bulk API.
+- **No idempotency keys.** Screening has no side effects on your data, so a
+  retry is safe and simply produces a new `trace_id`. Retries do count against
+  rate limits and billed usage.
+- **No published latency SLO.** Observed pattern-path latency is roughly
+  20-30ms; adding the semantic layer typically brings a request to 200-450ms.
+  These are measurements, not a contractual guarantee.
 
 When a private disclosure needs owner consent, `suggested_action` is `request_owner_approval` and the response includes `approval_request`:
 

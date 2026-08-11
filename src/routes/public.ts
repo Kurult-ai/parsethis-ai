@@ -15,6 +15,12 @@ import { prisma } from "../db.js";
 import { getBaseUrl } from "../lib/route-utils.js";
 import { getDeploymentMetadata, getPublicVersionPayload, SERVICE_VERSION } from "../lib/build-info.js";
 import { renderPage } from "../lib/html-template.js";
+import {
+  DATA_FLOW_HTML,
+  RETENTION_TABLE_HTML,
+  STORAGE_BY_ENDPOINT_HTML,
+} from "../lib/retention-facts.js";
+import { loadContentBySlug } from "../lib/markdown.js";
 import { organizationSchema } from "../lib/schema.js";
 import { getLogoLockupSvg } from "../lib/logo.js";
 import { renderLandingPage } from "../pages/landing.js";
@@ -526,25 +532,52 @@ publicRoutes.post("/demo/api", async (c) => {
   const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
   const rateKey = `${DEMO_RATE_KEY_PREFIX}:${createHash("sha256").update(ip).digest("hex").slice(0, 16)}`;
 
-  // Check rate limit using Redis
+  // Rate limit via Redis. Fail CLOSED, matching POST /v1/keys/generate: the
+  // demo runs on one shared DEMO_API_KEY, so the per-IP counter is the only
+  // thing standing between a Redis outage and unmetered use of that key by
+  // anyone who finds the endpoint. A dead Redis must cost us the demo, not the
+  // cap. Callers who need reliable access get their own free key at
+  // /get-started, which is the outcome we want anyway.
   let useCount = 0;
   let rateLimited = false;
+  let rateLimiterDown = false;
   try {
-    if (isRedisAvailable()) {
-      const connected = await ensureRedisConnected();
-      if (connected) {
+    getRedis();
+    if (!isRedisAvailable()) {
+      rateLimiterDown = true;
+    } else {
+      const connected = await withTimeout(ensureRedisConnected(), 1_500, false);
+      if (!connected) {
+        rateLimiterDown = true;
+      } else {
         const redis = getRedis();
-        useCount = await redis.incr(rateKey);
-        if (useCount === 1) {
-          await redis.expire(rateKey, DEMO_RATE_WINDOW_SECONDS);
-        }
-        if (useCount > DEMO_RATE_LIMIT_PER_HOUR) {
-          rateLimited = true;
+        useCount = await withTimeout(redis.incr(rateKey), 1_500, Number.NaN);
+        if (!Number.isFinite(useCount)) {
+          rateLimiterDown = true;
+        } else {
+          if (useCount === 1) {
+            await withTimeout(redis.expire(rateKey, DEMO_RATE_WINDOW_SECONDS), 1_500, 0);
+          }
+          if (useCount > DEMO_RATE_LIMIT_PER_HOUR) {
+            rateLimited = true;
+          }
         }
       }
     }
   } catch {
-    // If Redis is down, allow the request (fail open for demo)
+    rateLimiterDown = true;
+  }
+
+  if (rateLimiterDown) {
+    return c.json(
+      {
+        error: "Demo unavailable",
+        detail:
+          "The demo's rate limiter is unreachable, so the demo is paused. Grab a free API key at /get-started — it has higher limits and does not depend on this.",
+        next_step: "/get-started",
+      },
+      503,
+    );
   }
 
   if (rateLimited) {
@@ -1295,6 +1328,101 @@ publicRoutes.get("/security/:slug", (c) => {
   return c.html(result.html);
 });
 
+// Security index. /security/:slug pages existed but /security itself answered
+// 404 with a JSON body, which is what a browser got when someone trimmed the
+// URL or followed a link to the section root.
+publicRoutes.get("/security", (c) => {
+  const baseUrl = getBaseUrl(c);
+  recordGeoSurfaceHit(c, "security.index");
+  const content = `
+<h1>Security</h1>
+
+<p class="answer-capsule">Where to find what Parse does, what it does not do, and how to
+tell us when it is wrong. Detection reduces risk; it does not replace least-privilege
+tools or output validation.</p>
+
+<h2>Documents</h2>
+<ul>
+  <li><a href="/security/limitations"><strong>Security limitations</strong></a> — what Parse
+  screens, what it misses, and the failure modes we know about. Read this before you
+  design around Parse.</li>
+  <li><a href="/trust"><strong>Trust and security</strong></a> — architecture, security
+  controls, subprocessors, what we store and for how long, and compliance posture.</li>
+  <li><a href="/trust#questionnaire"><strong>Vendor security questionnaire</strong></a> —
+  the 30 most-asked assessment questions, pre-answered.</li>
+  <li><a href="/privacy"><strong>Privacy policy</strong></a> — what we collect, what we
+  store per endpoint, and where prompt text travels.</li>
+  <li><a href="/changelog"><strong>Changelog</strong></a> — what changed and when.</li>
+</ul>
+
+<h2>Reporting a vulnerability</h2>
+<p>Email <a href="mailto:security@parsethis.ai">security@parsethis.ai</a>. We acknowledge
+reports within 48 hours and aim to remediate critical findings within 90 hours. We will
+not pursue legal action against researchers who respect user privacy, avoid denial of
+service and social engineering, report promptly, and give us reasonable time to fix the
+issue before disclosing it. Full policy and remediation targets are on the
+<a href="/trust#vulnerability-disclosure">trust page</a>.</p>
+
+<p>For abuse or denial-of-service reports, use
+<a href="mailto:abuse@parsethis.ai">abuse@parsethis.ai</a>. For everything else, use
+<a href="/support">support</a>.</p>
+
+<h2>Machine-readable</h2>
+<ul>
+  <li><code>GET /v1/security/headers</code> — the security headers this deployment sets</li>
+  <li><code>GET /status</code> — running build and dependency state</li>
+  <li><code>GET /security/limitations</code> with <code>Accept: text/markdown</code> — the
+  limitations document as source markdown</li>
+</ul>
+`;
+  return c.html(
+    renderPage({
+      title: "Security",
+      description:
+        "Parse security index: limitations, trust package, vendor questionnaire, and vulnerability disclosure contact.",
+      path: "/security",
+      content,
+      baseUrl,
+      jsonLd: [organizationSchema(baseUrl)],
+      breadcrumbs: [
+        { name: "Home", href: "/" },
+        { name: "Security", href: "/security" },
+      ],
+    }),
+  );
+});
+
+// Changelog (markdown content at content/changelog.md, supports Accept: text/markdown)
+publicRoutes.get("/changelog", (c) => {
+  const file = loadContentBySlug("", "changelog");
+  if (!file) return c.json({ error: "Not found" }, 404);
+
+  if ((c.req.header("Accept") || "").includes("text/markdown")) {
+    c.header("Content-Type", "text/markdown; charset=utf-8");
+    c.header("Vary", "Accept");
+    return c.body(file.markdown);
+  }
+
+  const baseUrl = getBaseUrl(c);
+  const fm = file.frontmatter;
+  return c.html(
+    renderPage({
+      title: (fm.title as string) || "Changelog",
+      description: (fm.description as string) || "What changed in Parse, and when.",
+      path: "/changelog",
+      content: file.html,
+      baseUrl,
+      lastUpdated: (fm.lastUpdated as string) || (fm.date as string),
+      headExtra: `<link rel="alternate" type="text/markdown" href="${baseUrl}/changelog">`,
+      jsonLd: [organizationSchema(baseUrl)],
+      breadcrumbs: [
+        { name: "Home", href: "/" },
+        { name: "Changelog", href: "/changelog" },
+      ],
+    }),
+  );
+});
+
 // Blog listing
 publicRoutes.get("/blog", (c) => {
   return c.html(renderBlogListingPage(getBaseUrl(c)));
@@ -1348,7 +1476,7 @@ publicRoutes.get("/privacy", (c) => {
   const content = `
 <h1>Privacy Policy</h1>
 
-<p class="answer-capsule"><strong>Last updated:</strong> March 23, 2026</p>
+<p class="answer-capsule"><strong>Last updated:</strong> August 11, 2026</p>
 
 <h2>Overview</h2>
 
@@ -1373,7 +1501,7 @@ publicRoutes.get("/privacy", (c) => {
 <ul>
   <li><strong>API Keys:</strong> Self-generated keys via POST /v1/keys/generate (hashed for storage)</li>
   <li><strong>Key Metadata:</strong> Name, creation date, expiration date, scopes, and usage statistics</li>
-  <li><strong>IP Addresses:</strong> For rate limiting and abuse prevention (retained for 30 days)</li>
+  <li><strong>IP Addresses:</strong> For rate limiting and abuse prevention. Rate-limit counters key off a SHA-256 of the address and expire with the window; the audit log records the address itself, under the retention below.</li>
 </ul>
 
 <h3>3. Payment Data (x402)</h3>
@@ -1410,23 +1538,17 @@ publicRoutes.get("/privacy", (c) => {
   <li>Generate usage statistics and analytics</li>
 </ul>
 
-<h2>Data Retention</h2>
+<h2 id="what-we-store">What We Store, Per Endpoint</h2>
 
-<h3>API Request Data</h3>
+${STORAGE_BY_ENDPOINT_HTML}
 
-<ul>
-  <li><strong>Free tier:</strong> Prompt content is not stored after analysis completes</li>
-  <li><strong>Sandbox outputs:</strong> Retained for 7 days for debugging and security auditing</li>
-  <li><strong>Evaluation results:</strong> Retained for 30 days (unless your plan specifies otherwise)</li>
-</ul>
+<h2 id="data-retention">Data Retention</h2>
 
-<h3>API Keys</h3>
+${RETENTION_TABLE_HTML}
 
-<ul>
-  <li><strong>Active keys:</strong> Retained until expiration (default 30 days) or revocation</li>
-  <li><strong>Expired keys:</strong> Hashed values retained for 90 days for security auditing</li>
-  <li><strong>Usage records:</strong> Retained for 90 days for billing and analytics</li>
-</ul>
+<h2 id="where-your-prompt-text-goes">Where Your Prompt Text Goes</h2>
+
+${DATA_FLOW_HTML}
 
 <h2>Data Security</h2>
 
@@ -1447,12 +1569,12 @@ publicRoutes.get("/privacy", (c) => {
 <h3>1. Service Providers</h3>
 
 <ul>
-  <li><strong>Infrastructure:</strong> Railway (application hosting), Neon Postgres (database), Upstash Redis (caching)</li>
-  <li><strong>Payment Processing:</strong> x402 protocol facilitators (verify on-chain USDC transfers)</li>
-  <li><strong>AI Models:</strong> OpenRouter (LLM analysis routing to providers like DeepSeek, OpenAI, Anthropic)</li>
+  <li><strong>Infrastructure:</strong> Application hosting, Postgres database, and Redis cache</li>
+  <li><strong>Payment Processing:</strong> Stripe (subscriptions) and x402 protocol facilitators (verify on-chain USDC transfers)</li>
+  <li><strong>AI Models:</strong> OpenRouter, which routes the semantic analysis layer to providers such as DeepSeek, OpenAI, and Anthropic</li>
 </ul>
 
-<p class="answer-capsule">All providers are contractually obligated to protect your data and use it only for service delivery.</p>
+<p class="answer-capsule">OpenRouter is the only one of these that receives your prompt text, under the conditions set out in <a href="#where-your-prompt-text-goes">Where Your Prompt Text Goes</a> above. What it and the model providers behind it retain is governed by their policies, not ours. Pass <code>mode: "pattern-only"</code> and the text never reaches them.</p>
 
 <h3>2. Legal Requirements</h3>
 
@@ -1526,7 +1648,7 @@ publicRoutes.get("/privacy", (c) => {
     content,
     baseUrl,
     jsonLd: [organizationSchema(baseUrl)],
-    lastUpdated: "2026-03-23",
+    lastUpdated: "2026-08-11",
   }));
 });
 
@@ -1983,8 +2105,246 @@ publicRoutes.get("/refund", (c) => {
   }));
 });
 
-// Status page redirect
-publicRoutes.get("/status", (c) => c.redirect("/health"));
+// ── Public status page ───────────────────────────────────────────────────
+// /health stays a bare liveness probe and /health/detail stays admin-only.
+// This is the third thing: what a prospect or an on-call engineer can see
+// without a key — which build is running, how long it has been up, and whether
+// each dependency answers. It reports state; it does not expose memory
+// figures, connection strings, or anything else from /health/detail.
+
+// "degraded" = reachable but not doing its job; distinct from "down".
+type PublicDependencyStatus = "operational" | "degraded" | "down" | "not_configured";
+
+interface PublicDependency {
+  name: string;
+  status: PublicDependencyStatus;
+  detail: string;
+}
+
+async function collectPublicDependencies(): Promise<PublicDependency[]> {
+  const deps: PublicDependency[] = [];
+
+  // Database — same probe /health/detail uses, with a bound so a hung socket
+  // cannot hold the page open.
+  let database: PublicDependencyStatus = "down";
+  try {
+    const ok = await withTimeout(
+      prisma.$queryRaw`SELECT 1`.then(() => true).catch(() => false),
+      2_000,
+      false,
+    );
+    database = ok ? "operational" : "down";
+  } catch {
+    database = "down";
+  }
+  deps.push({
+    name: "Database",
+    status: database,
+    detail: "Stores API keys, screening events, and policy configuration.",
+  });
+
+  // Cache / rate limiting
+  let redisStatus: PublicDependencyStatus = "down";
+  try {
+    if (!isRedisAvailable()) {
+      redisStatus = "not_configured";
+    } else {
+      const connected = await withTimeout(ensureRedisConnected(), 2_000, false);
+      if (!connected) {
+        redisStatus = "down";
+      } else {
+        const pong = await withTimeout(
+          getRedis().ping().then(() => true).catch(() => false),
+          2_000,
+          false,
+        );
+        redisStatus = pong ? "operational" : "down";
+      }
+    }
+  } catch {
+    redisStatus = "down";
+  }
+  deps.push({
+    name: "Cache and rate limiting",
+    status: redisStatus,
+    detail: "Backs rate limits and short-lived counters.",
+  });
+
+  // Semantic analysis layer. A configured key proves nothing: the outage this
+  // page exists to surface was the model failing at runtime *while* the key was
+  // set. Report the observed degraded count instead of the configuration.
+  if (!process.env.OPENROUTER_API_KEY) {
+    deps.push({
+      name: "Semantic analysis layer",
+      status: "not_configured",
+      detail: "No model provider configured — screening runs on pattern matching alone.",
+    });
+  } else {
+    let degradedToday: number | null = null;
+    if (isRedisAvailable()) {
+      try {
+        const connected = await withTimeout(ensureRedisConnected(), 1_500, false);
+        if (connected) {
+          const day = new Date().toISOString().slice(0, 10);
+          const raw = await withTimeout(
+            getRedis().get(`screening:llm_degraded:${day}`),
+            1_500,
+            null as string | null
+          );
+          degradedToday = raw === null ? 0 : Number(raw) || 0;
+        }
+      } catch {
+        degradedToday = null;
+      }
+    }
+    deps.push({
+      name: "Semantic analysis layer",
+      status: degradedToday === null ? "operational" : degradedToday > 0 ? "degraded" : "operational",
+      detail:
+        degradedToday === null
+          ? "Configured. Recent health could not be read; per-request status is reported in layers.llm."
+          : degradedToday > 0
+            ? `${degradedToday} screening call(s) fell back to pattern matching today. Per-request status is reported in layers.llm.`
+            : "No screening calls have fallen back to pattern matching today.",
+    });
+  }
+
+  return deps;
+}
+
+function formatUptime(seconds: number): string {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+publicRoutes.get("/status", async (c) => {
+  const deployment = getDeploymentMetadata();
+  const uptimeSeconds = Math.floor(process.uptime());
+  const deps = await collectPublicDependencies();
+  const degraded = deps.some((d) => d.status === "down" || d.status === "degraded");
+  const overall: "operational" | "degraded" = degraded ? "degraded" : "operational";
+
+  const accept = c.req.header("Accept") || "";
+  c.header("Vary", "Accept");
+  c.header("Cache-Control", "no-store");
+
+  if (accept.includes("application/json") && !accept.includes("text/html")) {
+    return c.json({
+      status: overall,
+      service: PRODUCT.name,
+      version: SERVICE_VERSION,
+      commit: deployment.commit,
+      build_time: deployment.build_time,
+      runtime: deployment.runtime,
+      node_version: process.version,
+      uptime_seconds: uptimeSeconds,
+      checked_at: new Date().toISOString(),
+      dependencies: deps.map((d) => ({ name: d.name, status: d.status })),
+      liveness_probe: "/health",
+    });
+  }
+
+  const badge = (status: PublicDependencyStatus): string => {
+    const label =
+      status === "operational" ? "Operational"
+        : status === "degraded" ? "Degraded"
+        : status === "down" ? "Down"
+        : "Not configured";
+    const color =
+      status === "operational" ? "var(--green, #3fb950)"
+        : status === "degraded" ? "var(--yellow, #d29922)"
+        : status === "down" ? "var(--red, #f85149)"
+        : "var(--text-dim)";
+    return `<span style="color:${color};font-weight:600">${label}</span>`;
+  };
+
+  const depRows = deps
+    .map(
+      (d) =>
+        `<tr><td>${d.name}</td><td>${badge(d.status)}</td><td style="color:var(--text-dim)">${d.detail}</td></tr>`,
+    )
+    .join("\n      ");
+
+  const buildRows = [
+    ["Overall", badge(overall)],
+    ["Version", `<code>${SERVICE_VERSION}</code>`],
+    ["Commit", `<code>${deployment.commit}</code>`],
+    ["Build time", `<code>${deployment.build_time}</code>`],
+    ["Running from", `<code>${deployment.runtime}</code>`],
+    ["Node", `<code>${process.version}</code>`],
+    ["Uptime", `${formatUptime(uptimeSeconds)}`],
+    ["Checked at", `<code>${new Date().toISOString()}</code>`],
+  ]
+    .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`)
+    .join("\n      ");
+
+  const content = `
+<h1>Status</h1>
+
+<p class="answer-capsule">Live state of this deployment, read at the moment you loaded
+the page. Nothing here is cached. This page is for people; <code>/health</code> is the
+liveness probe for machines, and returns the same build identity as JSON.</p>
+
+<h2>Build</h2>
+<div class="table-wrapper">
+  <table>
+    <tbody>
+      ${buildRows}
+    </tbody>
+  </table>
+</div>
+
+<p style="font-size:14px;color:var(--text-dim)">This deploy runs from source rather
+than a compiled artifact, so the build time is the time the process started. The commit
+is read from the checkout at boot.</p>
+
+<h2>Dependencies</h2>
+<div class="table-wrapper">
+  <table>
+    <thead><tr><th>Dependency</th><th>Status</th><th>What it does</th></tr></thead>
+    <tbody>
+      ${depRows}
+    </tbody>
+  </table>
+</div>
+
+<p style="font-size:14px;color:var(--text-dim)">A dependency marked down does not
+necessarily take the API down. Screening itself runs in-process: pattern matching keeps
+working when the database or cache is unreachable, and every screening response reports
+which analysis layers actually ran.</p>
+
+<h2>Machine-readable</h2>
+<ul>
+  <li><code>GET /status</code> with <code>Accept: application/json</code> — this page as JSON</li>
+  <li><code>GET /health</code> — liveness probe, always JSON</li>
+  <li><code>GET /version</code> — version and build identity</li>
+</ul>
+
+<p>Something broken that this page says is fine? Tell us at
+<a href="mailto:security@parsethis.ai">security@parsethis.ai</a> for security issues, or
+<a href="/support">support</a> for everything else.</p>
+`;
+
+  return c.html(
+    renderPage({
+      title: "Status",
+      description: "Live status of the Parse API: running build, uptime, and per-dependency state.",
+      path: "/status",
+      content,
+      baseUrl: getBaseUrl(c),
+      breadcrumbs: [
+        { name: "Home", href: "/" },
+        { name: "Status", href: "/status" },
+      ],
+    }),
+  );
+});
 
 // Skill install script (bash, pipe-able)
 publicRoutes.get("/skill/install.sh", (c) => {

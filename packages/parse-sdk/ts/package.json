@@ -1,28 +1,33 @@
 {
-  "name": "@parse-agents/sdk",
+  "name": "@parsethis/sdk",
   "version": "0.1.0",
   "description": "Drop-in interceptor that screens every OpenAI/Anthropic client call with Parse prompt security.",
-  "main": "index.ts",
-  "types": "index.ts",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./index.ts",
-      "import": "./index.ts",
-      "require": "./index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./adapters/hermes-middleware": {
-      "types": "./adapters/hermes-middleware.ts",
-      "import": "./adapters/hermes-middleware.ts",
-      "require": "./adapters/hermes-middleware.ts"
+      "types": "./dist/adapters/hermes-middleware.d.ts",
+      "import": "./dist/adapters/hermes-middleware.js",
+      "default": "./dist/adapters/hermes-middleware.js"
     },
     "./adapters/openclaw-plugin": {
-      "types": "./adapters/openclaw-plugin.ts",
-      "import": "./adapters/openclaw-plugin.ts",
-      "require": "./adapters/openclaw-plugin.ts"
-    }
+      "types": "./dist/adapters/openclaw-plugin.d.ts",
+      "import": "./dist/adapters/openclaw-plugin.js",
+      "default": "./dist/adapters/openclaw-plugin.js"
+    },
+    "./package.json": "./package.json"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build"
   },
   "keywords": [
     "parse",
@@ -36,10 +41,24 @@
   ],
   "author": "Kurultai",
   "license": "ISC",
+  "homepage": "https://www.parsethis.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kurult-ai/parsethis-ai.git",
+    "directory": "packages/parse-sdk/ts"
+  },
+  "bugs": {
+    "url": "https://github.com/Kurult-ai/parsethis-ai/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "files": [
-    "index.ts",
-    "adapters/hermes-middleware.ts",
-    "adapters/openclaw-plugin.ts"
+    "dist",
+    "README.md"
   ],
   "devDependencies": {
     "typescript": "^5.5.0"

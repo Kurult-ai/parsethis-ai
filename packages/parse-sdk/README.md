@@ -1,37 +1,46 @@
-# @parse-agents/sdk
+# Parse SDK
 
-Drop-in interceptor that wraps **any** OpenAI or Anthropic client so every `chat.completions.create()` or `messages.create()` call is automatically screened by [Parse](https://parsethis.ai) — prompt-injection detection, risk scoring, and output screening, all from one line.
+Drop-in interceptor that wraps **any** OpenAI or Anthropic client so every `chat.completions.create()` or `messages.create()` call is automatically screened by [Parse](https://www.parsethis.ai) — prompt-injection detection, risk scoring, and output screening, all from one line.
+
+Two implementations live here:
+
+| Language | Directory | Distribution name |
+|----------|-----------|-------------------|
+| TypeScript / Node | [`ts/`](ts/) | `@parsethis/sdk` (not published yet) |
+| Python | [`python/`](python/) | `parse-agents`, imported as `parse_agents` |
 
 ## Quickstart
 
 ### TypeScript / Node.js
 
 ```bash
-npm install @parse-agents/sdk
+npm install @parsethis/sdk
 ```
 
 ```typescript
+import { wrap } from "@parsethis/sdk";
 import OpenAI from "openai";
-import { wrap } from "@parse-agents/sdk";
 
-const client = wrap(new OpenAI({ apiKey: "sk-..." }), {
-  agentId: "billing-bot",
-  environment: "production",
-  parseApiKey: "parse_...",
-  parseBaseUrl: "https://parsethis.ai",
+const screened = wrap(new OpenAI(), {
+  apiKey: process.env.PARSE_API_KEY,
+  failClosed: true,
 });
 
 // Every call is now screened — no further code changes needed.
-const res = await client.chat.completions.create({
+const res = await screened.chat.completions.create({
   model: "gpt-4o",
   messages: [{ role: "user", content: "Hello" }],
 });
 ```
 
+See [`ts/README.md`](ts/README.md) for the full TypeScript reference.
+
 ### Python
 
+The Python package is not on PyPI yet. Install it from this directory:
+
 ```bash
-pip install parse-agents
+pip install ./packages/parse-sdk/python
 ```
 
 ```python
@@ -43,7 +52,7 @@ client = wrap(
     agent_id="billing-bot",
     environment="production",
     parse_api_key="parse_...",
-    parse_base_url="https://parsethis.ai",
+    parse_base_url="https://www.parsethis.ai",
 )
 
 # Every call is now screened.
@@ -64,7 +73,7 @@ client = wrap(
     agent_id="billing-bot",
     environment="production",
     parse_api_key="parse_...",
-    parse_base_url="https://parsethis.ai",
+    parse_base_url="https://www.parsethis.ai",
 )
 
 res = client.messages.create(
@@ -77,9 +86,9 @@ res = client.messages.create(
 ## How It Works
 
 1. **Pre-call screening:** Before the LLM is called, the user prompt is sent to `POST /v1/parse` with `agent_id`, `environment`, and `data_sources` metadata.
-2. **Block handling:** If the Parse API returns a verdict of `critical` or `high_risk`, the call is intercepted. Depending on `failPosture`:
-   - `"fail_closed"` → throws `ParseScreeningError` with verdict details.
-   - `"fail_open"` (default) → returns a safe placeholder response with `_parse.blocked = true`.
+2. **Block handling:** If the Parse API returns a verdict of `critical` or `high_risk`, the call is intercepted. Depending on the fail posture:
+   - fail closed → throws `ParseScreeningError` with verdict details.
+   - fail open (default) → returns a safe placeholder response with `_parse.blocked = true`.
 3. **Post-call screening:** After the LLM returns, the output text is sent to `POST /v1/screen-output` for output injection detection (configurable via `screenOutput`).
 4. **Telemetry:** Token usage is recorded per call.
 
@@ -87,18 +96,21 @@ res = client.messages.create(
 
 | Option | TS | Python | Default | Description |
 |--------|-----|--------|---------|-------------|
-| API key | `parseApiKey` | `parse_api_key` | *(required)* | Parse API key (`parse_...`) |
-| Base URL | `parseBaseUrl` | `parse_base_url` | `https://parsethis.ai` | Parse API base URL |
-| Agent ID | `agentId` | `agent_id` | *(required)* | Identifier for the agent |
-| Environment | `environment` | `environment` | *(required)* | Deployment environment |
+| API key | `apiKey` | `parse_api_key` | *(required)* | Parse API key (`parse_...`) |
+| Base URL | `parseBaseUrl` | `parse_base_url` | `https://www.parsethis.ai` | Parse API base URL |
+| Agent ID | `agentId` | `agent_id` | TS `"default"` / Python *(required)* | Identifier for the agent |
+| Environment | `environment` | `environment` | TS `"production"` / Python *(required)* | Deployment environment |
 | Data sources | `dataSources` | `data_sources` | `[]` | Data source IDs for governance |
-| Fail posture | `failPosture` | `fail_posture` | `"fail_open"` | `"fail_open"` or `"fail_closed"` |
+| Fail posture | `failClosed` | `fail_posture` | TS `false` / Python `"fail_open"` | Throw on a block verdict |
 | Screen output | `screenOutput` | `screen_output` | `true` | Post-call output screening |
 | Timeout | `parseTimeoutMs` | `parse_timeout` | `10000`ms / `10.0`s | Parse API call timeout |
 
+The TypeScript SDK also accepts the older names `parseApiKey` and
+`failPosture: "fail_closed"`; the names in the table win when both are given.
+
 ## Fail Postures
 
-### `fail_open` (default)
+### Fail open (default)
 On a block verdict, returns a safe response object so your application continues running. The response includes `_parse.blocked = true` for programmatic detection. Parse API errors (network, timeout) also fall through to the original call.
 
 ```typescript
@@ -108,8 +120,8 @@ if (res._parse?.blocked) {
 }
 ```
 
-### `fail_closed`
-On a block verdict, throws `ParseScreeningError`. Use when you want to halt execution on any risk.
+### Fail closed
+On a block verdict, throws `ParseScreeningError`. Use when you want to halt execution on any risk. Set `failClosed: true` (TypeScript) or `fail_posture="fail_closed"` (Python).
 
 ```typescript
 try {
@@ -135,11 +147,11 @@ middleware stack, screens the prompt and tool arguments via `POST /v1/parse`,
 and blocks execution on `critical` / `high_risk` verdicts.
 
 ```typescript
-import { createParseMiddleware } from "@parse-agents/sdk/adapters/hermes-middleware";
+import { createParseMiddleware } from "@parsethis/sdk/adapters/hermes-middleware";
 
 const parseMiddleware = createParseMiddleware({
   parseApiKey: process.env.PARSE_API_KEY!,
-  parseBaseUrl: "https://parsethis.ai",
+  parseBaseUrl: "https://www.parsethis.ai",
   agentId: "billing-bot",
   environment: "production",
   failPosture: "fail_closed",
@@ -168,11 +180,11 @@ screening: input screening before LLM calls, output screening after, and automat
 agent registration with the Parse Agent Registry on init.
 
 ```typescript
-import { ParseOpenClawPlugin } from "@parse-agents/sdk/adapters/openclaw-plugin";
+import { ParseOpenClawPlugin } from "@parsethis/sdk/adapters/openclaw-plugin";
 
 const plugin = new ParseOpenClawPlugin({
   parseApiKey: process.env.PARSE_API_KEY!,
-  parseBaseUrl: "https://parsethis.ai",
+  parseBaseUrl: "https://www.parsethis.ai",
   agentId: "research-agent",
   environment: "production",
   failPosture: "fail_closed",

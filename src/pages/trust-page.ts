@@ -2,6 +2,12 @@ import { renderPage } from "../lib/html-template.js";
 import { TIER_RATE_LIMITS } from "../lib/rate-limiter.js";
 import { DETECTION_FACTS, PRODUCT } from "../lib/product-facts.js";
 import { CONTACT_EMAIL } from "../lib/constants.js";
+import {
+  DATA_FLOW_HTML,
+  RETENTION,
+  RETENTION_TABLE_HTML,
+  STORAGE_BY_ENDPOINT_HTML,
+} from "../lib/retention-facts.js";
 
 /**
  * Trust page — SSR HTML at /trust
@@ -153,38 +159,14 @@ export function renderTrustPage(baseUrl: string): string {
   </div>
 </div>
 
-<h3>Data Storage: What Parse Stores vs Discards</h3>
-<div class="table-wrapper">
-  <table>
-    <thead>
-      <tr><th>Data Element</th><th>Stored?</th><th>Retention</th></tr>
-    </thead>
-    <tbody>
-      <tr><td>Screening verdict (risk score, categories, flags)</td><td>✅ Yes</td><td>90 days</td></tr>
-      <tr><td>Request metadata (timestamp, key ID, endpoint)</td><td>✅ Yes</td><td>90 days</td></tr>
-      <tr><td>Prompt SHA-256 hash (for deduplication)</td><td>✅ Yes</td><td>90 days</td></tr>
-      <tr><td><strong>Prompt plaintext (Compliance tier)</strong></td><td><strong>❌ No — SHA-256 hash only</strong></td><td>Never stored</td></tr>
-      <tr><td>Prompt plaintext (other tiers)</td><td>⚠️ Transient only</td><td>0 seconds persisted</td></tr>
-      <tr><td>Compliance receipts (signed evidence)</td><td>✅ Yes</td><td>1 year</td></tr>
-      <tr><td>API keys</td><td>✅ bcrypt-hashed</td><td>Until revocation</td></tr>
-    </tbody>
-  </table>
-</div>
+<h3 id="storage">Data Storage: What Parse Stores, Per Endpoint</h3>
+${STORAGE_BY_ENDPOINT_HTML}
 
-<h3>Retention Defaults</h3>
-<div class="table-wrapper">
-  <table>
-    <thead>
-      <tr><th>Data Category</th><th>Default Retention</th><th>Configurable</th></tr>
-    </thead>
-    <tbody>
-      <tr><td>Screening events</td><td>90 days</td><td>✅ Compliance tier</td></tr>
-      <tr><td>Compliance receipts</td><td>1 year</td><td>❌ Fixed for audit integrity</td></tr>
-      <tr><td>SIEM-forwarded logs</td><td>Customer-controlled</td><td>✅</td></tr>
-      <tr><td>Rate limit counters</td><td>Auto-expire (TTL)</td><td>❌</td></tr>
-    </tbody>
-  </table>
-</div>
+<h3 id="retention">Retention</h3>
+${RETENTION_TABLE_HTML}
+
+<h3 id="data-flow">Where Prompt Text Goes</h3>
+${DATA_FLOW_HTML}
 </div>
 
 <!-- ─── 2. Security Controls Summary ─────────────────────────────────────── -->
@@ -272,19 +254,19 @@ export function renderTrustPage(baseUrl: string): string {
 <div class="trust-section">
 <h2 id="subprocessors">3. Subprocessors</h2>
 
-<p>Parse uses minimal third-party services. No customer prompt data is stored by subprocessors beyond the request lifecycle.</p>
+<p>Parse uses few third-party services. One of them receives prompt text.</p>
 
 <div class="table-wrapper">
   <table>
     <thead><tr><th>Subprocessor</th><th>Purpose</th><th>Data Accessed</th></tr></thead>
     <tbody>
-      <tr><td><strong>None for v1 core processing</strong></td><td>—</td><td>—</td></tr>
-      <tr><td>OpenRouter</td><td>LLM inference routing (Layer 2)</td><td>Prompt text transiently; not stored</td></tr>
-      <tr><td>Stripe</td><td>Subscription billing</td><td>Payment metadata only; no card data</td></tr>
+      <tr><td>OpenRouter</td><td>Routes the semantic analysis layer (Layer 2) to a model provider, and runs the prompt when <code>execute: true</code></td><td>Prompt text. What OpenRouter and the providers behind it retain is set by their policies, not ours.</td></tr>
+      <tr><td>Stripe</td><td>Subscription billing</td><td>Payment metadata only. Card details go to Stripe directly; Parse never holds them.</td></tr>
+      <tr><td>Cloud infrastructure (compute, Postgres, Redis)</td><td>Hosting and storage</td><td>Whatever Parse stores, listed in <a href="#storage">Data Storage</a>. Prompt text is not among it for the screening endpoints.</td></tr>
     </tbody>
   </table>
 </div>
-<p style="font-size: 14px; color: var(--text-dim);">Customers on the Compliance tier can disable LLM analysis entirely, operating on Layers 1 and 3 only. New subprocessors are announced 30 days in advance.</p>
+<p style="font-size: 14px; color: var(--text-dim);">Any caller on any tier can keep prompt text away from OpenRouter by passing <code>mode: "pattern-only"</code> per request, which runs Layer 1 only. There is no account-level or tier-level switch for this today — the control is per request. New subprocessors are announced 30 days in advance.</p>
 </div>
 
 <!-- ─── 4. Vulnerability Disclosure Policy ───────────────────────────────── -->
@@ -338,8 +320,8 @@ export function renderTrustPage(baseUrl: string): string {
       <tr><td>CC9: Risk Mitigation</td><td>Rate limiting, sandbox isolation, SSRF guards</td><td>✅</td></tr>
       <tr><td><strong>Availability</strong></td><td>A1: Availability</td><td>Multi-instance, Redis HA, health endpoints</td><td>⚠️ Partial</td></tr>
       <tr><td><strong>Processing Integrity</strong></td><td>PI1: Processing Integrity</td><td>Deterministic scoring, nonce-tagged LLM delimiters</td><td>✅</td></tr>
-      <tr><td><strong>Confidentiality</strong></td><td>C1: Confidentiality</td><td>TLS, bcrypt/AES-256, SHA-256 prompt hashing</td><td>✅</td></tr>
-      <tr><td><strong>Privacy</strong></td><td>P1–P8</td><td>Retention policies, data governance, approval matrix</td><td>✅</td></tr>
+      <tr><td><strong>Confidentiality</strong></td><td>C1: Confidentiality</td><td>TLS, bcrypt/AES-256, no prompt storage on the screening endpoints</td><td>✅</td></tr>
+      <tr><td><strong>Privacy</strong></td><td>P1–P8</td><td>Documented retention enforced by a daily purge job, data governance, approval matrix</td><td>✅ Implemented</td></tr>
     </tbody>
   </table>
 </div>
@@ -424,15 +406,19 @@ export function renderTrustPage(baseUrl: string): string {
 </div>
 <div class="qa-block">
   <p class="q"><span class="qnum">13.</span>Do you store customer prompt data?</p>
-  <p class="a">No (Compliance tier): prompts SHA-256 hashed only. Other tiers: prompt text is transient in memory, discarded after response.</p>
+  <p class="a">The screening endpoints (<code>/v1/parse</code>, <code>/v1/screen-output</code>, <code>/v1/agent/trust/verify</code>) do not: the screening event table has no column for prompt text or a hash of it, on every tier. <code>/v1/evaluate</code> does, for the length of the run — on completion the stored copy is overwritten with the first ${RETENTION.evaluatePlaintextPrefixChars} characters plus a SHA-256 of the full prompt, and those characters remain readable. See <a href="#storage">Data Storage</a> for the per-endpoint breakdown.</p>
 </div>
 <div class="qa-block">
   <p class="q"><span class="qnum">14.</span>What is your data retention policy?</p>
-  <p class="a">Screening events: 90 days. Compliance receipts: 1 year. Rate limit counters: auto-expire. API keys: until revocation. Configurable on Compliance tier.</p>
+  <p class="a">Stated retention: screening events ${RETENTION.screeningEventsDays} days, audit events ${RETENTION.auditEventsDays} days, compliance receipts 1 year, API keys until revocation or expiry. A daily purge job deletes records past each window. Rate-limit counters and the in-memory <code>/v1/evaluate</code> records expire automatically. See <a href="#retention">Retention</a>.</p>
 </div>
 <div class="qa-block">
   <p class="q"><span class="qnum">15.</span>Do you support customer data deletion requests?</p>
-  <p class="a">Yes. Via support@parsethis.ai or API. Completed within 30 days.</p>
+  <p class="a">Yes. Via privacy@parsethis.ai or ${CONTACT_EMAIL}. Completed within ${RETENTION.deletionRequestDays} days.</p>
+</div>
+<div class="qa-block">
+  <p class="q"><span class="qnum">15b.</span>Does prompt text leave your infrastructure?</p>
+  <p class="a">Yes, for the semantic analysis layer: prompt text is sent to OpenRouter for model scoring unless the caller passes <code>mode: "pattern-only"</code>, a pattern already matched at severity 9 or above, or the deployment has no OpenRouter key. Prompt text also reaches OpenRouter and the execution sandbox when the caller opts in with <code>execute: true</code>, which is off by default. See <a href="#data-flow">Where Prompt Text Goes</a>.</p>
 </div>
 </details>
 
@@ -492,7 +478,7 @@ export function renderTrustPage(baseUrl: string): string {
 </div>
 <div class="qa-block">
   <p class="q"><span class="qnum">27.</span>Are logs retained and protected?</p>
-  <p class="a">Yes. Screening logs: 90 days. Compliance receipts: 1 year. Access-controlled, encrypted storage.</p>
+  <p class="a">Yes, in access-controlled, encrypted storage. Stated retention is ${RETENTION.screeningEventsDays} days for screening logs and 1 year for compliance receipts, enforced by a daily purge job — see <a href="#retention">Retention</a>.</p>
 </div>
 <div class="qa-block">
   <p class="q"><span class="qnum">28.</span>Is request traceability supported?</p>
@@ -529,7 +515,7 @@ export function renderTrustPage(baseUrl: string): string {
     path: "/trust",
     content,
     baseUrl,
-    lastUpdated: "2026-08-08",
+    lastUpdated: "2026-08-11",
     breadcrumbs: [
       { name: "Home", href: "/" },
       { name: "Trust & Security", href: "/trust" },

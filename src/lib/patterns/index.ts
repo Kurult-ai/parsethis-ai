@@ -62,7 +62,9 @@ export const INJECTION_PATTERNS: Array<{
 
   // Privilege escalation
   { pattern: /you\s+(now\s+)?have\s+(admin|root|unlimited|full)\s+(access|permissions|privileges)/i, category: "privilege_escalation", severity: 8, label: "Grant admin access" },
-  { pattern: /sudo\s+|as\s+root|chmod\s+777|rm\s+-rf/i, category: "privilege_escalation", severity: 7, label: "System command injection" },
+  // System command execution moved to the intent grammar
+  // (intent.system_command_execution): a bare `sudo` literal cannot tell a log
+  // line reporting a denied attempt from an instruction to run one.
 
   // Social engineering
   { pattern: /I('m|\s+am)\s+(your|the)\s+(developer|creator|admin|owner|manager)/i, category: "social_engineering", severity: 7, label: "Authority claim" },

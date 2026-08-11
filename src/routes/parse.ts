@@ -42,6 +42,7 @@ const EXEC_LIMITS: Record<string, number> = {
   free: 5,
   pro: 50,
   team: 200,
+  compliance: 500,
   enterprise: 1000,
 };
 
@@ -49,6 +50,7 @@ const DAILY_COST_CAPS: Record<string, number> = {
   free: 0.50,
   pro: 10,
   team: 50,
+  compliance: 200,
   enterprise: 500,
 };
 
@@ -189,6 +191,20 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
       status: 400,
       title: "Validation failure",
       detail: "mode must be 'full' or 'pattern-only'",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
+  }
+  // pattern-only is a privacy guarantee, not a speed setting: it exists so a
+  // caller can keep prompt text away from the model provider. Sandbox execution
+  // forwards that text regardless, so honouring only half the request would make
+  // the guarantee false. Refuse the combination rather than silently breaking it.
+  if (body.mode === "pattern-only" && (body.execute === true || body.execute === "auto")) {
+    return problem(c, {
+      status: 400,
+      title: "Incompatible options",
+      detail:
+        'mode "pattern-only" cannot be combined with execute. Pattern-only keeps prompt text away from the model provider, and sandbox execution sends it there. Drop execute, or use mode "full".',
       code: ErrorCode.VALIDATION_INVALID_TYPE,
       retryable: false,
     });
@@ -406,6 +422,36 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   const parseStart = Date.now();
   const result = await parsePrompt(body);
   const parseLatencyMs = Date.now() - parseStart;
+
+  // A silently degraded semantic layer looks exactly like a clean pass to the
+  // caller, so surface it as an operational event rather than letting screening
+  // quietly fall back to pattern matching for everyone.
+  if (result.degraded) {
+    auditLog({
+      action: "screening_llm_degraded",
+      apiKeyId: c.get("apiKey")?.id,
+      requestId: result.id,
+      detail: result.degraded_reason,
+    });
+    // Counter so /status can report the layer's real health rather than
+    // inferring it from a key being configured. Best-effort: a screening
+    // verdict must never fail because bookkeeping did.
+    if (isRedisAvailable()) {
+      void (async () => {
+        try {
+          const connected = await ensureRedisConnected();
+          if (!connected) return;
+          const redis = getRedis();
+          const day = new Date().toISOString().slice(0, 10);
+          const key = `screening:llm_degraded:${day}`;
+          const count = await redis.incr(key);
+          if (count === 1) await redis.expire(key, 35 * 24 * 60 * 60);
+        } catch {
+          // ignore — telemetry only
+        }
+      })();
+    }
+  }
 
   // ── Custom Rules Engine (Layer 4: org-specific compliance rules) ──
   // Evaluate customer-defined regex rules against the prompt after the 3
@@ -988,7 +1034,9 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   }
 
   // ── Gate score_components to team+ tier (prevents free-tier scoring oracle) ──
-  if (tier !== "team" && tier !== "enterprise" && apiKey.id !== "master") {
+  // Compliance is a paid tier above Team; withholding forensic detail from the
+  // customers who buy Parse for audit evidence defeats the purpose.
+  if (tier !== "team" && tier !== "compliance" && tier !== "enterprise" && apiKey.id !== "master") {
     delete result.score_components;
   }
 
@@ -1040,7 +1088,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   }
 
   // ── Observe mode: separate, more restrictive rate limit for high-risk prompts ──
-  const OBSERVE_LIMITS: Record<string, number> = { free: 2, pro: 10, team: 50, enterprise: 200 };
+  const OBSERVE_LIMITS: Record<string, number> = { free: 2, pro: 10, team: 50, compliance: 100, enterprise: 200 };
   if (observeExec && apiKey.id !== "master" && isRedisAvailable()) {
     try {
       const redis = getRedis();

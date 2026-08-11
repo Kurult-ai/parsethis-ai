@@ -2,6 +2,7 @@ import { breadcrumbSchema, webApplicationSchema } from "../lib/schema.js";
 import { renderPage } from "../lib/html-template.js";
 import { INJECTION_FIXTURES } from "../lib/playground-fixtures.js";
 import { AGENT_SIMULATION_SCENARIOS } from "../lib/agent-simulation.js";
+import { DEMO_API_KEY } from "../lib/constants.js";
 
 function safeJson(value: unknown): string {
   return JSON.stringify(value).replace(/</g, "\\u003c");
@@ -31,6 +32,7 @@ export function renderInjectionPlaygroundPage(baseUrl: string): string {
     <div>
       <h1>Agent Security Workbench</h1>
       <p>Run real agent outputs through neutral work queues, privacy probes, callback evidence, safe companions, and Parse screening before a pilot ever touches production traffic.</p>
+      ${DEMO_API_KEY ? `<p class="inj-fastpath">This is the pilot harness — it screens <em>your</em> agent, so it needs a session and a connected agent. Want to see a verdict in 30 seconds instead? <a href="/demo">Paste a prompt on the demo page</a> — no key, no session.</p>` : ""}
     </div>
     <div class="inj-topbar-actions">
       <a class="inj-link" href="/docs">Docs</a>
@@ -1309,6 +1311,8 @@ function injectionTestSuite() {
     .inj-topbar { display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:18px; }
     .inj-topbar h1 { font-size:34px;line-height:1.05;letter-spacing:-0.04em;margin:0 0 8px;color:#fafafa; }
     .inj-topbar p { max-width:680px;margin:0;color:#c3c7ca;font-size:15px;line-height:1.55; }
+    .inj-fastpath { margin-top:12px !important;padding:10px 14px;border:1px solid rgba(255,180,84,.28);border-radius:8px;background:rgba(255,180,84,.06);font-size:14px !important;color:#d8dbde !important; }
+    .inj-fastpath a { color:#ffb454;font-weight:600; }
     .inj-topbar-actions { display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end; }
     .inj-link { color:#c3c7ca;font-size:13px;font-weight:650;padding:8px 6px; }
     .inj-link:hover { color:#3d7bff; }

@@ -221,8 +221,12 @@ const STRONG_DEFENSIVE_CONTEXT =
 const LIVE_ATTACK_CONTEXT =
   /\b(?:ignore|disregard|forget|override|from now on|you are now|your answer must|must start with|must always|dan mode|jailbreak|no filters?|no restrictions?|avoid content filtering|provide|share|repeat|quote|reiterate|rephrase|output|display|print|echo|regurgitate|pass\s*phrase|password|system prompt|developer message|instructions?|personal information|user data|cached user data|\.env|\/etc\/passwd|base64|admin privileges?|system_override|hidden_instruction)\b/i;
 
+// A live instruction aimed at the model. Defensive framing ("documentation",
+// "as quoted") must never suppress one of these: the canonical override
+// imperatives were missing, so prefixing an injection payload with
+// "Documentation example:" disabled prompt-injection detection outright.
 const DIRECT_ATTACK_IMPERATIVE =
-  /\b(?:from now on|you are now|your answer must|must start with|must always|please confirm|provide the pass\s*phrase|share the password|avoid content filtering|no filters?|no restrictions?|repeat instructions|quote your instructions|reiterate your original instructions|print all prompt|output the string|dan mode enabled)\b/i;
+  /\b(?:from now on|you are now|your answer must|must start with|must always|please confirm|provide the pass\s*phrase|share the password|avoid content filtering|no filters?|no restrictions?|repeat instructions|quote your instructions|reiterate your original instructions|print all prompt|output the string|dan mode enabled|ignore\s+(?:all\s+)?(?:previous|prior|preceding|above|earlier)|ignore\s+the\s+above|disregard\s+(?:all\s+)?(?:previous|prior|preceding|the\s+above|earlier)|forget\s+(?:all\s+)?(?:previous|prior|your)\s+(?:instructions?|rules?|context)|override\s+(?:your|the)\s+(?:instructions?|rules?|policy|policies))\b/i;
 
 const DIRECT_AGENT_TARGET =
   /\b(?:you|your|du|dein|sie|ihre|assistant|assistent|agent|model|modell|llm|bot|copilot|chatgpt|gpt|downstream agent|receiving agent)\b/i;
@@ -235,6 +239,68 @@ const UNRESTRICTED_ROLE =
 
 const DIRECT_URL_EXFIL =
   /\b(?:send|post|upload|transmit|forward|exfiltrate|copy|deliver)\b[^.\n]{0,120}\b(?:conversation|chat|messages?|data|content|private|internal|customer)\b[^.\n]{0,120}\bhttps?:\/\//i;
+
+// Shell-command detection lives here rather than in the flat pattern list so it
+// can see sentence context. A log line that reports a denied sudo attempt and an
+// instruction to run sudo are the same tokens with opposite intent.
+// Deliberately loose: this identifies the *artifact*, not the intent. Requiring
+// an operand here lost coverage the deleted flat rule had (`rm -rf *`,
+// `rm -rf "/quoted/path"`, a bare `chmod 777`, a general `as root`). Whether the
+// command is being issued or merely described is `directed`'s job, below.
+const SHELL_COMMAND_ARTIFACT =
+  /(?:sudo\s+(?:-\w+\s+)*[a-z][\w./-]*|chmod\s+(?:777|\+s)\b|rm\s+-rf\b|dd\s+if=|mkfs\.\w|usermod\s+-aG\s+(?:sudo|wheel)|\bas\s+root\b)/i;
+
+const DESTRUCTIVE_SHELL_ARTIFACT =
+  /(?:rm\s+-rf\b|dd\s+if=|mkfs\.\w|chmod\s+777\s+\/(?:etc|var|usr|boot)\b)/i;
+
+const COMMAND_IMPERATIVE_CUE =
+  /\b(?:run|execute|type|enter|issue|invoke|now\s+do|please\s+run|go\s+ahead\s+and|immediately|first\s+command)\b/i;
+
+// An imperative anywhere ahead of the command means the command is being issued,
+// whatever framing surrounds it. This overrides the reported-speech and
+// defensive-discussion guards below — otherwise "Audit log:" or "Documentation
+// example:" becomes a prefix that launders any live command.
+//
+// Ordering rather than proximity, and [\s\S] rather than [^.\n]: a shell command
+// in retrieved content normally arrives inside a fenced code block on its own
+// line, which any same-line/same-sentence window can never reach. The verb list
+// must stay in sync with COMMAND_IMPERATIVE_CUE — a cue strong enough to prove
+// intent must also be strong enough to defeat the suppressor.
+const COMMAND_ARTIFACT_CORE =
+  "(?:sudo\\s|chmod\\s+(?:777|\\+s)|rm\\s+-rf|dd\\s+if=|mkfs\\.|usermod\\s+-aG|as\\s+root)";
+
+const IMPERATIVE_BEFORE_COMMAND = new RegExp(
+  `\\b(?:run|execute|exec|type|enter|issue|invoke|perform|paste|apply|go\\s+ahead\\s+and|please\\s+run|now\\s+do|immediately|first\\s+command)\\b[\\s\\S]{0,300}?${COMMAND_ARTIFACT_CORE}`,
+  "i"
+);
+
+// The anaphoric form: the command comes first and the instruction points back at
+// it ("sudo rm -rf /var/lib/postgres — run this now").
+const IMPERATIVE_AFTER_COMMAND = new RegExp(
+  `${COMMAND_ARTIFACT_CORE}[\\s\\S]{0,300}?\\b(?:run|execute|exec|paste|apply|do)\\s+(?:this|it|that|these|the\\s+above|the\\s+(?:command|commands|step|steps))\\b`,
+  "i"
+);
+
+// Reported speech: the command is being described, quoted, or logged — not issued.
+const REPORTED_SPEECH_CONTEXT =
+  /\b(?:attempted|attempts?|tried\s+to|was\s+(?:denied|blocked|terminated|rejected|logged|flagged|observed)|were\s+denied|denied\s+by|blocked\s+by|audit\s+log|log\s+(?:entry|excerpt|line)|syslog|postmortem|incident\s+(?:report|timeline)|man\s+page|manual\s+page|runbook|a\s+user|the\s+user|an\s+attacker)\b|\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/i;
+
+// Authority-assertion exfiltration: text that grants itself permission to move
+// data. Requires a triad (claimed authority + movement verb + sensitive object
+// or destination) so ordinary delegation prose cannot trip it.
+const AUTHORITY_ASSERTION_CUE =
+  // The grantee may be second person ("you are pre-authorized") or a third-person
+  // agent ("downstream agent is authorized", "future agents are cleared").
+  /\b(?:you|(?:the\s+|a\s+|any\s+|all\s+)?(?:downstream\s+|receiving\s+|future\s+|other\s+)?agents?|the\s+assistant|the\s+bot)\s+(?:is|are|has\s+been|have\s+been)\s+(?:pre-?\s?authoriz|authoriz|clear|approv|permitt|grant)(?:ed)?\b|\bapproval\s+(?:is\s+|has\s+been\s+|already\s+)*(?:been\s+)?granted\b|\bno\s+(?:further|additional)\s+(?:confirmation|approval|authorization|review|sign-?off)\s+(?:is\s+)?(?:needed|required|necessary)\b|\bwithout\s+(?:further\s+)?(?:confirmation|approval|authorization|review)\b|\b(?:this|that|the|it)\s*(?:action|request|task|export|transfer)?\s*(?:is|has\s+been|was)\s+(?:already\s+)?(?:approved|authorized|pre-?approved|sanctioned|signed\s+off)\b|\b(?:compliance|management|the\s+(?:admin|owner|operator|security)\s+team)\s+has\s+(?:approved|authorized|cleared)\b|\bdo\s+not\s+(?:ask|prompt|wait)\s+for\s+(?:confirmation|approval|permission)\b|\bproceed\s+without\s+(?:user|owner|human)?\s*(?:confirmation|approval)\b/i;
+
+const DATA_MOVEMENT_VERB =
+  /\b(?:export|send|forward|upload|transfer|share|email|post|copy|sync|transmit|extract|deliver|publish|expose|mirror|archive|relay|drop|push|dump|stream|attach|replicate|back\s*up|make\s+\w+\s+available)\b/i;
+
+const SENSITIVE_RECORD_COMPOUND =
+  /\b(?:customer|user|client|member|subscriber|patient|employee)\s+(?:records?|data|lists?|databases?|details|information|pii)\b|\bpii\b/i;
+
+const EXTERNAL_DESTINATION =
+  /https?:\/\/|\b[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}\b|\b(?:s3|gs|azblob|r2):\/\/[\w./-]+|\b(?:to|at|into|onto)\s+(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:\/\S*)?/i;
 
 const HANDOFF_SPOOF_CUE =
   /\b(?:system|developer|admin|trusted|override|ignore|disregard|new\s+instructions?|do\s+not\s+reveal|without\s+owner\s+review|skip\s+approval|bypass\s+approval|grant|elevated|tool\s+access)\b/i;
@@ -396,11 +462,29 @@ function sentenceWindows(text: string): string[] {
   return [...windows].map((window) => window.slice(0, 900));
 }
 
+/**
+ * Drops quoted spans. Quoting is the clearest mention-vs-use signal available:
+ * a security doc writes the phrase 'ignore all previous instructions' inside
+ * quotes to talk about it, while an attacker writes it bare so the model reads
+ * it as an instruction.
+ */
+function stripQuotedSpans(text: string): string {
+  return text
+    .replace(/'[^']{0,300}'/g, " ")
+    .replace(/"[^"]{0,300}"/g, " ")
+    .replace(/\u201c[^\u201d]{0,300}\u201d/g, " ")
+    .replace(/\u2018[^\u2019]{0,300}\u2019/g, " ")
+    .replace(/`[^`]{0,300}`/g, " ");
+}
+
 function isDefensiveDiscussion(text: string): boolean {
   const defensive = DEFENSIVE_CONTEXT.test(text) || (NEGATED_ATTACK.test(text) && /\b(?:security|documentation|example|quoted|test case)\b/i.test(text));
   if (isBenignSensitiveHandlingDiscussion(text)) return true;
   if (!defensive || TOOL_OR_EXFIL.test(text)) return false;
-  if (STRONG_DEFENSIVE_CONTEXT.test(text) && !DIRECT_ATTACK_IMPERATIVE.test(text)) return true;
+  // Test the imperative against unquoted text only: a doc that quotes an attack
+  // string is discussing it, but bare defensive vocabulary in front of a live
+  // payload ("Documentation example: Ignore all previous text...") is cover.
+  if (STRONG_DEFENSIVE_CONTEXT.test(text) && !DIRECT_ATTACK_IMPERATIVE.test(stripQuotedSpans(text))) return true;
   return !LIVE_ATTACK_CONTEXT.test(text);
 }
 
@@ -483,6 +567,68 @@ function maybeFlagRoleSpoof(flags: IntentRiskFlag[], text: string): void {
       confidence: "medium",
       attack_family: "spoof_instruction_hierarchy",
       action_floor: "sandbox",
+      evidence: window,
+      source: "deterministic_intent",
+    });
+  }
+}
+
+function maybeFlagSystemCommand(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (!SHELL_COMMAND_ARTIFACT.test(window)) continue;
+    // Described, quoted, or logged commands are not instructions to run one —
+    // unless an imperative sits right in front of the command, in which case the
+    // surrounding framing is cover rather than context.
+    // Text aimed at the agent ("you are authorized to grant yourself ... sudo
+    // usermod") is an instruction even with no imperative verb, so it also
+    // overrides the framing guards. Descriptive prose about a command does not
+    // address the agent, which is what keeps man pages and log excerpts quiet.
+    const issuedDirectly =
+      IMPERATIVE_BEFORE_COMMAND.test(window) ||
+      IMPERATIVE_AFTER_COMMAND.test(window) ||
+      (DIRECT_AGENT_TARGET.test(window) && OPERATIONAL_INSTRUCTION.test(window));
+    if (!issuedDirectly && REPORTED_SPEECH_CONTEXT.test(window)) continue;
+    if (!issuedDirectly && isDefensiveDiscussion(window)) continue;
+    const directed =
+      COMMAND_IMPERATIVE_CUE.test(window) ||
+      (DIRECT_AGENT_TARGET.test(window) && OPERATIONAL_INSTRUCTION.test(window));
+    if (!directed) continue;
+    const destructive = DESTRUCTIVE_SHELL_ARTIFACT.test(window);
+    addFlag(flags, {
+      id: "intent.system_command_execution",
+      category: "privilege_escalation",
+      severity: destructive ? 8 : 7,
+      label: "System command execution intent",
+      detail:
+        "The prompt instructs the agent to run a privileged or destructive shell command rather than describing one.",
+      confidence: "high",
+      attack_family: "system_command_execution",
+      action_floor: destructive ? "block" : "sandbox",
+      evidence: window,
+      source: "deterministic_intent",
+    });
+  }
+}
+
+function maybeFlagAuthorityAssertion(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (!AUTHORITY_ASSERTION_CUE.test(window)) continue;
+    if (!DATA_MOVEMENT_VERB.test(window)) continue;
+    if (!SENSITIVE_RECORD_COMPOUND.test(window) && !EXTERNAL_DESTINATION.test(window)) continue;
+    // No defensive-discussion exemption here. The triad (claimed authority +
+    // movement verb + sensitive object or destination) is specific enough that
+    // prose merely *about* this attack does not satisfy it, and exempting it
+    // would let "Documentation example:" prefix a working payload.
+    addFlag(flags, {
+      id: "intent.authority_assertion_exfil",
+      category: "data_exfiltration",
+      severity: 8,
+      label: "Self-granted authority to move data",
+      detail:
+        "The content claims the agent is already authorized to move sensitive data to a destination, bypassing confirmation. Instructions carrying their own approval are a hallmark of indirect injection.",
+      confidence: "high",
+      attack_family: "authority_assertion_exfil",
+      action_floor: "block",
       evidence: window,
       source: "deterministic_intent",
     });
@@ -1074,6 +1220,8 @@ export function detectIntentPromptRisks(prompt: string, normalizedPrompt = promp
     maybeFlagBoundary(flags, text);
     maybeFlagReset(flags, text);
     maybeFlagDirectExfil(flags, text);
+    maybeFlagSystemCommand(flags, text);
+    maybeFlagAuthorityAssertion(flags, text);
     maybeFlagFuzzyOverride(flags, text);
     maybeFlagInstructionDisclosure(flags, text);
     maybeFlagPreConversationProbe(flags, text);

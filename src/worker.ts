@@ -6,6 +6,7 @@ import { executePrompt } from "./executor.js";
 import { runSpecEvaluators } from "./evaluators.js";
 import { storeResult, updateProgress, clearProgress } from "./result-store.js";
 import { redactEvaluationAfterCompletion, redactPrompt } from "./lib/prompt-privacy.js";
+import { runRetentionPurge } from "./lib/retention-purge.js";
 import type { EvaluationJobData } from "./queue.js";
 import type { TestCaseResult, EvalSummary, EvaluationResult } from "./types.js";
 import { createSIEMWorker } from "./lib/compliance/siem-worker.js";
@@ -226,6 +227,30 @@ const siemWorker = createSIEMWorker();
 worker.on("ready", () => {
   console.log("[worker] Evaluation worker ready, waiting for jobs...");
 });
+
+// ─── Retention purge ─────────────────────────────────────────────────────
+// The retention figures published on /privacy and /trust are only true if
+// something enforces them. Runs daily; set RETENTION_PURGE_ENABLED=false to
+// disable, or RETENTION_PURGE_DRY_RUN=true to report without deleting.
+
+const RETENTION_PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+async function retentionPurgeTick(): Promise<void> {
+  if (process.env.RETENTION_PURGE_ENABLED === "false") return;
+  try {
+    await runRetentionPurge({ dryRun: process.env.RETENTION_PURGE_DRY_RUN === "true" });
+  } catch (err) {
+    // Never let bookkeeping take the worker down.
+    console.error(`[worker] retention purge failed: ${(err as Error).message}`);
+  }
+}
+
+// Wait a few minutes after boot so a restart loop cannot hammer the database.
+const retentionPurgeTimer = setTimeout(() => {
+  void retentionPurgeTick();
+  setInterval(() => void retentionPurgeTick(), RETENTION_PURGE_INTERVAL_MS).unref();
+}, 5 * 60 * 1000);
+retentionPurgeTimer.unref();
 
 function shutdown(signal: string) {
   console.log(`\n[worker] ${signal} received, shutting down...`);
