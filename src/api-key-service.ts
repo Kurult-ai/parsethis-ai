@@ -312,6 +312,24 @@ export type ApiKeyValidationResult =
   | { status: "revoked" }
   | { status: "temporarily_unavailable"; reason: "cache_lookup_failed" | "fallback_lookup_failed" | "db_lookup_failed" | "db_lookup_timeout" };
 
+/**
+ * Rolling expiry: a key that is being used never silently dies. On each valid
+ * use, if less than 29 of the 30 lifetime days remain, expiry rolls forward to
+ * now + 30 days. Self-throttling — right after a roll the key has 30 days
+ * remaining, which is above the 29-day threshold, so the write happens at most
+ * about once per key per day. A key idle for 30 straight days still expires;
+ * that is the abandonment cleanup the expiry exists for.
+ */
+const KEY_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
+const KEY_RENEWAL_THRESHOLD_MS = 29 * 24 * 60 * 60 * 1000;
+
+export function rolledExpiryFor(expiresAt: Date | null): Date | null {
+  if (!expiresAt) return null;
+  const remaining = expiresAt.getTime() - Date.now();
+  if (remaining <= 0 || remaining >= KEY_RENEWAL_THRESHOLD_MS) return null;
+  return new Date(Date.now() + KEY_LIFETIME_MS);
+}
+
 export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKeyValidationResult> {
   if (!bearerToken || !bearerToken.startsWith("pfa_")) return { status: "invalid" };
   if (bearerToken.startsWith("pfa_live_") && !/^pfa_live_[0-9a-f]{48}$/.test(bearerToken)) return { status: "invalid" };
@@ -328,6 +346,8 @@ export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKe
       if (candidate.revokedAt) return { status: "revoked" };
       if (candidate.expiresAt && new Date(candidate.expiresAt) < new Date()) return { status: "expired" };
       candidate.lastUsedAt = new Date();
+      const rolledLocal = rolledExpiryFor(candidate.expiresAt ? new Date(candidate.expiresAt) : null);
+      if (rolledLocal) candidate.expiresAt = rolledLocal;
       return { status: "valid", record: candidate };
     }
     return { status: "invalid" };
@@ -358,11 +378,18 @@ export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKe
       if (record.revokedAt) return { status: "revoked" };
       if (record.expiresAt && new Date(record.expiresAt) < new Date()) return { status: "expired" };
 
-      // Update last_used_at asynchronously (fire-and-forget)
+      // Update last_used_at asynchronously (fire-and-forget); roll expiry
+      // forward when the key is in its final 29 days. The cache must be
+      // invalidated on a roll, or the cached record's stale expiresAt would
+      // keep reporting "expired" after the DB says otherwise.
+      const rolledCached = rolledExpiryFor(record.expiresAt ? new Date(record.expiresAt) : null);
       prisma.apiKey.update({
         where: { id: record.id },
-        data: { lastUsedAt: new Date() },
+        data: rolledCached ? { lastUsedAt: new Date(), expiresAt: rolledCached } : { lastUsedAt: new Date() },
+      }).then(() => {
+        if (rolledCached) return invalidateApiKeyCache(prefix);
       }).catch(() => {});
+      if (rolledCached) record.expiresAt = rolledCached;
 
       return { status: "valid", record };
     }
@@ -383,6 +410,11 @@ export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKe
     if (!valid) continue;
     if (fallbackRecord.revokedAt) return { status: "revoked" };
     if (fallbackRecord.expiresAt && fallbackRecord.expiresAt < new Date()) return { status: "expired" };
+    const rolledFallback = rolledExpiryFor(fallbackRecord.expiresAt);
+    if (rolledFallback) {
+      fallbackRecord.expiresAt = rolledFallback;
+      storeFallbackRecord(fallbackRecord).catch(() => {});
+    }
     return { status: "valid", record: fallbackRecord };
   }
   // A non-matching fallback candidate sharing the short prefix is not proof of
@@ -418,6 +450,11 @@ export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKe
 
     const record = toApiKeyRecord(candidate);
 
+    // Roll expiry forward before caching so the cached record carries the
+    // renewed date.
+    const rolledDb = rolledExpiryFor(record.expiresAt);
+    if (rolledDb) record.expiresAt = rolledDb;
+
     // Cache in Redis (include keyHash for future bcrypt compare). Cache write
     // failure should not reject an otherwise valid key.
     cacheApiKey(prefix, { ...record, keyHash: candidate.keyHash }).catch(() => {});
@@ -425,7 +462,7 @@ export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKe
     // Update last_used_at
     prisma.apiKey.update({
       where: { id: candidate.id },
-      data: { lastUsedAt: new Date() },
+      data: rolledDb ? { lastUsedAt: new Date(), expiresAt: rolledDb } : { lastUsedAt: new Date() },
     }).catch(() => {});
 
     return { status: "valid", record };

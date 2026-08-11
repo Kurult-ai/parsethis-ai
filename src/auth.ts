@@ -420,7 +420,9 @@ export function authMiddleware(requiredScope?: string) {
       });
     }
 
-    // Attach key info to context
+    // Attach key info to context. expires_in_days lets screening responses
+    // carry key_expires_in_days so an unattended agent can warn its owner
+    // before the key dies.
     c.set("apiKey", {
       id: apiKeyRecord.id,
       name: apiKeyRecord.name,
@@ -428,6 +430,9 @@ export function authMiddleware(requiredScope?: string) {
       rate_limit: apiKeyRecord.rateLimit,
       tier: apiKeyRecord.tier,
       role: apiKeyRecord.role,
+      expires_in_days: apiKeyRecord.expiresAt
+        ? Math.max(0, Math.ceil((new Date(apiKeyRecord.expiresAt).getTime() - Date.now()) / 86_400_000))
+        : null,
     });
 
     // Resolve environment from X-Parse-Environment header (default: production)

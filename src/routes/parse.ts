@@ -636,6 +636,13 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     enforcement_mode: enforcementMode,
   };
 
+  // ── Key expiry telemetry ──
+  // Expiring bearer keys report remaining days so unattended agents can warn
+  // their owner before screening silently starts failing 401.
+  if (typeof apiKey?.expires_in_days === "number") {
+    (result as unknown as Record<string, unknown>).key_expires_in_days = apiKey.expires_in_days;
+  }
+
   // ── Data Access Governance (Task 8.1) ──
   // When request metadata includes data_sources and an agent_id,
   // check the agent's grants. Ungranted access is a finding.

@@ -145,5 +145,6 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
     approval_request: approvalRequest,
     output_length: body.output.length,
     analyzed_at: new Date().toISOString(),
+    ...(typeof apiKey?.expires_in_days === "number" ? { key_expires_in_days: apiKey.expires_in_days } : {}),
   });
 });

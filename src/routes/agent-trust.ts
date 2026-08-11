@@ -95,5 +95,6 @@ agentTrustRoutes.post("/v1/agent/trust/verify", authMiddleware("evaluate"), bill
     risk_score: riskScore,
     flags,
     recommendation: result.recommendation,
+    ...(typeof apiKey?.expires_in_days === "number" ? { key_expires_in_days: apiKey.expires_in_days } : {}),
   });
 });

@@ -2737,7 +2737,7 @@ publicRoutes.post("/v1/keys/generate", async (c) => {
       scopes: key.scopes,
       created_at: key.created_at,
       expires_at: expiresAt.toISOString(),
-      note: "Store this key securely. It will not be shown again in full. Expires in 30 days.",
+      note: "Store this key securely. It will not be shown again in full. Renews automatically while in use; expires after 30 idle days (fails closed with 401). Self-revoke anytime with DELETE /v1/keys/self.",
     }, 201);
   } catch (err) {
     return keygenProblem(c, classifyKeygenDatabaseFailure(err), err);

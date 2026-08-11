@@ -321,7 +321,7 @@ Required verification:
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.free.requestsPerMinute} req/min</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">30-day key expiry</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Keys auto-renew while in use; idle 30 days = expiry (fails closed, 401)</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Self-service</li>
         <li style="padding:6px 0;">${PLAN_LIMITS.free.sandboxExecutionsPerHour} sandbox/hr</li>
       </ul>

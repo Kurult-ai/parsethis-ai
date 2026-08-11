@@ -26,6 +26,8 @@ export interface ApiKeyContext {
   rate_limit: number;
   tier?: string;
   role?: string;
+  /** Whole days until the key expires; null for non-expiring keys (master, demo, x402). */
+  expires_in_days?: number | null;
 }
 
 export type AppEnv = {

@@ -89,7 +89,7 @@ Verification required before reporting done:
     },
     curl: {
       code: "curl -X POST https://www.parsethis.ai/v1/keys/generate",
-      foot: `<b>no auth required</b> — returns a 30-day key, ${PLAN_LIMITS.free.requestsPerMinute} req/min free.`,
+      foot: `<b>no auth required</b> — returns a key that renews while in use, ${PLAN_LIMITS.free.requestsPerMinute} req/min free.`,
     },
   };
   const installPayload = JSON.stringify(installSnippets).replace(/</g, "\\u003c");
