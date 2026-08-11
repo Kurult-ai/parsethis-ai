@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcrypt";
 import { prisma } from "./db.js";
 import { cacheApiKey, getCachedApiKey, invalidateApiKeyCache } from "./result-store.js";
+import { isNegativelyCached, recordNegativeCache } from "./lib/auth-dos-guard.js";
 import { PLAN_LIMITS } from "./lib/product-facts.js";
 import { abandonRedisConnection, ensureRedisConnected, getRedis } from "./redis.js";
 
@@ -455,6 +456,14 @@ export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKe
     // invalid. Continue to the fallback/database candidate lookup.
   }
 
+  // Past the prefix cache, so everything below is the expensive path: a
+  // fallback sweep and then a bcrypt compare against every DB row sharing this
+  // prefix. Short-circuit a token we very recently proved invalid before it can
+  // pay that cost again. Deliberately placed here rather than at the top of the
+  // function: a valid cache hit should not be taxed with an extra Redis EXISTS
+  // to make invalid requests cheaper. Fails open — see auth-dos-guard.
+  if (await isNegativelyCached(bearerToken)) return { status: "invalid" };
+
   // Check Redis fallback keys before DB. This keeps newly issued self-service
   // keys usable during a Postgres binding outage without exposing secrets.
   let fallbackRecords: FallbackApiKeyRecord[];
@@ -526,6 +535,12 @@ export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKe
     return { status: "valid", record };
   }
 
+  // Definitive miss: cache, fallback, and DB all consulted, nothing matched.
+  // This is the expensive outcome (a full bcrypt sweep of the prefix bucket),
+  // so remember it briefly to spare the next identical probe. Fire-and-forget:
+  // the response should not wait on the write, and a concurrent-probe race that
+  // runs bcrypt twice before this lands is harmless.
+  void recordNegativeCache(bearerToken);
   return { status: "invalid" };
 }
 

@@ -13,6 +13,7 @@ import { getCachedPolicyData, cachePolicyData } from "./result-store.js";
 import type { AppEnv, ScreeningPolicy } from "./types.js";
 import { auditLog } from "./lib/audit-log.js";
 import { problem, ErrorCode } from "./lib/problem-response.js";
+import { isAuthFailureLimited, recordAuthFailure } from "./lib/auth-dos-guard.js";
 
 /** Timing-safe string comparison to prevent timing attacks on key validation */
 function safeCompare(a: string, b: string): boolean {
@@ -345,6 +346,24 @@ export function authMiddleware(requiredScope?: string) {
       return;
     }
 
+    // Before the expensive path — cache miss then a bcrypt sweep of the prefix
+    // bucket — throttle a source that is only ever failing. Valid keys never
+    // reach recordAuthFailure below, so this cannot limit legitimate traffic;
+    // it only bounds the bcrypt work an unauthenticated flood can force.
+    const authIp = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+    if (await isAuthFailureLimited(authIp)) {
+      auditLog({ action: "auth_failure", detail: "IP auth-failure rate limit exceeded", ip: authIp });
+      c.header("Retry-After", "60");
+      return problem(c, {
+        status: 429,
+        title: "Too many authentication failures",
+        detail: "Too many failed authentication attempts from this source. Retry after 60 seconds with a valid key.",
+        code: ErrorCode.RATE_LIMIT,
+        retryable: true,
+        retry_after_seconds: 60,
+      });
+    }
+
     // Postgres-backed key validation via api-key-service (bcrypt + Redis cache)
     let apiKeyRecord: ApiKeyRecord;
     try {
@@ -364,6 +383,9 @@ export function authMiddleware(requiredScope?: string) {
       if (validation.status !== "valid") {
         const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
         auditLog({ action: "auth_failure", detail: validation.status === "expired" ? "Expired API key" : validation.status === "revoked" ? "Revoked API key" : "Invalid API key", ip });
+        // Count only definitive failures toward the per-IP budget — never the
+        // temporarily_unavailable branch above, which is our outage, not theirs.
+        void recordAuthFailure(ip);
         return problem(c, {
           status: 401,
           title: "Invalid API key",
