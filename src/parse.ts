@@ -217,6 +217,28 @@ function applyTrustedConversationSoftening(flags: RiskFlag[], metadata?: Record<
 const SEMANTIC_ACQUITTAL_MAX_LLM_SCORE = 5;
 const SEMANTIC_ACQUITTAL_SEVERITY_CAP = 4;
 
+/**
+ * Stricter than SOFTENING_CANCEL_CATEGORIES, deliberately.
+ *
+ * That set guards applyTrustedConversationSoftening, which only runs when the
+ * caller attests first-party ownership — an accountable claim. This path has no
+ * such attestation and applies to anonymous traffic, so it must cancel on more.
+ *
+ * The additions are indirect_injection and social_engineering. Reusing the
+ * trusted-conversation set here would have left both out: a mid-severity
+ * indirect-injection flag carries a "sandbox" floor rather than "block", so it
+ * would not have tripped the block-floor guard below, and the score recompute
+ * could then pull a blocking verdict down to sandbox on the exact threat the
+ * product exists to catch. prompt_injection stays out by necessity — it is the
+ * correction family's own category, and including it would mean nothing ever
+ * releases.
+ */
+const ACQUITTAL_CANCEL_CATEGORIES = new Set([
+  ...SOFTENING_CANCEL_CATEGORIES,
+  "indirect_injection",
+  "social_engineering",
+]);
+
 function applySemanticAcquittalRelease(flags: RiskFlag[], llmResult: LlmRiskResult | null): boolean {
   if (!llmResult) return false;
   if (llmResult.risk_score >= SEMANTIC_ACQUITTAL_MAX_LLM_SCORE) return false;
@@ -225,7 +247,7 @@ function applySemanticAcquittalRelease(flags: RiskFlag[], llmResult: LlmRiskResu
   const hasDangerSignal = flags.some(
     (f) =>
       f.id === "intent.extract_protected_prompt" ||
-      (!CONVERSATIONAL_CORRECTION_FLAG_IDS.has(f.id ?? "") && SOFTENING_CANCEL_CATEGORIES.has(f.category)),
+      (!CONVERSATIONAL_CORRECTION_FLAG_IDS.has(f.id ?? "") && ACQUITTAL_CANCEL_CATEGORIES.has(f.category)),
   );
   if (hasDangerSignal) return false;
 
