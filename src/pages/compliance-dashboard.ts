@@ -118,6 +118,7 @@ export async function renderComplianceDashboardPage(baseUrl: string, apiKeyId: s
   <button class="tab-btn" data-tab="frameworks" style="padding:10px 20px;border:none;background:none;color:var(--text-dim);border-bottom:2px solid transparent;cursor:pointer;font-size:14px;font-weight:600;">Frameworks</button>
   <button class="tab-btn" data-tab="export" style="padding:10px 20px;border:none;background:none;color:var(--text-dim);border-bottom:2px solid transparent;cursor:pointer;font-size:14px;font-weight:600;">Evidence Export</button>
   <button class="tab-btn" data-tab="siem" style="padding:10px 20px;border:none;background:none;color:var(--text-dim);border-bottom:2px solid transparent;cursor:pointer;font-size:14px;font-weight:600;">SIEM Forwarding</button>
+  <a href="/dashboard/org" style="margin-left:auto;align-self:center;padding:10px 20px;color:var(--text-dim);font-size:14px;font-weight:600;">Org control panel →</a>
 </div>
 
 <!-- ═══ Tab: Overview ═══ -->

@@ -25,6 +25,7 @@ Parse's compliance suite turns your existing screening data into audit-ready evi
 5. [Agent Registry Guide](#5-agent-registry-guide)
 6. [Data Governance Guide](#6-data-governance-guide)
 7. [Enforcement Dial Guide](#7-enforcement-dial-guide)
+8. [Org Tool Governance Guide](#8-org-tool-governance-guide)
 
 ---
 
@@ -618,3 +619,125 @@ curl https://www.parsethis.ai/v1/compliance/policy-history \
 ```
 
 Returns the last 50 policy revisions with version, snapshot, changed_by, change_reason, and diff.
+
+---
+
+## 8. Org Tool Governance Guide
+
+Two org-wide controls let an administrator set what their teams' agents may do,
+rather than trusting each agent to declare it. Both are managed from
+`/dashboard/org` or the API below, and both are audited.
+
+### Controlling which tools agents may use
+
+The common case is banning a capability outright — for example, a company that
+does not permit browser or computer use from AI agents. One rule does it:
+
+```bash
+curl -X POST https://www.parsethis.ai/v1/org/tool-policy/rules \
+  -H "Authorization: Bearer pfa_live_yourkey" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "kind": "category",
+    "pattern": "browser",
+    "action": "block",
+    "reason": "Company policy: no browser use from AI agents."
+  }'
+```
+
+`kind` may be `category`, `exact` (one tool name), or `prefix` (a name prefix).
+A category matches every name that capability travels under — the `browser`
+category covers `browser_use`, `playwright`, `puppeteer`, `selenium`,
+`computer_use`, `mcp__claude-in-chrome__*` and more, so a team cannot sidestep
+the rule by renaming the tool. List the categories and what each covers:
+
+```bash
+curl https://www.parsethis.ai/v1/org/tool-policy/catalog \
+  -H "Authorization: Bearer pfa_live_yourkey"
+```
+
+`action` is `block`, `require_approval`, or `allow`. Rules may be scoped to one
+agent, one API key, or one role, and carry a `priority`. **A scoped rule can
+tighten the org-wide result but never loosen it** — a per-agent `allow` at the
+highest priority does not override an org-wide `block`.
+
+An org runs in `blocklist` mode (tools allowed unless a rule blocks them) or
+`allowlist` mode (blocked unless a rule allows them):
+
+```bash
+curl -X PUT https://www.parsethis.ai/v1/org/tool-policy \
+  -H "Authorization: Bearer pfa_live_yourkey" \
+  -H "Content-Type: application/json" \
+  -d '{"mode": "allowlist"}'
+```
+
+### See what a rule would break before enforcing it
+
+The dry run resolves tools against your live rules and writes nothing:
+
+```bash
+curl -X POST https://www.parsethis.ai/v1/org/tool-policy/test \
+  -H "Authorization: Bearer pfa_live_yourkey" \
+  -H "Content-Type: application/json" \
+  -d '{"tools": ["playwright", "send_email", "query_db"]}'
+```
+
+Each result carries the decision, the rule that produced it, and a plain-English
+reason. Pair this with the enforcement dial on `monitor` to watch what *would*
+have been blocked before anything actually is.
+
+### Where the rules are enforced
+
+| Point | Behaviour |
+|-------|-----------|
+| Agent registration | Registering or updating an agent whose tool list contains a blocked tool returns **422** naming the tools |
+| Screening (`POST /v1/parse`) | Requested tools produce a `tool_policy_violation` flag; blocked under the `block` dial, recorded under `monitor` and `warn` |
+| Gateway proxy | Blocked entries are stripped from the OpenAI-compatible `tools` array before the request reaches the provider, and refused outright under `block` |
+
+Agents already registered with a now-banned tool are not edited silently. They
+appear as in violation on the dashboard and are stopped at screening time.
+
+### Setting an org-wide risk tolerance
+
+Screening policy is otherwise per API key, so each team can set its own
+threshold. The org ceiling puts a floor under all of them:
+
+```bash
+curl -X PUT https://www.parsethis.ai/v1/org/policy-defaults \
+  -H "Authorization: Bearer pfa_live_yourkey" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "autoBlockThreshold": 5,
+    "enforcementMode": "block",
+    "screenUserInput": true,
+    "bypassEnabled": false,
+    "locked_fields": ["enforcementMode"]
+  }'
+```
+
+The merge tightens only. A key asking for a threshold of 9 gets 5; a key already
+at 3 keeps 3. A key on `monitor` is raised to `block`; a key already on `block`
+stays there. `bypassEnabled: false` forces bypass off for everyone.
+
+`locked_fields` is the exception: a locked field takes the org value outright,
+which is the only way to set something *looser* than a key chose — a deliberate,
+audited act. A member attempting to write a locked field gets a **422** naming
+the field and the org value, rather than having their write silently overridden.
+
+Omitting a field means the org has no opinion and the key's own value stands.
+`PUT` replaces the whole ceiling, so an omitted field withdraws any previous
+opinion.
+
+### Roles and audit
+
+Reading either control requires `org_admin`, `security_analyst` or `auditor`.
+Changing either requires `org_admin`. Every change writes an audit event and a
+policy revision, so `GET /v1/compliance/policy-history` shows who changed the
+org's governance, when, and what the diff was — and existing SIEM forwarding
+picks the change up as a `policy_change` event.
+
+### Scope note
+
+Org membership is by API key (`ApiKey.orgId` and `ApiKey.role`), not by user
+account. The control panel lists keys, labelled with the owner's email where it
+is known. One person holding several keys appears as several members.

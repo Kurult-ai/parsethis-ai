@@ -506,6 +506,10 @@ export async function renderAgentDashboardPage(
         <a class="item" href="/dashboard/compliance"><i class="ic">▤</i>Compliance</a>
       </div>
       <div>
+        <div class="grp-label">GOVERNANCE</div>
+        <a class="item" href="/dashboard/org"><i class="ic">◎</i>Org control panel</a>
+      </div>
+      <div>
         <div class="grp-label">PLATFORM</div>
         <a class="item" href="/dashboard/billing"><i class="ic">$</i>Billing</a>
         <a class="item" href="/docs"><i class="ic">✎</i>Docs</a>

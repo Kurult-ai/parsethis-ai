@@ -1,0 +1,137 @@
+/**
+ * Org policy ceiling — the org-wide risk tolerance a member key cannot loosen.
+ *
+ * `ScreeningPolicy` is unique on (apiKeyId, environment), so without this an
+ * employee can raise their own auto-block threshold or drop their enforcement
+ * mode to "monitor" and opt out of the company's tolerance entirely.
+ *
+ * The merge is tighten-only, mirroring the tool rules: where the org and the
+ * key disagree, the stricter value wins. A field named in `lockedFields` takes
+ * the org value outright, which is the only way an org can force a *looser*
+ * setting than a key chose — an explicit, audited act rather than a side
+ * effect of the merge.
+ *
+ * Pure: no I/O, so it can be applied on every request at the point where the
+ * effective policy is published (src/auth.ts).
+ */
+
+import type { ScreeningPolicy } from "../types.js";
+
+export type EnforcementMode = "monitor" | "warn" | "block";
+export type ScreeningMode = "full" | "pattern-only";
+
+/** Null fields mean "the org has no opinion"; the key's own value stands. */
+export interface OrgPolicyCeiling {
+  autoBlockThreshold?: number | null;
+  enforcementMode?: string | null;
+  defaultMode?: string | null;
+  screenUserInput?: boolean | null;
+  screenToolOutputs?: boolean | null;
+  screenForwardedMessages?: boolean | null;
+  executeInSandbox?: boolean | null;
+  enforceToolAllowlist?: boolean | null;
+  bypassEnabled?: boolean | null;
+  lockedFields?: string[];
+}
+
+const ENFORCEMENT_STRICTNESS: Record<EnforcementMode, number> = {
+  monitor: 1,
+  warn: 2,
+  block: 3,
+};
+
+/** Booleans where true is the stricter setting, so an org true forces true. */
+const STRICT_WHEN_TRUE = [
+  "screenUserInput",
+  "screenToolOutputs",
+  "screenForwardedMessages",
+  "executeInSandbox",
+  "enforceToolAllowlist",
+] as const;
+
+function isEnforcementMode(value: unknown): value is EnforcementMode {
+  return value === "monitor" || value === "warn" || value === "block";
+}
+
+function isLocked(ceiling: OrgPolicyCeiling, field: string): boolean {
+  return Array.isArray(ceiling.lockedFields) && ceiling.lockedFields.includes(field);
+}
+
+/**
+ * Merge the org ceiling into a key's policy. Returns a new object; the input
+ * is never mutated. A null/undefined ceiling returns the policy unchanged.
+ */
+export function applyOrgPolicyCeiling(
+  policy: ScreeningPolicy,
+  ceiling: OrgPolicyCeiling | null | undefined,
+): ScreeningPolicy {
+  if (!ceiling) return policy;
+
+  const merged: ScreeningPolicy = { ...policy };
+
+  // Lower blocks more, so the ceiling is a maximum the key may not exceed.
+  if (typeof ceiling.autoBlockThreshold === "number" && Number.isFinite(ceiling.autoBlockThreshold)) {
+    merged.autoBlockThreshold = isLocked(ceiling, "autoBlockThreshold")
+      ? ceiling.autoBlockThreshold
+      : Math.min(policy.autoBlockThreshold, ceiling.autoBlockThreshold);
+  }
+
+  if (isEnforcementMode(ceiling.enforcementMode)) {
+    const keyMode: EnforcementMode = isEnforcementMode(policy.enforcementMode)
+      ? policy.enforcementMode
+      : "block";
+    merged.enforcementMode = isLocked(ceiling, "enforcementMode")
+      ? ceiling.enforcementMode
+      : ENFORCEMENT_STRICTNESS[ceiling.enforcementMode] >= ENFORCEMENT_STRICTNESS[keyMode]
+        ? ceiling.enforcementMode
+        : keyMode;
+  }
+
+  // pattern-only keeps prompt text away from third-party model providers, so it
+  // is the stricter of the two modes and an org choosing it overrides the key.
+  if (ceiling.defaultMode === "full" || ceiling.defaultMode === "pattern-only") {
+    merged.defaultMode = isLocked(ceiling, "defaultMode")
+      ? (ceiling.defaultMode as ScreeningMode)
+      : ceiling.defaultMode === "pattern-only"
+        ? "pattern-only"
+        : (policy.defaultMode ?? "full");
+  }
+
+  for (const field of STRICT_WHEN_TRUE) {
+    const orgValue = ceiling[field];
+    if (typeof orgValue !== "boolean") continue;
+    const keyValue = policy[field];
+    merged[field] = isLocked(ceiling, field) ? orgValue : orgValue || keyValue === true;
+  }
+
+  // Inverted: bypass is an escape hatch, so false is the stricter setting.
+  if (typeof ceiling.bypassEnabled === "boolean") {
+    merged.bypassEnabled = isLocked(ceiling, "bypassEnabled")
+      ? ceiling.bypassEnabled
+      : ceiling.bypassEnabled === false
+        ? false
+        : (policy.bypassEnabled ?? false);
+  }
+
+  return merged;
+}
+
+/**
+ * Fields where the ceiling actually changed the key's own value. The control
+ * panel uses this to show an admin how many member keys a given setting is
+ * currently constraining, and `PUT /v1/policy` uses it to reject a write that
+ * would be silently clamped.
+ */
+export function clampedFields(
+  policy: ScreeningPolicy,
+  ceiling: OrgPolicyCeiling | null | undefined,
+): string[] {
+  const merged = applyOrgPolicyCeiling(policy, ceiling);
+  const fields: string[] = [];
+
+  for (const key of Object.keys(merged) as Array<keyof ScreeningPolicy>) {
+    if (merged[key] !== policy[key]) fields.push(key as string);
+  }
+
+  return fields;
+}

@@ -25,6 +25,9 @@ import {
   getEffectivePolicy,
   validateDelegation,
 } from "../lib/compliance/delegation-chain.js";
+import { getOrgToolPolicy } from "../lib/tool-policy-store.js";
+import { resolveToolList } from "../lib/tool-policy.js";
+import type { ToolPolicyMode, ToolRule, ToolScope } from "../lib/tool-policy.js";
 
 export const agentRegistryRoutes = new Hono<AppEnv>();
 
@@ -79,6 +82,54 @@ async function resolveOrgId(apiKeyId: string): Promise<string | null> {
 
 function isValidStringArray(val: unknown): val is string[] {
   return Array.isArray(val) && val.every((v) => typeof v === "string");
+}
+
+export interface BlockedRegistrationTools {
+  blockedTools: string[];
+  detail: string;
+}
+
+/**
+ * The registration-time half of org tool governance, kept pure so it can be
+ * tested without a database.
+ *
+ * Only `block` decisions reject. `require_approval` is deliberately let
+ * through: registering an agent is a declaration, not a moment of use, and
+ * demanding approval belongs to the screening path.
+ */
+export function findBlockedRegistrationTools(
+  tools: string[],
+  rules: ToolRule[],
+  mode: ToolPolicyMode,
+  scope: ToolScope = {},
+): BlockedRegistrationTools | null {
+  const { blocked } = resolveToolList(tools, rules, mode, scope);
+  if (blocked.length === 0) return null;
+  return {
+    blockedTools: blocked.map((d) => d.tool),
+    detail: `Your organization's tool policy blocks ${blocked
+      .map((d) => `"${d.tool}" (${d.reason})`)
+      .join("; ")}`,
+  };
+}
+
+/**
+ * Resolve and apply the org tool policy for a registration. Fails open: a
+ * governance lookup failure must not stop an agent being registered.
+ */
+async function blockedToolsForRegistration(
+  tools: unknown,
+  orgId: string,
+  scope: ToolScope,
+): Promise<BlockedRegistrationTools | null> {
+  if (!isValidStringArray(tools) || tools.length === 0) return null;
+  try {
+    const { mode, rules } = await getOrgToolPolicy(orgId);
+    return findBlockedRegistrationTools(tools, rules, mode, scope);
+  } catch (err) {
+    console.error("[tool-policy] registration check failed:", (err as Error).message);
+    return null;
+  }
 }
 
 // ─── POST /v1/agents — Register a new agent ────────────────────────────
@@ -168,6 +219,23 @@ agentRegistryRoutes.post("/v1/agents", authMiddleware("evaluate"), async (c) => 
       detail: "An organization is required to register agents. Contact your administrator.",
       code: ErrorCode.AUTH_INSUFFICIENT_SCOPE,
       retryable: false,
+    });
+  }
+
+  // ── Org tool policy ──
+  // tools[] is self-declared, so without this an employee could put "browser"
+  // on their own agent and satisfy every downstream check.
+  const registrationBlock = await blockedToolsForRegistration(body.tools, orgId, {
+    apiKeyId: apiKey.id,
+  });
+  if (registrationBlock) {
+    return problem(c, {
+      status: 422,
+      title: "Tool blocked by org policy",
+      detail: registrationBlock.detail,
+      code: ErrorCode.VALIDATION_INVALID_INPUT,
+      retryable: false,
+      blocked_tools: registrationBlock.blockedTools,
     });
   }
 
@@ -359,6 +427,26 @@ agentRegistryRoutes.put("/v1/agents/:id", authMiddleware("evaluate"), async (c) 
       code: ErrorCode.VALIDATION_INVALID_INPUT,
       retryable: false,
     });
+  }
+
+  // ── Org tool policy ──
+  // Only when the update actually rewrites tools[] — an unrelated edit to an
+  // agent that predates the rule must still be allowed to save.
+  if (body.tools !== undefined && orgId) {
+    const updateBlock = await blockedToolsForRegistration(body.tools, orgId, {
+      apiKeyId: apiKey.id,
+      agentId,
+    });
+    if (updateBlock) {
+      return problem(c, {
+        status: 422,
+        title: "Tool blocked by org policy",
+        detail: updateBlock.detail,
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+        blocked_tools: updateBlock.blockedTools,
+      });
+    }
   }
 
   try {
