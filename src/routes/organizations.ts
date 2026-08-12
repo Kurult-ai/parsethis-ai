@@ -15,6 +15,14 @@ import {
   tokenMatchesOrg,
   checkDnsChallenge,
 } from "../lib/org-domains.js";
+import { getOrgToolPolicy, invalidateOrgToolPolicy } from "../lib/tool-policy-store.js";
+import {
+  resolveToolList,
+  resolveToolDecision,
+  type ToolPolicyMode,
+  type ToolRule,
+} from "../lib/tool-policy.js";
+import { createPolicyRevision } from "../lib/policy-revision.js";
 import type { AppEnv } from "../types.js";
 
 export const organizationRoutes = new Hono<AppEnv>();
@@ -1374,6 +1382,332 @@ organizationRoutes.delete(
       removed: keys.length,
       mode,
       keys: keys.map((k) => ({ id: k.id, name: k.name })),
+    });
+  },
+);
+
+// ── Per-agent configuration ────────────────────────────────────────────
+//
+// Org-wide rules answer "what may any agent here do". They do not answer the
+// question an admin actually asks about a named agent someone else built:
+// "what can *this* one do, who decided that, and how do I tighten it."
+//
+// The engine has supported agent-scoped rules from the start — scope_type
+// "agent" with the agent's id — and the precedence is tighten-only: a scoped
+// rule may make the org result stricter and can never loosen it. That property
+// is the whole sale, so these routes deliberately offer no way to grant an
+// exception. An admin can restrict an agent further, freeze it, or reclassify
+// its risk. There is no allow.
+
+const VALID_RISK_LEVELS = ["low", "medium", "high", "critical", "unscored"];
+const VALID_AGENT_STATUS = ["active", "suspended", "decommissioned", "discovered"];
+
+/**
+ * What one agent may do, and which rule decided each answer.
+ *
+ * `could_tighten` is the honest answer to "can I restrict this further": a tool
+ * already blocked org-wide cannot be tightened, and saying so stops an admin
+ * writing a rule that governs nothing.
+ */
+organizationRoutes.get(
+  "/v1/orgs/:id/agents/:agentId",
+  authMiddleware("evaluate"),
+  requireRole("org_admin", "security_analyst", "auditor"),
+  async (c) => {
+    const orgId = c.req.param("id")!;
+    const agentId = c.req.param("agentId")!;
+
+    const denied = await denyIfNotOwnOrg(c, orgId);
+    if (denied) return denied;
+
+    const agent = await prisma.agentRegistry.findFirst({
+      where: { id: agentId, orgId },
+      select: {
+        id: true, agentName: true, agentVersion: true, framework: true, description: true,
+        tools: true, dataAccess: true, riskLevel: true, status: true,
+        frozen: true, frozenReason: true, frozenAt: true, ownerEmail: true,
+        lastSeenAt: true, createdAt: true,
+      },
+    });
+    if (!agent) {
+      return problem(c, {
+        status: 404,
+        title: "Not found",
+        detail: "No agent with that id in this organization.",
+        code: ErrorCode.RESOURCE_NOT_FOUND,
+        retryable: false,
+      });
+    }
+
+    let policy: { mode: ToolPolicyMode; rules: ToolRule[] };
+    try {
+      policy = await getOrgToolPolicy(orgId);
+    } catch (err) {
+      return serviceDependencyProblem(c, err);
+    }
+
+    const scope = { agentId: agent.id };
+    const withScope = resolveToolList(agent.tools, policy.rules, policy.mode, scope);
+    // The same tools judged with no scope, so we can say which decisions come
+    // from a rule aimed at this agent specifically rather than the whole org.
+    const orgOnly = resolveToolList(agent.tools, policy.rules, policy.mode, {});
+
+    const tools = withScope.decisions.map((decision, i) => {
+      const orgDecision = orgOnly.decisions[i];
+      return {
+        tool: decision.tool,
+        action: decision.action,
+        source: decision.source,
+        reason: decision.reason,
+        matched_rule_id: decision.matchedRule?.id ?? null,
+        org_action: orgDecision?.action ?? decision.action,
+        /** false when the org already blocks it — a scoped rule would govern nothing. */
+        could_tighten: decision.action !== "block",
+      };
+    });
+
+    const scopedRules = policy.rules
+      .filter((r) => r.scopeType === "agent" && r.scopeId === agent.id)
+      .map((r) => ({
+        id: r.id,
+        kind: r.kind,
+        pattern: r.pattern,
+        action: r.action,
+        priority: r.priority,
+        reason: r.reason,
+      }));
+
+    return c.json({
+      agent: {
+        id: agent.id,
+        name: agent.agentName,
+        version: agent.agentVersion,
+        framework: agent.framework,
+        description: agent.description,
+        owner_email: agent.ownerEmail,
+        risk_level: agent.riskLevel,
+        status: agent.status,
+        frozen: agent.frozen,
+        frozen_reason: agent.frozenReason,
+        frozen_at: agent.frozenAt,
+        last_seen_at: agent.lastSeenAt,
+        declared_tools: agent.tools,
+        data_access: agent.dataAccess,
+      },
+      org_tool_policy_mode: policy.mode,
+      tools,
+      scoped_rules: scopedRules,
+      summary: {
+        allowed: withScope.allowed.length,
+        requires_approval: withScope.needsApproval.length,
+        blocked: withScope.blocked.length,
+      },
+      note:
+        agent.tools.length === 0
+          ? "This agent declares no tools, so org rules have nothing to decide for it. Registration and the gateway are what cover an agent that does not declare."
+          : "A rule scoped to this agent may tighten the org result and can never loosen it.",
+    });
+  },
+);
+
+/**
+ * Configure one agent: tighten its tools, freeze it, or reclassify it.
+ *
+ * There is no field here that grants a permission. `restrict_tools` writes
+ * agent-scoped `block` rules; a request naming a tool the org already blocks is
+ * accepted and reported as a no-op rather than creating a rule that governs
+ * nothing.
+ */
+organizationRoutes.put(
+  "/v1/orgs/:id/agents/:agentId",
+  authMiddleware("evaluate"),
+  requireRole("org_admin"),
+  requireCsrf(),
+  async (c) => {
+    const orgId = c.req.param("id")!;
+    const agentId = c.req.param("agentId")!;
+    const callerKey = c.get("apiKey");
+
+    const denied = await denyIfNotOwnOrg(c, orgId);
+    if (denied) return denied;
+
+    type Body = {
+      risk_level?: unknown;
+      status?: unknown;
+      frozen?: unknown;
+      frozen_reason?: unknown;
+      restrict_tools?: unknown;
+      reason?: unknown;
+    };
+    const body = await c.req.json<Body>().catch(() => ({}) as Body);
+
+    // Refuse loudly rather than ignoring a field that looks like it grants
+    // something. An admin who writes allow_tools must learn it does not exist,
+    // not discover later that it was dropped.
+    const grantish = ["allow_tools", "permit_tools", "grant_tools", "exempt_tools"].filter(
+      (f) => f in (body as Record<string, unknown>),
+    );
+    if (grantish.length > 0) {
+      return problem(c, {
+        status: 400,
+        title: "Cannot grant an exception",
+        detail: `${grantish.join(", ")} is not a field. A rule scoped to one agent may tighten the organization's result and never loosen it, so per-agent configuration can restrict, freeze or reclassify — it cannot permit. To widen what agents may do, change the org rule.`,
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+
+    const agent = await prisma.agentRegistry.findFirst({
+      where: { id: agentId, orgId },
+      select: { id: true, agentName: true, tools: true, riskLevel: true, status: true, frozen: true },
+    });
+    if (!agent) {
+      return problem(c, {
+        status: 404,
+        title: "Not found",
+        detail: "No agent with that id in this organization.",
+        code: ErrorCode.RESOURCE_NOT_FOUND,
+        retryable: false,
+      });
+    }
+
+    const update: Record<string, unknown> = {};
+
+    if (body.risk_level !== undefined) {
+      if (typeof body.risk_level !== "string" || !VALID_RISK_LEVELS.includes(body.risk_level)) {
+        return problem(c, {
+          status: 400,
+          title: "Validation failure",
+          detail: `risk_level must be one of: ${VALID_RISK_LEVELS.join(", ")}`,
+          code: ErrorCode.VALIDATION_INVALID_INPUT,
+          retryable: false,
+        });
+      }
+      update.riskLevel = body.risk_level;
+    }
+
+    if (body.status !== undefined) {
+      if (typeof body.status !== "string" || !VALID_AGENT_STATUS.includes(body.status)) {
+        return problem(c, {
+          status: 400,
+          title: "Validation failure",
+          detail: `status must be one of: ${VALID_AGENT_STATUS.join(", ")}`,
+          code: ErrorCode.VALIDATION_INVALID_INPUT,
+          retryable: false,
+        });
+      }
+      update.status = body.status;
+    }
+
+    if (body.frozen !== undefined) {
+      if (typeof body.frozen !== "boolean") {
+        return problem(c, {
+          status: 400,
+          title: "Validation failure",
+          detail: "frozen must be a boolean",
+          code: ErrorCode.VALIDATION_INVALID_TYPE,
+          retryable: false,
+        });
+      }
+      update.frozen = body.frozen;
+      update.frozenAt = body.frozen ? new Date() : null;
+      update.frozenReason = body.frozen
+        ? typeof body.frozen_reason === "string" && body.frozen_reason.trim()
+          ? body.frozen_reason.trim()
+          : "Frozen from the org control panel"
+        : null;
+    }
+
+    // ── Tighten: agent-scoped block rules ──
+    let restricted: string[] = [];
+    let alreadyBlocked: string[] = [];
+    if (body.restrict_tools !== undefined) {
+      if (!Array.isArray(body.restrict_tools) || body.restrict_tools.some((t) => typeof t !== "string")) {
+        return problem(c, {
+          status: 400,
+          title: "Validation failure",
+          detail: "restrict_tools must be an array of tool names",
+          code: ErrorCode.VALIDATION_INVALID_TYPE,
+          retryable: false,
+        });
+      }
+
+      let policy: { mode: ToolPolicyMode; rules: ToolRule[] };
+      try {
+        policy = await getOrgToolPolicy(orgId);
+      } catch (err) {
+        return serviceDependencyProblem(c, err);
+      }
+
+      const wanted = [...new Set((body.restrict_tools as string[]).map((t) => t.trim()).filter(Boolean))];
+      for (const tool of wanted) {
+        // A rule that duplicates an org-wide block governs nothing and would
+        // clutter the history. Report it rather than writing it.
+        const current = resolveToolDecision(tool, policy.rules, policy.mode, { agentId: agent.id });
+        if (current.action === "block") {
+          alreadyBlocked.push(tool);
+          continue;
+        }
+        restricted.push(tool);
+      }
+
+      if (restricted.length > 0) {
+        const previous = await getOrgToolPolicy(orgId);
+        await prisma.orgToolRule.createMany({
+          data: restricted.map((tool) => ({
+            orgId,
+            kind: "exact",
+            pattern: tool,
+            action: "block",
+            scopeType: "agent",
+            scopeId: agent.id,
+            priority: 0,
+            reason:
+              typeof body.reason === "string" && body.reason.trim()
+                ? body.reason.trim()
+                : `Restricted for agent "${agent.agentName}"`,
+            createdBy: callerKey.id,
+          })),
+        });
+        await invalidateOrgToolPolicy(orgId);
+        const next = await getOrgToolPolicy(orgId);
+        await createPolicyRevision(
+          orgId,
+          { mode: previous.mode, rules: previous.rules },
+          { mode: next.mode, rules: next.rules },
+          callerKey.id,
+          `Restricted ${restricted.length} tool(s) for agent "${agent.agentName}"`,
+        );
+      }
+    }
+
+    if (Object.keys(update).length > 0) {
+      await prisma.agentRegistry.update({ where: { id: agent.id }, data: update });
+    }
+
+    auditLog({
+      action: "org_agent_configured",
+      apiKeyId: callerKey.id,
+      detail: JSON.stringify({
+        orgId,
+        agentId: agent.id,
+        agentName: agent.agentName,
+        fields: Object.keys(update),
+        restricted,
+        alreadyBlocked,
+      }),
+    });
+
+    return c.json({
+      agent_id: agent.id,
+      name: agent.agentName,
+      updated: Object.keys(update),
+      restricted,
+      already_blocked: alreadyBlocked,
+      detail:
+        restricted.length > 0
+          ? `Added ${restricted.length} agent-scoped block rule(s). Scoped rules tighten only — they cannot loosen the org result.`
+          : "No new restrictions were needed.",
     });
   },
 );

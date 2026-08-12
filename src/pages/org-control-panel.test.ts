@@ -9,6 +9,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { VALID_ROLES } from "../lib/rbac.js";
+import type { ToolRule } from "../lib/tool-policy.js";
 
 import {
   computeRuleExposure,
@@ -23,6 +24,8 @@ import {
   type OrgAgentSummary,
   type MemberInput,
   memberActionsCell,
+  buildAgentConfigRows,
+  agentActionsCell,
   describeRevisionDiff,
 } from "./org-control-panel.js";
 import { CEILING_FIELDS } from "../routes/org-policy.js";
@@ -442,5 +445,101 @@ describe("describeRevisionDiff", () => {
   it("survives a null or malformed diff rather than throwing", () => {
     assert.deepEqual(describeRevisionDiff(null), []);
     assert.deepEqual(describeRevisionDiff({ weird: null } as never), []);
+  });
+});
+
+// ── Per-agent configuration ──────────────────────────────────────────
+//
+// Org rules answer "what may any agent do". An admin also has to answer "what
+// may THIS one do", for agents other teams built. The engine has always
+// supported agent-scoped rules and they are tighten-only, so per-agent
+// configuration can restrict, freeze and reclassify — never permit.
+
+describe("buildAgentConfigRows", () => {
+  const ORG_BLOCK: ToolRule = {
+    id: "r_org", kind: "category", pattern: "browser", action: "block",
+    scopeType: null, scopeId: null, priority: 0, reason: "no browser use",
+  };
+  const AGENT_BLOCK: ToolRule = {
+    id: "r_agent", kind: "exact", pattern: "postgres_query", action: "block",
+    scopeType: "agent", scopeId: "ag_1", priority: 0, reason: "no direct DB",
+  };
+
+  const agents: OrgAgentSummary[] = [
+    { id: "ag_1", agentName: "claims-intake", tools: ["send_email", "postgres_query", "playwright"], riskLevel: "high", frozen: false, status: "active", lastSeenAt: null },
+    { id: "ag_2", agentName: "billing-bot", tools: ["send_email", "postgres_query"], riskLevel: "medium", frozen: false, status: "active", lastSeenAt: null },
+  ];
+
+  it("counts what the rules block for each agent", () => {
+    const rows = buildAgentConfigRows(agents, [ORG_BLOCK, AGENT_BLOCK], "blocklist");
+    // ag_1: playwright by the org rule, postgres_query by its own rule.
+    assert.equal(rows[0].blocked, 2);
+    // ag_2 declares neither a browser tool nor anything scoped to it.
+    assert.equal(rows[1].blocked, 0);
+  });
+
+  it("separates what was tightened HERE from what the org already blocked", () => {
+    // The number an admin came for: how much of this agent's posture is its own.
+    const rows = buildAgentConfigRows(agents, [ORG_BLOCK, AGENT_BLOCK], "blocklist");
+    assert.equal(rows[0].restrictedHere, 1, "only postgres_query is specific to ag_1");
+    assert.equal(rows[1].restrictedHere, 0);
+  });
+
+  it("does not attribute another agent's rule to this one", () => {
+    const rows = buildAgentConfigRows(agents, [AGENT_BLOCK], "blocklist");
+    assert.equal(rows[1].restrictedHere, 0, "ag_2 must not inherit ag_1's restriction");
+    assert.equal(rows[1].blocked, 0);
+  });
+
+  it("reports an agent that declares nothing without pretending it is governed", () => {
+    const rows = buildAgentConfigRows(
+      [{ id: "ag_3", agentName: "silent", tools: [] }],
+      [ORG_BLOCK],
+      "blocklist",
+    );
+    assert.equal(rows[0].declaredTools, 0);
+    assert.equal(rows[0].blocked, 0);
+    assert.equal(rows[0].restrictedHere, 0);
+  });
+
+  it("carries the posture fields the panel renders", () => {
+    const rows = buildAgentConfigRows(
+      [{ id: "ag_4", agentName: "frozen-one", tools: [], riskLevel: "critical", frozen: true, status: "suspended" }],
+      [],
+      "blocklist",
+    );
+    assert.equal(rows[0].frozen, true);
+    assert.equal(rows[0].riskLevel, "critical");
+    assert.equal(rows[0].status, "suspended");
+  });
+
+  it("defaults a missing risk level to unscored rather than inventing one", () => {
+    const rows = buildAgentConfigRows([{ id: "ag_5", agentName: "x", tools: [] }], [], "blocklist");
+    assert.equal(rows[0].riskLevel, "unscored");
+  });
+
+  it("survives a malformed rule instead of taking the page down", () => {
+    const bad = { id: "r_bad", kind: "nonsense", pattern: "", action: "block" } as unknown as ToolRule;
+    assert.doesNotThrow(() => buildAgentConfigRows(agents, [bad], "blocklist"));
+  });
+});
+
+describe("agentActionsCell", () => {
+  it("offers restrict and freeze, and nothing that grants", () => {
+    const html = agentActionsCell({ id: "ag_1", name: "claims-intake", frozen: false });
+    assert.match(html, /ocp-agent-restrict/);
+    assert.match(html, /ocp-agent-freeze/);
+    assert.ok(!/allow|permit|grant|exempt/i.test(html), "no control may suggest granting an exception");
+  });
+
+  it("flips the freeze control for an agent that is already frozen", () => {
+    const html = agentActionsCell({ id: "ag_1", name: "x", frozen: true });
+    assert.match(html, />Unfreeze</);
+    assert.match(html, /data-frozen="1"/);
+  });
+
+  it("escapes a hostile agent name", () => {
+    const html = agentActionsCell({ id: "ag_1", name: '"><script>x()</script>', frozen: false });
+    assert.ok(!html.includes("<script>x()</script>"));
   });
 });

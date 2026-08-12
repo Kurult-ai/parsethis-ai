@@ -75,6 +75,10 @@ export interface OrgAgentSummary {
   id: string;
   agentName: string;
   tools: string[];
+  riskLevel?: string;
+  frozen?: boolean;
+  status?: string;
+  lastSeenAt?: Date | null;
 }
 
 export interface RuleExposureRow {
@@ -138,6 +142,59 @@ export function computeRuleExposure(
   return out;
 }
 
+export interface AgentConfigRow {
+  id: string;
+  name: string;
+  riskLevel: string;
+  frozen: boolean;
+  status: string;
+  declaredTools: number;
+  /** Tools this agent declares that the org (or a rule aimed at it) blocks. */
+  blocked: number;
+  /** Tools blocked by a rule aimed at THIS agent, not the whole org. */
+  restrictedHere: number;
+  lastSeenAt: Date | null;
+}
+
+/**
+ * One row per registered agent, with what the rules currently decide for it.
+ *
+ * `restrictedHere` is the number an admin came for: how much of this agent's
+ * configuration is specific to it, rather than inherited from the org. An agent
+ * with 0 is running the house rules; an agent with 3 has been tightened.
+ */
+export function buildAgentConfigRows(
+  agents: OrgAgentSummary[],
+  rules: ToolRule[],
+  mode: ToolPolicyMode,
+): AgentConfigRow[] {
+  return (Array.isArray(agents) ? agents : []).map((agent) => {
+    let blocked = 0;
+    let restrictedHere = 0;
+    try {
+      const scoped = resolveToolList(agent.tools, rules, mode, { agentId: agent.id }).decisions;
+      const orgOnly = resolveToolList(agent.tools, rules, mode, {}).decisions;
+      scoped.forEach((decision, i) => {
+        if (decision.action === "block") blocked += 1;
+        if (decision.action === "block" && orgOnly[i]?.action !== "block") restrictedHere += 1;
+      });
+    } catch {
+      // A malformed rule must not take down the page.
+    }
+    return {
+      id: agent.id,
+      name: agent.agentName,
+      riskLevel: agent.riskLevel ?? "unscored",
+      frozen: Boolean(agent.frozen),
+      status: agent.status ?? "active",
+      declaredTools: agent.tools.length,
+      blocked,
+      restrictedHere,
+      lastSeenAt: agent.lastSeenAt ?? null,
+    };
+  });
+}
+
 /**
  * Who owns a member key.
  *
@@ -162,6 +219,19 @@ export function ownerLabel(
   return member.ownerVerified
     ? email
     : `${email} <span class="ocp-sub" title="This address has not been confirmed, so this person cannot create an organization.">unverified</span>`;
+}
+
+/**
+ * Per-agent controls, org_admin only and omitted for everyone else.
+ *
+ * Restrict and Freeze, and no third option — the API refuses a grant outright,
+ * and offering one here would advertise a capability the engine does not have.
+ */
+export function agentActionsCell(agent: Pick<AgentConfigRow, "id" | "name" | "frozen">): string {
+  return `        <td class="ocp-manage">
+          <button type="button" class="ocp-agent-restrict" data-agent-id="${escapeHtml(agent.id)}" data-agent-name="${escapeHtml(agent.name)}">Restrict</button>
+          <button type="button" class="ocp-agent-freeze" data-agent-id="${escapeHtml(agent.id)}" data-agent-name="${escapeHtml(agent.name)}" data-frozen="${agent.frozen ? "1" : "0"}">${agent.frozen ? "Unfreeze" : "Freeze"}</button>
+        </td>`;
 }
 
 /**
@@ -741,9 +811,17 @@ export async function renderOrgControlPanelPage(
         where: { orgId },
         orderBy: { createdAt: "desc" },
         take: AGENT_LIMIT,
-        select: { id: true, agentName: true, tools: true },
+        select: { id: true, agentName: true, tools: true, riskLevel: true, frozen: true, status: true, lastSeenAt: true },
       });
-      agents = rows.map((r) => ({ id: r.id, agentName: r.agentName, tools: r.tools ?? [] }));
+      agents = rows.map((r) => ({
+        id: r.id,
+        agentName: r.agentName,
+        tools: r.tools ?? [],
+        riskLevel: r.riskLevel,
+        frozen: r.frozen,
+        status: r.status,
+        lastSeenAt: r.lastSeenAt,
+      }));
     } catch {
       agents = [];
     }
@@ -950,6 +1028,27 @@ ${isAdmin ? memberActionsCell(m) : ""}
 
   // ─── Zone 4: Violations ──────────────────────────────────────────────
 
+  const agentConfigRows = buildAgentConfigRows(agents, rules, toolMode);
+  const agentBody = agentConfigRows.length
+    ? agentConfigRows
+        .map((a) => {
+          const posture = a.frozen
+            ? `<span class="ocp-clamp">frozen</span>`
+            : a.restrictedHere > 0
+              ? `<span class="ocp-sub">${a.restrictedHere} tightened here</span>`
+              : `<span class="ocp-sub">org rules only</span>`;
+          return `<tr>
+        <td><span class="ocp-nm">${escapeHtml(a.name)}</span>${a.status !== "active" ? `<span class="ocp-sub">${escapeHtml(a.status)}</span>` : ""}</td>
+        <td class="ocp-mono">${escapeHtml(a.riskLevel)}</td>
+        <td class="ocp-mono">${a.declaredTools === 0 ? "—" : `${a.blocked}/${a.declaredTools} blocked`}</td>
+        <td>${posture}</td>
+        <td class="ocp-mono">${escapeHtml(timeAgo(a.lastSeenAt))}</td>
+${isAdmin ? agentActionsCell(a) : ""}
+      </tr>`;
+        })
+        .join("\n")
+    : `<tr><td colspan="${isAdmin ? 6 : 5}" class="ocp-empty">No registered agents yet.</td></tr>`;
+
   const revisionBody = revisions.length
     ? revisions
         .map((r) => {
@@ -1143,6 +1242,21 @@ ${violationBody}
   <p class="ocp-note">Under the <code>monitor</code> dial the pipeline runs and records a verdict without stopping anything, so those rows read "would block" — the enforcement did not happen.</p>
 </section>
 
+<!-- ═══ Zone 4b · Individual agents ═══ -->
+<section class="ocp-zone">
+  <div class="ocp-zone-head">
+    <h2>Agents</h2><span class="ocp-meta">ONE AT A TIME</span>
+    <span class="ocp-right">${agentTotal > 0 ? `${agentTotal.toLocaleString("en-US")} registered${agentConfigRows.length < agentTotal ? ` · showing ${agentConfigRows.length}` : ""}` : "none yet"}</span>
+  </div>
+  <p class="ocp-note">Org rules answer what <em>any</em> agent may do. This answers what <em>one</em> agent may do, and lets you tighten it without touching anyone else. A rule aimed at a single agent may only make the org result stricter — there is no way to grant an agent an exception, by design.</p>
+  <table class="ocp-t">
+    <thead><tr><th>Agent</th><th>Risk</th><th>Declared tools</th><th>Posture</th><th>Last seen</th>${isAdmin ? "<th>Configure</th>" : ""}</tr></thead>
+    <tbody>
+${agentBody}
+    </tbody>
+  </table>
+</section>
+
 <!-- ═══ Zone 5 · Policy history ═══ -->
 <section class="ocp-zone">
   <div class="ocp-zone-head">
@@ -1274,6 +1388,41 @@ ${isAdmin ? `  // ── Member management ────────────�
       send('PUT', '/v1/orgs/' + encodeURIComponent(orgId) + '/members/' + encodeURIComponent(keyId) + '/role', { role: sel.value })
         .then(function () { say('Role changed. Reloading…'); location.reload(); })
         .catch(function (err) { say(err.message); });
+    });
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.ocp-agent-restrict'), function (btn) {
+    btn.addEventListener('click', function () {
+      var agentId = btn.getAttribute('data-agent-id');
+      var agentName = btn.getAttribute('data-agent-name') || 'this agent';
+      var input = window.prompt('Block which tools for "' + agentName + '"?\\n\\nComma-separated. This tightens only this agent — it cannot grant it anything.');
+      if (!input) return;
+      var tools = input.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      if (!tools.length) return;
+      btn.disabled = true;
+      say('Restricting…');
+      send('PUT', '/v1/orgs/' + encodeURIComponent(orgId) + '/agents/' + encodeURIComponent(agentId), { restrict_tools: tools })
+        .then(function () { say('Agent restricted. Reloading…'); location.reload(); })
+        .catch(function (err) { btn.disabled = false; say(err.message); });
+    });
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.ocp-agent-freeze'), function (btn) {
+    btn.addEventListener('click', function () {
+      var agentId = btn.getAttribute('data-agent-id');
+      var agentName = btn.getAttribute('data-agent-name') || 'this agent';
+      var isFrozen = btn.getAttribute('data-frozen') === '1';
+      var body = { frozen: !isFrozen };
+      if (!isFrozen) {
+        var why = window.prompt('Freeze "' + agentName + '"? It receives an immediate block on every request.\\n\\nReason (goes in the audit trail):');
+        if (why === null) return;
+        if (why.trim()) body.frozen_reason = why.trim();
+      }
+      btn.disabled = true;
+      say(isFrozen ? 'Unfreezing…' : 'Freezing…');
+      send('PUT', '/v1/orgs/' + encodeURIComponent(orgId) + '/agents/' + encodeURIComponent(agentId), body)
+        .then(function () { say('Done. Reloading…'); location.reload(); })
+        .catch(function (err) { btn.disabled = false; say(err.message); });
     });
   });
 
