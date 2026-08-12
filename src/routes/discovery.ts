@@ -151,12 +151,29 @@ If a response includes \`suggested_action: "request_owner_approval"\`, ask the o
 
 ${router}
 
+## Org Governance
+
+An organization is the control plane: it decides which tools every agent under
+it may use, sets a risk tolerance a member key cannot loosen, and receipts every
+change. Included on every plan, Free upward.
+
+- Create one and become its org_admin: POST ${baseUrl}/v1/orgs/bootstrap with {"name":"Your Org"}. Requires a key owned by an account with a confirmed email — an anonymously generated key is refused.
+- Ban a capability under every name it ships with: POST ${baseUrl}/v1/org/tool-policy/rules with {"kind":"category","pattern":"browser","action":"block"}. That one rule decides browser_use, playwright, computer_use and the mcp__* names.
+- Dry-run before you commit: POST ${baseUrl}/v1/org/tool-policy/test with {"tools":["playwright","send_email"]}.
+- Configure one agent without touching the rest: GET/PUT ${baseUrl}/v1/orgs/:id/agents/:agentId. A rule scoped to one agent may only tighten the org result; there is no way to grant an exception.
+- Set a ceiling members inherit: PUT ${baseUrl}/v1/org/policy-defaults. A locked field returns 422 on a member's write rather than clamping silently.
+- Prove it: GET ${baseUrl}/v1/compliance/policy-history returns who changed which rule, when, and what it was before.
+- Enforce without trusting self-declaration: POST ${baseUrl}/v1/gateway/configure, then send OpenAI-compatible calls to ${baseUrl}/v1/gateway/chat/completions. The gateway reads the tools array off the wire, so an agent that declares nothing to the registry is still governed.
+
 ## Public Facts
 
 - Free API keys: ${PLAN_LIMITS.free.requestsPerMinute} requests/minute and ${PLAN_LIMITS.free.sandboxExecutionsPerHour} sandbox executions/hour.
 - Pro keys: ${PLAN_LIMITS.pro.requestsPerMinute} requests/minute.
 - Team keys: ${PLAN_LIMITS.team.requestsPerMinute} requests/minute.
 - Enterprise keys: ${PLAN_LIMITS.enterprise.requestsPerMinute} requests/minute.
+- Org governance (tool rules, roles, ceiling, audit trail) is included on every plan, including Free. Tiers differ on volume, rate limit, SIEM forwarding and evidence packs.
+- Org roles: org_admin, security_analyst, auditor, developer.
+- A tool ban is enforced at three points: agent registration (422 on a declared tool), screening (reads metadata.tool_permissions or body.tools), and the org gateway (reads the tools array off the wire, so it does not depend on the agent declaring anything).
 - Risk taxonomy: ${DETECTION_FACTS.riskCategoryCount} categories (${riskCategoryList()}).
 - Detection pipeline: deterministic pattern matching, structural risk analysis, optional LLM semantic analysis, and optional sandbox execution.
 - Pattern rules: ${DETECTION_FACTS.patternRuleCount} deterministic rules in the hosted detector.
@@ -416,10 +433,10 @@ discoveryRoutes.get("/openapi.json", (c) => {
   return c.json({
     openapi: "3.1.0",
     info: {
-      title: "Parse Prompt Protection API",
+      title: "Parse Agent Governance & Compliance API",
       version: "1.0.0",
       description:
-        `${PRODUCT.name} is a prompt protection API for AI agents. Screen untrusted prompts before tool use, screen LLM outputs before forwarding, verify peer-agent messages, and pay per call with x402 when no bearer key exists. The hosted detector uses deterministic pattern matching, structural risk analysis, optional LLM semantic analysis, and optional sandbox execution across ${DETECTION_FACTS.riskCategoryCount} risk categories. It reduces risk but does not guarantee protection.`,
+        `${PRODUCT.name} is an agent governance and compliance API. Screen untrusted prompts before tool use, screen LLM outputs before forwarding, verify peer-agent messages, and pay per call with x402 when no bearer key exists. The hosted detector uses deterministic pattern matching, structural risk analysis, optional LLM semantic analysis, and optional sandbox execution across ${DETECTION_FACTS.riskCategoryCount} risk categories. It reduces risk but does not guarantee protection.`,
       contact: { name: PRODUCT.name, url: baseUrl },
     },
     servers: [{ url: baseUrl }],
@@ -678,6 +695,376 @@ discoveryRoutes.get("/openapi.json", (c) => {
               },
             },
           },
+        },
+      },
+      // ── Organization governance ──────────────────────────────────────
+      //
+      // These were absent from this spec entirely until 2026-08-12: 19 paths,
+      // none of them org-scoped, while the landing page said governance is the
+      // product. A security lead reading the machine surfaces concluded the
+      // feature did not exist.
+      "/v1/orgs/bootstrap": {
+        post: {
+          operationId: "bootstrapOrganization",
+          summary: "Create your organization",
+          description:
+            "Create an organization and become its org_admin. Included on every plan, Free upward. Requires a key owned by an account with a confirmed email; an anonymously minted key is refused, because an organization governs other people's agents and has to be attributable to a person.",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["name"],
+                  properties: {
+                    name: { type: "string", maxLength: 200 },
+                    slug: { type: "string" },
+                    tool_policy_mode: {
+                      type: "string",
+                      enum: ["blocklist", "allowlist"],
+                      default: "blocklist",
+                      description:
+                        "blocklist: every tool allowed until a rule blocks it. allowlist: every tool blocked until a rule allows it.",
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Organization created; caller is now org_admin" },
+            "403": { description: "Key is anonymous, unverified, already in an org, or its email domain belongs to another organization" },
+          },
+        },
+      },
+      "/v1/org/tool-policy": {
+        get: {
+          operationId: "getOrgToolPolicy",
+          summary: "Read the org tool policy",
+          description: "The organization's mode and every tool rule in force.",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Mode and rules" }, "403": { description: "Requires org_admin, security_analyst or auditor" } },
+        },
+        put: {
+          operationId: "setOrgToolPolicyMode",
+          summary: "Set blocklist or allowlist",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { type: "object", required: ["mode"], properties: { mode: { type: "string", enum: ["blocklist", "allowlist"] } } },
+              },
+            },
+          },
+          responses: { "200": { description: "Mode updated" }, "403": { description: "Requires org_admin" } },
+        },
+      },
+      "/v1/org/tool-policy/rules": {
+        post: {
+          operationId: "addOrgToolRule",
+          summary: "Ban or allow a capability",
+          description:
+            "One rule on a capability category covers every name that capability ships under: a rule on `browser` decides browser_use, playwright, computer_use and the mcp__* names. A scoped rule may tighten the org result and can never loosen it.",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["kind", "pattern", "action"],
+                  properties: {
+                    kind: { type: "string", enum: ["category", "exact", "prefix"] },
+                    pattern: { type: "string", description: 'A catalog slug when kind is "category" — see /v1/org/tool-policy/catalog.' },
+                    action: { type: "string", enum: ["block", "require_approval", "allow"] },
+                    scope_type: { type: "string", enum: ["agent", "api_key", "role"] },
+                    scope_id: { type: "string" },
+                    priority: { type: "integer", minimum: 0, maximum: 999 },
+                    reason: { type: "string", description: "Quoted back in every decision this rule makes." },
+                  },
+                },
+              },
+            },
+          },
+          responses: { "201": { description: "Rule created" }, "403": { description: "Requires org_admin" } },
+        },
+      },
+      "/v1/org/tool-policy/rules/{id}": {
+        delete: {
+          operationId: "deleteOrgToolRule",
+          summary: "Remove a tool rule",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Rule removed" }, "403": { description: "Requires org_admin" } },
+        },
+      },
+      "/v1/org/tool-policy/test": {
+        post: {
+          operationId: "testOrgToolPolicy",
+          summary: "Dry-run tool names against your rules",
+          description: "Ask what your rules would decide for a list of tool names, without changing anything.",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["tools"],
+                  properties: {
+                    tools: { type: "array", items: { type: "string" } },
+                    scope: { type: "object", properties: { agentId: { type: "string" }, apiKeyId: { type: "string" } } },
+                  },
+                },
+              },
+            },
+          },
+          responses: { "200": { description: "A decision per tool, with the rule that made it" } },
+        },
+      },
+      "/v1/org/tool-policy/catalog": {
+        get: {
+          operationId: "getToolCatalog",
+          summary: "Capability categories a rule can name",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Categories with sample tool names" } },
+        },
+      },
+      "/v1/org/policy-defaults": {
+        get: {
+          operationId: "getOrgPolicyCeiling",
+          summary: "Read the org risk ceiling",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "The ceiling and its locked fields" } },
+        },
+        put: {
+          operationId: "setOrgPolicyCeiling",
+          summary: "Set the org risk ceiling",
+          description:
+            "A member key inherits this and cannot loosen a locked field — PUT /v1/policy returns 422 naming the field rather than clamping silently. Unknown fields are rejected rather than ignored.",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    autoBlockThreshold: { type: "integer", minimum: 1, maximum: 10 },
+                    enforcementMode: { type: "string", enum: ["monitor", "warn", "block"] },
+                    defaultMode: { type: "string", enum: ["full", "pattern-only"] },
+                    bypassEnabled: { type: "boolean" },
+                    locked_fields: { type: "array", items: { type: "string" }, description: "lockedFields is accepted as an alias." },
+                  },
+                },
+              },
+            },
+          },
+          responses: { "200": { description: "Ceiling updated" }, "400": { description: "Unknown field" }, "403": { description: "Requires org_admin" } },
+        },
+      },
+      "/v1/orgs/{id}/members": {
+        get: {
+          operationId: "listOrgMembers",
+          summary: "List member keys",
+          description: "A member is an API key. One person holding three keys appears three times; the owner column names the account.",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Member keys with roles" } },
+        },
+      },
+      "/v1/orgs/{id}/members/{keyId}": {
+        delete: {
+          operationId: "removeOrgMember",
+          summary: "Remove a member",
+          description: "Revokes the key by default, because offboarding means it stops working. ?mode=release leaves it working outside the organization.",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "keyId", in: "path", required: true, schema: { type: "string" } },
+            { name: "mode", in: "query", schema: { type: "string", enum: ["revoke", "release"], default: "revoke" } },
+          ],
+          responses: { "200": { description: "Removed" }, "409": { description: "Self-removal, or the last org_admin" } },
+        },
+      },
+      "/v1/orgs/{id}/members/by-user/{userId}": {
+        delete: {
+          operationId: "offboardOrgPerson",
+          summary: "Offboard a person",
+          description: "Revokes every key that account holds in this organization. Keys it holds elsewhere are untouched.",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "userId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { "200": { description: "Keys revoked" } },
+        },
+      },
+      "/v1/orgs/{id}/members/{keyId}/role": {
+        put: {
+          operationId: "setOrgMemberRole",
+          summary: "Change a member's role",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "keyId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { type: "object", required: ["role"], properties: { role: { type: "string", enum: ["org_admin", "security_analyst", "auditor", "developer"] } } },
+              },
+            },
+          },
+          responses: { "200": { description: "Role changed" }, "403": { description: "Requires org_admin" } },
+        },
+      },
+      "/v1/orgs/{id}/claim-keys": {
+        post: {
+          operationId: "claimOrgKeys",
+          summary: "Claim unaffiliated keys",
+          description: "A customer org_admin may claim only keys that belong to no organization; a key in another org returns 409.",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Keys claimed" }, "409": { description: "A key belongs to another organization" } },
+        },
+      },
+      "/v1/orgs/{id}/claimable": {
+        get: {
+          operationId: "listClaimableKeys",
+          summary: "Unaffiliated keys on your verified domains",
+          description: "Keys held by confirmed accounts on a domain this organization has verified, belonging to no organization. This is how an admin sees a key that went off on its own.",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Claimable keys" } },
+        },
+      },
+      "/v1/orgs/{id}/domains": {
+        post: {
+          operationId: "claimOrgDomain",
+          summary: "Start a domain claim",
+          description: "Returns a DNS TXT challenge. Once verified, an account on that domain cannot start a rival organization. Shared mail providers cannot be claimed.",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Challenge issued" }, "409": { description: "Another organization has verified it" } },
+        },
+      },
+      "/v1/orgs/{id}/agents/{agentId}": {
+        get: {
+          operationId: "getOrgAgentConfiguration",
+          summary: "What one agent may do",
+          description: "The agent's posture and a per-tool breakdown: the decision, the rule that made it, what the org alone would have said, and whether a scoped rule could tighten it further.",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "agentId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { "200": { description: "Agent configuration" } },
+        },
+        put: {
+          operationId: "configureOrgAgent",
+          summary: "Restrict, freeze or reclassify one agent",
+          description:
+            "There is no field that grants a permission. A rule scoped to one agent may tighten the org result and never loosen it, so a body carrying allow_tools is refused rather than ignored.",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "agentId", in: "path", required: true, schema: { type: "string" } },
+          ],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    restrict_tools: { type: "array", items: { type: "string" }, description: "Writes agent-scoped block rules." },
+                    risk_level: { type: "string", enum: ["low", "medium", "high", "critical", "unscored"] },
+                    status: { type: "string", enum: ["active", "suspended", "decommissioned", "discovered"] },
+                    frozen: { type: "boolean" },
+                    frozen_reason: { type: "string" },
+                    reason: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          responses: { "200": { description: "Agent configured" }, "400": { description: "A grant-shaped field was sent" }, "403": { description: "Requires org_admin" } },
+        },
+      },
+      "/v1/compliance/policy-history": {
+        get: {
+          operationId: "getPolicyHistory",
+          summary: "Who changed which rule, when, and what it was before",
+          description: "Versioned policy revisions for your organization, with a field-level before and after.",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Revisions, newest first" }, "403": { description: "Requires org_admin, security_analyst or auditor" } },
+        },
+      },
+      "/v1/gateway/configure": {
+        post: {
+          operationId: "configureOrgGateway",
+          summary: "Set the org's upstream LLM provider",
+          description:
+            "The gateway is the only enforcement point that does not depend on an agent declaring its own tools — it reads the tools array off the wire. The provider credential is encrypted at rest and never returned by any route.",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["upstream_url", "upstream_api_key"],
+                  properties: {
+                    upstream_url: { type: "string", format: "uri" },
+                    upstream_api_key: { type: "string" },
+                    enforcement_mode: { type: "string", enum: ["monitor", "warn", "block"], default: "block" },
+                    model: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          responses: { "200": { description: "Configured" }, "403": { description: "Requires org_admin" }, "503": { description: "This deployment cannot encrypt secrets at rest" } },
+        },
+      },
+      "/v1/gateway/chat/completions": {
+        post: {
+          operationId: "gatewayChatCompletions",
+          summary: "OpenAI-compatible proxy with screening and tool enforcement",
+          description:
+            "Screens the conversation and filters the request's tools array against the org policy before forwarding. Under block, a request carrying a banned tool is refused outright — whether or not the agent ever declared that tool.",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            "200": { description: "Upstream response with X-Parse-* screening headers" },
+            "403": { description: "Blocked by screening or by the org tool policy" },
+            "503": { description: "No active gateway for this organization" },
+          },
+        },
+      },
+      "/v1/gateway/status": {
+        get: {
+          operationId: "getGatewayStatus",
+          summary: "Whether this org has a gateway configured",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Status; never the provider credential" } },
+        },
+      },
+      "/v1/agents": {
+        post: {
+          operationId: "registerAgent",
+          summary: "Register an agent",
+          description: "Returns 422 naming the rule when the declared tools include one the organization blocks.",
+          security: [{ BearerAuth: [] }],
+          responses: { "201": { description: "Registered" }, "422": { description: "A declared tool is blocked by org policy" } },
+        },
+        get: {
+          operationId: "listAgents",
+          summary: "List registered agents",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Agents" } },
         },
       },
       "/v1/policy": {

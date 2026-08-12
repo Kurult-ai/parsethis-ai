@@ -225,6 +225,7 @@ Required verification:
         <div style="font-size:13px;color:var(--text-dim);">forever</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Org governance</strong> — tool rules, roles, ceiling, audit trail</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.free.requestsPerMinute} req/min</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Keys auto-renew while in use; idle 30 days = expiry (fails closed, 401)</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Self-service</li>
@@ -242,6 +243,7 @@ Required verification:
         <div style="font-size:13px;color:var(--text-dim);">2K requests included</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Org governance</strong> — tool rules, roles, ceiling, audit trail</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.solo.requestsPerMinute} req/min — a backlog import does not stall</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Evidence spans: the exact text that tripped each flag</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">$0.005/overage request</li>
@@ -278,6 +280,7 @@ Required verification:
         <div style="font-size:13px;color:var(--text-dim);">10K requests included</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Org governance</strong> — tool rules, roles, ceiling, audit trail</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.pro.requestsPerMinute} req/min</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">$0.003/overage request</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.pro.sandboxExecutionsPerHour} sandbox/hr</li>
@@ -294,6 +297,7 @@ Required verification:
         <div style="font-size:13px;color:var(--text-dim);">50K requests included</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Org governance</strong> — tool rules, roles, ceiling, audit trail</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.team.requestsPerMinute} req/min</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">$0.002/overage request</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.team.sandboxExecutionsPerHour} sandbox/hr</li>
@@ -542,6 +546,7 @@ Required verification:
     </div>
     <div class="pricing-bundle-note" style="margin-top:18px;padding:16px 18px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02);">
       <p style="margin:0 0 8px;font-size:14px;"><strong>What the call includes.</strong> A screening call is priced above the raw classifier endpoints sold by the hyperscalers, and it should be compared for what it carries, not per invocation alone.</p>
+      <p class="pricing-muted" style="margin:0 0 14px;font-size:13.5px;"><strong>The control plane is not the upsell.</strong> Organizations, tool rules, roles, the risk ceiling a member key cannot loosen, and the audit trail are on every plan including Free. A ban you can only afford at $199 is not a security control, it is a paywall. What the tiers buy is volume, rate limit, SIEM forwarding and evidence packs.</p>
       <p class="pricing-muted" style="margin:0;font-size:13.5px;">Every verdict is recorded against a registered agent, evaluated under your versioned policy, and returned with a receipt — category, score, action and <code>trace_id</code> — that your auditor can read and your SIEM can ingest. That evidence trail, the agent registry, the enforcement dial and the OWASP LLM / NIST AI RMF / EU AI Act / ISO 42001 crosswalk are the product. Screening is the mechanism underneath it. If you need a bare classifier call and nothing around it, a commodity endpoint will be cheaper per request; if you need to show someone what your agents did and under which rule, that is what you are buying here.</p>
     </div>
     <div class="pricing-fact-strip" aria-label="x402 payment rail">

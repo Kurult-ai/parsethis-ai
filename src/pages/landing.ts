@@ -534,8 +534,9 @@ curl -s ${baseUrl}/v1/parse \\
   <div class="wrap">
     <div class="cube c">§</div>
     <h2>Screening is the floor.<br><span class="thin">Governance is the product.</span></h2>
-    <p class="sec-sub">Six controls around the pipeline. Evidence your auditor can read.</p>
+    <p class="sec-sub">Seven controls around the pipeline. Evidence your auditor can read.</p>
     <div class="gov">
+      <div class="gcard"><div class="tag">TOOL POLICY</div><h3>Ban a capability, not a name</h3><p>One rule on <code>browser</code> covers browser_use, playwright, computer_use and every MCP name it hides behind. A team lead cannot write themselves an exception.</p></div>
       <div class="gcard"><div class="tag">REGISTRY</div><h3>Every agent on record</h3><p>Status, risk, owner, last seen. Freeze or retire from one place.</p></div>
       <div class="gcard"><div class="tag">POLICY</div><h3>Enforcement you dial</h3><p>Monitor, warn, or block — per environment, versioned with diffs.</p></div>
       <div class="gcard"><div class="tag">DATA</div><h3>Boundaries on data</h3><p>Grants, egress control, and volume budgets per agent.</p></div>
