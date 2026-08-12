@@ -9,6 +9,8 @@
  * security operations infrastructure.
  */
 
+import { openMaybeSealed } from "../secret-box.js";
+
 // Types from the Prisma generated client — using inline types for portability
 interface PrismaScreeningEvent {
   id: string;

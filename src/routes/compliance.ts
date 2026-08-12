@@ -41,7 +41,11 @@ import {
   type AlertRuleTemplate,
 } from "../lib/compliance/alert-rules.js";
 import { getSIEMStatus, checkDestinationHealth } from "../lib/compliance/siem-worker.js";
+import { policyHistoryScope } from "../lib/compliance/policy-history-scope.js";
+import { sealSecret } from "../lib/secret-box.js";
+import { resolveOrgId } from "../lib/org-scope.js";
 import { requireRole } from "../lib/rbac.js";
+import { problem, ErrorCode, serviceDependencyProblem } from "../lib/problem-response.js";
 
 export const complianceRoutes = new Hono<AppEnv>();
 
@@ -275,6 +279,7 @@ complianceRoutes.post("/v1/compliance/export", authMiddleware("evaluate"), requi
       framework,
       dateFrom,
       dateTo,
+      await resolveOrgId(apiKey.id),
     );
 
     // Store export record (best effort — table might not exist yet)
@@ -339,6 +344,25 @@ complianceRoutes.post("/v1/compliance/siem", authMiddleware("evaluate"), require
 
   const { platform, endpoint, auth_header, format, event_types } = body;
 
+  // The schema has said "stored encrypted at rest" since this table shipped and
+  // the value went in as plaintext. Seal it. A missing PARSE_SECRET_KEY is a
+  // 503, not a quiet fallback to writing the token in the clear.
+  let sealedAuthHeader: string | null = null;
+  if (auth_header) {
+    try {
+      sealedAuthHeader = sealSecret(String(auth_header));
+    } catch (err) {
+      console.error("[compliance] SIEM auth header could not be sealed:", (err as Error).message);
+      return problem(c, {
+        status: 503,
+        title: "Secret storage unavailable",
+        detail: "This deployment cannot encrypt secrets at rest, so the credential was not stored. Set PARSE_SECRET_KEY and try again.",
+        code: ErrorCode.SERVICE_UNAVAILABLE,
+        retryable: true,
+      });
+    }
+  }
+
   if (!platform || !endpoint) {
     return c.json({ error: "platform and endpoint are required" }, 400);
   }
@@ -356,7 +380,7 @@ complianceRoutes.post("/v1/compliance/siem", authMiddleware("evaluate"), require
   try {
     await prisma.$executeRaw`
       INSERT INTO siem_configs (id, org_id, platform, endpoint, auth_header, format, event_types, active, created_at, updated_at)
-      VALUES (${id}, ${orgId}, ${platform}, ${endpoint}, ${auth_header ?? null}, ${fmt}, ${evtTypes}, true, NOW(), NOW())
+      VALUES (${id}, ${orgId}, ${platform}, ${endpoint}, ${sealedAuthHeader}, ${fmt}, ${evtTypes}, true, NOW(), NOW())
     `;
 
     auditLog({
@@ -608,18 +632,30 @@ complianceRoutes.post("/v1/siem/alert-rules/templates/:template_id", authMiddlew
 
 complianceRoutes.get("/v1/compliance/policy-history", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst", "auditor"), async (c) => {
   const apiKey = c.get("apiKey");
-  const orgId = apiKey.id;
+
+  // The caller's ORGANIZATION, not the caller's key. These are both cuids, so
+  // the wrong one returns an empty list instead of an error — which is exactly
+  // how every org's audit trail read empty while the rows sat in the table.
+  // resolveOrgId, NOT resolveOrgIdForCoverage — the latter falls back to the
+  // API key id when a key has no org, which is how this endpoint read empty in
+  // the first place.
+  const scope = policyHistoryScope(await resolveOrgId(apiKey.id));
+  if (!scope.ok) return c.json({ revisions: [], note: scope.note });
 
   try {
     const revisions = await prisma.$queryRaw<Array<{
       id: string; version: number; policy_snapshot: unknown; changed_by: string;
       change_reason: string | null; diff: unknown; created_at: Date;
     }>>`
-      SELECT * FROM policy_revisions WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 50
+      SELECT * FROM policy_revisions WHERE org_id = ${scope.orgId} ORDER BY created_at DESC LIMIT 50
     `;
     return c.json({ revisions });
-  } catch {
-    return c.json({ revisions: [], note: "Policy revision table not yet migrated." });
+  } catch (err) {
+    // Never answer a failed query with an empty list. An audit trail that
+    // reports "nothing changed" is worse than one that reports it is broken,
+    // because the first passes a security review.
+    console.error("[compliance] policy-history query failed:", (err as Error).message);
+    return serviceDependencyProblem(c, err);
   }
 });
 

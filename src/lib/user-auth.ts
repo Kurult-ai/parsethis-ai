@@ -252,3 +252,72 @@ export async function consumePasswordReset(
     return false;
   }
 }
+
+// ── Email Verification ──────────────────────────────────────────────
+//
+// `User.emailVerifiedAt` shipped with the account system and nothing ever set
+// it — production carried 0 verified emails across every account. It is now the
+// gate on POST /v1/orgs/bootstrap: getting an API key stays anonymous, but
+// creating a governance boundary has to be attributable to a person, or there
+// is nothing to stop an employee standing up a rival organization.
+//
+// Same shape as the password reset above: hashed single-use token, explicit
+// expiry, used_at rather than deletion so a replay is distinguishable from an
+// unknown token.
+
+const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+export async function createEmailVerification(userId: string): Promise<string | null> {
+  try {
+    const token = randomBytes(32).toString("hex");
+    await prisma.emailVerification.create({
+      data: {
+        userId,
+        tokenHash: hashToken(token),
+        expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
+      },
+    });
+    return token;
+  } catch {
+    return null;
+  }
+}
+
+export type EmailVerificationOutcome =
+  | { ok: true; userId: string; email: string }
+  | { ok: false; reason: "unknown" | "expired" | "already_used" };
+
+/**
+ * Consume a verification token and stamp `emailVerifiedAt`. Idempotent for a
+ * user who is already verified — a second click on the same link should read
+ * as success to the person clicking it, not as an error.
+ */
+export async function consumeEmailVerification(token: string): Promise<EmailVerificationOutcome> {
+  const row = await prisma.emailVerification.findUnique({
+    where: { tokenHash: hashToken(token) },
+    include: { user: { select: { id: true, email: true, emailVerifiedAt: true } } },
+  });
+
+  if (!row) return { ok: false, reason: "unknown" };
+  if (row.usedAt) {
+    return row.user.emailVerifiedAt
+      ? { ok: true, userId: row.user.id, email: row.user.email }
+      : { ok: false, reason: "already_used" };
+  }
+  if (row.expiresAt.getTime() < Date.now()) return { ok: false, reason: "expired" };
+
+  await prisma.$transaction([
+    prisma.emailVerification.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
+    prisma.user.update({ where: { id: row.user.id }, data: { emailVerifiedAt: new Date() } }),
+  ]);
+
+  return { ok: true, userId: row.user.id, email: row.user.email };
+}
+
+export async function isEmailVerified(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { emailVerifiedAt: true },
+  });
+  return Boolean(user?.emailVerifiedAt);
+}

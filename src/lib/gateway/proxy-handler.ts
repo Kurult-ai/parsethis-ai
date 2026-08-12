@@ -111,17 +111,16 @@ export interface ProxyForwardOptions {
   isStreaming: boolean;
 }
 
-// ─── Gateway configuration (in-memory, set via POST /v1/gateway/configure) ─
-
-let gatewayConfig: GatewayConfig | null = null;
-
-export function getGatewayConfig(): GatewayConfig | null {
-  return gatewayConfig;
-}
-
-export function setGatewayConfig(config: GatewayConfig): void {
-  gatewayConfig = config;
-}
+// ─── Gateway configuration ─────────────────────────────────────────────────
+//
+// Configuration used to live here, in one process-global variable, which made
+// the gateway single-tenant: whichever organization configured last won for
+// everybody. It now lives per organization in gateway_configs, read through
+// src/lib/gateway/config-store.ts. GatewayConfig below is still the shape the
+// forwarding code takes, but it is built per request from that store and holds
+// the provider key only for the life of the call.
+//
+// Do not reintroduce a module-level config here.
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 

@@ -644,6 +644,7 @@ export async function upgradeApiKeyTier(id: string, tier: string): Promise<void>
     data: { tier, rateLimit, expiresAt: null },
   });
   await invalidateApiKeyCache(key.keyPrefix);
+  await syncOwnedOrgTier(id, tier);
 }
 
 export async function downgradeApiKeyTier(id: string): Promise<void> {
@@ -653,6 +654,24 @@ export async function downgradeApiKeyTier(id: string): Promise<void> {
     data: { tier: "free", rateLimit: 10, expiresAt },
   });
   await invalidateApiKeyCache(key.keyPrefix);
+  await syncOwnedOrgTier(id, "free");
+}
+
+/**
+ * Keep an organization's plan tier in step with the key that owns it.
+ *
+ * `Organization.planTier` was hardcoded "free" at creation and never updated,
+ * so a Team customer's org read "free" — confusing on its own, and actively
+ * misleading in an evidence export. Governance itself is not tier-gated; this
+ * is a reporting field, so a failure here must never break a subscription
+ * activation.
+ */
+async function syncOwnedOrgTier(apiKeyId: string, tier: string): Promise<void> {
+  try {
+    await prisma.organization.updateMany({ where: { ownerId: apiKeyId }, data: { planTier: tier } });
+  } catch (err) {
+    console.error("[billing] could not sync owned org tier:", (err as Error).message);
+  }
 }
 
 function toApiKeyRecord(row: {

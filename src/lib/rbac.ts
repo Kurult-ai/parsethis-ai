@@ -136,6 +136,30 @@ export function hasRoleExact(
  * @param requiredRoles One or more roles; access is granted if the key
  *                      satisfies **any** of them.
  */
+/**
+ * What a caller refused by role can actually do about it. There are only two
+ * cases — you have no organization, or you have one and hold the wrong role —
+ * and both have a concrete next request.
+ */
+export const ORG_ROLE_HELP = {
+  no_organization: {
+    detail:
+      "If this key belongs to no organization, create one and become its org_admin. Included on every plan.",
+    method: "POST",
+    url: "/v1/orgs/bootstrap",
+    body: {
+      name: "string (required)",
+      tool_policy_mode: "blocklist | allowlist (optional, defaults to blocklist)",
+    },
+  },
+  in_organization: {
+    detail: "If your key is already in an organization, an org_admin can change your role.",
+    method: "PUT",
+    url: "/v1/orgs/:orgId/members/:keyId/role",
+  },
+  dashboard: "/dashboard/org",
+} as const;
+
 export function requireRole(...requiredRoles: Role[]) {
   return async (c: Context<AppEnv>, next: Next) => {
     const apiKey = c.get("apiKey");
@@ -149,6 +173,11 @@ export function requireRole(...requiredRoles: Role[]) {
         retryable: false,
         required_roles: requiredRoles,
         current_role: apiKey?.role ?? "unknown",
+        // Naming the roles without naming a way to obtain one is a dead end.
+        // This 403 was the last thing a paying prospect saw before leaving:
+        // bootstrap existed, worked in 133 ms, and appeared in no error body,
+        // no docs page, and no API spec.
+        _help: ORG_ROLE_HELP,
       });
     }
 
@@ -173,6 +202,7 @@ export function requireRoleExact(requiredRole: Role) {
         retryable: false,
         required_role: requiredRole,
         current_role: apiKey?.role ?? "unknown",
+        _help: ORG_ROLE_HELP,
       });
     }
 

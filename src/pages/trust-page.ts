@@ -2,6 +2,12 @@ import { renderPage } from "../lib/html-template.js";
 import { TIER_RATE_LIMITS } from "../lib/rate-limiter.js";
 import { DETECTION_FACTS, PRODUCT } from "../lib/product-facts.js";
 import { CONTACT_EMAIL } from "../lib/constants.js";
+// Roles are read from the code that enforces them. This page carried four role
+// names for months — admin, owner, member, viewer — and not one of them existed.
+// A customer's reviewer reads the questionnaire answer below into their
+// assessment, so it cannot be maintained by hand.
+import { VALID_ROLES } from "../lib/rbac.js";
+import { VALID_PROVIDER_TYPES } from "../lib/sso/sso-provider.js";
 import {
   DATA_FLOW_HTML,
   RETENTION,
@@ -189,7 +195,7 @@ ${DATA_FLOW_HTML}
   <div class="trust-card">
     <h3>👥 RBAC</h3>
     <ul>
-      <li>Roles: admin, owner, member, viewer</li>
+      <li>Roles: ${VALID_ROLES.join(", ")}</li>
       <li>Route-level middleware enforcement</li>
       <li>Organization-scoped keys; cross-org denied</li>
       <li>Configurable per-org policy packs</li>
@@ -199,7 +205,7 @@ ${DATA_FLOW_HTML}
     <h3>🔑 SSO</h3>
     <ul>
       <li>OAuth 2.0 / OpenID Connect</li>
-      <li>Google, Microsoft, Okta, Auth0, custom OIDC</li>
+      <li>Okta, Microsoft Entra ID, Google Workspace, WorkOS</li>
       <li>Available on Team + Compliance tiers</li>
     </ul>
   </div>
@@ -378,7 +384,7 @@ ${DATA_FLOW_HTML}
 <summary>Access Control (Q6–Q10)</summary>
 <div class="qa-block">
   <p class="q"><span class="qnum">6.</span>Is access to systems and data based on role (RBAC)?</p>
-  <p class="a">Yes. RBAC with defined roles (admin, owner, member, viewer). Access enforced at route level via middleware.</p>
+  <p class="a">Yes. RBAC with defined roles (${VALID_ROLES.join(", ")}). Access is enforced at route level by middleware, and org-scoped routes additionally refuse a caller outside the organization that owns the record.</p>
 </div>
 <div class="qa-block">
   <p class="q"><span class="qnum">7.</span>Are access rights reviewed periodically?</p>

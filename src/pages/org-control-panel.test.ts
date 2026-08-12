@@ -8,6 +8,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { VALID_ROLES } from "../lib/rbac.js";
 
 import {
   computeRuleExposure,
@@ -21,6 +22,10 @@ import {
   CEILING_FORM_FIELDS,
   type OrgAgentSummary,
   type MemberInput,
+  memberActionsCell,
+  buildAgentConfigRows,
+  agentActionsCell,
+  describeRevisionDiff,
 } from "./org-control-panel.js";
 import { CEILING_FIELDS } from "../routes/org-policy.js";
 import type { ToolRule } from "../lib/tool-policy.js";
@@ -352,5 +357,188 @@ describe("CEILING_FORM_FIELDS", () => {
     for (const field of CEILING_FORM_FIELDS) {
       assert.ok(field.label.trim().length > 0, `${String(field.key)} has no label`);
     }
+  });
+});
+
+// ── Member management controls ───────────────────────────────────────
+//
+// Offboarding was the question with no answer: no member-delete route, and a
+// panel that displayed an organization it could not administer. These controls
+// are the second lock, not the only one — the API refuses non-admins too.
+
+describe("memberActionsCell", () => {
+  const member = { id: "key_1", role: "developer", name: "dilan-key" };
+
+  it("offers every role the code enforces", () => {
+    const html = memberActionsCell(member);
+    for (const role of VALID_ROLES) assert.ok(html.includes(`value="${role}"`), `missing ${role}`);
+  });
+
+  it("preselects the role the member currently holds", () => {
+    assert.match(memberActionsCell(member), /value="developer" selected/);
+  });
+
+  it("carries the key id both controls need", () => {
+    const html = memberActionsCell(member);
+    assert.equal((html.match(/data-key-id="key_1"/g) ?? []).length, 2);
+  });
+
+  it("escapes a hostile key name rather than interpolating it", () => {
+    const html = memberActionsCell({ ...member, name: '"><script>x()</script>' });
+    assert.ok(!html.includes("<script>x()</script>"));
+    assert.ok(html.includes("&lt;script&gt;"));
+  });
+});
+
+// ── Policy history ───────────────────────────────────────────────────
+//
+// The revisions were always written correctly and never readable: the API
+// scoped its query by the caller's key id against a column holding org ids, and
+// the panel had no history zone at all.
+
+describe("describeRevisionDiff", () => {
+  it("reads the { old, new } shape computeDiff actually writes", () => {
+    const lines = describeRevisionDiff({
+      autoBlockThreshold: { old: null, new: 5 },
+      enforcementMode: { old: "monitor", new: "block" },
+    });
+    assert.ok(lines.includes("autoBlockThreshold: — → 5"));
+    assert.ok(lines.includes("enforcementMode: monitor → block"));
+  });
+
+  it("also reads { from, to }, so a future writer does not vanish silently", () => {
+    assert.deepEqual(describeRevisionDiff({ enforcementMode: { from: "warn", to: "block" } }), [
+      "enforcementMode: warn → block",
+    ]);
+  });
+
+  it("summarises a tool rule instead of printing [object Object]", () => {
+    const lines = describeRevisionDiff({
+      rules: { old: [], new: [{ kind: "category", pattern: "browser", action: "block", scope_type: null, scope_id: null }] },
+    });
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /block browser \(category\), whole org/);
+    assert.ok(!lines[0].includes("[object Object]"));
+  });
+
+  it("names the scope when a rule targets one agent", () => {
+    const lines = describeRevisionDiff({
+      rules: { old: [], new: [{ kind: "exact", pattern: "playwright", action: "block", scope_type: "agent", scope_id: "ag_1" }] },
+    });
+    assert.match(lines[0], /agent ag_1/);
+  });
+
+  it("renders booleans as on and off, and empty arrays as none", () => {
+    assert.deepEqual(describeRevisionDiff({ bypassEnabled: { old: true, new: false } }), [
+      "bypassEnabled: on → off",
+    ]);
+    assert.deepEqual(describeRevisionDiff({ locked_fields: { old: [], new: ["autoBlockThreshold"] } }), [
+      "locked_fields: none → autoBlockThreshold",
+    ]);
+  });
+
+  it("drops a field whose value did not actually change", () => {
+    assert.deepEqual(describeRevisionDiff({ enforcementMode: { old: "block", new: "block" } }), []);
+  });
+
+  it("survives a null or malformed diff rather than throwing", () => {
+    assert.deepEqual(describeRevisionDiff(null), []);
+    assert.deepEqual(describeRevisionDiff({ weird: null } as never), []);
+  });
+});
+
+// ── Per-agent configuration ──────────────────────────────────────────
+//
+// Org rules answer "what may any agent do". An admin also has to answer "what
+// may THIS one do", for agents other teams built. The engine has always
+// supported agent-scoped rules and they are tighten-only, so per-agent
+// configuration can restrict, freeze and reclassify — never permit.
+
+describe("buildAgentConfigRows", () => {
+  const ORG_BLOCK: ToolRule = {
+    id: "r_org", kind: "category", pattern: "browser", action: "block",
+    scopeType: null, scopeId: null, priority: 0, reason: "no browser use",
+  };
+  const AGENT_BLOCK: ToolRule = {
+    id: "r_agent", kind: "exact", pattern: "postgres_query", action: "block",
+    scopeType: "agent", scopeId: "ag_1", priority: 0, reason: "no direct DB",
+  };
+
+  const agents: OrgAgentSummary[] = [
+    { id: "ag_1", agentName: "claims-intake", tools: ["send_email", "postgres_query", "playwright"], riskLevel: "high", frozen: false, status: "active", lastSeenAt: null },
+    { id: "ag_2", agentName: "billing-bot", tools: ["send_email", "postgres_query"], riskLevel: "medium", frozen: false, status: "active", lastSeenAt: null },
+  ];
+
+  it("counts what the rules block for each agent", () => {
+    const rows = buildAgentConfigRows(agents, [ORG_BLOCK, AGENT_BLOCK], "blocklist");
+    // ag_1: playwright by the org rule, postgres_query by its own rule.
+    assert.equal(rows[0].blocked, 2);
+    // ag_2 declares neither a browser tool nor anything scoped to it.
+    assert.equal(rows[1].blocked, 0);
+  });
+
+  it("separates what was tightened HERE from what the org already blocked", () => {
+    // The number an admin came for: how much of this agent's posture is its own.
+    const rows = buildAgentConfigRows(agents, [ORG_BLOCK, AGENT_BLOCK], "blocklist");
+    assert.equal(rows[0].restrictedHere, 1, "only postgres_query is specific to ag_1");
+    assert.equal(rows[1].restrictedHere, 0);
+  });
+
+  it("does not attribute another agent's rule to this one", () => {
+    const rows = buildAgentConfigRows(agents, [AGENT_BLOCK], "blocklist");
+    assert.equal(rows[1].restrictedHere, 0, "ag_2 must not inherit ag_1's restriction");
+    assert.equal(rows[1].blocked, 0);
+  });
+
+  it("reports an agent that declares nothing without pretending it is governed", () => {
+    const rows = buildAgentConfigRows(
+      [{ id: "ag_3", agentName: "silent", tools: [] }],
+      [ORG_BLOCK],
+      "blocklist",
+    );
+    assert.equal(rows[0].declaredTools, 0);
+    assert.equal(rows[0].blocked, 0);
+    assert.equal(rows[0].restrictedHere, 0);
+  });
+
+  it("carries the posture fields the panel renders", () => {
+    const rows = buildAgentConfigRows(
+      [{ id: "ag_4", agentName: "frozen-one", tools: [], riskLevel: "critical", frozen: true, status: "suspended" }],
+      [],
+      "blocklist",
+    );
+    assert.equal(rows[0].frozen, true);
+    assert.equal(rows[0].riskLevel, "critical");
+    assert.equal(rows[0].status, "suspended");
+  });
+
+  it("defaults a missing risk level to unscored rather than inventing one", () => {
+    const rows = buildAgentConfigRows([{ id: "ag_5", agentName: "x", tools: [] }], [], "blocklist");
+    assert.equal(rows[0].riskLevel, "unscored");
+  });
+
+  it("survives a malformed rule instead of taking the page down", () => {
+    const bad = { id: "r_bad", kind: "nonsense", pattern: "", action: "block" } as unknown as ToolRule;
+    assert.doesNotThrow(() => buildAgentConfigRows(agents, [bad], "blocklist"));
+  });
+});
+
+describe("agentActionsCell", () => {
+  it("offers restrict and freeze, and nothing that grants", () => {
+    const html = agentActionsCell({ id: "ag_1", name: "claims-intake", frozen: false });
+    assert.match(html, /ocp-agent-restrict/);
+    assert.match(html, /ocp-agent-freeze/);
+    assert.ok(!/allow|permit|grant|exempt/i.test(html), "no control may suggest granting an exception");
+  });
+
+  it("flips the freeze control for an agent that is already frozen", () => {
+    const html = agentActionsCell({ id: "ag_1", name: "x", frozen: true });
+    assert.match(html, />Unfreeze</);
+    assert.match(html, /data-frozen="1"/);
+  });
+
+  it("escapes a hostile agent name", () => {
+    const html = agentActionsCell({ id: "ag_1", name: '"><script>x()</script>', frozen: false });
+    assert.ok(!html.includes("<script>x()</script>"));
   });
 });

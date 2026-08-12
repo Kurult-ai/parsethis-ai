@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { applyOrgPolicyCeiling, clampedFields, type OrgPolicyCeiling } from "./org-policy-ceiling.js";
+import {
+  applyOrgPolicyCeiling,
+  clampedFields,
+  clampReport,
+  type OrgPolicyCeiling,
+} from "./org-policy-ceiling.js";
 import type { ScreeningPolicy } from "../types.js";
 
 /** A permissive key policy — the shape an employee would set to opt out. */
@@ -174,4 +179,53 @@ test("clampedFields is empty when the key is already within the ceiling", () => 
     clampedFields(compliant, { autoBlockThreshold: 5, enforcementMode: "block", screenUserInput: true }),
     [],
   );
+});
+
+// A write the ceiling tightens used to be stored as sent and echoed back as
+// sent: an employee who set threshold 9 and monitor mode got 200 and those
+// values, while every read returned 5 and block. They build on it, and file a
+// bug three weeks later. The clamp was right; the answer was not.
+test("clampReport returns the effective policy, not the requested one", () => {
+  const requested = loosePolicy({ autoBlockThreshold: 9, enforcementMode: "monitor" });
+  const ceiling: OrgPolicyCeiling = { autoBlockThreshold: 5, enforcementMode: "block" };
+
+  const report = clampReport(requested, ceiling);
+
+  assert.equal(report.effective.autoBlockThreshold, 5);
+  assert.equal(report.effective.enforcementMode, "block");
+});
+
+test("clampReport names every field the org overrode, and the value it forced", () => {
+  const requested = loosePolicy({ autoBlockThreshold: 9, enforcementMode: "monitor" });
+  const ceiling: OrgPolicyCeiling = { autoBlockThreshold: 5, enforcementMode: "block" };
+
+  const report = clampReport(requested, ceiling);
+
+  assert.ok(report.org_clamped, "a clamped write must say so");
+  assert.deepEqual(report.org_clamped!.fields.sort(), ["autoBlockThreshold", "enforcementMode"]);
+  assert.equal(report.org_clamped!.org_values.autoBlockThreshold, 5);
+  assert.equal(report.org_clamped!.org_values.enforcementMode, "block");
+});
+
+test("clampReport stays silent when the org changed nothing", () => {
+  const requested = loosePolicy({ autoBlockThreshold: 3, enforcementMode: "block" });
+  const ceiling: OrgPolicyCeiling = { autoBlockThreshold: 5 };
+
+  const report = clampReport(requested, ceiling);
+
+  assert.equal(report.org_clamped, undefined, "an unclamped write must not grow a warning");
+  assert.equal(report.effective.autoBlockThreshold, 3);
+});
+
+test("clampReport with no ceiling returns the policy unchanged and says nothing", () => {
+  const requested = loosePolicy();
+  const report = clampReport(requested, null);
+
+  assert.deepEqual(report.effective, requested);
+  assert.equal(report.org_clamped, undefined);
+});
+
+test("clampReport explains itself in words the caller can act on", () => {
+  const report = clampReport(loosePolicy({ autoBlockThreshold: 9 }), { autoBlockThreshold: 5 });
+  assert.match(report.org_clamped!.detail, /organization/i);
 });

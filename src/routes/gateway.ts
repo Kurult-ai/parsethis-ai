@@ -17,9 +17,17 @@ import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 import type { AppEnv } from "../types.js";
 import { problem, ErrorCode } from "../lib/problem-response.js";
 import { auditLog } from "../lib/audit-log.js";
+import { prisma } from "../db.js";
+import { requireRole } from "../lib/rbac.js";
+import { requireCsrf } from "../lib/csrf.js";
+import { resolveOrgId } from "../lib/org-scope.js";
+import { sealSecret } from "../lib/secret-box.js";
 import {
-  getGatewayConfig,
-  setGatewayConfig,
+  getOrgGatewayConfig,
+  getOrgGatewayCredentials,
+  invalidateOrgGatewayConfig,
+} from "../lib/gateway/config-store.js";
+import {
   handleProxyRequest,
   handleStreamingProxyRequest,
   GatewayBlockError,
@@ -33,26 +41,36 @@ export const gatewayRoutes = new Hono<AppEnv>();
 
 // ─── POST /v1/gateway/configure ────────────────────────────────────────────
 //
-// Set the upstream LLM provider URL and API key, plus enforcement mode.
-// Requires admin scope. The API key is stored in-memory (per ADR-001, Parse
-// deliberately avoids persistent key custody — the C17 blast radius is
-// minimized by not persisting provider keys to disk/database).
+// Set the org's upstream LLM provider URL, API key, and enforcement mode.
+//
+// Supersedes ADR-001's C17 note: the provider key IS persisted now, sealed with
+// src/lib/secret-box.ts and scoped to one organization. See that module for why
+// the trade changed and what makes the reversal defensible.
 
+// Configuration is an org_admin action, not an operator one.
+//
+// It used to require `admin` scope, which self-service keys never carry, so the
+// endpoint answered 403 to every customer and the proxy then answered 503
+// telling them to call the endpoint they were forbidden to call. The gateway is
+// the one enforcement point that reads tools off the wire instead of trusting an
+// agent to declare them, and it did not exist for customers at all.
 gatewayRoutes.post(
   "/v1/gateway/configure",
   authMiddleware("evaluate"),
+  requireRole("org_admin"),
+  requireCsrf(),
   async (c) => {
     const apiKey = c.get("apiKey");
 
-    // Require admin scope for configuration changes
-    if (!apiKey.scopes.includes("admin")) {
+    const orgId = await resolveOrgId(apiKey.id);
+    if (!orgId) {
       return problem(c, {
         status: 403,
-        title: "Insufficient permissions",
-        detail: "Gateway configuration requires admin scope",
-        code: ErrorCode.AUTH_INSUFFICIENT_SCOPE,
+        title: "No organization",
+        detail: "A gateway belongs to an organization. Create one with POST /v1/orgs/bootstrap, then configure the gateway.",
+        code: ErrorCode.AUTH_FORBIDDEN_ROLE,
         retryable: false,
-        required_scope: "admin",
+        _help: { create_organization: { method: "POST", url: "/v1/orgs/bootstrap" } },
       });
     }
 
@@ -60,6 +78,7 @@ gatewayRoutes.post(
       upstream_url?: string;
       upstream_api_key?: string;
       enforcement_mode?: EnforcementMode;
+      model?: string;
     }>().catch(() => null);
 
     if (!body || typeof body !== "object") {
@@ -122,30 +141,58 @@ gatewayRoutes.post(
       });
     }
 
-    // Build new config
-    const config: GatewayConfig = {
-      upstreamUrl: body.upstream_url,
-      // In-memory only — NOT persisted to DB/disk (ADR-001 C17 minimization)
-      upstreamApiKey: body.upstream_api_key,
-      enforcementMode,
-    };
+    // Sealed at rest — see src/lib/secret-box.ts for why this reverses C17 and
+    // what makes the reversal defensible. A deployment that cannot encrypt is a
+    // 503; storing the provider key in the clear is not an available fallback.
+    let sealedApiKey: string;
+    try {
+      sealedApiKey = sealSecret(body.upstream_api_key);
+    } catch (err) {
+      console.error("[gateway] provider key could not be sealed:", (err as Error).message);
+      return problem(c, {
+        status: 503,
+        title: "Secret storage unavailable",
+        detail: "This deployment cannot encrypt secrets at rest, so the provider key was not stored. Set PARSE_SECRET_KEY and try again.",
+        code: ErrorCode.SERVICE_UNAVAILABLE,
+        retryable: true,
+      });
+    }
 
-    setGatewayConfig(config);
+    await prisma.gatewayConfig.upsert({
+      where: { orgId },
+      create: {
+        orgId,
+        upstreamUrl: body.upstream_url,
+        sealedApiKey,
+        model: typeof body.model === "string" ? body.model : null,
+        enforcementMode,
+        active: true,
+      },
+      update: {
+        upstreamUrl: body.upstream_url,
+        sealedApiKey,
+        model: typeof body.model === "string" ? body.model : null,
+        enforcementMode,
+        active: true,
+      },
+    });
+    await invalidateOrgGatewayConfig(orgId);
 
     auditLog({
       action: "gateway_configured",
       apiKeyId: apiKey.id,
-      detail: `upstream=${body.upstream_url}, enforcement=${enforcementMode}`,
+      detail: `org=${orgId}, upstream=${body.upstream_url}, enforcement=${enforcementMode}`,
       ip: c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown",
     });
 
     return c.json({
       status: "configured",
+      org_id: orgId,
       upstream_url: body.upstream_url,
       enforcement_mode: enforcementMode,
+      // The credential is never echoed, not even as a preview: a prefix and a
+      // suffix of a provider key is enough to identify it in a leaked log.
       api_key_configured: true,
-      // Never echo back the API key
-      api_key_preview: body.upstream_api_key.slice(0, 6) + "..." + body.upstream_api_key.slice(-4),
       configured_at: new Date().toISOString(),
     });
   },
@@ -156,17 +203,21 @@ gatewayRoutes.post(
 gatewayRoutes.get(
   "/v1/gateway/status",
   authMiddleware("evaluate"),
-  (c) => {
-    const config = getGatewayConfig();
+  async (c) => {
+    const orgId = await resolveOrgId(c.get("apiKey").id);
+    const config = orgId ? await getOrgGatewayConfig(orgId) : null;
 
     return c.json({
       status: config ? "configured" : "not_configured",
       gateway_mode: "available",
+      org_id: orgId,
       upstream: config
         ? {
             url: config.upstreamUrl,
+            model: config.model,
             enforcement_mode: config.enforcementMode,
-            api_key_configured: Boolean(config.upstreamApiKey),
+            // Configured, never the value.
+            api_key_configured: true,
           }
         : null,
       supported_endpoints: [
@@ -203,19 +254,29 @@ gatewayRoutes.post(
   authMiddleware("evaluate"),
   billableUsageMiddleware(),
   async (c) => {
-    // Check gateway is configured
-    const config = getGatewayConfig();
+    const apiKey = c.get("apiKey");
+
+    // The gateway belongs to an organization, and fails CLOSED: no config, an
+    // inactive one, or a provider key that cannot be opened all mean "do not
+    // proxy". Forwarding unfiltered to an upstream we cannot identify would
+    // defeat the point of routing through here.
+    const orgId = await resolveOrgId(apiKey.id);
+    const config = orgId ? await getOrgGatewayCredentials(orgId) : null;
     if (!config) {
       return problem(c, {
         status: 503,
         title: "Gateway not configured",
-        detail: "Call POST /v1/gateway/configure to set the upstream LLM provider before using the gateway proxy.",
+        detail: orgId
+          ? "This organization has no active gateway. An org_admin can set one with POST /v1/gateway/configure."
+          : "A gateway belongs to an organization. Create one with POST /v1/orgs/bootstrap, then configure the gateway.",
         code: ErrorCode.SERVICE_UNAVAILABLE,
         retryable: true,
+        ...(orgId ? { org_id: orgId } : {}),
+        _help: orgId
+          ? { configure: { method: "POST", url: "/v1/gateway/configure" } }
+          : { create_organization: { method: "POST", url: "/v1/orgs/bootstrap" } },
       });
     }
-
-    const apiKey = c.get("apiKey");
 
     // Parse the chat completion request body
     const requestBody = await c.req.json<ChatCompletionRequest>().catch(() => null);

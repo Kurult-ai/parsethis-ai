@@ -543,14 +543,21 @@ export function authMiddleware(requiredScope?: string) {
 }
 
 // Delegate key management to api-key-service (Postgres-backed)
-// Simplified signatures for route handlers (self-service context, no userId)
+//
+// `ownerId` defaults to the shared self-service user, which is what an
+// anonymous POST /v1/keys/generate should produce and what every existing
+// caller already got. Pass a real user id when the request carries a session,
+// so the key belongs to a person: without that edge there is no answer to
+// "whose key is this", which is what made the org bypass possible and
+// offboarding impossible.
 export async function createApiKey(
   name: string,
   scopes: string[],
   expiresAt?: Date,
-  orgId?: string
+  orgId?: string,
+  ownerId: string = SELF_SERVICE_USER_ID,
 ): Promise<{ id: string; key: string; name: string; scopes: string[]; created_at: string }> {
-  const result = await createApiKeyFromService(SELF_SERVICE_USER_ID, name, "free", orgId, scopes, expiresAt);
+  const result = await createApiKeyFromService(ownerId, name, "free", orgId, scopes, expiresAt);
   return {
     id: result.record.id,
     key: result.key,

@@ -34,6 +34,8 @@ import {
 } from "../lib/org-policy-ceiling.js";
 import { resolveToolList, type ToolPolicyMode, type ToolRule } from "../lib/tool-policy.js";
 import { TOOL_CATEGORIES, getCategory } from "../lib/tool-catalog.js";
+import { SELF_SERVICE_USER_ID } from "../lib/constants.js";
+import { VALID_ROLES } from "../lib/rbac.js";
 import type { ScreeningPolicy } from "../types.js";
 
 // ─── Escaping and formatting ───────────────────────────────────────────
@@ -73,6 +75,10 @@ export interface OrgAgentSummary {
   id: string;
   agentName: string;
   tools: string[];
+  riskLevel?: string;
+  frozen?: boolean;
+  status?: string;
+  lastSeenAt?: Date | null;
 }
 
 export interface RuleExposureRow {
@@ -136,6 +142,118 @@ export function computeRuleExposure(
   return out;
 }
 
+export interface AgentConfigRow {
+  id: string;
+  name: string;
+  riskLevel: string;
+  frozen: boolean;
+  status: string;
+  declaredTools: number;
+  /** Tools this agent declares that the org (or a rule aimed at it) blocks. */
+  blocked: number;
+  /** Tools blocked by a rule aimed at THIS agent, not the whole org. */
+  restrictedHere: number;
+  lastSeenAt: Date | null;
+}
+
+/**
+ * One row per registered agent, with what the rules currently decide for it.
+ *
+ * `restrictedHere` is the number an admin came for: how much of this agent's
+ * configuration is specific to it, rather than inherited from the org. An agent
+ * with 0 is running the house rules; an agent with 3 has been tightened.
+ */
+export function buildAgentConfigRows(
+  agents: OrgAgentSummary[],
+  rules: ToolRule[],
+  mode: ToolPolicyMode,
+): AgentConfigRow[] {
+  return (Array.isArray(agents) ? agents : []).map((agent) => {
+    let blocked = 0;
+    let restrictedHere = 0;
+    try {
+      const scoped = resolveToolList(agent.tools, rules, mode, { agentId: agent.id }).decisions;
+      const orgOnly = resolveToolList(agent.tools, rules, mode, {}).decisions;
+      scoped.forEach((decision, i) => {
+        if (decision.action === "block") blocked += 1;
+        if (decision.action === "block" && orgOnly[i]?.action !== "block") restrictedHere += 1;
+      });
+    } catch {
+      // A malformed rule must not take down the page.
+    }
+    return {
+      id: agent.id,
+      name: agent.agentName,
+      riskLevel: agent.riskLevel ?? "unscored",
+      frozen: Boolean(agent.frozen),
+      status: agent.status ?? "active",
+      declaredTools: agent.tools.length,
+      blocked,
+      restrictedHere,
+      lastSeenAt: agent.lastSeenAt ?? null,
+    };
+  });
+}
+
+/**
+ * Who owns a member key.
+ *
+ * This column used to print `self-service@internal.invalid` for every
+ * self-service key, because they all hung off one shared user row. An admin
+ * asked to offboard someone read three identical fake addresses. A key with no
+ * account now says so plainly rather than showing an address nobody holds.
+ */
+export function ownerLabel(
+  member: Pick<MemberRow, "ownerEmail" | "ownerUserId" | "ownerVerified">,
+): string {
+  const anonymous =
+    !member.ownerUserId ||
+    member.ownerUserId === SELF_SERVICE_USER_ID ||
+    !member.ownerEmail ||
+    member.ownerEmail.endsWith("@internal.invalid");
+
+  if (anonymous) {
+    return `<span class="ocp-sub">anonymous key — no account</span>`;
+  }
+  const email = escapeHtml(member.ownerEmail!);
+  return member.ownerVerified
+    ? email
+    : `${email} <span class="ocp-sub" title="This address has not been confirmed, so this person cannot create an organization.">unverified</span>`;
+}
+
+/**
+ * Per-agent controls, org_admin only and omitted for everyone else.
+ *
+ * Restrict and Freeze, and no third option — the API refuses a grant outright,
+ * and offering one here would advertise a capability the engine does not have.
+ */
+export function agentActionsCell(agent: Pick<AgentConfigRow, "id" | "name" | "frozen">): string {
+  return `        <td class="ocp-manage">
+          <button type="button" class="ocp-agent-restrict" data-agent-id="${escapeHtml(agent.id)}" data-agent-name="${escapeHtml(agent.name)}">Restrict</button>
+          <button type="button" class="ocp-agent-freeze" data-agent-id="${escapeHtml(agent.id)}" data-agent-name="${escapeHtml(agent.name)}" data-frozen="${agent.frozen ? "1" : "0"}">${agent.frozen ? "Unfreeze" : "Freeze"}</button>
+        </td>`;
+}
+
+/**
+ * The role select and Remove control for one member row.
+ *
+ * Rendered only when the caller is an org_admin, and rendered by *omission* for
+ * everyone else — an auditor's page must not contain a disabled version of a
+ * control they may not use. The API refuses them too; this is the second lock,
+ * not the only one.
+ */
+export function memberActionsCell(member: Pick<MemberRow, "id" | "role" | "name">): string {
+  const options = VALID_ROLES.map(
+    (role) =>
+      `<option value="${escapeHtml(role)}"${role === member.role ? " selected" : ""}>${escapeHtml(role)}</option>`,
+  ).join("");
+
+  return `        <td class="ocp-manage">
+          <select class="ocp-role-select" data-key-id="${escapeHtml(member.id)}" aria-label="Role for ${escapeHtml(member.name)}">${options}</select>
+          <button type="button" class="ocp-member-remove" data-key-id="${escapeHtml(member.id)}" data-key-name="${escapeHtml(member.name)}">Remove</button>
+        </td>`;
+}
+
 /** What a rule matches, in words an operator can check against reality. */
 export function ruleTargetLabel(rule: Pick<ToolRule, "kind" | "pattern">): string {
   if (rule.kind === "category") {
@@ -158,6 +276,9 @@ export interface MemberInput {
   name: string;
   role: string;
   ownerEmail: string | null;
+  /** null for a key nobody owns — see ownerLabel(). */
+  ownerUserId?: string | null;
+  ownerVerified?: boolean;
   lastUsedAt: Date | null;
   revokedAt: Date | null;
 }
@@ -167,6 +288,8 @@ export interface MemberRow {
   name: string;
   role: string;
   ownerEmail: string | null;
+  ownerUserId?: string | null;
+  ownerVerified?: boolean;
   lastUsedAt: Date | null;
   revoked: boolean;
   /** false when the key has no stored production policy and no default was supplied. */
@@ -202,6 +325,8 @@ export function buildMemberRows(
         name: member.name,
         role: member.role,
         ownerEmail: member.ownerEmail ?? null,
+        ownerUserId: member.ownerUserId ?? null,
+        ownerVerified: member.ownerVerified ?? false,
         lastUsedAt: member.lastUsedAt ?? null,
         revoked: Boolean(member.revokedAt),
         toleranceKnown: false,
@@ -219,6 +344,8 @@ export function buildMemberRows(
       name: member.name,
       role: member.role,
       ownerEmail: member.ownerEmail ?? null,
+      ownerUserId: member.ownerUserId ?? null,
+      ownerVerified: member.ownerVerified ?? false,
       lastUsedAt: member.lastUsedAt ?? null,
       revoked: Boolean(member.revokedAt),
       toleranceKnown: true,
@@ -336,6 +463,84 @@ export function violationVerdictLabel(blocked: boolean): string {
   return blocked ? "blocked" : "would block";
 }
 
+/** The panel shows a working window, not the whole history; the API has the rest. */
+const REVISION_LIMIT = 20;
+
+export interface PolicyRevisionRow {
+  id: string;
+  version: number;
+  changedBy: string;
+  changeReason: string | null;
+  /**
+   * computeDiff writes { field: { old, new } } — see src/lib/policy-revision.ts.
+   * from/to is tolerated on read so a future writer using the other spelling
+   * renders rather than vanishing.
+   */
+  diff: Record<string, { old?: unknown; new?: unknown; from?: unknown; to?: unknown }> | null;
+  createdAt: Date;
+}
+
+/**
+ * A policy change in the words an auditor needs: which field, what it was, what
+ * it became. `diff` is written by createPolicyRevision as { field: { from, to } }.
+ *
+ * A revision with no readable diff still renders — "recorded, no field-level
+ * diff" is a true statement about the record, and silently dropping the row
+ * would understate how many changes were made.
+ */
+export function describeRevisionDiff(diff: PolicyRevisionRow["diff"]): string[] {
+  if (!diff || typeof diff !== "object") return [];
+  const out: string[] = [];
+  for (const [field, raw] of Object.entries(diff)) {
+    if (!raw || typeof raw !== "object") continue;
+    // computeDiff writes { old, new }. from/to is accepted too so a future
+    // writer using the other spelling renders instead of silently vanishing.
+    const change = raw as { old?: unknown; new?: unknown; from?: unknown; to?: unknown };
+    const before = formatRevisionValue("old" in change ? change.old : change.from);
+    const after = formatRevisionValue("new" in change ? change.new : change.to);
+    if (before === after) continue;
+    out.push(`${field}: ${before} → ${after}`);
+  }
+  return out;
+}
+
+function formatRevisionValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "boolean") return value ? "on" : "off";
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "none";
+    // A tool-policy snapshot stores whole rule objects. Joining those printed
+    // "[object Object]" at an auditor, which is worse than saying less.
+    return value
+      .map((entry) => (typeof entry === "object" && entry !== null ? summariseRule(entry) : String(entry)))
+      .join("; ");
+  }
+  if (typeof value === "object") return summariseRule(value);
+  return String(value);
+}
+
+/**
+ * One rule in a sentence: "block browser (category), whole org".
+ *
+ * Snapshots are serialised with snake_case scope fields while the in-memory
+ * ToolRule uses camelCase, so read both — printing "[object Object]" at an
+ * auditor is worse than printing less.
+ */
+function summariseRule(value: object): string {
+  const rule = value as {
+    action?: unknown; kind?: unknown; pattern?: unknown;
+    scopeType?: unknown; scopeId?: unknown; scope_type?: unknown; scope_id?: unknown;
+  };
+  if (rule.action && rule.pattern) {
+    const scopeType = rule.scopeType ?? rule.scope_type;
+    const scopeId = rule.scopeId ?? rule.scope_id;
+    const scope = scopeType && scopeId ? `${scopeType} ${scopeId}` : "whole org";
+    return `${rule.action} ${rule.pattern} (${rule.kind ?? "?"}), ${scope}`;
+  }
+  const json = JSON.stringify(value);
+  return json.length > 90 ? `${json.slice(0, 90)}…` : json;
+}
+
 // ─── Read helpers (read-only) ──────────────────────────────────────────
 
 /**
@@ -428,6 +633,8 @@ export async function renderOrgControlPanelPage(
     agentId: string | null;
   }> = [];
   let violationTotal = 0;
+  let revisions: PolicyRevisionRow[] = [];
+  let revisionTotal = 0;
 
   // The product default a key with no stored policy runs under. Imported
   // lazily so this page module stays free of the route graph.
@@ -462,7 +669,7 @@ export async function renderOrgControlPanelPage(
           role: true,
           lastUsedAt: true,
           revokedAt: true,
-          user: { select: { email: true } },
+          user: { select: { id: true, email: true, emailVerifiedAt: true } },
         },
       });
       members = rows.map((r) => ({
@@ -470,6 +677,8 @@ export async function renderOrgControlPanelPage(
         name: r.name,
         role: r.role,
         ownerEmail: r.user?.email ?? null,
+        ownerUserId: r.user?.id ?? null,
+        ownerVerified: Boolean(r.user?.emailVerifiedAt),
         lastUsedAt: r.lastUsedAt,
         revokedAt: r.revokedAt,
       }));
@@ -560,6 +769,35 @@ export async function renderOrgControlPanelPage(
       ceiling = null;
     }
 
+    // Policy history. Every rule, mode and tolerance change is versioned with a
+    // before, an after, an author and the admin's own reason string — and until
+    // now none of it was readable anywhere, because the API scoped the query by
+    // the caller's key id against a column holding organization ids.
+    try {
+      const rows = await prisma.policyRevision.findMany({
+        where: { orgId },
+        orderBy: { createdAt: "desc" },
+        take: REVISION_LIMIT,
+        select: { id: true, version: true, changedBy: true, changeReason: true, diff: true, createdAt: true },
+      });
+      revisions = rows.map((r) => ({
+        id: r.id,
+        version: r.version,
+        changedBy: r.changedBy,
+        changeReason: r.changeReason,
+        diff: r.diff as PolicyRevisionRow["diff"],
+        createdAt: r.createdAt,
+      }));
+    } catch {
+      revisions = [];
+    }
+
+    try {
+      revisionTotal = await prisma.policyRevision.count({ where: { orgId } });
+    } catch {
+      revisionTotal = revisions.length;
+    }
+
     try {
       const policy = await getOrgToolPolicy(orgId);
       rules = policy.rules;
@@ -573,9 +811,17 @@ export async function renderOrgControlPanelPage(
         where: { orgId },
         orderBy: { createdAt: "desc" },
         take: AGENT_LIMIT,
-        select: { id: true, agentName: true, tools: true },
+        select: { id: true, agentName: true, tools: true, riskLevel: true, frozen: true, status: true, lastSeenAt: true },
       });
-      agents = rows.map((r) => ({ id: r.id, agentName: r.agentName, tools: r.tools ?? [] }));
+      agents = rows.map((r) => ({
+        id: r.id,
+        agentName: r.agentName,
+        tools: r.tools ?? [],
+        riskLevel: r.riskLevel,
+        frozen: r.frozen,
+        status: r.status,
+        lastSeenAt: r.lastSeenAt,
+      }));
     } catch {
       agents = [];
     }
@@ -617,14 +863,15 @@ export async function renderOrgControlPanelPage(
               : "";
           return `<tr>
         <td><span class="ocp-nm">${escapeHtml(m.name)}</span>${m.revoked ? '<span class="ocp-sub">revoked</span>' : ""}</td>
-        <td class="ocp-dim">${safeStr(m.ownerEmail)}</td>
+        <td class="ocp-dim">${ownerLabel(m)}</td>
         <td><span class="ocp-role">${escapeHtml(m.role)}</span></td>
         <td class="ocp-mono">${escapeHtml(timeAgo(m.lastUsedAt))}</td>
         <td class="ocp-mono">${escapeHtml(tolerance)}${clampNote ? `<br>${clampNote}` : ""}</td>
+${isAdmin ? memberActionsCell(m) : ""}
       </tr>`;
         })
         .join("\n")
-    : `<tr><td colspan="5" class="ocp-empty">${
+    : `<tr><td colspan="${isAdmin ? 6 : 5}" class="ocp-empty">${
         orgId
           ? "No member keys yet."
           : "This key belongs to no organization, so there is nothing to govern. An org_admin adds it to one."
@@ -781,6 +1028,49 @@ export async function renderOrgControlPanelPage(
 
   // ─── Zone 4: Violations ──────────────────────────────────────────────
 
+  const agentConfigRows = buildAgentConfigRows(agents, rules, toolMode);
+  // An agent declaring nothing is not governed at screening time. Say so here
+  // rather than letting a clean-looking table imply coverage that is absent.
+  const undeclaredAgents = agentConfigRows.filter((a) => a.declaredTools === 0).length;
+  const agentBody = agentConfigRows.length
+    ? agentConfigRows
+        .map((a) => {
+          const posture = a.frozen
+            ? `<span class="ocp-clamp">frozen</span>`
+            : a.restrictedHere > 0
+              ? `<span class="ocp-sub">${a.restrictedHere} tightened here</span>`
+              : `<span class="ocp-sub">org rules only</span>`;
+          return `<tr>
+        <td><span class="ocp-nm">${escapeHtml(a.name)}</span>${a.status !== "active" ? `<span class="ocp-sub">${escapeHtml(a.status)}</span>` : ""}</td>
+        <td class="ocp-mono">${escapeHtml(a.riskLevel)}</td>
+        <td class="ocp-mono">${a.declaredTools === 0 ? "—" : `${a.blocked}/${a.declaredTools} blocked`}</td>
+        <td>${posture}</td>
+        <td class="ocp-mono">${escapeHtml(timeAgo(a.lastSeenAt))}</td>
+${isAdmin ? agentActionsCell(a) : ""}
+      </tr>`;
+        })
+        .join("\n")
+    : `<tr><td colspan="${isAdmin ? 6 : 5}" class="ocp-empty">No registered agents yet.</td></tr>`;
+
+  const revisionBody = revisions.length
+    ? revisions
+        .map((r) => {
+          const changes = describeRevisionDiff(r.diff);
+          const detail = changes.length
+            ? changes.map((c) => `<div class="ocp-sub">${escapeHtml(c)}</div>`).join("")
+            : `<span class="ocp-sub">recorded, no field-level diff</span>`;
+          return `<tr>
+        <td class="ocp-mono">v${r.version}</td>
+        <td>${r.changeReason ? escapeHtml(r.changeReason) : '<span class="ocp-sub">no reason given</span>'}${detail}</td>
+        <td class="ocp-mono ocp-dim">${escapeHtml(r.changedBy)}</td>
+        <td class="ocp-mono">${escapeHtml(timeAgo(r.createdAt))}</td>
+      </tr>`;
+        })
+        .join("\n")
+    : `<tr><td colspan="4" class="ocp-empty">${
+        orgId ? "No policy changes recorded yet." : "This key belongs to no organization."
+      }</td></tr>`;
+
   const violationBody = violations.length
     ? violations
         .map((v) => {
@@ -806,6 +1096,12 @@ export async function renderOrgControlPanelPage(
   .ocp-head h1 { margin:0; font-size:2.1em; }
   .ocp-head .ocp-who { font-family:var(--mono); font-size:12px; color:var(--text-soft); letter-spacing:.08em; }
   .ocp-badge { font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--accent2); background:var(--accent-dim); border-radius:999px; padding:3px 11px; }
+  .ocp-manage { white-space:nowrap; }
+  .ocp-manage select { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:4px 6px; font-family:var(--mono); font-size:11px; }
+  .ocp-manage button { margin-left:6px; background:transparent; color:var(--text-dim); border:1px solid var(--border); border-radius:6px; padding:4px 9px; font-size:11px; font-family:inherit; cursor:pointer; }
+  .ocp-manage button:hover { color:var(--text); border-color:var(--text-soft); }
+  .ocp-manage button[disabled] { opacity:.5; cursor:default; }
+  .ocp-manage select:focus-visible, .ocp-manage button:focus-visible { outline:2px solid var(--accent, #6366f1); outline-offset:2px; }
   .ocp-zone { margin-top:28px; background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
   .ocp-zone-primary { border-color:var(--border2); }
   .ocp-zone-head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; padding:16px 20px; border-bottom:1px solid var(--border); }
@@ -874,9 +1170,9 @@ export async function renderOrgControlPanelPage(
     <h2>People</h2><span class="ocp-meta">MEMBER KEYS</span>
     <span class="ocp-right">${members.length < memberTotal ? `showing ${members.length} of ${memberTotal.toLocaleString("en-US")}` : `${memberTotal.toLocaleString("en-US")} total`}</span>
   </div>
-  <p class="ocp-note">A member here is an <strong>API key</strong>, not a person. <code>ApiKey.orgId</code> and <code>ApiKey.role</code> are the only membership edge in the schema, so one employee holding three keys appears three times. Per-person identity needs an org member table and is not built yet. The email column is the email on the account that owns the key.</p>
+  <p class="ocp-note">A member here is an <strong>API key</strong>, not a person. <code>ApiKey.orgId</code> and <code>ApiKey.role</code> are the only membership edge in the schema, so one employee holding three keys appears three times. Per-person identity needs an org member table and is not built yet. The owner column is the account that holds the key: a key created from an account shows that account's email, and a key minted anonymously says so rather than showing a placeholder address.</p>
   <table class="ocp-t">
-    <thead><tr><th>Key</th><th>Owner email</th><th>Role</th><th>Last used</th><th>Effective tolerance</th></tr></thead>
+    <thead><tr><th>Key</th><th>Owner</th><th>Role</th><th>Last used</th><th>Effective tolerance</th>${isAdmin ? "<th>Manage</th>" : ""}</tr></thead>
     <tbody>
 ${memberBody}
     </tbody>
@@ -947,6 +1243,37 @@ ${violationBody}
     </tbody>
   </table>
   <p class="ocp-note">Under the <code>monitor</code> dial the pipeline runs and records a verdict without stopping anything, so those rows read "would block" — the enforcement did not happen.</p>
+</section>
+
+<!-- ═══ Zone 4b · Individual agents ═══ -->
+<section class="ocp-zone">
+  <div class="ocp-zone-head">
+    <h2>Agents</h2><span class="ocp-meta">ONE AT A TIME</span>
+    <span class="ocp-right">${agentTotal > 0 ? `${agentTotal.toLocaleString("en-US")} registered${agentConfigRows.length < agentTotal ? ` · showing ${agentConfigRows.length}` : ""}` : "none yet"}</span>
+  </div>
+  ${undeclaredAgents > 0 ? `<p class="ocp-note"><strong>${undeclaredAgents} of ${agentConfigRows.length} agents here declare no tools</strong>, so screening-time rules have nothing to decide for them. Registration covers what they declared; the org gateway covers what they actually send. <code>POST /v1/gateway/configure</code></p>` : ""}
+  <p class="ocp-note">Org rules answer what <em>any</em> agent may do. This answers what <em>one</em> agent may do, and lets you tighten it without touching anyone else. A rule aimed at a single agent may only make the org result stricter — there is no way to grant an agent an exception, by design.</p>
+  <table class="ocp-t">
+    <thead><tr><th>Agent</th><th>Risk</th><th>Declared tools</th><th>Posture</th><th>Last seen</th>${isAdmin ? "<th>Configure</th>" : ""}</tr></thead>
+    <tbody>
+${agentBody}
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══ Zone 5 · Policy history ═══ -->
+<section class="ocp-zone">
+  <div class="ocp-zone-head">
+    <h2>Policy history</h2><span class="ocp-meta">WHO CHANGED WHAT</span>
+    <span class="ocp-right">${revisionTotal > 0 ? `${revisionTotal.toLocaleString("en-US")} recorded${revisions.length < revisionTotal ? ` · showing ${revisions.length}` : ""}` : "no data yet"}</span>
+  </div>
+  <table class="ocp-t">
+    <thead><tr><th>Version</th><th>Change</th><th>By</th><th>When</th></tr></thead>
+    <tbody>
+${revisionBody}
+    </tbody>
+  </table>
+  <p class="ocp-note">Every tool rule, mode and tolerance change is versioned with a before and an after. The full history, including changes older than the ${REVISION_LIMIT} shown here, is at <code>GET /v1/compliance/policy-history</code> and in your evidence export.</p>
 </section>
 ${readOnlyNote}
 
@@ -1052,11 +1379,79 @@ ${readOnlyNote}
         .catch(function (err) { say(err.message); });
     });
   });
+
+${isAdmin ? `  // ── Member management ────────────────────────────────────────────────
+  // Present only for org_admin: these elements do not exist in an analyst's or
+  // auditor's page at all, so there is nothing here for them to bind to.
+  var orgId = document.body.getAttribute('data-org-id');
+
+  Array.prototype.forEach.call(document.querySelectorAll('.ocp-role-select'), function (sel) {
+    sel.addEventListener('change', function () {
+      var keyId = sel.getAttribute('data-key-id');
+      say('Changing role…');
+      send('PUT', '/v1/orgs/' + encodeURIComponent(orgId) + '/members/' + encodeURIComponent(keyId) + '/role', { role: sel.value })
+        .then(function () { say('Role changed. Reloading…'); location.reload(); })
+        .catch(function (err) { say(err.message); });
+    });
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.ocp-agent-restrict'), function (btn) {
+    btn.addEventListener('click', function () {
+      var agentId = btn.getAttribute('data-agent-id');
+      var agentName = btn.getAttribute('data-agent-name') || 'this agent';
+      var input = window.prompt('Block which tools for "' + agentName + '"?\\n\\nComma-separated. This tightens only this agent — it cannot grant it anything.');
+      if (!input) return;
+      var tools = input.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      if (!tools.length) return;
+      btn.disabled = true;
+      say('Restricting…');
+      send('PUT', '/v1/orgs/' + encodeURIComponent(orgId) + '/agents/' + encodeURIComponent(agentId), { restrict_tools: tools })
+        .then(function () { say('Agent restricted. Reloading…'); location.reload(); })
+        .catch(function (err) { btn.disabled = false; say(err.message); });
+    });
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.ocp-agent-freeze'), function (btn) {
+    btn.addEventListener('click', function () {
+      var agentId = btn.getAttribute('data-agent-id');
+      var agentName = btn.getAttribute('data-agent-name') || 'this agent';
+      var isFrozen = btn.getAttribute('data-frozen') === '1';
+      var body = { frozen: !isFrozen };
+      if (!isFrozen) {
+        var why = window.prompt('Freeze "' + agentName + '"? It receives an immediate block on every request.\\n\\nReason (goes in the audit trail):');
+        if (why === null) return;
+        if (why.trim()) body.frozen_reason = why.trim();
+      }
+      btn.disabled = true;
+      say(isFrozen ? 'Unfreezing…' : 'Freezing…');
+      send('PUT', '/v1/orgs/' + encodeURIComponent(orgId) + '/agents/' + encodeURIComponent(agentId), body)
+        .then(function () { say('Done. Reloading…'); location.reload(); })
+        .catch(function (err) { btn.disabled = false; say(err.message); });
+    });
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.ocp-member-remove'), function (btn) {
+    btn.addEventListener('click', function () {
+      var keyId = btn.getAttribute('data-key-id');
+      var keyName = btn.getAttribute('data-key-name') || 'this key';
+      // Removing revokes by default: offboarding means the key stops working.
+      if (!window.confirm('Remove "' + keyName + '" from this organization?\\n\\nThe key is revoked and stops authenticating immediately.')) return;
+      btn.disabled = true;
+      say('Removing…');
+      send('DELETE', '/v1/orgs/' + encodeURIComponent(orgId) + '/members/' + encodeURIComponent(keyId))
+        .then(function () { say('Member removed. Reloading…'); location.reload(); })
+        .catch(function (err) { btn.disabled = false; say(err.message); });
+    });
+  });
+` : ""}
 })();
 </script>
 `;
 
   return renderPage({
+    // The client needs the org id for the member-management calls, and it is
+    // not otherwise present in the markup.
+    bodyAttributes: orgId ? `data-org-id="${escapeHtml(orgId)}"` : undefined,
     title: "Org control panel",
     description:
       "Org governance console: member keys and their roles, the tool rules every agent inherits, the org risk tolerance, and recent tool policy violations.",

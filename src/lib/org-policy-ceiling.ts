@@ -135,3 +135,49 @@ export function clampedFields(
 
   return fields;
 }
+
+export interface ClampReport {
+  /** What the policy actually is after the org has had its say. */
+  effective: ScreeningPolicy;
+  /** Present only when the org overrode something the caller asked for. */
+  org_clamped?: {
+    fields: string[];
+    org_values: Record<string, unknown>;
+    detail: string;
+  };
+}
+
+/**
+ * What to tell a caller who wrote a policy their organization tightens.
+ *
+ * A field the ceiling merely tightens is stored as written and clamped at read
+ * time, which is correct — but `PUT /v1/policy` used to answer with the stored
+ * value. An employee who set threshold 9 and monitor mode was told they had
+ * threshold 9 and monitor mode, while every read returned 5 and block. They
+ * build on the answer and file a bug three weeks later.
+ *
+ * A locked field is a different case and is refused outright with a 422 before
+ * this runs. This is for the fields an org tightens without freezing: the write
+ * succeeds, and the response says what it actually bought.
+ */
+export function clampReport(
+  policy: ScreeningPolicy,
+  ceiling: OrgPolicyCeiling | null | undefined,
+): ClampReport {
+  const effective = applyOrgPolicyCeiling(policy, ceiling);
+  const fields = clampedFields(policy, ceiling);
+  if (fields.length === 0) return { effective };
+
+  const source = (ceiling ?? {}) as Record<string, unknown>;
+  return {
+    effective,
+    org_clamped: {
+      fields,
+      org_values: Object.fromEntries(
+        fields.map((field) => [field, source[field] ?? effective[field as keyof ScreeningPolicy]]),
+      ),
+      detail:
+        "Your organization's ceiling is stricter than the values you sent. The policy above is what is in force; the fields listed here were overridden.",
+    },
+  };
+}

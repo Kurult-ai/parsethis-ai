@@ -8,6 +8,7 @@ import { getRedis, disconnectRedis } from "./redis.js";
 import { runMigrations } from "./migrate.js";
 import { ensureSelfServiceUser } from "./lib/self-service-user.js";
 import { runSemanticPreflight } from "./lib/semantic-preflight.js";
+import { secretBoxReady } from "./lib/secret-box.js";
 
 // ── Deployment identity ──────────────────────────────────────────────────
 // Production runs `node --import tsx src/index.ts` straight from the checkout,
@@ -91,6 +92,17 @@ void runMigrations()
 // cost us the semantic layer, never the API. runSemanticPreflight resolves
 // rather than throwing, so nothing here can take the process down.
 void runSemanticPreflight();
+
+// Secret storage. Same non-blocking shape: a missing key must not take the API
+// down, but it must be visible in the log, because the routes that store
+// customer credentials answer 503 without it rather than writing plaintext.
+if (!secretBoxReady()) {
+  console.warn(
+    "[startup] PARSE_SECRET_KEY is not configured. Encrypting secrets at rest is unavailable, so the gateway and SIEM credential routes will answer 503. Generate one with: openssl rand -base64 32",
+  );
+} else {
+  console.log("[startup] secret storage OK: secrets can be encrypted at rest.");
+}
 
 function shutdown(signal: string) {
   console.log(`\n${signal} received. Shutting down gracefully...`);

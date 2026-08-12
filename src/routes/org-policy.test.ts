@@ -223,3 +223,44 @@ describe("validateOrgPolicyInput — locked_fields", () => {
     assert.deepEqual(accepted(validateOrgPolicyInput({ locked_fields: null })).lockedFields, []);
   });
 });
+
+// The body mixes conventions: every value field is camelCase, the lock list is
+// snake_case. An admin who writes the natural `lockedFields` beside
+// `autoBlockThreshold` used to get 200 and an empty lock list — they believed
+// the ceiling was locked and it was not. A silently dropped lock is worse than
+// a rejected one, so the validator now accepts the alias and refuses anything
+// it does not recognise.
+describe("validateOrgPolicyInput — the casing trap", () => {
+  it("accepts camelCase lockedFields as an alias, rather than dropping it", () => {
+    const value = accepted(
+      validateOrgPolicyInput({
+        autoBlockThreshold: 5,
+        enforcementMode: "block",
+        lockedFields: ["autoBlockThreshold", "enforcementMode"],
+      }),
+    );
+    assert.deepEqual(value.lockedFields, ["autoBlockThreshold", "enforcementMode"]);
+  });
+
+  it("still accepts the snake_case spelling", () => {
+    const value = accepted(
+      validateOrgPolicyInput({ autoBlockThreshold: 5, locked_fields: ["autoBlockThreshold"] }),
+    );
+    assert.deepEqual(value.lockedFields, ["autoBlockThreshold"]);
+  });
+
+  it("rejects a field name it does not recognise instead of ignoring it", () => {
+    const result = rejection(validateOrgPolicyInput({ autoBlockThreshold: 5, lockedField: ["autoBlockThreshold"] }));
+    assert.match(result.detail, /lockedField/);
+  });
+
+  it("names the fields it will accept, so the caller can fix the request", () => {
+    const result = rejection(validateOrgPolicyInput({ autoBlockThresold: 5 }));
+    assert.match(result.detail, /autoBlockThreshold/);
+  });
+
+  it("does not let the alias smuggle in a lock on a field with no org value", () => {
+    const result = rejection(validateOrgPolicyInput({ lockedFields: ["enforcementMode"] }));
+    assert.match(result.detail, /has no org value/);
+  });
+});

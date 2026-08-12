@@ -50,6 +50,14 @@ export const CEILING_FIELDS = [
   ...BOOLEAN_FIELDS,
 ] as const;
 
+/**
+ * Every field this endpoint will read. `locked_fields` is the documented
+ * spelling; `lockedFields` is accepted because it is what anyone writing the
+ * camelCase value fields beside it will type, and dropping it silently is how
+ * an unlocked ceiling shipped believing itself locked.
+ */
+const ACCEPTED_FIELDS = new Set<string>([...CEILING_FIELDS, "locked_fields", "lockedFields"]);
+
 const VALID_ENFORCEMENT_MODES = new Set(["monitor", "warn", "block"]);
 const VALID_DEFAULT_MODES = new Set(["full", "pattern-only"]);
 
@@ -86,6 +94,21 @@ function invalid(detail: string, code: ErrorCodeValue = ErrorCode.VALIDATION_INV
  */
 export function validateOrgPolicyInput(body: unknown): ValidationResult<ValidatedOrgPolicyDefaults> {
   const input = (body ?? {}) as Record<string, unknown>;
+
+  // This body mixes conventions: every value field is camelCase, the lock list
+  // is snake_case. An admin who wrote the natural `lockedFields` beside
+  // `autoBlockThreshold` got 200 back with an empty lock list, and walked away
+  // believing the ceiling was locked. A dropped lock is not a smaller failure
+  // than a rejected one — it is a larger one, because nobody finds out.
+  //
+  // So: accept the alias, and refuse anything else rather than ignoring it.
+  // No future casing trap can open silently.
+  const unknownFields = Object.keys(input).filter((field) => !ACCEPTED_FIELDS.has(field));
+  if (unknownFields.length > 0) {
+    return invalid(
+      `Unknown field(s): ${unknownFields.join(", ")}. This endpoint accepts: ${[...ACCEPTED_FIELDS].join(", ")}`,
+    );
+  }
 
   let autoBlockThreshold: number | null = null;
   if (input.autoBlockThreshold !== undefined && input.autoBlockThreshold !== null) {
@@ -130,7 +153,7 @@ export function validateOrgPolicyInput(body: unknown): ValidationResult<Validate
     booleans[field] = value;
   }
 
-  const lockedRaw = input.locked_fields;
+  const lockedRaw = input.locked_fields ?? input.lockedFields;
   let lockedFields: string[] = [];
   if (lockedRaw !== undefined && lockedRaw !== null) {
     if (!Array.isArray(lockedRaw)) {

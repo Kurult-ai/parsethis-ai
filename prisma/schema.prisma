@@ -20,6 +20,7 @@ model User {
 
   apiKeys         ApiKey[]
   passwordResets  PasswordReset[]
+  emailVerifications EmailVerification[]
 
   @@map("users")
 }
@@ -36,6 +37,23 @@ model PasswordReset {
 
   @@index([userId], name: "idx_password_resets_user")
   @@map("password_resets")
+}
+
+/// Email verification tokens. `User.emailVerifiedAt` existed from the start and
+/// nothing set it; it is now the gate on creating an organization, because that
+/// is the one act that has to be attributable to a person.
+model EmailVerification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], name: "idx_email_verifications_user")
+  @@map("email_verifications")
 }
 
 model ApiKey {
@@ -401,6 +419,10 @@ model Organization {
   // "blocklist" (default): tools are allowed unless a rule blocks them.
   // "allowlist": tools are blocked unless a rule allows them.
   toolPolicyMode String @default("blocklist") @map("tool_policy_mode")
+  /// Email domains this org has proven it controls, via a DNS TXT challenge.
+  /// A verified account whose address is in one of these cannot bootstrap a
+  /// second organization, and its unaffiliated keys show up as claimable here.
+  verifiedDomains String[] @default([]) @map("verified_domains")
   ssoEnabled  Boolean  @default(false) @map("sso_enabled")
   ssoConfig   Json?    @map("sso_config")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -415,6 +437,7 @@ model Organization {
   ssoProviders SSOProvider[]
   toolRules   OrgToolRule[]
   policyDefault OrgPolicyDefault?
+  gatewayConfig GatewayConfig?
 
   @@map("organizations")
 }
@@ -520,12 +543,45 @@ model PolicyRevision {
   @@map("policy_revisions")
 }
 
+/// Per-organization LLM gateway.
+///
+/// This model reverses a recorded decision: the gateway deliberately avoided
+/// persistent key custody ("the C17 blast radius is minimized by not persisting
+/// provider keys to disk/database"), and its config lived in one process-global
+/// variable. That made it single-tenant AND unreachable — configuring it needed
+/// an `admin` scope no customer key holds, so the one enforcement point that
+/// does not depend on an agent declaring its own tools did not exist for
+/// customers at all.
+///
+/// The trade is now managed rather than avoided: sealedApiKey is AES-256-GCM
+/// via src/lib/secret-box.ts, no route returns it, and config is scoped to one
+/// organization.
+model GatewayConfig {
+  id             String   @id @default(cuid())
+  orgId          String   @unique @map("org_id")
+  upstreamUrl    String   @map("upstream_url")
+  /// Sealed. Never returned by any route — reads report configured true/false.
+  sealedApiKey   String   @map("sealed_api_key")
+  model          String?
+  enforcementMode String  @default("block") @map("enforcement_mode")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt      @map("updated_at")
+
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("gateway_configs")
+}
+
 model SIEMConfig {
   id            String   @id @default(cuid())
   orgId         String   @map("org_id")
   platform      String   // splunk, datadog, elastic, sentinel, generic_webhook
   endpoint      String
-  authHeader    String?  @map("auth_header")  // stored encrypted at rest
+  /// Sealed with src/lib/secret-box.ts (AES-256-GCM) since 2026-08-12. Rows
+  /// written before that are plaintext and are sealed on their next write; the
+  /// forwarder reads both. Never returned by any route.
+  authHeader    String?  @map("auth_header")
   format        String   @default("cef")  // cef, json, leef, raw
   eventTypes    String[] @default(["screening", "audit", "policy_change", "approval"])
   active        Boolean  @default(true)

@@ -223,6 +223,10 @@ export async function renderAccountDashboard(
           const res = await fetch('/v1/keys/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            // Send the session cookie so the key is attributed to this account.
+            // Without it the key belongs to the shared self-service user and
+            // never appears in the list below, which queries by userId.
+            credentials: 'same-origin',
             body: JSON.stringify({ name }),
           });
           const data = await res.json();
@@ -258,7 +262,13 @@ export async function renderAccountDashboard(
       document.getElementById('confirm-revoke-btn').onclick = async function() {
         if (!revokeKeyId) return;
         try {
-          const res = await fetch('/v1/keys/' + revokeKeyId, { method: 'DELETE' });
+          // /v1/keys/:id requires admin scope and this request carries no
+          // Authorization header, so it could never have worked. The account
+          // route below is session-authenticated and scoped to your own keys.
+          const res = await fetch('/account/keys/' + revokeKeyId, {
+            method: 'DELETE',
+            credentials: 'same-origin',
+          });
           if (res.ok) {
             window.location.reload();
           } else {
