@@ -61,8 +61,18 @@ export const TIER_CONFIG = {
   solo: { priceEnvVar: "STRIPE_SOLO_PRICE_ID", includedRequests: 2_000, overageRate: 0.005, rateLimit: PLAN_LIMITS.solo.requestsPerMinute },
   pro: { priceEnvVar: "STRIPE_PRO_PRICE_ID", includedRequests: 10_000, overageRate: 0.003, rateLimit: PLAN_LIMITS.pro.requestsPerMinute },
   team: { priceEnvVar: "STRIPE_TEAM_PRICE_ID", includedRequests: 50_000, overageRate: 0.002, rateLimit: PLAN_LIMITS.team.requestsPerMinute },
-  compliance: { priceEnvVar: "STRIPE_AUDIT_PRICE_ID", includedRequests: 200_000, overageRate: 0.001, rateLimit: PLAN_LIMITS.compliance.requestsPerMinute },
+  // Compliance had been pointed at STRIPE_AUDIT_PRICE_ID, which belongs to the
+  // one-time $47 audit product. Neither is set today, so both simply fail — but
+  // the moment the audit price is wired to a real Stripe price, a compliance
+  // checkout would have started selling the $999/mo tier at $47 once. Each tier
+  // gets its own variable so that cannot happen.
+  compliance: { priceEnvVar: "STRIPE_COMPLIANCE_PRICE_ID", includedRequests: 200_000, overageRate: 0.001, rateLimit: PLAN_LIMITS.compliance.requestsPerMinute },
 } as const;
+
+/** Tiers whose Stripe price is configured in this environment. */
+export function isTierPurchasable(tier: PaidTier): boolean {
+  return isStripeMockMode() || !!process.env[TIER_CONFIG[tier].priceEnvVar];
+}
 
 export type PaidTier = keyof typeof TIER_CONFIG;
 

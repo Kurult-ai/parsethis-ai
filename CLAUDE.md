@@ -147,7 +147,33 @@ When a feature ships, flip its entry in `FEATURE_STATUS`
 
 Requires: `DATABASE_URL`, `REDIS_URL`, `OPENROUTER_API_KEY`
 Optional: `SANDBOX_URL`, `SANDBOX_HMAC_SECRET`, `ANALYSIS_MODEL`, `DEFAULT_MODEL`, `ALLOWED_ORIGINS`
-Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SOLO_PRICE_ID`, `STRIPE_PRO_PRICE_ID`, `STRIPE_TEAM_PRICE_ID`, `STRIPE_AUDIT_PRICE_ID`
+Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SOLO_PRICE_ID`, `STRIPE_PRO_PRICE_ID`, `STRIPE_TEAM_PRICE_ID`, `STRIPE_COMPLIANCE_PRICE_ID`, `STRIPE_AUDIT_PRICE_ID`
+
+One price variable per product. `STRIPE_AUDIT_PRICE_ID` belongs to the one-time
+$47 audit only, never to a subscription tier — Compliance used to share it, which
+would have sold the $999/mo plan for $47 the moment that price was wired up. A
+tier whose variable is unset is reported by `isTierPurchasable()` and its checkout
+returns 503 instead of throwing a 500. Only Solo, Pro and Team have prices in
+Stripe today; Compliance is sales-led, so its card links to email and self-serve
+checkout refuses on purpose.
+
+## Deployment (production)
+
+Production is **not** deployed by pushing to GitHub. `www.parsethis.ai` is served
+by the launchd agent `com.kublai.parse-for-agents` on the Mac Mini
+(`WorkingDirectory: /Users/kublai/parse-for-agents-live`, `node --import tsx
+src/index.ts`, port 3001) behind the `kublai-mac-mini` cloudflared tunnel. It
+imports modules once at boot, so a push changes nothing until:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/com.kublai.parse-for-agents   # KeepAlive restarts it
+curl -s https://www.parsethis.ai/health | jq .deployment.commit    # confirm the commit
+```
+
+Because it runs from the working directory rather than a build artifact, any
+uncommitted edit in this repo goes live the moment the service restarts for any
+reason. Commit before restarting. (`railway.toml` exists but is not what serves
+production; a stale pm2 entry named `parse-api` is likewise not serving.)
 
 ## Testing
 

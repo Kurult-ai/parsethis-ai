@@ -5,9 +5,11 @@ import {
   isStripeEnabled,
   createCheckoutSession,
   createPortalSession,
+  isTierPurchasable,
   TIER_CONFIG,
   type PaidTier,
 } from "../stripe.js";
+import { CONTACT_EMAIL } from "../lib/constants.js";
 import { authMiddleware, createApiKey } from "../auth.js";
 import {
   upgradeApiKeyTier,
@@ -198,6 +200,14 @@ billingRoutes.post("/v1/billing/signup-checkout", async (c) => {
   if (!tier || !Object.prototype.hasOwnProperty.call(TIER_CONFIG, tier)) {
     return c.json({ error: "Invalid tier. Must be 'solo', 'pro', 'team', or 'compliance'" }, 400);
   }
+  // Checked before the key is minted: an unsellable tier should not leave a
+  // stray self-service key behind, and those count against the 100-key cap.
+  if (!isTierPurchasable(tier as PaidTier)) {
+    return c.json(
+      { error: `The ${tier} plan is not available for self-serve checkout. Contact ${CONTACT_EMAIL}.` },
+      503,
+    );
+  }
 
   const ip =
     c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -274,6 +284,15 @@ billingRoutes.post("/v1/billing/checkout", authMiddleware("evaluate"), async (c)
 
   if (!tier || !Object.prototype.hasOwnProperty.call(TIER_CONFIG, tier)) {
     return c.json({ error: "Invalid tier. Must be 'solo', 'pro', 'team', or 'compliance'" }, 400);
+  }
+
+  // A tier with no Stripe price configured cannot be sold. Say so plainly
+  // rather than throwing into a 500 the caller cannot act on.
+  if (!isTierPurchasable(tier as PaidTier)) {
+    return c.json(
+      { error: `The ${tier} plan is not available for self-serve checkout. Contact ${CONTACT_EMAIL}.` },
+      503,
+    );
   }
 
   const apiKey = c.get("apiKey");
