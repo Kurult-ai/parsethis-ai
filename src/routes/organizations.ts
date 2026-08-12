@@ -4,7 +4,17 @@ import { prisma } from "../db.js";
 import { problem, ErrorCode, serviceDependencyProblem } from "../lib/problem-response.js";
 import { auditLog } from "../lib/audit-log.js";
 import { invalidateApiKeyCache } from "../result-store.js";
+import { SELF_SERVICE_USER_ID } from "../lib/constants.js";
 import { requireRole, VALID_ROLES, type Role } from "../lib/rbac.js";
+import { requireCsrf } from "../lib/csrf.js";
+import {
+  validateClaimableDomain,
+  challengeHost,
+  challengeValue,
+  mintChallengeToken,
+  tokenMatchesOrg,
+  checkDnsChallenge,
+} from "../lib/org-domains.js";
 import type { AppEnv } from "../types.js";
 
 export const organizationRoutes = new Hono<AppEnv>();
@@ -184,7 +194,12 @@ organizationRoutes.post(
  */
 export type BootstrapGate =
   | { ok: true }
-  | { ok: false; reason: "no_record" | "already_in_org"; orgId?: string };
+  | {
+      ok: false;
+      reason: "no_record" | "already_in_org" | "anonymous_key" | "unverified_email" | "domain_claimed";
+      orgId?: string;
+      orgName?: string;
+    };
 
 export function checkBootstrapEligibility(
   record: { orgId: string | null } | null | undefined,
@@ -193,6 +208,54 @@ export function checkBootstrapEligibility(
   // organization with; those callers use POST /v1/orgs.
   if (!record) return { ok: false, reason: "no_record" };
   if (record.orgId) return { ok: false, reason: "already_in_org", orgId: record.orgId };
+  return { ok: true };
+}
+
+/** The account behind a key, as far as the bootstrap gate is concerned. */
+export interface BootstrapIdentity {
+  id: string;
+  email: string;
+  emailVerifiedAt: Date | null;
+}
+
+/**
+ * The full bootstrap gate: membership, then identity, then domain.
+ *
+ * Membership alone was not enough. A prospect walkthrough on 2026-08-12 stood
+ * up a rival organization in three calls — mint an anonymous key (no auth),
+ * bootstrap an org from it, register an agent declaring the very tool the real
+ * organization had banned. The victim admin could not see the escape, could not
+ * list it, and could not reclaim the key.
+ *
+ * The fix is narrow on purpose. Getting an API key stays anonymous, because a
+ * key in under half a second with no account is the product's best first
+ * impression. Creating a governance boundary is the privileged act, so it needs
+ * a person: an account, a confirmed address, and a domain no other organization
+ * has already proven it owns.
+ *
+ * Order matters for the message the caller gets. "You are already in org X" is
+ * actionable; telling that same caller to verify their email is a dead end.
+ */
+export function checkBootstrapIdentity(
+  record: { orgId: string | null } | null | undefined,
+  user: BootstrapIdentity | null | undefined,
+  claimedDomains: Map<string, { orgId: string; orgName: string }>,
+): BootstrapGate {
+  const membership = checkBootstrapEligibility(record);
+  if (!membership.ok) return membership;
+
+  // An anonymous key has no owner to attribute an organization to. Every
+  // self-service key shares one user row, so "who owns this key" has no answer.
+  if (!user || user.id === SELF_SERVICE_USER_ID) return { ok: false, reason: "anonymous_key" };
+
+  if (!user.emailVerifiedAt) return { ok: false, reason: "unverified_email" };
+
+  const domain = user.email.split("@")[1]?.toLowerCase();
+  const claimed = domain ? claimedDomains.get(domain) : undefined;
+  if (claimed) {
+    return { ok: false, reason: "domain_claimed", orgId: claimed.orgId, orgName: claimed.orgName };
+  }
+
   return { ok: true };
 }
 
@@ -252,37 +315,105 @@ organizationRoutes.post(
       });
     }
 
-    let callerRecord: { id: string; orgId: string | null; keyPrefix: string } | null;
+    let callerRecord:
+      | { id: string; orgId: string | null; keyPrefix: string; user: BootstrapIdentity | null }
+      | null;
     try {
       callerRecord = await prisma.apiKey.findUnique({
         where: { id: callerKey.id },
-        select: { id: true, orgId: true, keyPrefix: true },
+        select: {
+          id: true,
+          orgId: true,
+          keyPrefix: true,
+          user: { select: { id: true, email: true, emailVerifiedAt: true } },
+        },
       });
     } catch (err) {
       console.error("[orgs] bootstrap caller lookup failed:", (err as Error).message);
       return serviceDependencyProblem(c, err);
     }
 
-    const gate = checkBootstrapEligibility(callerRecord);
-    if (!gate.ok) {
-      return gate.reason === "no_record"
-        ? problem(c, {
-            status: 403,
-            title: "Key cannot own an organization",
-            detail:
-              "This key has no stored record to attach an organization to. Generate a standard API key, or use POST /v1/orgs with an admin-scoped key.",
-            code: ErrorCode.AUTH_INSUFFICIENT_SCOPE,
-            retryable: false,
-          })
-        : problem(c, {
-            status: 403,
-            title: "Already in an organization",
-            detail:
-              "This key already belongs to an organization, and a key may belong to only one. Ask an org_admin to change your role, or use a key that is not yet claimed.",
-            code: ErrorCode.AUTH_FORBIDDEN_ROLE,
-            retryable: false,
-            org_id: gate.orgId,
+    // The identity half of the gate is behind a flag for the rollout: a bug here
+    // locks every customer out of creating an organization, which is worse than
+    // the hole it closes. Turn it on once probe J has been re-run on staging.
+    const enforceIdentity = process.env.ORG_BOOTSTRAP_REQUIRE_VERIFIED_EMAIL === "true";
+
+    let claimedDomains = new Map<string, { orgId: string; orgName: string }>();
+    if (enforceIdentity && callerRecord?.user?.email) {
+      const domain = callerRecord.user.email.split("@")[1]?.toLowerCase();
+      if (domain) {
+        try {
+          const owners = await prisma.organization.findMany({
+            where: { verifiedDomains: { has: domain } },
+            select: { id: true, name: true },
           });
+          claimedDomains = new Map(owners.map((o) => [domain, { orgId: o.id, orgName: o.name }]));
+        } catch (err) {
+          // Fail CLOSED. Every other governance lookup in this codebase fails
+          // open so a degraded store cannot break screening — but this one is
+          // the gate itself, and an open failure is the bypass.
+          console.error("[orgs] claimed-domain lookup failed:", (err as Error).message);
+          return serviceDependencyProblem(c, err);
+        }
+      }
+    }
+
+    const gate = enforceIdentity
+      ? checkBootstrapIdentity(callerRecord, callerRecord?.user ?? null, claimedDomains)
+      : checkBootstrapEligibility(callerRecord);
+
+    if (!gate.ok) {
+      const refusals: Record<string, { status: number; title: string; detail: string; code: string }> = {
+        no_record: {
+          status: 403,
+          title: "Key cannot own an organization",
+          detail:
+            "This key has no stored record to attach an organization to. Generate a standard API key, or use POST /v1/orgs with an admin-scoped key.",
+          code: ErrorCode.AUTH_INSUFFICIENT_SCOPE,
+        },
+        already_in_org: {
+          status: 403,
+          title: "Already in an organization",
+          detail:
+            "This key already belongs to an organization, and a key may belong to only one. Ask an org_admin to change your role, or use a key that is not yet claimed.",
+          code: ErrorCode.AUTH_FORBIDDEN_ROLE,
+        },
+        anonymous_key: {
+          status: 403,
+          title: "Anonymous key cannot create an organization",
+          detail:
+            "This key was created without an account, so there is nobody to attach an organization to. Sign up, confirm your email, then create the organization from a key made while signed in — or attach this key to an account with POST /account/keys/adopt.",
+          code: ErrorCode.AUTH_FORBIDDEN_ROLE,
+        },
+        unverified_email: {
+          status: 403,
+          title: "Email not confirmed",
+          detail:
+            "Confirm your email address before creating an organization. An organization governs other people's agents, so it has to be attributable to a person.",
+          code: ErrorCode.AUTH_FORBIDDEN_ROLE,
+        },
+        domain_claimed: {
+          status: 403,
+          title: "Your domain already has an organization",
+          detail: `Your email domain belongs to "${gate.orgName ?? "another organization"}", which has verified it. Ask an org_admin there to claim your key rather than starting a second organization.`,
+          code: ErrorCode.AUTH_FORBIDDEN_ROLE,
+        },
+      };
+
+      const refusal = refusals[gate.reason] ?? refusals.no_record;
+      return problem(c, {
+        ...refusal,
+        code: refusal.code as typeof ErrorCode.AUTH_FORBIDDEN_ROLE,
+        retryable: false,
+        reason: gate.reason,
+        ...(gate.orgId ? { org_id: gate.orgId } : {}),
+        ...(gate.reason === "unverified_email"
+          ? { _help: { resend: { method: "POST", url: "/auth/verify/send" } } }
+          : {}),
+        ...(gate.reason === "anonymous_key"
+          ? { _help: { sign_up: "/signup", adopt: { method: "POST", url: "/account/keys/adopt" } } }
+          : {}),
+      });
     }
 
     let org: { id: string; name: string; slug: string; planTier: string };
@@ -760,6 +891,281 @@ organizationRoutes.put(
       previousRole,
       newRole: updated.role,
       changedBy: callerKey.id,
+    });
+  },
+);
+
+// ── Domain ownership ───────────────────────────────────────────────────
+//
+// The escape a prospect walked on 2026-08-12 was structural: the org boundary
+// is per-key, and keys are free and unlimited. Identity alone does not close it
+// — an employee can still sign up with a personal address. What closes it for
+// the employer's own domain is proof of control over that domain.
+
+// POST /v1/orgs/:id/domains — start a claim, returns the DNS challenge
+organizationRoutes.post(
+  "/v1/orgs/:id/domains",
+  authMiddleware("evaluate"),
+  requireRole("org_admin"),
+  requireCsrf(),
+  async (c) => {
+    const orgId = c.req.param("id")!;
+    const denied = await denyIfNotOwnOrg(c, orgId);
+    if (denied) return denied;
+
+    const body = await c.req.json<{ domain?: string }>().catch(() => ({}) as { domain?: string });
+    const validated = validateClaimableDomain(body.domain);
+    if (!validated.ok) {
+      return problem(c, {
+        status: 400,
+        title: validated.reason === "public_mail" ? "Domain cannot be claimed" : "Validation failure",
+        detail: validated.detail,
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+    const { domain } = validated;
+
+    // Someone else's proven domain is not available, and saying so plainly is
+    // better than a silent no-op — the admin needs to know a colleague already
+    // has an organization.
+    const owner = await prisma.organization.findFirst({
+      where: { verifiedDomains: { has: domain } },
+      select: { id: true, name: true },
+    });
+    if (owner && owner.id !== orgId) {
+      return problem(c, {
+        status: 409,
+        title: "Domain already verified by another organization",
+        detail: `${domain} is already verified by "${owner.name}".`,
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+    if (owner?.id === orgId) {
+      return c.json({ domain, verified: true, already: true });
+    }
+
+    const token = mintChallengeToken(orgId);
+    return c.json({
+      domain,
+      verified: false,
+      challenge: {
+        type: "TXT",
+        host: challengeHost(domain),
+        value: challengeValue(token),
+        token,
+      },
+      next: {
+        step: "Publish the TXT record above, then verify. DNS can take a few minutes.",
+        method: "POST",
+        url: `/v1/orgs/${orgId}/domains/${domain}/verify`,
+        body: { token },
+      },
+    });
+  },
+);
+
+// POST /v1/orgs/:id/domains/:domain/verify — check the challenge, record the claim
+organizationRoutes.post(
+  "/v1/orgs/:id/domains/:domain/verify",
+  authMiddleware("evaluate"),
+  requireRole("org_admin"),
+  requireCsrf(),
+  async (c) => {
+    const orgId = c.req.param("id")!;
+    const denied = await denyIfNotOwnOrg(c, orgId);
+    if (denied) return denied;
+
+    const validated = validateClaimableDomain(c.req.param("domain"));
+    if (!validated.ok) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: validated.detail,
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+    const { domain } = validated;
+
+    const body = await c.req.json<{ token?: string }>().catch(() => ({}) as { token?: string });
+    // A token minted for another organization must not prove a domain for this
+    // one, or an attacker could have their own org's challenge published on a
+    // domain they control and then replay it.
+    if (!body.token || !tokenMatchesOrg(body.token, orgId)) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "token is required and must be the challenge token issued for this organization.",
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+
+    const owner = await prisma.organization.findFirst({
+      where: { verifiedDomains: { has: domain } },
+      select: { id: true, name: true },
+    });
+    if (owner && owner.id !== orgId) {
+      return problem(c, {
+        status: 409,
+        title: "Domain already verified by another organization",
+        detail: `${domain} is already verified by "${owner.name}".`,
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+
+    const proof = await checkDnsChallenge(domain, body.token);
+    if (!proof.ok) {
+      return problem(c, {
+        status: proof.reason === "lookup_failed" ? 503 : 422,
+        title: "Domain not verified",
+        detail: proof.detail,
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: proof.reason !== "not_found",
+        reason: proof.reason,
+      });
+    }
+
+    const org = await prisma.organization.update({
+      where: { id: orgId },
+      data: { verifiedDomains: { push: domain } },
+      select: { id: true, name: true, verifiedDomains: true },
+    });
+
+    auditLog({
+      action: "org_domain_verified",
+      apiKeyId: c.get("apiKey").id,
+      detail: `Verified domain "${domain}" for org "${org.name}" (${orgId})`,
+    });
+
+    return c.json({ domain, verified: true, verified_domains: org.verifiedDomains });
+  },
+);
+
+// DELETE /v1/orgs/:id/domains/:domain — release a claim
+organizationRoutes.delete(
+  "/v1/orgs/:id/domains/:domain",
+  authMiddleware("evaluate"),
+  requireRole("org_admin"),
+  requireCsrf(),
+  async (c) => {
+    const orgId = c.req.param("id")!;
+    const denied = await denyIfNotOwnOrg(c, orgId);
+    if (denied) return denied;
+
+    const validated = validateClaimableDomain(c.req.param("domain"));
+    if (!validated.ok) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: validated.detail,
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { verifiedDomains: true, name: true },
+    });
+    if (!org || !org.verifiedDomains.includes(validated.domain)) {
+      return problem(c, {
+        status: 404,
+        title: "Not found",
+        detail: `${validated.domain} is not a verified domain of this organization.`,
+        code: ErrorCode.RESOURCE_NOT_FOUND,
+        retryable: false,
+      });
+    }
+
+    const updated = await prisma.organization.update({
+      where: { id: orgId },
+      data: { verifiedDomains: org.verifiedDomains.filter((d) => d !== validated.domain) },
+      select: { verifiedDomains: true },
+    });
+
+    auditLog({
+      action: "org_domain_released",
+      apiKeyId: c.get("apiKey").id,
+      detail: `Released domain "${validated.domain}" from org "${org.name}" (${orgId})`,
+    });
+
+    return c.json({ domain: validated.domain, verified: false, verified_domains: updated.verifiedDomains });
+  },
+);
+
+// ── GET /v1/orgs/:id/claimable — unaffiliated keys on this org's domains ──
+//
+// The bypass was not only possible, it was invisible: the admin had no way to
+// see a key that had gone off on its own. This is that view.
+organizationRoutes.get(
+  "/v1/orgs/:id/claimable",
+  authMiddleware("evaluate"),
+  requireRole("org_admin", "security_analyst", "auditor"),
+  async (c) => {
+    const orgId = c.req.param("id")!;
+    const denied = await denyIfNotOwnOrg(c, orgId);
+    if (denied) return denied;
+
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { verifiedDomains: true },
+    });
+    if (!org) {
+      return problem(c, {
+        status: 404,
+        title: "Not found",
+        detail: `Organization ${orgId} not found`,
+        code: ErrorCode.RESOURCE_NOT_FOUND,
+        retryable: false,
+      });
+    }
+    if (org.verifiedDomains.length === 0) {
+      return c.json({
+        domains: [],
+        keys: [],
+        note: "Verify a domain to see unaffiliated keys held by accounts on it. POST /v1/orgs/:id/domains",
+      });
+    }
+
+    // Only keys that belong to no organization, held by a verified account on a
+    // domain this org has proven. Never another org's keys: that would be
+    // cross-tenant visibility, which is the thing the boundary exists to stop.
+    const keys = await prisma.apiKey.findMany({
+      where: {
+        orgId: null,
+        revokedAt: null,
+        user: {
+          emailVerifiedAt: { not: null },
+          OR: org.verifiedDomains.map((d) => ({ email: { endsWith: `@${d}` } })),
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        keyPrefix: true,
+        createdAt: true,
+        lastUsedAt: true,
+        user: { select: { email: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+
+    return c.json({
+      domains: org.verifiedDomains,
+      keys: keys.map((k) => ({
+        id: k.id,
+        name: k.name,
+        key_prefix: k.keyPrefix,
+        owner_email: k.user?.email ?? null,
+        created_at: k.createdAt,
+        last_used_at: k.lastUsedAt,
+      })),
+      claim: { method: "POST", url: `/v1/orgs/${orgId}/claim-keys`, body: { keyIds: ["..."] } },
     });
   },
 );

@@ -419,6 +419,10 @@ model Organization {
   // "blocklist" (default): tools are allowed unless a rule blocks them.
   // "allowlist": tools are blocked unless a rule allows them.
   toolPolicyMode String @default("blocklist") @map("tool_policy_mode")
+  /// Email domains this org has proven it controls, via a DNS TXT challenge.
+  /// A verified account whose address is in one of these cannot bootstrap a
+  /// second organization, and its unaffiliated keys show up as claimable here.
+  verifiedDomains String[] @default([]) @map("verified_domains")
   ssoEnabled  Boolean  @default(false) @map("sso_enabled")
   ssoConfig   Json?    @map("sso_config")
   createdAt   DateTime @default(now()) @map("created_at")
