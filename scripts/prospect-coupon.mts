@@ -103,6 +103,21 @@ async function mint(tier: string): Promise<void> {
 async function list(): Promise<void> {
   const promos = await stripe.promotionCodes.list({ coupon: COUPON_ID, limit: 100 }).catch(() => null);
   console.log(`mode: ${MODE}`);
+
+  // `applies_to` is only returned when expanded — retrieving the coupon plainly
+  // shows no restriction at all, which reads alarmingly like an unrestricted
+  // 100%-off code. Print it here so nobody has to rediscover that.
+  const coupon = await stripe.coupons
+    .retrieve(COUPON_ID, { expand: ["applies_to"] })
+    .catch(() => null);
+  if (coupon) {
+    const products = coupon.applies_to?.products;
+    console.log(
+      `coupon: ${coupon.percent_off}% off ${coupon.duration}, restricted to ` +
+        (products?.length ? `${products.length} product(s): ${products.join(", ")}` : "NOTHING — any product"),
+    );
+  }
+
   if (!promos || promos.data.length === 0) {
     console.log("no prospect codes exist");
     return;
