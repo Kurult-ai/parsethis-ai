@@ -34,6 +34,7 @@ import {
 } from "../lib/org-policy-ceiling.js";
 import { resolveToolList, type ToolPolicyMode, type ToolRule } from "../lib/tool-policy.js";
 import { TOOL_CATEGORIES, getCategory } from "../lib/tool-catalog.js";
+import { SELF_SERVICE_USER_ID } from "../lib/constants.js";
 import type { ScreeningPolicy } from "../types.js";
 
 // ─── Escaping and formatting ───────────────────────────────────────────
@@ -136,6 +137,32 @@ export function computeRuleExposure(
   return out;
 }
 
+/**
+ * Who owns a member key.
+ *
+ * This column used to print `self-service@internal.invalid` for every
+ * self-service key, because they all hung off one shared user row. An admin
+ * asked to offboard someone read three identical fake addresses. A key with no
+ * account now says so plainly rather than showing an address nobody holds.
+ */
+export function ownerLabel(
+  member: Pick<MemberRow, "ownerEmail" | "ownerUserId" | "ownerVerified">,
+): string {
+  const anonymous =
+    !member.ownerUserId ||
+    member.ownerUserId === SELF_SERVICE_USER_ID ||
+    !member.ownerEmail ||
+    member.ownerEmail.endsWith("@internal.invalid");
+
+  if (anonymous) {
+    return `<span class="ocp-sub">anonymous key — no account</span>`;
+  }
+  const email = escapeHtml(member.ownerEmail!);
+  return member.ownerVerified
+    ? email
+    : `${email} <span class="ocp-sub" title="This address has not been confirmed, so this person cannot create an organization.">unverified</span>`;
+}
+
 /** What a rule matches, in words an operator can check against reality. */
 export function ruleTargetLabel(rule: Pick<ToolRule, "kind" | "pattern">): string {
   if (rule.kind === "category") {
@@ -158,6 +185,9 @@ export interface MemberInput {
   name: string;
   role: string;
   ownerEmail: string | null;
+  /** null for a key nobody owns — see ownerLabel(). */
+  ownerUserId?: string | null;
+  ownerVerified?: boolean;
   lastUsedAt: Date | null;
   revokedAt: Date | null;
 }
@@ -167,6 +197,8 @@ export interface MemberRow {
   name: string;
   role: string;
   ownerEmail: string | null;
+  ownerUserId?: string | null;
+  ownerVerified?: boolean;
   lastUsedAt: Date | null;
   revoked: boolean;
   /** false when the key has no stored production policy and no default was supplied. */
@@ -202,6 +234,8 @@ export function buildMemberRows(
         name: member.name,
         role: member.role,
         ownerEmail: member.ownerEmail ?? null,
+        ownerUserId: member.ownerUserId ?? null,
+        ownerVerified: member.ownerVerified ?? false,
         lastUsedAt: member.lastUsedAt ?? null,
         revoked: Boolean(member.revokedAt),
         toleranceKnown: false,
@@ -219,6 +253,8 @@ export function buildMemberRows(
       name: member.name,
       role: member.role,
       ownerEmail: member.ownerEmail ?? null,
+      ownerUserId: member.ownerUserId ?? null,
+      ownerVerified: member.ownerVerified ?? false,
       lastUsedAt: member.lastUsedAt ?? null,
       revoked: Boolean(member.revokedAt),
       toleranceKnown: true,
@@ -462,7 +498,7 @@ export async function renderOrgControlPanelPage(
           role: true,
           lastUsedAt: true,
           revokedAt: true,
-          user: { select: { email: true } },
+          user: { select: { id: true, email: true, emailVerifiedAt: true } },
         },
       });
       members = rows.map((r) => ({
@@ -470,6 +506,8 @@ export async function renderOrgControlPanelPage(
         name: r.name,
         role: r.role,
         ownerEmail: r.user?.email ?? null,
+        ownerUserId: r.user?.id ?? null,
+        ownerVerified: Boolean(r.user?.emailVerifiedAt),
         lastUsedAt: r.lastUsedAt,
         revokedAt: r.revokedAt,
       }));
@@ -617,7 +655,7 @@ export async function renderOrgControlPanelPage(
               : "";
           return `<tr>
         <td><span class="ocp-nm">${escapeHtml(m.name)}</span>${m.revoked ? '<span class="ocp-sub">revoked</span>' : ""}</td>
-        <td class="ocp-dim">${safeStr(m.ownerEmail)}</td>
+        <td class="ocp-dim">${ownerLabel(m)}</td>
         <td><span class="ocp-role">${escapeHtml(m.role)}</span></td>
         <td class="ocp-mono">${escapeHtml(timeAgo(m.lastUsedAt))}</td>
         <td class="ocp-mono">${escapeHtml(tolerance)}${clampNote ? `<br>${clampNote}` : ""}</td>
@@ -874,7 +912,7 @@ export async function renderOrgControlPanelPage(
     <h2>People</h2><span class="ocp-meta">MEMBER KEYS</span>
     <span class="ocp-right">${members.length < memberTotal ? `showing ${members.length} of ${memberTotal.toLocaleString("en-US")}` : `${memberTotal.toLocaleString("en-US")} total`}</span>
   </div>
-  <p class="ocp-note">A member here is an <strong>API key</strong>, not a person. <code>ApiKey.orgId</code> and <code>ApiKey.role</code> are the only membership edge in the schema, so one employee holding three keys appears three times. Per-person identity needs an org member table and is not built yet. The email column is the email on the account that owns the key.</p>
+  <p class="ocp-note">A member here is an <strong>API key</strong>, not a person. <code>ApiKey.orgId</code> and <code>ApiKey.role</code> are the only membership edge in the schema, so one employee holding three keys appears three times. Per-person identity needs an org member table and is not built yet. The owner column is the account that holds the key: a key created from an account shows that account's email, and a key minted anonymously says so rather than showing a placeholder address.</p>
   <table class="ocp-t">
     <thead><tr><th>Key</th><th>Owner email</th><th>Role</th><th>Last used</th><th>Effective tolerance</th></tr></thead>
     <tbody>

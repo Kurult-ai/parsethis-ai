@@ -44,7 +44,9 @@ import { renderComplianceDashboardPage } from "../pages/compliance-dashboard.js"
 import { renderGetStartedPage } from "../pages/get-started.js";
 import { renderDemoPage } from "../pages/demo-page.js";
 import { renderCompetitorComparePage, getComparisonSlugs } from "../pages/compare.js";
-import { DEMO_API_KEY } from "../lib/constants.js";
+import { DEMO_API_KEY, SELF_SERVICE_USER_ID } from "../lib/constants.js";
+import { auditLog } from "../lib/audit-log.js";
+import { invalidateApiKeyCache } from "../result-store.js";
 import { recordActivationEvent, getActivationFunnel, type ActivationEvent } from "../lib/activation-tracker.js";
 import { renderBillingDashboardPage } from "../pages/billing.js";
 import { renderAgentDashboardPage } from "../pages/agent-dashboard.js";
@@ -68,6 +70,9 @@ import {
   destroySession,
   createPasswordReset,
   consumePasswordReset,
+  createEmailVerification,
+  consumeEmailVerification,
+  isEmailVerified,
   getUserByEmail,
   hashPassword,
   type PublicUser,
@@ -2725,6 +2730,24 @@ publicRoutes.post("/v1/support/tickets", async (c) => {
 // earlier handler.
 publicRoutes.post("/v1/keys/generate/canary", handleKeygenCanary);
 
+/**
+ * The session user's id, or null when the caller is anonymous.
+ *
+ * Deliberately non-redirecting, unlike `sessionMiddleware`: an anonymous key
+ * request is a first-class case, not an authentication failure. Never throws —
+ * a session lookup problem must not break keyless onboarding.
+ */
+async function resolveSessionOwnerId(c: Context): Promise<string | null> {
+  try {
+    const token = getSessionCookie(c);
+    if (!token) return null;
+    const user = await getSessionUser(token);
+    return user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // Public API key generation (Phase 1: Redis rate limiting, global cap, expiry, env toggle)
 publicRoutes.post("/v1/keys/generate", async (c) => {
   // Check if key generation is enabled
@@ -2823,7 +2846,20 @@ publicRoutes.post("/v1/keys/generate", async (c) => {
       return keygenProblem(c, "key_insert_failed");
     }
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    const key = await createApiKey(name, ["analyze", "evaluate", "chat"], expiresAt);
+    // Anonymous callers still get an anonymous key — that path is unchanged and
+    // stays unchanged, because a key in under half a second with no account is
+    // the product's best first impression. But when the request carries a
+    // session cookie, the key belongs to that account. Without this the account
+    // dashboard's own "Create Key" button produced keys the dashboard could
+    // never list, because it queries by userId and every key was self-service.
+    const sessionOwnerId = await resolveSessionOwnerId(c);
+    const key = await createApiKey(
+      name,
+      ["analyze", "evaluate", "chat"],
+      expiresAt,
+      undefined,
+      sessionOwnerId ?? undefined,
+    );
 
     // ── Activation Funnel: key_generated (Task 17.1) ──
     recordActivationEvent(key.id, "key_generated", { ip }).catch(() => {});
@@ -3201,6 +3237,12 @@ publicRoutes.post("/auth/signup", async (c) => {
     return c.json({ error: "Failed to create account" }, 500);
   }
 
+  // Send the verification link. Never block signup on it: a mail failure must
+  // not cost an account, and the link can be re-sent from /account.
+  issueEmailVerification(getBaseUrl(c), user.id, user.email).catch((err) => {
+    console.error("[verify] signup verification send failed:", (err as Error).message);
+  });
+
   // Create session
   const token = await createSession(user.id);
   if (!token) {
@@ -3465,6 +3507,189 @@ publicRoutes.get("/account", sessionMiddleware, async (c) => {
 });
 
 // ── Stripe Customer Portal (session-protected) ──────────────────────
+
+// ── Email verification ──────────────────────────────────────────────
+//
+// users.email_verified_at shipped with the account system and nothing set it.
+// It is now the gate on creating an organization: getting an API key stays
+// anonymous, but a governance boundary has to be attributable to a person.
+
+/** Send (or, where mail is not configured, log) a verification link. */
+async function issueEmailVerification(baseUrl: string, userId: string, email: string): Promise<boolean> {
+  const token = await createEmailVerification(userId);
+  if (!token) return false;
+
+  const verifyUrl = `${baseUrl}/auth/verify/${token}`;
+  const { sendEmail, emailVerificationEmail } = await import("../lib/email.js");
+  const result = await sendEmail({ to: email, ...emailVerificationEmail(verifyUrl) });
+
+  // Staging deliberately has no RESEND_API_KEY so it cannot send real mail.
+  // Log the link there rather than failing silently, so the flow stays walkable.
+  if ("error" in result) {
+    console.log(`[verify] mail not sent (${result.error}); link for ${email}: ${verifyUrl}`);
+  }
+  return true;
+}
+
+// POST /auth/verify/send — re-send the link to the signed-in account
+publicRoutes.post("/auth/verify/send", sessionMiddleware, async (c) => {
+  const user = getSessionUserFromContext(c);
+  if (!user) return c.json({ error: "Authentication required" }, 401);
+
+  if (await isEmailVerified(user.id)) {
+    return c.json({ ok: true, already_verified: true });
+  }
+
+  // One live link per minute per account: this endpoint sends mail to an
+  // address the caller has already proven they can sign in as, so the risk is
+  // noise rather than takeover, but noise is still worth bounding.
+  const recent = await prisma.emailVerification.count({
+    where: { userId: user.id, createdAt: { gte: new Date(Date.now() - 60_000) } },
+  });
+  if (recent > 0) {
+    return problem(c, {
+      status: 429,
+      title: "Rate limit exceeded",
+      detail: "A verification link was sent in the last minute. Check your inbox, then try again.",
+      code: ErrorCode.RATE_LIMIT,
+      retryable: true,
+      retry_after_seconds: 60,
+    });
+  }
+
+  const sent = await issueEmailVerification(getBaseUrl(c), user.id, user.email);
+  return sent
+    ? c.json({ ok: true, sent_to: user.email })
+    : c.json({ error: "Could not create a verification link. Try again shortly." }, 503);
+});
+
+// GET /auth/verify/:token — consume the link
+publicRoutes.get("/auth/verify/:token", async (c) => {
+  const outcome = await consumeEmailVerification(c.req.param("token")!);
+  if (outcome.ok) return c.redirect("/account?verified=1");
+
+  const reason =
+    outcome.reason === "expired"
+      ? "expired"
+      : outcome.reason === "already_used"
+        ? "used"
+        : "invalid";
+  return c.redirect(`/account?verify_error=${reason}`);
+});
+
+// ── Account-scoped key management ───────────────────────────────────
+//
+// The account dashboard's revoke button called DELETE /v1/keys/:id, which
+// requires `admin` scope, with no Authorization header at all. It could never
+// have worked for any customer. These routes are session-authenticated and
+// scoped to the caller's own keys.
+
+// DELETE /account/keys/:id — revoke a key this account owns
+publicRoutes.delete("/account/keys/:id", sessionMiddleware, async (c) => {
+  const user = getSessionUserFromContext(c);
+  if (!user) return c.json({ error: "Authentication required" }, 401);
+
+  const id = c.req.param("id")!;
+  const key = await prisma.apiKey.findUnique({ where: { id }, select: { userId: true, name: true } });
+
+  // 404 rather than 403 for someone else's key: a 403 confirms the id exists.
+  if (!key || key.userId !== user.id) {
+    return problem(c, {
+      status: 404,
+      title: "Not found",
+      detail: "No key with that id on this account.",
+      code: ErrorCode.RESOURCE_NOT_FOUND,
+      retryable: false,
+    });
+  }
+
+  const revoked = await deleteApiKey(id);
+  if (!revoked) {
+    return problem(c, {
+      status: 404,
+      title: "Not found",
+      detail: "Key not found or already revoked.",
+      code: ErrorCode.RESOURCE_NOT_FOUND,
+      retryable: false,
+    });
+  }
+
+  auditLog({ action: "account_key_revoked", apiKeyId: id, detail: `Revoked from /account by user ${user.id}` });
+  return c.json({ revoked: true, id });
+});
+
+// POST /account/keys/adopt — attach an existing anonymous key to this account
+//
+// 64 production keys predate account-linked issuance. They keep working
+// untouched; this lets their holder claim one rather than rotating.
+publicRoutes.post("/account/keys/adopt", sessionMiddleware, async (c) => {
+  const user = getSessionUserFromContext(c);
+  if (!user) return c.json({ error: "Authentication required" }, 401);
+
+  const body = await c.req.json<{ key?: string }>().catch(() => ({}) as { key?: string });
+  if (!body.key || typeof body.key !== "string") {
+    return problem(c, {
+      status: 400,
+      title: "Validation failure",
+      detail: "key is required — paste the API key you want to attach to this account.",
+      code: ErrorCode.VALIDATION_REQUIRED,
+      retryable: false,
+    });
+  }
+
+  const { validateApiKey } = await import("../api-key-service.js");
+  const record = await validateApiKey(body.key).catch(() => null);
+  if (!record) {
+    return problem(c, {
+      status: 404,
+      title: "Not found",
+      detail: "That key is not valid, or has been revoked.",
+      code: ErrorCode.RESOURCE_NOT_FOUND,
+      retryable: false,
+    });
+  }
+
+  const row = await prisma.apiKey.findUnique({
+    where: { id: record.id },
+    select: { id: true, userId: true, orgId: true, keyPrefix: true },
+  });
+  if (!row) {
+    return problem(c, {
+      status: 404,
+      title: "Not found",
+      detail: "That key has no stored record to attach.",
+      code: ErrorCode.RESOURCE_NOT_FOUND,
+      retryable: false,
+    });
+  }
+  if (row.userId === user.id) return c.json({ adopted: true, id: row.id, already: true });
+  if (row.userId !== SELF_SERVICE_USER_ID) {
+    return problem(c, {
+      status: 409,
+      title: "Key belongs to another account",
+      detail: "That key is already attached to a different Parse account.",
+      code: ErrorCode.VALIDATION_INVALID_INPUT,
+      retryable: false,
+    });
+  }
+  // A key inside an organization carries a role and a governance history; moving
+  // its ownership is an org_admin decision, not a self-service one.
+  if (row.orgId) {
+    return problem(c, {
+      status: 409,
+      title: "Key belongs to an organization",
+      detail: "That key is a member of an organization. Ask an org_admin there to release it first.",
+      code: ErrorCode.VALIDATION_INVALID_INPUT,
+      retryable: false,
+      org_id: row.orgId,
+    });
+  }
+
+  await prisma.apiKey.update({ where: { id: row.id }, data: { userId: user.id } });
+  await invalidateApiKeyCache(row.keyPrefix).catch(() => {});
+  auditLog({ action: "account_key_adopted", apiKeyId: row.id, detail: `Adopted by user ${user.id}` });
+  return c.json({ adopted: true, id: row.id });
+});
 
 // POST /v1/billing/portal — requires session auth (not API key auth)
 publicRoutes.post("/v1/billing/portal", sessionMiddleware, async (c) => {

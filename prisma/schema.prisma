@@ -20,6 +20,7 @@ model User {
 
   apiKeys         ApiKey[]
   passwordResets  PasswordReset[]
+  emailVerifications EmailVerification[]
 
   @@map("users")
 }
@@ -36,6 +37,23 @@ model PasswordReset {
 
   @@index([userId], name: "idx_password_resets_user")
   @@map("password_resets")
+}
+
+/// Email verification tokens. `User.emailVerifiedAt` existed from the start and
+/// nothing set it; it is now the gate on creating an organization, because that
+/// is the one act that has to be attributable to a person.
+model EmailVerification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], name: "idx_email_verifications_user")
+  @@map("email_verifications")
 }
 
 model ApiKey {
