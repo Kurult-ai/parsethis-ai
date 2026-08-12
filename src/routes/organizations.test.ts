@@ -6,7 +6,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { checkBootstrapEligibility } from "./organizations.js";
+import { checkBootstrapEligibility, claimableKeyFilter } from "./organizations.js";
 
 describe("checkBootstrapEligibility", () => {
   it("lets an unaffiliated key create its first organization", () => {
@@ -40,5 +40,33 @@ describe("checkBootstrapEligibility", () => {
     // Defensive: an empty string is not a real org id, and refusing on it
     // would lock a caller out of bootstrapping with no way forward.
     assert.deepEqual(checkBootstrapEligibility({ orgId: "" }), { ok: true });
+  });
+});
+
+describe("claimableKeyFilter", () => {
+  it("lets a customer org_admin claim only unclaimed keys", () => {
+    // The cross-tenant guard: no clause here may match a key that already
+    // belongs to some other organization.
+    assert.deepEqual(claimableKeyFilter(false, "org_acme"), { orgId: null });
+  });
+
+  it("never lets a customer org_admin reach another org's keys", () => {
+    const filter = claimableKeyFilter(false, "org_acme");
+    assert.equal("OR" in filter, false, "a customer filter must not widen past orgId: null");
+    assert.equal((filter as { orgId: null }).orgId, null);
+  });
+
+  it("still lets an admin-scoped caller migrate keys between orgs", () => {
+    assert.deepEqual(claimableKeyFilter(true, "org_acme"), {
+      OR: [{ orgId: null }, { orgId: { not: "org_acme" } }],
+    });
+  });
+
+  it("excludes keys already in the target org for an admin caller, so the batch is a no-op for them", () => {
+    const filter = claimableKeyFilter(true, "org_acme") as {
+      OR: Array<{ orgId: { not: string } } | { orgId: null }>;
+    };
+    const notClause = filter.OR.find((c) => typeof c.orgId === "object" && c.orgId !== null);
+    assert.deepEqual(notClause, { orgId: { not: "org_acme" } });
   });
 });

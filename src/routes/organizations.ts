@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { authMiddleware } from "../auth.js";
 import { prisma } from "../db.js";
 import { problem, ErrorCode, serviceDependencyProblem } from "../lib/problem-response.js";
@@ -31,6 +31,62 @@ async function generateUniqueSlug(name: string): Promise<string> {
     });
     if (!existing) return candidate;
   }
+}
+
+/**
+ * Which keys a caller may pull into an org. An admin-scoped caller may migrate
+ * keys between orgs — that is what claim-keys was built for. A customer
+ * org_admin may claim only UNCLAIMED keys: letting them take a key that already
+ * belongs to another org would be cross-tenant theft, pulling that org's key,
+ * its agents and its screening history across. Harmless while the route
+ * required admin scope; not harmless now that an org_admin can reach it.
+ *
+ * Pure so the rule is unit-tested rather than asserted inside a handler.
+ */
+export function claimableKeyFilter(
+  isAdminScope: boolean,
+  orgId: string,
+): { orgId: null } | { OR: Array<{ orgId: null } | { orgId: { not: string } }> } {
+  return isAdminScope ? { OR: [{ orgId: null }, { orgId: { not: orgId } }] } : { orgId: null };
+}
+
+/**
+ * Org-scoping for member management. A key may manage only the organization it
+ * belongs to; `admin` scope is exempt because it provisions on others' behalf.
+ *
+ * This is what replaces the blanket `admin` requirement on the member routes.
+ * Those routes were unreachable by the org_admin of a self-service org, which
+ * left every customer organization stuck at exactly one member forever.
+ *
+ * Returns a Response to send back, or null when the caller is authorised.
+ */
+async function denyIfNotOwnOrg(c: Context<AppEnv>, orgId: string): Promise<Response | null> {
+  const callerKey = c.get("apiKey");
+  if (callerKey.scopes?.includes("admin")) return null;
+
+  let callerOrgId: string | null = null;
+  try {
+    const record = await prisma.apiKey.findUnique({
+      where: { id: callerKey.id },
+      select: { orgId: true },
+    });
+    callerOrgId = record?.orgId ?? null;
+  } catch (err) {
+    console.error("[orgs] caller org lookup failed:", (err as Error).message);
+    return serviceDependencyProblem(c, err);
+  }
+
+  if (callerOrgId && callerOrgId === orgId) return null;
+
+  // Same body whether the org is someone else's or does not exist, so this
+  // cannot be used to probe which organization ids are real.
+  return problem(c, {
+    status: 403,
+    title: "Not your organization",
+    detail: "This key may only manage the organization it belongs to.",
+    code: ErrorCode.AUTH_FORBIDDEN_ROLE,
+    retryable: false,
+  });
 }
 
 // ── POST /v1/orgs — create organization ────────────────────────────────
@@ -314,11 +370,14 @@ organizationRoutes.get(
 
 organizationRoutes.post(
   "/v1/orgs/:id/claim-keys",
-  authMiddleware("admin"),
+  authMiddleware("evaluate"),
   requireRole("org_admin"),
   async (c) => {
     const orgId = c.req.param("id")!;
     const callerKey = c.get("apiKey");
+
+    const denied = await denyIfNotOwnOrg(c, orgId);
+    if (denied) return denied;
 
     const body = await c.req.json<{ keyIds: string[] }>();
 
@@ -357,12 +416,18 @@ organizationRoutes.post(
       });
     }
 
-    // Find the keys that exist and are not already org-scoped (or belong to
-    // a different org). We do a single query to keep this batch-efficient.
+    // An admin-scoped caller may migrate keys between orgs — that is what this
+    // route was built for. A customer org_admin may claim only UNCLAIMED keys:
+    // allowing them to take a key that already belongs to another org would be
+    // cross-tenant theft, pulling that org's key, its agents and its screening
+    // history into this one. Harmless while the route required admin scope;
+    // not harmless now that an org_admin can reach it.
+    const claimable = claimableKeyFilter(callerKey.scopes?.includes("admin") ?? false, orgId);
+
     const keysToUpdate = await prisma.apiKey.findMany({
       where: {
         id: { in: body.keyIds },
-        OR: [{ orgId: null }, { orgId: { not: orgId } }],
+        ...claimable,
       },
       select: { id: true, keyPrefix: true, orgId: true },
     });
@@ -481,10 +546,13 @@ organizationRoutes.post(
 
 organizationRoutes.get(
   "/v1/orgs/:id/members",
-  authMiddleware("admin"),
+  authMiddleware("evaluate"),
   requireRole("org_admin", "security_analyst", "auditor"),
   async (c) => {
     const orgId = c.req.param("id")!;
+
+    const denied = await denyIfNotOwnOrg(c, orgId);
+    if (denied) return denied;
 
     const org = await prisma.organization.findUnique({
       where: { id: orgId },
@@ -524,12 +592,15 @@ organizationRoutes.get(
 
 organizationRoutes.put(
   "/v1/orgs/:id/members/:keyId/role",
-  authMiddleware("admin"),
+  authMiddleware("evaluate"),
   requireRole("org_admin"),
   async (c) => {
     const orgId = c.req.param("id")!;
     const keyId = c.req.param("keyId")!;
     const callerKey = c.get("apiKey");
+
+    const denied = await denyIfNotOwnOrg(c, orgId);
+    if (denied) return denied;
 
     const body = await c.req.json<{ role: string }>();
 
