@@ -78,6 +78,7 @@ plan_manifest:
 > (`src/lib/tool-refusals.ts`). And governance endpoints were exempted from the
 > per-key rate limit (`src/lib/governance-surface.ts`), which was a run-7 open
 > finding that bit me during the re-walk.
+>
 > **Created:** 2026-08-12
 > **Source:** `~/reports/parse-prospect/2026-08-12-dilan-okonkwo-governed-engineer.html` (prospect run 8)
 > **Baseline:** commit `72a3bd8`, live on production
