@@ -68,7 +68,8 @@ plan_manifest:
 
 # Iris Mbeki org-governance remediation
 
-> **Status:** Draft
+> **Status:** Executed 2026-08-12 on branch `fix/org-governance-remediation`. All 21 journey
+> rows verified on staging; 274 tests passing across 17 files. Not yet deployed.
 > **Created:** 2026-08-12
 > **Source:** `~/reports/parse-prospect/2026-08-12-iris-mbeki-org-governance.html` (prospect run 7)
 > **Phases:** 11 · **Tasks:** 41
