@@ -34,6 +34,7 @@ import { renderDocsPage, renderGuidePage, renderComparePage, renderSecurityPage 
 import { renderPricingPage } from "../pages/pricing.js";
 import { renderAnalyticsDashboardPage } from "../pages/analytics-dashboard.js";
 import { renderSupportPage } from "../pages/support.js";
+import { renderCheckoutSuccessPage, type CheckoutOutcome } from "../pages/checkout-success.js";
 import { renderTechnologyPage } from "../pages/technology.js";
 import { renderGeoPage } from "../pages/geo.js";
 import { getFaviconSvg } from "../pages/favicon.js";
@@ -47,6 +48,8 @@ import { DEMO_API_KEY } from "../lib/constants.js";
 import { recordActivationEvent, getActivationFunnel, type ActivationEvent } from "../lib/activation-tracker.js";
 import { renderBillingDashboardPage } from "../pages/billing.js";
 import { renderAgentDashboardPage } from "../pages/agent-dashboard.js";
+import { renderOrgControlPanelPage } from "../pages/org-control-panel.js";
+import { requireRole } from "../lib/rbac.js";
 import { renderTrustPage } from "../pages/trust-page.js";
 import { renderTrustPackagePage } from "../pages/trust-package.js";
 import { renderDpaPage } from "../pages/dpa.js";
@@ -927,6 +930,25 @@ publicRoutes.get("/dashboard/agents", authMiddleware("evaluate"), async (c) => {
   const html = await renderAgentDashboardPage(baseUrl, apiKey.id, apiKey.name || "Parse");
   return c.html(html);
 });
+
+// Org control panel — members, tool rules, org tolerance, violations.
+// Analysts and auditors read; only org_admin sees the mutation controls.
+publicRoutes.get(
+  "/dashboard/org",
+  authMiddleware("evaluate"),
+  requireRole("org_admin", "security_analyst", "auditor"),
+  async (c) => {
+    const baseUrl = getBaseUrl(c);
+    const apiKey = c.get("apiKey");
+    const html = await renderOrgControlPanelPage(
+      baseUrl,
+      apiKey.id,
+      apiKey.name,
+      apiKey.role ?? "developer",
+    );
+    return c.html(html);
+  },
+);
 
 // Trust & Security page
 publicRoutes.get("/trust", (c) => {
@@ -2617,6 +2639,35 @@ async function handleSupportTicketIntake(c: Context, input: SupportTicketIntakeB
 }
 
 // Public support form.
+// Where Stripe returns a paying customer. Public by necessity: the browser
+// arrives from checkout.stripe.com with no key and no cookie. The tier is read
+// from the Stripe session server-side rather than trusted from the URL.
+publicRoutes.get("/checkout/success", async (c) => {
+  const sessionId = c.req.query("session_id");
+  let outcome: CheckoutOutcome = { state: "unknown" };
+
+  if (sessionId) {
+    try {
+      const { getStripe, isStripeEnabled } = await import("../stripe.js");
+      if (isStripeEnabled()) {
+        const session = await getStripe().checkout.sessions.retrieve(sessionId);
+        const tier = session.metadata?.tier;
+        if (session.payment_status === "paid" && tier) {
+          outcome = { state: "paid", tier };
+        } else if (session.status === "complete" || session.payment_status === "no_payment_required") {
+          outcome = { state: "processing" };
+        }
+      }
+    } catch (err) {
+      // A charged customer must never meet a stack trace. Fall through to the
+      // "we could not read that session" copy, which tells them what to do.
+      console.error(`[checkout] could not read session ${sessionId}: ${(err as Error).message}`);
+    }
+  }
+
+  return c.html(renderCheckoutSuccessPage(getBaseUrl(c), outcome));
+});
+
 publicRoutes.get("/support", (c) => c.html(renderSupportPage(getBaseUrl(c))));
 
 publicRoutes.post("/support", async (c) => {

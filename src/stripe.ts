@@ -81,7 +81,7 @@ export async function createCheckoutSession(apiKeyId: string, tier: PaidTier, ba
     const url = new URL("https://stripe.mock/checkout/session");
     url.searchParams.set("client_reference_id", apiKeyId);
     url.searchParams.set("tier", tier);
-    url.searchParams.set("success_url", `${baseUrl}/dashboard/billing?session_id={CHECKOUT_SESSION_ID}`);
+    url.searchParams.set("success_url", `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`);
     url.searchParams.set("cancel_url", `${baseUrl}/pricing`);
     return url.toString();
   }
@@ -97,7 +97,16 @@ export async function createCheckoutSession(apiKeyId: string, tier: PaidTier, ba
     line_items: [{ price: priceId, quantity: 1 }],
     client_reference_id: apiKeyId,
     metadata: { apiKeyId, tier },
-    success_url: `${baseUrl}/dashboard/billing?session_id={CHECKOUT_SESSION_ID}`,
+    // Lets a prospect run reach the paid product on production with a
+    // single-use 100%-off code instead of a card (scripts/prospect-coupon.mts).
+    // The cost is a promo field on every real customer's checkout; the benefit
+    // is that evaluation happens on the live site rather than a copy of it.
+    allow_promotion_codes: true,
+    // Subscription mode defaults to "always", which would still demand a card on
+    // a fully-discounted checkout. "if_required" only skips collection when
+    // nothing is owed now or later, so a normal paying customer is unaffected.
+    payment_method_collection: "if_required",
+    success_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${baseUrl}/pricing`,
   });
   return session.url!;

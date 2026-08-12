@@ -26,6 +26,10 @@ import {
 } from "../screening-event-log.js";
 import { recordScreening } from "../compliance/coverage-attestation.js";
 import { auditLog } from "../audit-log.js";
+import { prisma } from "../../db.js";
+import { getOrgToolPolicy } from "../tool-policy-store.js";
+import { resolveToolDecision } from "../tool-policy.js";
+import type { ToolDecision, ToolPolicyMode, ToolRule, ToolScope } from "../tool-policy.js";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -49,6 +53,11 @@ export interface ChatCompletionRequest {
   stream?: boolean;
   stop?: string | string[];
   n?: number;
+  /**
+   * The capability grant. Declared explicitly rather than left to the index
+   * signature because the org tool filter reads it on every request.
+   */
+  tools?: Array<{ type?: string; function?: { name?: string; [k: string]: unknown }; [k: string]: unknown }>;
   [key: string]: unknown;
 }
 
@@ -154,6 +163,111 @@ function shouldBlock(verdict: ParseResponse["verdict"], riskScore: number, mode:
   return verdict === "critical" || verdict === "high_risk" || riskScore >= 7;
 }
 
+// ─── Org tool policy ───────────────────────────────────────────────────────
+
+type RequestTool = NonNullable<ChatCompletionRequest["tools"]>[number];
+
+function toolName(tool: RequestTool): string | null {
+  const fromFunction = tool?.function?.name;
+  if (typeof fromFunction === "string" && fromFunction.trim() !== "") return fromFunction;
+  const fromTool = (tool as { name?: unknown })?.name;
+  if (typeof fromTool === "string" && fromTool.trim() !== "") return fromTool;
+  return null;
+}
+
+/**
+ * The `tools` array on a chat/completions request is the capability grant
+ * itself, so an org that bans browser use has not banned it until this runs.
+ *
+ * Pure: the caller supplies the rules. `require_approval` decisions are left in
+ * the request — the proxy has no approval flow to hand them to.
+ */
+export function filterRequestTools(
+  request: ChatCompletionRequest,
+  rules: ToolRule[],
+  mode: ToolPolicyMode,
+  enforcementMode: EnforcementMode,
+  scope?: ToolScope,
+): { request: ChatCompletionRequest; removed: ToolDecision[]; refuse: boolean } {
+  const tools = Array.isArray(request?.tools) ? request.tools : [];
+  if (tools.length === 0) return { request, removed: [], refuse: false };
+
+  const removed: ToolDecision[] = [];
+  const kept: RequestTool[] = [];
+
+  for (const tool of tools) {
+    const name = toolName(tool);
+    // A tool whose name we cannot read cannot be resolved. Leave it alone
+    // rather than guess at the capability it carries.
+    if (!name) {
+      kept.push(tool);
+      continue;
+    }
+    const decision = resolveToolDecision(name, rules, mode, scope ?? {});
+    if (decision.action === "block") {
+      removed.push(decision);
+    } else {
+      kept.push(tool);
+    }
+  }
+
+  if (removed.length === 0) return { request, removed: [], refuse: false };
+
+  // monitor reports the counterfactual and forwards the request untouched.
+  if (enforcementMode === "monitor") return { request, removed, refuse: false };
+
+  return {
+    request: { ...request, tools: kept },
+    removed,
+    refuse: enforcementMode === "block",
+  };
+}
+
+/**
+ * Resolve the caller's org policy and apply it. Fails open on any error: a
+ * governance lookup failure must never take the proxy down.
+ */
+async function applyOrgToolPolicy(
+  request: ChatCompletionRequest,
+  apiKeyId: string,
+  enforcementMode: EnforcementMode,
+): Promise<{ request: ChatCompletionRequest; removed: ToolDecision[]; refuse: boolean }> {
+  const untouched = { request, removed: [] as ToolDecision[], refuse: false };
+  if (!Array.isArray(request?.tools) || request.tools.length === 0) return untouched;
+
+  try {
+    const key = await prisma.apiKey.findUnique({
+      where: { id: apiKeyId },
+      select: { orgId: true },
+    });
+    if (!key?.orgId) return untouched;
+    const { mode, rules } = await getOrgToolPolicy(key.orgId);
+    return filterRequestTools(request, rules, mode, enforcementMode, { apiKeyId });
+  } catch (err) {
+    console.error("[tool-policy] gateway filter failed:", (err as Error).message);
+    return untouched;
+  }
+}
+
+/**
+ * Fold removals into the pre-screen result so the screening event and the audit
+ * log carry them — the removal is the evidence an auditor needs.
+ */
+function recordToolPolicyRemovals(result: ParseResponse, removed: ToolDecision[]): void {
+  for (const decision of removed) {
+    result.flags.push({
+      category: "tool_policy_violation",
+      severity: 7,
+      label: `Org policy blocks tool: ${decision.tool}`,
+      detail: decision.reason,
+      source: "org_tool_policy",
+    });
+  }
+  if (!result.categories.includes("tool_policy_violation")) {
+    result.categories.push("tool_policy_violation");
+  }
+}
+
 // ─── Pre-screen: screen the input messages ────────────────────────────────
 
 async function preScreenMessages(
@@ -196,11 +310,15 @@ function logGatewayScreening(
   result: ParseResponse,
   latencyMs: number,
   enforcementMode: EnforcementMode,
+  removedTools: ToolDecision[] = [],
 ): void {
   // Audit log
   auditLog({
     action: "gateway_screened",
     apiKeyId,
+    detail: removedTools.length
+      ? JSON.stringify({ tool_policy_removed: removedTools.map((d) => d.tool) })
+      : undefined,
     riskScore: result.risk_score,
     verdict: result.verdict,
     promptLength: request.prompt.length,
@@ -235,11 +353,13 @@ function logGatewayScreening(
  *
  * Flow:
  * 1. Pre-screen the input messages
- * 2. If block mode and verdict is critical/high_risk → reject with 403
- * 3. Forward to upstream provider
- * 4. Post-screen the response output
- * 5. If block mode and output risk is critical → return error instead of response
- * 6. Return response with X-Parse-* headers
+ * 2. Apply the org tool policy to the request's `tools` array
+ * 3. If block mode and verdict is critical/high_risk → reject with 403
+ * 4. If the org tool policy refuses → reject with 403
+ * 5. Forward to upstream provider with blocked tools stripped
+ * 6. Post-screen the response output
+ * 7. If block mode and output risk is critical → return error instead of response
+ * 8. Return response with X-Parse-* headers
  */
 export async function handleProxyRequest(
   options: ProxyForwardOptions,
@@ -253,6 +373,10 @@ export async function handleProxyRequest(
   const preScreen = await preScreenMessages(options.request.messages, apiKeyId);
   const preScreenLatency = Date.now() - preScreenStart;
 
+  // 2. Org tool policy — resolved before logging so removals reach the audit trail
+  const toolFilter = await applyOrgToolPolicy(options.request, apiKeyId, enforcementMode);
+  if (toolFilter.removed.length > 0) recordToolPolicyRemovals(preScreen, toolFilter.removed);
+
   // Log pre-screen
   const promptText = messagesToPromptText(options.request.messages);
   logGatewayScreening(
@@ -261,9 +385,10 @@ export async function handleProxyRequest(
     preScreen,
     preScreenLatency,
     enforcementMode,
+    toolFilter.removed,
   );
 
-  // 2. Check enforcement dial for pre-screen
+  // 3. Check enforcement dial for pre-screen
   const blocked = shouldBlock(preScreen.verdict, preScreen.risk_score, enforcementMode);
   if (blocked) {
     const screening: ScreeningResult = {
@@ -283,15 +408,34 @@ export async function handleProxyRequest(
     throw error;
   }
 
-  // 3. Forward to upstream provider
-  const upstreamResponse = await forwardToUpstream(options);
+  // 4. Refuse outright when the org's dial is "block"
+  if (toolFilter.refuse) {
+    const names = toolFilter.removed.map((d) => d.tool).join(", ");
+    const screening: ScreeningResult = {
+      screeningId,
+      verdict: preScreen.verdict,
+      riskScore: preScreen.risk_score,
+      blocked: true,
+      flags: preScreen.flags,
+      categories: preScreen.categories,
+      preScreen,
+    };
+
+    throw new GatewayBlockError(
+      `Request blocked by Parse gateway: org tool policy blocks ${names}`,
+      screening,
+    );
+  }
+
+  // 5. Forward to upstream provider, with blocked tools stripped
+  const upstreamResponse = await forwardToUpstream({ ...options, request: toolFilter.request });
   const responseJson: ChatCompletionResponse = await upstreamResponse.json() as ChatCompletionResponse;
 
-  // 4. Post-screen the response
+  // 6. Post-screen the response
   const responseText = extractResponseText(responseJson);
   const postScreen = postScreenResponse(responseText, promptText);
 
-  // 5. Check enforcement dial for post-screen
+  // 7. Check enforcement dial for post-screen
   const outputVerdict = computeVerdict(postScreen.outputRiskScore);
   const outputBlocked = shouldBlock(outputVerdict, postScreen.outputRiskScore, enforcementMode);
   if (outputBlocked) {
@@ -312,7 +456,7 @@ export async function handleProxyRequest(
     );
   }
 
-  // 6. Return response with screening metadata
+  // 8. Return response with screening metadata
   const screening: ScreeningResult = {
     screeningId,
     verdict: preScreen.verdict,
@@ -350,6 +494,10 @@ export async function handleStreamingProxyRequest(
   const preScreen = await preScreenMessages(options.request.messages, apiKeyId);
   const preScreenLatency = Date.now() - preScreenStart;
 
+  // Org tool policy — resolved before logging so removals reach the audit trail
+  const toolFilter = await applyOrgToolPolicy(options.request, apiKeyId, enforcementMode);
+  if (toolFilter.removed.length > 0) recordToolPolicyRemovals(preScreen, toolFilter.removed);
+
   // Log pre-screen
   const promptText = messagesToPromptText(options.request.messages);
   logGatewayScreening(
@@ -358,6 +506,7 @@ export async function handleStreamingProxyRequest(
     preScreen,
     preScreenLatency,
     enforcementMode,
+    toolFilter.removed,
   );
 
   // Check enforcement dial
@@ -379,8 +528,26 @@ export async function handleStreamingProxyRequest(
     );
   }
 
-  // Forward to upstream and get the SSE stream
-  const upstreamResponse = await forwardToUpstream(options);
+  if (toolFilter.refuse) {
+    const names = toolFilter.removed.map((d) => d.tool).join(", ");
+    const screening: ScreeningResult = {
+      screeningId,
+      verdict: preScreen.verdict,
+      riskScore: preScreen.risk_score,
+      blocked: true,
+      flags: preScreen.flags,
+      categories: preScreen.categories,
+      preScreen,
+    };
+
+    throw new GatewayBlockError(
+      `Request blocked by Parse gateway: org tool policy blocks ${names}`,
+      screening,
+    );
+  }
+
+  // Forward to upstream and get the SSE stream, with blocked tools stripped
+  const upstreamResponse = await forwardToUpstream({ ...options, request: toolFilter.request });
 
   if (!upstreamResponse.body) {
     throw new Error("Upstream provider returned no body for streaming request");

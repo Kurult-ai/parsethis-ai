@@ -398,6 +398,9 @@ model Organization {
   slug        String   @unique
   ownerId     String   @map("owner_id")
   planTier    String   @default("free") @map("plan_tier")
+  // "blocklist" (default): tools are allowed unless a rule blocks them.
+  // "allowlist": tools are blocked unless a rule allows them.
+  toolPolicyMode String @default("blocklist") @map("tool_policy_mode")
   ssoEnabled  Boolean  @default(false) @map("sso_enabled")
   ssoConfig   Json?    @map("sso_config")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -410,8 +413,65 @@ model Organization {
   policyHistory PolicyRevision[]
   egressRules  EgressRule[]
   ssoProviders SSOProvider[]
+  toolRules   OrgToolRule[]
+  policyDefault OrgPolicyDefault?
 
   @@map("organizations")
+}
+
+/// Org-wide tool governance. One row per rule; highest priority match wins.
+model OrgToolRule {
+  id        String   @id @default(cuid())
+  orgId     String   @map("org_id")
+  // What the rule matches:
+  //   kind = "category" → pattern is a catalog category slug (e.g. "browser")
+  //   kind = "exact"    → pattern is a tool name (e.g. "playwright")
+  //   kind = "prefix"   → pattern matched as prefix (e.g. "mcp__claude-in-chrome__")
+  kind      String   @default("category")
+  pattern   String
+  // allow | require_approval | block
+  action    String   @default("block")
+  // Scope: null = whole org. Otherwise restrict to one agent, key, or role.
+  // A scoped rule may only tighten the org-wide result, never loosen it.
+  scopeType String?  @map("scope_type")   // agent | api_key | role
+  scopeId   String?  @map("scope_id")
+  priority  Int      @default(0)
+  reason    String?
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, priority], name: "idx_org_tool_rules_org_priority")
+  @@map("org_tool_rules")
+}
+
+/// Org-wide risk tolerance. ScreeningPolicy is per (apiKeyId, environment), so
+/// without this row an employee can loosen their own key. One row per org; a
+/// null field means the org has no opinion and the key's own value stands.
+model OrgPolicyDefault {
+  id                      String   @id @default(cuid())
+  orgId                   String   @unique @map("org_id")
+  // Same field names as ScreeningPolicy so the clamp is a field-wise merge.
+  autoBlockThreshold      Int?     @map("auto_block_threshold")
+  enforcementMode         String?  @map("enforcement_mode")
+  defaultMode             String?  @map("default_mode")
+  screenUserInput         Boolean? @map("screen_user_input")
+  screenToolOutputs       Boolean? @map("screen_tool_outputs")
+  screenForwardedMessages Boolean? @map("screen_forwarded_messages")
+  executeInSandbox        Boolean? @map("execute_in_sandbox")
+  enforceToolAllowlist    Boolean? @map("enforce_tool_allowlist")
+  bypassEnabled           Boolean? @map("bypass_enabled")
+  /// Fields the member key may not override. Unlocked fields are seed values.
+  lockedFields            String[] @default([]) @map("locked_fields")
+  updatedBy               String   @map("updated_by")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt      @map("updated_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("org_policy_defaults")
 }
 
 model AgentRegistry {

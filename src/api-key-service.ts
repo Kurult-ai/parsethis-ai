@@ -4,6 +4,7 @@ import { prisma } from "./db.js";
 import { backfillApiKeyFastHash, cacheApiKey, getCachedApiKey, invalidateApiKeyCache } from "./result-store.js";
 import { isNegativelyCached, recordNegativeCache } from "./lib/auth-dos-guard.js";
 import { PLAN_LIMITS } from "./lib/product-facts.js";
+import { SELF_SERVICE_USER_ID } from "./lib/constants.js";
 import { abandonRedisConnection, ensureRedisConnected, getRedis } from "./redis.js";
 
 const BCRYPT_ROUNDS = 12;
@@ -318,7 +319,15 @@ export async function createApiKey(
     record = toApiKeyRecord(dbRecord);
     createdInDatabase = true;
   } catch (err) {
-    if (!redisFallbackEnabled() || userId !== "self-service") throw err;
+    if (!redisFallbackEnabled() || userId !== SELF_SERVICE_USER_ID) throw err;
+    // Say why. This fallback is meant for a database outage, but it also
+    // swallows schema faults — a missing users row sent every signup key here
+    // for months, and nothing in the logs said so. A key that lands in Redis
+    // cannot be upgraded by checkout, so this line is the only warning anyone
+    // gets that a purchase is about to fail.
+    console.warn(
+      `[api-key] database write failed, issuing Redis fallback key: ${(err as Error).message}`,
+    );
     record = {
       id: `redis_${randomBytes(8).toString("hex")}`,
       userId,
@@ -610,13 +619,13 @@ export async function countSelfServiceKeys(): Promise<number> {
   if (isLocalKeyGenerationTestMode()) {
     return Array.from(localTestKeysByPrefix.values())
       .flat()
-      .filter((key) => key.userId === "self-service" && key.revokedAt === null).length;
+      .filter((key) => key.userId === SELF_SERVICE_USER_ID && key.revokedAt === null).length;
   }
 
   try {
     const dbCount = await withTimeout(
       prisma.apiKey.count({
-        where: { userId: "self-service", revokedAt: null },
+        where: { userId: SELF_SERVICE_USER_ID, revokedAt: null },
       }),
       dbFallbackTimeoutMs(),
       null

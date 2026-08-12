@@ -43,6 +43,8 @@ npm run seed         # Seed database (prisma/seed.ts)
 | discovery.ts | `/v1/discovery` | Service discovery endpoints |
 | screening-metrics.ts | `/v1/screening-metrics` | Screening analytics |
 | billing.ts | `/v1/billing/*` | Stripe checkout, portal, usage, webhook |
+| tool-policy.ts | `/v1/org/tool-policy*` | Org tool rules (connectors, plugins, MCPs) |
+| org-policy.ts | `/v1/org/policy-defaults` | Org-wide risk tolerance and field locks |
 
 ### Browser Dashboards (`src/pages/`, mounted in `src/routes/public.ts`)
 
@@ -54,6 +56,7 @@ SSR pages for human operators, distinct from the agent-facing JSON API.
 | `/dashboard/screening` | `screening-dashboard.ts` | none |
 | `/dashboard/compliance` | `compliance-dashboard.ts` | `authMiddleware("evaluate")` |
 | `/dashboard/billing` | `billing.ts` | `authMiddleware("evaluate")` |
+| `/dashboard/org` | `org-control-panel.ts` | `authMiddleware("evaluate")` + `requireRole` |
 | `/admin/login` | inline in `public.ts` | none (issues the cookie) |
 
 Conventions for these pages:
@@ -125,8 +128,71 @@ The cookie is set by `POST /admin/login` (httpOnly, Secure, SameSite=Lax,
 (`?api_key=`) is not supported — keys in URLs leak through logs and referrers.
 
 Because the cookie is `SameSite=Lax`, it rides along on top-level navigations
-but not on cross-site subrequests. Any future state-changing browser form
-posted from a dashboard needs its own CSRF token; do not rely on Lax alone.
+but not on cross-site subrequests, which is not by itself a defence for a
+state-changing POST. `src/lib/csrf.ts` supplies the token: `issueCsrfToken()`
+embeds one in the rendered page and `requireCsrf()` guards the mutation.
+Bearer-authenticated API callers pass through untouched — a cross-site page
+cannot attach an `Authorization` header, so only cookie auth needs the check.
+Any new state-changing browser form must carry it; do not rely on Lax alone.
+
+## Org Governance
+
+Two org-wide controls sit above the per-key policy. Both follow the same rule:
+a narrower scope may **tighten** the org result and never loosen it, mirroring
+`DelegationChain`, where a child may restrict its parent's grant but never
+expand it.
+
+**Tool rules** (`OrgToolRule`) decide which connectors, plugins and MCP servers
+an org's agents may use. A rule matches by catalog category, exact name, or name
+prefix; `src/lib/tool-catalog.ts` maps one category (`browser`) onto the many
+names a capability hides behind (`browser_use`, `playwright`, `computer_use`,
+`mcp__claude-in-chrome__*`), so "no browser use" is one rule. The catalog is
+curated in code and updated by PR — adding a name needs no migration.
+`src/lib/tool-policy.ts` resolves; it is pure and must stay that way.
+
+Enforced at three points, so a ban holds however the request arrives:
+1. **Registration** (`src/routes/agent-registry.ts`) — 422 when a submitted
+   `tools[]` contains a blocked tool. Closes the self-declaration hole, since
+   `AgentRegistry.tools[]` is otherwise whatever the employee typed.
+2. **Screening** (`src/routes/parse.ts`) — `tool_policy_violation` through the
+   enforcement dial. Deliberately **not** gated on `enforceToolAllowlist`: that
+   flag governs the agent's own opt-in list, while an org ban must hold for
+   every key in the org.
+3. **Gateway** (`src/lib/gateway/proxy-handler.ts`) — blocked entries stripped
+   from the OpenAI-compatible `tools` array before forwarding; refused outright
+   under `block`.
+
+**Policy ceiling** (`OrgPolicyDefault`) is the org-wide risk tolerance.
+`ScreeningPolicy` is per `(apiKeyId, environment)`, so without it an employee
+can raise their own threshold or drop to `monitor`. The clamp is applied at the
+three `c.set("policy", ...)` branches in `src/auth.ts` — the sole place the
+effective policy is published — so every route reading `c.get("policy")`
+inherits it. `orgId` already rides on `apiKeyRecord`, so this costs no extra
+query on the hot path. Apply the ceiling **after** the per-key cache is read,
+never before it is written: caching the clamped value would delay an admin's
+change until every member key's cache entry expired. A field in `lockedFields`
+takes the org value outright, and `PUT /v1/policy` returns 422 rather than
+clamping such a write silently.
+
+Both stores are Redis-cached and **fail open** — a governance lookup must never
+break authentication or screening. Invalidate on every write.
+
+Members are API keys, not users: `ApiKey.orgId` + `ApiKey.role` is the only
+membership edge. Per-employee identity needs an `OrgMember` join table and is
+not built. See `docs/org-tool-governance-plan.md`.
+
+Both controls are org-scoped, and a fresh key belongs to no org.
+`POST /v1/orgs/bootstrap` lets an unaffiliated key create one and become its
+`org_admin`; `POST /v1/orgs` still requires `admin` scope and provisions on
+someone else's behalf. **A key that already belongs to an org is refused** —
+otherwise a governed member could create a second org and move their agents
+there to escape the first one's rules. The guard is
+`checkBootstrapEligibility()`, kept pure so that rule is unit-tested.
+
+Known gap: a key with no org that opens `/dashboard/org` gets the raw 403 from
+`requireRole`, not a page explaining how to create one. The nav links to it from
+the agent and compliance dashboards, so that is a visible dead end until the
+route renders a get-started state.
 
 ## Brand & Claims Enforcement
 
@@ -146,7 +212,11 @@ When a feature ships, flip its entry in `FEATURE_STATUS`
 ## Environment Variables
 
 Requires: `DATABASE_URL`, `REDIS_URL`, `OPENROUTER_API_KEY`
-Optional: `SANDBOX_URL`, `SANDBOX_HMAC_SECRET`, `ANALYSIS_MODEL`, `DEFAULT_MODEL`, `ALLOWED_ORIGINS`
+Optional: `SANDBOX_URL`, `SANDBOX_HMAC_SECRET`, `ANALYSIS_MODEL`, `DEFAULT_MODEL`, `ALLOWED_ORIGINS`, `PARSE_CSRF_SECRET`
+
+`PARSE_CSRF_SECRET` signs dashboard CSRF tokens. Unset, it falls back to
+`PARSE_APPROVAL_SECRET` then `MASTER_API_KEY`; set it explicitly in production
+so rotating the master key does not invalidate every open dashboard session.
 Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SOLO_PRICE_ID`, `STRIPE_PRO_PRICE_ID`, `STRIPE_TEAM_PRICE_ID`, `STRIPE_COMPLIANCE_PRICE_ID`, `STRIPE_AUDIT_PRICE_ID`
 
 One price variable per product. `STRIPE_AUDIT_PRICE_ID` belongs to the one-time

@@ -14,7 +14,10 @@ import type { AppEnv, ScreeningPolicy } from "./types.js";
 import { auditLog } from "./lib/audit-log.js";
 import { problem, ErrorCode } from "./lib/problem-response.js";
 import { isAuthFailureLimited, recordAuthFailure } from "./lib/auth-dos-guard.js";
+import { applyOrgPolicyCeiling } from "./lib/org-policy-ceiling.js";
+import { getOrgPolicyCeiling } from "./lib/org-policy-store.js";
 import { PLAN_LIMITS } from "./lib/product-facts.js";
+import { SELF_SERVICE_USER_ID } from "./lib/constants.js";
 
 /** Timing-safe string comparison to prevent timing attacks on key validation */
 function safeCompare(a: string, b: string): boolean {
@@ -486,10 +489,21 @@ export function authMiddleware(requiredScope?: string) {
     const environment = resolveEnvironment(c);
     c.set("environment", environment);
 
-    // Load screening policy (from Redis cache or DB) scoped by environment
+    // Load screening policy (from Redis cache or DB) scoped by environment.
+    //
+    // The ceiling clamps what the request sees, never what the cache stores:
+    // the per-key cache must keep holding the key's *own* policy. Bake the
+    // clamp into the cached value and an admin tightening the org tolerance
+    // would not take effect until every member key's cache entry expired.
+    //
+    // orgId rides along on apiKeyRecord, so the ceiling costs no extra query
+    // here; getOrgPolicyCeiling is Redis-cached and never throws, so a
+    // governance failure leaves authentication as it was.
+    const orgCeiling = apiKeyRecord.orgId ? await getOrgPolicyCeiling(apiKeyRecord.orgId) : null;
+
     const cachedPolicy = await getCachedPolicyData(apiKeyRecord.id, environment);
     if (cachedPolicy) {
-      c.set("policy", cachedPolicy as ScreeningPolicy);
+      c.set("policy", applyOrgPolicyCeiling(cachedPolicy as ScreeningPolicy, orgCeiling));
     } else {
       try {
         const dbPolicy = await prisma.screeningPolicy.findUnique({
@@ -516,11 +530,11 @@ export function authMiddleware(requiredScope?: string) {
               environment: dbPolicy.environment,
             }
           : DEFAULT_POLICY;
-        c.set("policy", policy);
-        // Fire-and-forget cache
+        c.set("policy", applyOrgPolicyCeiling(policy, orgCeiling));
+        // Fire-and-forget cache — the key's own policy, unclamped.
         cachePolicyData(apiKeyRecord.id, policy, environment).catch(() => {});
       } catch {
-        c.set("policy", DEFAULT_POLICY);
+        c.set("policy", applyOrgPolicyCeiling(DEFAULT_POLICY, orgCeiling));
       }
     }
 
@@ -536,7 +550,7 @@ export async function createApiKey(
   expiresAt?: Date,
   orgId?: string
 ): Promise<{ id: string; key: string; name: string; scopes: string[]; created_at: string }> {
-  const result = await createApiKeyFromService("self-service", name, "free", orgId, scopes, expiresAt);
+  const result = await createApiKeyFromService(SELF_SERVICE_USER_ID, name, "free", orgId, scopes, expiresAt);
   return {
     id: result.record.id,
     key: result.key,
@@ -547,7 +561,7 @@ export async function createApiKey(
 }
 
 export async function listApiKeys(): Promise<ApiKeyRecord[]> {
-  return listApiKeysFromService("self-service");
+  return listApiKeysFromService(SELF_SERVICE_USER_ID);
 }
 
 export async function deleteApiKey(id: string): Promise<boolean> {

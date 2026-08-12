@@ -7,6 +7,8 @@ import { auditLog } from "../lib/audit-log.js";
 import { formatBypassPolicy, hashBypassCodeword } from "../lib/bypass-codeword.js";
 import { serviceDependencyProblem } from "../lib/problem-response.js";
 import { createPolicyRevision, snapshotFromScreeningPolicy, computeDiff } from "../lib/policy-revision.js";
+import { clampedFields } from "../lib/org-policy-ceiling.js";
+import { getOrgPolicyCeiling } from "../lib/org-policy-store.js";
 import {
   validateRule,
   parseCustomRules,
@@ -323,6 +325,35 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
     if (!existing?.bypassCodewordHash) {
       return c.json({ error: "bypassCodeword is required before enabling codeword bypass" }, 400);
     }
+  }
+
+  // A field the org has locked is a hard rejection, not a silent clamp: an
+  // employee writing a value their org has frozen should be told so. Fields the
+  // ceiling merely tightens are allowed through — auth.ts applies the
+  // tighten-only merge at read time. Fails open, because a governance lookup
+  // failure must not block a policy write.
+  try {
+    const keyRow = await prisma.apiKey.findUnique({ where: { id: apiKey.id }, select: { orgId: true } });
+    const ceiling = keyRow?.orgId ? await getOrgPolicyCeiling(keyRow.orgId) : null;
+    const locked = ceiling?.lockedFields ?? [];
+    if (ceiling && locked.length > 0) {
+      const submitted = { ...(c.get("policy") ?? DEFAULT_POLICY), ...updateData } as ScreeningPolicy;
+      const orgValues = ceiling as Record<string, unknown>;
+      const violations = clampedFields(submitted, ceiling)
+        .filter((field) => locked.includes(field) && field in updateData);
+      if (violations.length > 0) {
+        return c.json(
+          {
+            error: "One or more policy fields are locked by your organization",
+            locked_fields: violations,
+            org_values: Object.fromEntries(violations.map((field) => [field, orgValues[field] ?? null])),
+          },
+          422,
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[policy] org ceiling check skipped:", (err as Error).message);
   }
 
   try {

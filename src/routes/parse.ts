@@ -32,6 +32,8 @@ import {
   isValidClassification,
 } from "../lib/data-governance/approval-matrix.js";
 import { prisma } from "../db.js";
+import { getOrgToolPolicy } from "../lib/tool-policy-store.js";
+import { resolveToolList } from "../lib/tool-policy.js";
 import { verifySignature } from "../lib/identity/signed-identity.js";
 import { recordActivationEvent, getActivationEventTs } from "../lib/activation-tracker.js";
 
@@ -759,6 +761,87 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
         // Fail open — don't block screening on allowlist check failure
       }
     }
+  }
+
+  // ── Org Tool Governance ──
+  // Deliberately NOT gated on policy.enforceToolAllowlist: that flag governs
+  // the agent's own opt-in allowlist above, while an org-wide ban must hold for
+  // every key in the org whether or not that key opted in. The only gate is
+  // that the key belongs to an org.
+  //
+  // The category is tool_policy_violation, distinct from the per-agent
+  // tool_violation above, so a dashboard or SIEM can tell "violated its own
+  // declared list" from "violated company policy".
+  try {
+    const orgToolKey = await prisma.apiKey.findUnique({
+      where: { id: apiKey.id },
+      select: { orgId: true },
+    });
+
+    if (orgToolKey?.orgId) {
+      const orgBodyTools = (body as any).tools;
+      const orgRequestedTools: string[] = Array.isArray(body.metadata?.tool_permissions)
+        ? body.metadata!.tool_permissions!
+        : Array.isArray(orgBodyTools)
+          ? (orgBodyTools as string[])
+          : [];
+
+      if (orgRequestedTools.length > 0) {
+        const { mode, rules } = await getOrgToolPolicy(orgToolKey.orgId);
+        const { blocked, needsApproval } = resolveToolList(orgRequestedTools, rules, mode, {
+          agentId: body.metadata?.agent_id,
+          apiKeyId: apiKey.id,
+          role: apiKey.role,
+        });
+
+        if (needsApproval.length > 0) {
+          for (const d of needsApproval) {
+            result.flags.push({
+              category: "tool_policy_approval",
+              severity: 5,
+              label: `Org policy holds tool for approval: ${d.tool}`,
+              detail: d.reason,
+              source: "org_tool_policy",
+            });
+          }
+          if (!result.categories.includes("tool_policy_approval")) {
+            result.categories.push("tool_policy_approval");
+          }
+          (result as unknown as Record<string, unknown>).tool_policy_approvals =
+            needsApproval.map((d) => d.tool);
+        }
+
+        if (blocked.length > 0) {
+          for (const d of blocked) {
+            result.flags.push({
+              category: "tool_policy_violation",
+              severity: 7,
+              label: `Org policy blocks tool: ${d.tool}`,
+              detail: d.reason,
+              source: "org_tool_policy",
+            });
+          }
+          if (!result.categories.includes("tool_policy_violation")) {
+            result.categories.push("tool_policy_violation");
+          }
+          (result as unknown as Record<string, unknown>).tool_policy_violations =
+            blocked.map((d) => d.tool);
+
+          // Enforcement: under "block" mode, escalate risk and block
+          if (enforcementMode === "block") {
+            result.risk_score = Math.max(result.risk_score, 7);
+            result.verdict = "critical";
+            result.safe = false;
+            result.suggested_action = "block";
+            result.recommended_action = "block";
+            result.wouldBlock = true;
+          }
+        }
+      }
+    }
+  } catch (otpErr) {
+    console.error("[tool-policy] screening check failed:", (otpErr as Error).message);
+    // Fail open — don't block screening on governance check failure
   }
 
   // ── Egress Destination Control (Task 8.3) ──
