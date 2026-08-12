@@ -41,7 +41,9 @@
     "fleet-provision": "node --import tsx scripts/fleet-provision.ts",
     "llm-discovery": "node --import tsx scripts/llm-discovery-check.ts",
     "check:retention-sync": "node --import tsx scripts/check-retention-sync.mts",
-    "retention:purge": "node --import tsx scripts/retention-purge.mts"
+    "retention:purge": "node --import tsx scripts/retention-purge.mts",
+    "bench:acquittal": "node --import tsx scripts/bench-acquittal.mts",
+    "probe:analyst": "node --import tsx scripts/probe-analyst.mts"
   },
   "keywords": [
     "agents",

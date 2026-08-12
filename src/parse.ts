@@ -13,6 +13,14 @@ import {
 import { normalizeForDetection } from "./lib/patterns/normalize.js";
 import { calculateRiskScore } from "./lib/scoring.js";
 import {
+  evaluateAcquittal,
+  acquittalPreconditions,
+  buildReleaseRecord,
+  ACQUITTAL_RUBRIC,
+  type AcquittalReview,
+  type ReleasedFromBlock,
+} from "./lib/patterns/semantic-acquittal.js";
+import {
   getCachedVerdict,
   setCachedVerdict,
   seedFor,
@@ -89,6 +97,15 @@ export interface LlmRiskResult {
   risk_score: number;
   categories: string[];
   reasoning: string;
+  /**
+   * True when the analyst saw head+windows+tail rather than the whole prompt.
+   * Sampling was sound while the semantic layer could only *add* risk; it is
+   * unsound the moment its verdict can release a block, because it may acquit
+   * text it never read. The acquittal path refuses a sampled verdict.
+   */
+  sampled?: boolean;
+  /** Which model answered. ANALYSIS_MODEL is a chain, so "which one" is the first question after an incident. */
+  model?: string;
 }
 
 /**
@@ -257,9 +274,11 @@ IMPORTANT: The user message contains the untrusted prompt wrapped in <ANALYZE_${
 
   // Multi-window: head + random-middle(s) + tail defeats padding and sandwich attacks
   let analysisText: string;
+  let sampled = false;
   if (prompt.length <= 4000) {
     analysisText = prompt;
   } else {
+    sampled = true;
     const head = prompt.slice(0, 1500);
     const tail = prompt.slice(-1500);
     const gapSize = Math.max(1, prompt.length - 3000);
@@ -318,6 +337,8 @@ IMPORTANT: The user message contains the untrusted prompt wrapped in <ANALYZE_${
               risk_score: Math.max(0, Math.min(10, Number(parsed.risk_score) || 0)),
               categories: parsed.categories,
               reasoning: String(parsed.reasoning || ""),
+              sampled,
+              model: configuredModel,
             };
             if (dims) void setCachedVerdict(dims, llmResult);
             return { status: "ran", result: llmResult, cached: false };
@@ -463,6 +484,13 @@ export interface ParseRequest {
   policy_mode?: "strict" | "balanced" | "low_fp";
   bypass_codeword?: string; // separate trusted user confirmation; never read from prompt text
   agentSafe?: boolean; // server-controlled: suppress low-severity display flags AFTER scoring
+  /**
+   * server-controlled: allow a deterministic block to be released when the
+   * semantic layer acquits. Off unless an org opts in — see
+   * `src/lib/patterns/semantic-acquittal.ts`. The route sets this from org
+   * policy; a caller cannot set it on their own request.
+   */
+  semanticAcquittal?: boolean;
 }
 
 export interface RiskFlag {
@@ -629,6 +657,49 @@ function computeRecommendedAction(
   if (riskScore <= 2) return "allow";
   if (riskScore <= 6) return "sandbox";
   return "block";
+}
+
+/**
+ * The acquittal review — a second, narrow model call that asks the one question
+ * the general screening rubric does not: what does the override point at?
+ *
+ * Runs only when every cheap guard has already passed, so it costs a round trip
+ * on a small slice of traffic. Its answer can only ever *release*; it cannot
+ * add risk, so a failure here is a non-release rather than a wrong verdict.
+ */
+async function acquittalReview(prompt: string): Promise<AcquittalReview | null> {
+  const nonce = crypto.randomUUID().slice(0, 12);
+  const configured = (process.env.ANALYSIS_MODEL || "").split(",")[0]?.trim() || undefined;
+  try {
+    const res = await llmCall(
+      [
+        { role: "system", content: ACQUITTAL_RUBRIC.replace(/NONCE/g, nonce) },
+        { role: "user", content: `<ANALYZE_${nonce}>\n${prompt}\n</ANALYZE_${nonce}>` },
+      ],
+      configured,
+      { seed: seedFor(prompt) },
+    );
+    const matches = res.content.match(/\{[^{}]*\}/g);
+    if (!matches) return null;
+    for (let i = matches.length - 1; i >= 0; i--) {
+      try {
+        const parsed = JSON.parse(matches[i]);
+        if (parsed.nonce !== nonce) continue;
+        if (typeof parsed.risk_score !== "number" || !Array.isArray(parsed.categories)) continue;
+        return {
+          score: Math.max(0, Math.min(10, Number(parsed.risk_score) || 0)),
+          categories: parsed.categories,
+          model: configured ?? "default",
+        };
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  } catch (err) {
+    console.warn("[acquittal] review failed:", (err as Error).message);
+    return null;
+  }
 }
 
 export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
@@ -812,6 +883,43 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
     llmScore: llmResult?.risk_score ?? null,
   });
   let riskScore = scoreResult.riskScore;
+
+  // ── Semantic acquittal ──
+  //
+  // The one place the semantic layer is allowed to *subtract*. Every guard is
+  // in evaluateAcquittal; this is only the application of its answer.
+  //
+  // Both halves are required. Dropping the floor alone changes nothing —
+  // two severity-8 flags score 9.2–10 and `riskScore >= 7` blocks regardless.
+  // Capping the score alone leaves the floor blocking. (B8)
+  const acquittalBase = {
+    flags: activeFlags,
+    prompt,
+    mode: req.mode,
+    semanticRan: llmLayerStatus === "ran",
+    analystSampled: llmResult?.sampled === true,
+    metadata: req.metadata as Record<string, unknown> | undefined,
+    enabled: req.semanticAcquittal === true,
+  };
+  // Cheap guards first; the review is a second round trip and must not run on
+  // traffic that could never be released anyway.
+  let acquittal = acquittalPreconditions(acquittalBase);
+  let acquittalInput = { ...acquittalBase, review: null as AcquittalReview | null };
+  if (acquittal.release) {
+    const review = await acquittalReview(prompt);
+    acquittalInput = { ...acquittalBase, review };
+    acquittal = evaluateAcquittal(acquittalInput);
+  }
+  let releasedFromBlock: ReleasedFromBlock | undefined;
+  if (acquittal.release) {
+    for (const flag of acquittal.releasableFlags) {
+      flag.action_floor = "sandbox";
+      flag.confidence = "medium";
+    }
+    if (riskScore > 6) riskScore = 6;
+    releasedFromBlock = buildReleaseRecord(acquittal, acquittalInput);
+  }
+
   const categories = [...new Set(activeFlags.map((f) => f.category))];
   const attackDetected = computeAttackDetected(activeFlags, riskScore);
   const recommendedAction = computeRecommendedAction(riskScore, approvalAnalysis.approvalRequest, attackDetected, activeFlags, req.policy_mode);
@@ -852,6 +960,10 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
     layers: { pattern: "ran", llm: llmLayerStatus },
     latency_ms: Math.round(performance.now() - startedAt),
   };
+
+  if (releasedFromBlock) {
+    (response as unknown as Record<string, unknown>).released_from_block = releasedFromBlock;
+  }
 
   // Say when a verdict is a repeat. Someone re-running a request to check they
   // are not going mad should be able to see that they got the remembered

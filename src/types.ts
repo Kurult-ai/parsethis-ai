@@ -15,6 +15,14 @@ export interface ScreeningPolicy {
   bypassExpiresAt?: Date | string | null;
   enforcementMode?: "monitor" | "warn" | "block";
   enforceToolAllowlist?: boolean;
+  /**
+   * Allow a deterministic block to be released when the semantic layer acquits.
+   *
+   * Off unless an org opts in. This feature has been reverted twice; it ships
+   * dark and nobody receives it by upgrading. See
+   * `docs/plans/2026-08-12-semantic-acquittal-release.md`.
+   */
+  semanticAcquittal?: boolean;
   defaultMode?: "full" | "pattern-only";
   environment?: string;
 }

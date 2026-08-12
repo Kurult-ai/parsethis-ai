@@ -471,6 +471,11 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
 
   // ── Run risk analysis (synchronous — pattern + LLM) ──
   const parseStart = Date.now();
+  // Server-controlled: the acquittal release is an org opt-in, never something
+  // a caller can turn on for their own request.
+  const screeningPolicy = c.get("policy");
+  body.semanticAcquittal = screeningPolicy?.semanticAcquittal === true;
+
   const result = await parsePrompt(body);
   const parseLatencyMs = Date.now() - parseStart;
 

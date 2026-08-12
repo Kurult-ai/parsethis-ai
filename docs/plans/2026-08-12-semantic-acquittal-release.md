@@ -35,7 +35,33 @@ plan_manifest:
 
 # Semantic acquittal release — third attempt
 
-> **Status:** Not started. **Do not begin at Phase 2.**
+> **Status (2026-08-12):** Phases 0 and 1 complete. **Phase 2 is built and is
+> NOT finished — it is blocked on a reproducibility failure described below.**
+> Phases 3 and 4 not started. The feature ships **off**: `semanticAcquittal`
+> defaults false in `ScreeningPolicy`, the route sets it server-side from org
+> policy only, and both `undefined` and `false` were verified to block the
+> motivating payload. Nothing in production behaves differently.
+>
+> **Why Phase 2 is not done.** The mechanism works and the guards hold — 45
+> tests, every bypass in Appendix B closed, `eval:screening` unchanged, and a
+> dedicated reviewer that scored **8 of 8** on the discrimination the general
+> rubric gets backwards. But the live bench **flaps between runs on identical
+> input**: the general analyst is non-deterministic, and whether it emits an
+> `llm.*` flag with a block floor decides whether the release is attempted at
+> all (`another_flag_floors_block`). Two consecutive runs gave 1 and 3 failures
+> over the same 13 rows.
+>
+> A security control whose outcome is not reproducible is the class of defect
+> that got the two previous attempts reverted. It does not go to adversarial
+> review in this state.
+>
+> **The next decision is a design one and belongs to Phase 3, not to whoever is
+> holding the keyboard:** either stabilise the general analyst's contribution
+> (the verdict cache does this in the server, where Redis is present, but only
+> within its 15-minute window), or exclude `llm.*` block floors from the
+> release precondition. The second is a real weakening with security
+> consequences and must not be decided unilaterally.
+>
 > **Created:** 2026-08-12
 > **Supersedes:** `2026-08-11-post-review-remediation.md` Phase 4, which holds the
 > correct design. This plan is that design plus the sequencing it was missing,
