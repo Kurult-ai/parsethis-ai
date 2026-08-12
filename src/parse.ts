@@ -341,7 +341,7 @@ IMPORTANT: The user message contains the untrusted prompt wrapped in <ANALYZE_${
               sampled,
               model: configuredModel,
             };
-            if (dims) void setCachedVerdict(dims, llmResult);
+            if (dims) void setCachedVerdict(dims, llmResult).catch(() => {});
             return { status: "ran", result: llmResult, cached: false };
           }
         } catch { continue; }
@@ -707,7 +707,7 @@ async function acquittalReview(prompt: string): Promise<AcquittalReview | null> 
           categories: parsed.categories,
           model: configured ?? "default",
         };
-        void setCachedVerdict(dims, review);
+        void setCachedVerdict(dims, review).catch(() => {});
         return review;
       } catch {
         continue;

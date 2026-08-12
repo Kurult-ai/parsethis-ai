@@ -45,6 +45,8 @@ export async function recordToolRefusals(
   try {
     if (!(await ensureRedisConnected())) return;
     const redis = getRedis();
+    // Fire-and-forget: never start a command on a closing client.
+    if (redis.status !== "ready") return;
     const k = key(apiKeyId);
     const at = new Date().toISOString();
 

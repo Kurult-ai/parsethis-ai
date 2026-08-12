@@ -77,6 +77,8 @@ export async function recordUnclassifiedTools(
   try {
     if (!(await ensureRedisConnected())) return;
     const redis = getRedis();
+    // Fire-and-forget: never start a command on a closing client.
+    if (redis.status !== "ready") return;
     const k = key(orgId);
     const now = new Date().toISOString();
 

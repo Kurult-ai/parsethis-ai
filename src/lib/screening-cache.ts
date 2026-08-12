@@ -100,7 +100,14 @@ export async function setCachedVerdict(d: CacheDimensions, value: unknown): Prom
   if (!isRedisConfigured()) return;
   try {
     if (!(await ensureRedisConnected())) return;
-    await getRedis().set(cacheKey(d), JSON.stringify(value), "EX", TTL_SECONDS);
+    const redis = getRedis();
+    // These writes are fire-and-forget, so one can still be in flight when the
+    // process (or a test) closes the connection underneath it. ioredis rejects
+    // pending commands with "Connection is closed.", which surfaces as a failed
+    // teardown rather than as anything this function can catch. Do not start a
+    // command on a client that is not ready.
+    if (redis.status !== "ready") return;
+    await redis.set(cacheKey(d), JSON.stringify(value), "EX", TTL_SECONDS);
   } catch (err) {
     console.error("[screening-cache] write failed:", (err as Error).message);
   }

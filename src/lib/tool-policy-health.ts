@@ -38,6 +38,8 @@ export async function recordToolPolicyCheckFailure(apiKeyId: string): Promise<vo
 
     if (!(await ensureRedisConnected())) return;
     const redis = getRedis();
+    // Fire-and-forget: never start a command on a closing client.
+    if (redis.status !== "ready") return;
     const k = redisKey(orgId, dayKey());
     await redis.incr(k);
     await redis.expire(k, TTL_SECONDS);
