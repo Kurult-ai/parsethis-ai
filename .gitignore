@@ -43,3 +43,6 @@ public-screening-results.json
 
 # Workspace (agent output)
 workspace/
+
+# Local scratch and DB dumps — never part of a deploy
+backups/
