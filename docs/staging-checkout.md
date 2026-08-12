@@ -151,6 +151,23 @@ A database built from them alone lacks `api_keys.role`, `users`, and
 `entitlement_grants`, which is why `staging-reset.sh` copies production's schema
 instead. Disaster recovery still depends on a dump, not on this directory.
 
+## Webhooks: staging forwards, it does not register an endpoint
+
+Staging receives events through `stripe listen`, which the launcher starts. It
+must not have a registered test-mode webhook endpoint as well.
+
+There used to be one — `we_1U2NRi8LghiREdMSS6bY49lT`, test mode, pointed at
+`https://www.parsethis.ai/v1/billing/webhook`. Every staging checkout was
+therefore delivered to *production* too, where the live signing secret rejected
+it: 18 `Webhook signature verification failed` lines in
+`~/.kublai/logs/parse-for-agents.err.log` on 2026-08-12, all of them generated
+by testing. Disabled that day.
+
+The rejection was the control working. Had those signatures verified, a
+test-mode checkout would have granted a real paid tier on production — so if
+anyone ever adds a test-mode endpoint back, do not let production's
+`STRIPE_WEBHOOK_SECRET` accept it.
+
 ## Maintenance
 
 The Stripe credentials come from the CLI login and expire about 90 days after
