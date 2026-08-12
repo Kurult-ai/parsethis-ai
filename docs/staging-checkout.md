@@ -72,7 +72,7 @@ Three things bite, all worked around in the transcript above:
 
 ## Three defects this environment surfaced
 
-**0. A paying customer landed on a 401.** Fixed in code, not yet deployed.
+**0. A paying customer landed on a 401.** Fixed and live since 2026-08-12.
 `success_url` returned buyers to `/dashboard/billing`, which is behind
 `authMiddleware`; a browser arriving from checkout.stripe.com carries no key, so
 the reward for paying was raw JSON asking for a Bearer token. It now points at a
@@ -84,21 +84,21 @@ after the fix: `GET /checkout/success 200` → `POST /admin/login 200` →
 dashboard.
 
 
-**1. Self-service signup keys cannot be written to Postgres.** Fixed in code,
-not yet deployed. `createApiKey()` passed the literal string `"self-service"` as `userId`
-(`src/auth.ts:553`), but no `users` row with that id exists — production has only
-`legacy_user`. The insert violates `api_keys_user_id_fkey`, so every signup key
-falls to the Redis fallback and gets a `redis_…` id
-(`src/api-key-service.ts:323`). Then `checkout.session.completed` tries
-`prisma.subscription.upsert({ apiKeyId: "redis_…" })`, violates
-`subscriptions_api_key_id_fkey`, and returns 500 — observed here as
+**1. Self-service signup keys could not be written to Postgres.** Fixed and live
+since 2026-08-12. `createApiKey()` passed the literal string `"self-service"` as `userId`
+(`src/auth.ts:553`), but no `users` row with that id existed — production had
+only `legacy_user`. The insert violated `api_keys_user_id_fkey`, so every signup
+key fell to the Redis fallback and got a `redis_…` id
+(`src/api-key-service.ts:323`). Then `checkout.session.completed` tried
+`prisma.subscription.upsert({ apiKeyId: "redis_…" })`, violated
+`subscriptions_api_key_id_fkey`, and returned 500 — observed here as
 `[billing] Error handling checkout.session.completed:` with an empty message,
-because the handler logs only `.message`.
+because the handler logged only `.message`.
 
-The consequence in production: **a customer can pay and never receive the plan
-they bought**, and Stripe will retry the webhook into a permanent 500. Production
-currently has 0 rows in `subscriptions`, which is consistent with this but does
-not prove it, since no live purchase has been attempted.
+The consequence in production: **a customer could pay and never receive the plan
+they bought**, with Stripe retrying the webhook into a permanent 500. Production
+had 0 rows in `subscriptions`, consistent with this though not proof of it, since
+no live purchase had been attempted.
 
 The fix is a sentinel `users` row, created three ways so no path can miss it:
 `ensureSelfServiceUser()` (`src/lib/self-service-user.ts`) upserts it on every
@@ -116,34 +116,40 @@ with the tier, customer and subscription id when it is absent.
 Whether a sentinel row is the right long-term answer, or signup should create a
 real user, is still a product decision. This makes the current design work.
 
-Verified on 2026-08-12 against a database rebuilt from production's schema —
-zero users, empty migration ledger, the exact shape production is in now. Boot
-created the row, the signup key landed in Postgres with a real cuid, and
-checkout granted Solo. Resending the original failing event
+Verified on staging first, against a database rebuilt from production's schema —
+zero users, empty migration ledger, the shape production was in. Boot created the
+row, the signup key landed in Postgres with a real cuid, and checkout granted
+Solo and Pro. Resending the original failing event
 (`evt_1U3QJC8LghiREdMSWbCZ8YPs`) produced the new diagnostic instead of an empty
 error.
 
-**2. Migrations have never run in production.** `_migrations` in
-`parse_for_agents` holds **zero rows**, so every boot starts at
-`001_init.sql`, fails with `relation "api_keys" already exists`, and
-`runMigrations` throws out of the loop before reaching any later file. The
-schema got where it is by other means; the SQL files have been decorative.
+Then confirmed on production after the 2026-08-12 deploy: the sentinel row
+exists, and a key created by real traffic at 01:26 UTC is owned by
+`self-service` in Postgres — an ownership that was impossible to write before.
 
-Two consequences. Migration `013` will not apply in production — the boot-time
-upsert is the load-bearing half of fix 1, which is why it runs regardless of
-migration outcome. And the files cannot rebuild the schema anyway: a database
-built from them lacks `api_keys.role`, `users`, and `entitlement_grants`.
+**2. Migrations had never run in production.** Repaired 2026-08-12.
+`_migrations` in `parse_for_agents` held **zero rows**, so every boot started at
+`001_init.sql`, failed with `relation "api_keys" already exists`, and
+`runMigrations` threw out of the loop before reaching any later file — the log
+shows that pair of lines repeating across every restart in
+`~/.kublai/logs/parse-for-agents.err.log`. The schema got where it is by other
+means; the SQL files were decorative.
 
-Repairing it means backfilling the ledger with the migrations already reflected
-in the schema, so `013` and everything after it can run:
+The repair was to backfill the ledger with the nine migrations whose tables were
+verified present in the live schema, leaving `010`–`013` to run on the next
+boot. They are additive and guarded with `IF NOT EXISTS` / `ON CONFLICT`, and
+they created `alert_rules`, `org_tool_rules`, `org_policy_defaults` and the
+self-service user row. Production now logs `[migrate] done`.
 
-```sql
-INSERT INTO _migrations (name) VALUES ('001_init.sql'), … ON CONFLICT DO NOTHING;
-```
+Before repeating this on another database, check which migrations the schema
+already reflects rather than assuming a prefix — the table names in the files do
+not always match the obvious guess (`payment_records`, not `payments`;
+`audit_events`, not `audit_logs`).
 
-That is a production data change and has not been made. Note that 011 and 012
-are uncommitted work in this worktree, so they are not part of what production
-already has.
+What this does not fix: the files still cannot rebuild the schema from empty.
+A database built from them alone lacks `api_keys.role`, `users`, and
+`entitlement_grants`, which is why `staging-reset.sh` copies production's schema
+instead. Disaster recovery still depends on a dump, not on this directory.
 
 ## Maintenance
 
