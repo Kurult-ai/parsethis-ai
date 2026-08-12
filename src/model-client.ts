@@ -36,9 +36,30 @@ export async function callLLM(
  * Full LLM call with messages array - returns content + metadata.
  * Retries on 429 (rate limit) with exponential backoff, up to 3 attempts.
  */
+/**
+ * Sampling for the screening path.
+ *
+ * This ran at `temperature: 0.3` with no seed. Prospect run 8 sent one benign
+ * sentence nine times and got scores from 0.3 to 8.8, including one
+ * `critical / block`, because a sampled severity crossing 7 flips an `llm.*`
+ * flag's action floor from `sandbox` to `block`. A customer cannot argue with
+ * a block they cannot reproduce, and an intermittent block reads as a bug in
+ * their own code — which is exactly how run 8's engineer spent his evening.
+ *
+ * Greedy decoding plus a per-prompt seed is the floor, not the ceiling: the
+ * default model is a mixture-of-experts and expert routing can still vary
+ * under batching. The verdict cache in `screening-cache.ts` is what actually
+ * guarantees a repeated request repeats its answer.
+ */
+export interface Determinism {
+  /** Stable integer derived from the prompt, for providers that honour `seed`. */
+  seed?: number;
+}
+
 export async function callLLMFull(
   messages: Array<{ role: string; content: string }>,
-  model?: string
+  model?: string,
+  determinism?: Determinism,
 ): Promise<LLMResponse> {
   const selectedModel = model || DEFAULT_MODEL;
 
@@ -65,7 +86,11 @@ export async function callLLMFull(
           model: selectedModel,
           messages,
           max_tokens: 2048,
-          temperature: 0.3,
+          // Greedy. A screening verdict is a decision about someone's traffic,
+          // not a piece of writing that benefits from variety.
+          temperature: 0,
+          top_p: 1,
+          ...(determinism?.seed !== undefined ? { seed: determinism.seed } : {}),
         }),
         signal: controller.signal,
       });

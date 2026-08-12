@@ -436,6 +436,7 @@ model Organization {
   egressRules  EgressRule[]
   ssoProviders SSOProvider[]
   toolRules   OrgToolRule[]
+  toolExceptionRequests ToolExceptionRequest[]
   policyDefault OrgPolicyDefault?
   gatewayConfig GatewayConfig?
 
@@ -464,10 +465,73 @@ model OrgToolRule {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt      @map("updated_at")
 
+  /// The approved ExceptionRequest that created this rule, when one did.
+  ///
+  /// A scoped rule may only tighten — that is the property the whole control
+  /// rests on, and it stays true for rules an admin writes by hand. A grant is
+  /// a different object: it exists because a named person asked, a named
+  /// admin approved, and it expires. This column is what separates the two, so
+  /// the resolver can honour a scoped `allow` that carries provenance without
+  /// opening the door to scoped `allow` in general.
+  grantedByRequestId String?   @unique @map("granted_by_request_id")
+  /// When this rule stops applying. Null means it does not expire.
+  expiresAt          DateTime? @map("expires_at")
+
   org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  grantedByRequest ToolExceptionRequest? @relation(fields: [grantedByRequestId], references: [id], onDelete: SetNull)
 
   @@index([orgId, priority], name: "idx_org_tool_rules_org_priority")
+  @@index([expiresAt], name: "idx_org_tool_rules_expires")
   @@map("org_tool_rules")
+}
+
+/// A request from someone who was blocked, to the people who blocked them.
+///
+/// Prospect run 8 measured the two paths open to a governed engineer whose
+/// legitimate integration had just stopped working. Renaming his tool took ten
+/// seconds and worked. Finding the sanctioned path took the whole session and
+/// there wasn't one — the docs said exceptions do not exist, the dry-run was
+/// closed to his role, and the only reason he knew who to email is that the
+/// admin had typed an address into a free-text reason field.
+///
+/// This is the missing object. It starts at the 422, carries the trace id of
+/// the refusal that prompted it, and ends as a scoped, expiring, attributable
+/// grant. The alternative it replaces is not compliance — it is a rename.
+model ToolExceptionRequest {
+  id     String @id @default(cuid())
+  orgId  String @map("org_id")
+
+  /// What is being asked for.
+  tool     String
+  agentId  String? @map("agent_id")
+  /// The screening or registration trace this request came from, so an
+  /// approver can read the exact refusal rather than take the asker's word.
+  traceId  String? @map("trace_id")
+  reason   String
+
+  /// Who asked. Keys are the membership edge today, so this is a key id.
+  requestedByKeyId String  @map("requested_by_key_id")
+  requestedByEmail String? @map("requested_by_email")
+
+  /// pending | approved | denied | withdrawn | expired
+  status String @default("pending")
+
+  /// Who answered, when, and what they said.
+  decidedByKeyId String?   @map("decided_by_key_id")
+  decidedAt      DateTime? @map("decided_at")
+  decisionNote   String?   @map("decision_note")
+  /// How long an approval lasts. Null means it does not expire.
+  expiresAt      DateTime? @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  org         Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  grantedRule OrgToolRule?
+
+  @@index([orgId, status], name: "idx_tool_exception_requests_org_status")
+  @@index([requestedByKeyId], name: "idx_tool_exception_requests_requester")
+  @@map("tool_exception_requests")
 }
 
 /// Org-wide risk tolerance. ScreeningPolicy is per (apiKeyId, environment), so

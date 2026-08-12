@@ -44,8 +44,9 @@ const VALID_FRAMEWORKS = new Set([
 // ─── Helpers ───────────────────────────────────────────────────────────
 
 /**
- * Resolve the orgId for the authenticated API key.
- * If the key has no org, auto-provisions a default organization.
+ * Resolve the orgId for the authenticated API key, or null.
+ *
+ * Deliberately does not create one. See the comment on the null return.
  */
 async function resolveOrgId(apiKeyId: string): Promise<string | null> {
   // Master / demo / x402 synthetic keys — look up or auto-provision
@@ -65,19 +66,12 @@ async function resolveOrgId(apiKeyId: string): Promise<string | null> {
   });
   if (existingOrg) return existingOrg.id;
 
-  // Auto-provision a default org
-  try {
-    const org = await prisma.organization.create({
-      data: {
-        name: "Default Organization",
-        slug: `org-${apiKeyId.slice(-12)}`,
-        ownerId: apiKeyId,
-      },
-    });
-    return org.id;
-  } catch {
-    return null;
-  }
+  // No organization. Registering an agent is a deliberate act, but it is still
+  // not a reason to invent an org: POST /v1/orgs/bootstrap refuses an anonymous
+  // key on the grounds that an organization needs a person to attach to, and
+  // silently creating one here contradicted that in the same codebase. The
+  // caller gets a 403 that names the front door instead.
+  return null;
 }
 
 function isValidStringArray(val: unknown): val is string[] {
@@ -87,6 +81,8 @@ function isValidStringArray(val: unknown): val is string[] {
 export interface BlockedRegistrationTools {
   blockedTools: string[];
   detail: string;
+  /** One entry per rule that refused, with the tools it caught. */
+  rules?: Array<{ reason: string; tools: string[] }>;
 }
 
 /**
@@ -105,11 +101,66 @@ export function findBlockedRegistrationTools(
 ): BlockedRegistrationTools | null {
   const { blocked } = resolveToolList(tools, rules, mode, scope);
   if (blocked.length === 0) return null;
+
+  // Group by the rule that did it. Four blocked tools under one ban used to
+  // repeat the admin's whole reason string four times, producing a
+  // thousand-character `detail` that says one thing. One rule, one sentence,
+  // all its tools named.
+  const byReason = new Map<string, string[]>();
+  for (const d of blocked) {
+    const list = byReason.get(d.reason) ?? [];
+    list.push(d.tool);
+    byReason.set(d.reason, list);
+  }
+
+  const clauses = [...byReason.entries()].map(([reason, toolNames]) => {
+    const quoted = toolNames.map((t) => `"${t}"`).join(", ");
+    return `${quoted} — ${reason}`;
+  });
+
   return {
     blockedTools: blocked.map((d) => d.tool),
-    detail: `Your organization's tool policy blocks ${blocked
-      .map((d) => `"${d.tool}" (${d.reason})`)
-      .join("; ")}`,
+    detail: `Your organization's tool policy blocks ${clauses.join(" Also: ")}`,
+    rules: [...byReason.entries()].map(([reason, toolNames]) => ({ reason, tools: toolNames })),
+  };
+}
+
+/**
+ * What a blocked engineer can actually do next.
+ *
+ * Prospect run 8's refusal was the best error message in the product and it
+ * ended in a dead end: nothing in it, or in the docs, or in any endpoint his
+ * role could reach, named a way to ask for an exception. He renamed his tool
+ * instead, in ten seconds, and the ban never saw it again. This block is the
+ * fix — the sanctioned path, quoted at the exact moment the alternative
+ * becomes tempting, with the trace id already filled in.
+ */
+export function exceptionHelp(
+  blockedTools: string[],
+  opts: { agentId?: string | null; traceId?: string | null } = {},
+): Record<string, unknown> {
+  const tool = blockedTools[0] ?? "the-tool";
+  return {
+    request_an_exception: {
+      detail:
+        "If this capability is the only way your agent can do its job, ask for an exception. " +
+        "An org admin decides, the grant is scoped to your agent alone, and it expires.",
+      method: "POST",
+      url: "/v1/exception-requests",
+      body: {
+        tool,
+        ...(opts.agentId ? { agent_id: opts.agentId } : {}),
+        ...(opts.traceId ? { trace_id: opts.traceId } : {}),
+        reason: "string (required) — what the agent does and why this tool is the only way",
+      },
+    },
+    see_what_else_is_blocked: {
+      detail: "Dry-run your whole tool list before redeploying, rather than one refusal at a time.",
+      method: "POST",
+      url: "/v1/org/tool-policy/test",
+      body: { tools: ["..."] },
+    },
+    my_agents: "/dashboard/my-agents",
   };
 }
 
@@ -216,9 +267,23 @@ agentRegistryRoutes.post("/v1/agents", authMiddleware("evaluate"), async (c) => 
     return problem(c, {
       status: 403,
       title: "Organization required",
-      detail: "An organization is required to register agents. Contact your administrator.",
+      detail:
+        "This key belongs to no organization, and the agent registry is org-scoped. " +
+        "If you are setting up governance for your own team, create one and become its " +
+        "org_admin. If your team already has an organization, an existing org_admin can " +
+        "claim this key into it.",
       code: ErrorCode.AUTH_INSUFFICIENT_SCOPE,
       retryable: false,
+      _help: {
+        create_an_organization: { method: "POST", url: "/v1/orgs/bootstrap", body: { name: "string (required)" } },
+        join_an_existing_one: {
+          detail: "An org_admin runs this against your key id.",
+          method: "POST",
+          url: "/v1/orgs/:orgId/claim-keys",
+          body: { keyIds: ["<this key id>"] },
+        },
+        dashboard: "/dashboard/org",
+      },
     });
   }
 
@@ -236,6 +301,10 @@ agentRegistryRoutes.post("/v1/agents", authMiddleware("evaluate"), async (c) => 
       code: ErrorCode.VALIDATION_INVALID_INPUT,
       retryable: false,
       blocked_tools: registrationBlock.blockedTools,
+      blocked_by: registrationBlock.rules,
+      _help: exceptionHelp(registrationBlock.blockedTools, {
+        agentId: typeof body.name === "string" ? body.name.trim() : null,
+      }),
     });
   }
 
@@ -445,6 +514,8 @@ agentRegistryRoutes.put("/v1/agents/:id", authMiddleware("evaluate"), async (c) 
         code: ErrorCode.VALIDATION_INVALID_INPUT,
         retryable: false,
         blocked_tools: updateBlock.blockedTools,
+        blocked_by: updateBlock.rules,
+        _help: exceptionHelp(updateBlock.blockedTools, { agentId }),
       });
     }
   }

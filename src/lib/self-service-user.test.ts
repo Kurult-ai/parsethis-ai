@@ -23,10 +23,19 @@ const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.met
 describe("self-service sentinel user", () => {
   it("is the id the signup path writes", () => {
     const auth = read("../auth.ts");
+    // The owner is a defaulted parameter rather than a literal at the call
+    // site, so a session-bearing request can pass a real user id. What has to
+    // hold is that the default is the shared constant and that the value is
+    // threaded to the service — not the shape of the call.
     assert.match(
       auth,
-      /createApiKeyFromService\(SELF_SERVICE_USER_ID,/,
-      "createApiKey must own its user id from the shared constant, not a literal",
+      /ownerId:\s*string\s*=\s*SELF_SERVICE_USER_ID/,
+      "createApiKey's owner must default to the shared constant, not a literal",
+    );
+    assert.match(
+      auth,
+      /createApiKeyFromService\(\s*ownerId,/,
+      "the resolved owner must be what reaches the key service",
     );
   });
 
