@@ -42,6 +42,7 @@ import {
 } from "../lib/compliance/alert-rules.js";
 import { getSIEMStatus, checkDestinationHealth } from "../lib/compliance/siem-worker.js";
 import { policyHistoryScope } from "../lib/compliance/policy-history-scope.js";
+import { resolveOrgId } from "../lib/org-scope.js";
 import { requireRole } from "../lib/rbac.js";
 import { serviceDependencyProblem } from "../lib/problem-response.js";
 
@@ -614,7 +615,10 @@ complianceRoutes.get("/v1/compliance/policy-history", authMiddleware("evaluate")
   // The caller's ORGANIZATION, not the caller's key. These are both cuids, so
   // the wrong one returns an empty list instead of an error — which is exactly
   // how every org's audit trail read empty while the rows sat in the table.
-  const scope = policyHistoryScope(await resolveOrgIdForCoverage(apiKey.id));
+  // resolveOrgId, NOT resolveOrgIdForCoverage — the latter falls back to the
+  // API key id when a key has no org, which is how this endpoint read empty in
+  // the first place.
+  const scope = policyHistoryScope(await resolveOrgId(apiKey.id));
   if (!scope.ok) return c.json({ revisions: [], note: scope.note });
 
   try {

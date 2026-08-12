@@ -214,9 +214,23 @@ organizationRoutes.post(
   async (c) => {
     const callerKey = c.get("apiKey");
 
-    const body = await c.req
-      .json<{ name?: string; slug?: string }>()
-      .catch(() => ({}) as { name?: string; slug?: string });
+    type BootstrapBody = { name?: string; slug?: string; tool_policy_mode?: string };
+    const body = await c.req.json<BootstrapBody>().catch(() => ({}) as BootstrapBody);
+
+    // An organization is created to stop something, so the first state of the
+    // control should be a decision rather than an inherited default. Blocklist
+    // stays the default for compatibility, but the caller can say otherwise and
+    // the response says which one they got and what it means.
+    const toolPolicyMode = body.tool_policy_mode ?? "blocklist";
+    if (toolPolicyMode !== "blocklist" && toolPolicyMode !== "allowlist") {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: 'tool_policy_mode must be "blocklist" or "allowlist"',
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
 
     if (!body.name || typeof body.name !== "string" || body.name.trim().length === 0) {
       return problem(c, {
@@ -290,7 +304,13 @@ organizationRoutes.post(
       // caller locked out of the surface they just created.
       org = await prisma.$transaction(async (tx) => {
         const created = await tx.organization.create({
-          data: { name: body.name!.trim(), slug, ownerId: callerKey.id, planTier: "free" },
+          data: {
+            name: body.name!.trim(),
+            slug,
+            ownerId: callerKey.id,
+            planTier: callerKey.tier ?? "free",
+            toolPolicyMode,
+          },
         });
         await tx.apiKey.update({
           where: { id: callerKey.id },
@@ -314,7 +334,41 @@ organizationRoutes.post(
       detail: `Created org "${org.name}" (${org.slug}) and became org_admin`,
     });
 
-    return c.json({ ...org, role: "org_admin" }, 201);
+    return c.json(
+      {
+        ...org,
+        role: "org_admin",
+        tool_policy: {
+          mode: toolPolicyMode,
+          meaning:
+            toolPolicyMode === "blocklist"
+              ? "Every tool is allowed until a rule blocks it. Nothing your teams already run stops working; add bans as you decide them."
+              : "Every tool is blocked until a rule allows it. No agent in this organization may use any tool until you add an allow rule.",
+        },
+        next_steps: [
+          {
+            step: "Ban a capability under every name it ships with",
+            method: "POST",
+            url: "/v1/org/tool-policy/rules",
+            body: { kind: "category", pattern: "browser", action: "block" },
+          },
+          {
+            step: "Dry-run the ban against the tool names your teams actually use",
+            method: "POST",
+            url: "/v1/org/tool-policy/test",
+            body: { tools: ["playwright", "computer_use", "mcp__claude-in-chrome__navigate"] },
+          },
+          {
+            step: "Set a risk tolerance your members cannot loosen",
+            method: "PUT",
+            url: "/v1/org/policy-defaults",
+            body: { autoBlockThreshold: 5, enforcementMode: "block", locked_fields: ["autoBlockThreshold"] },
+          },
+          { step: "Read the panel", method: "GET", url: "/dashboard/org" },
+        ],
+      },
+      201,
+    );
   },
 );
 

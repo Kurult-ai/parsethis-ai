@@ -49,7 +49,9 @@ import { recordActivationEvent, getActivationFunnel, type ActivationEvent } from
 import { renderBillingDashboardPage } from "../pages/billing.js";
 import { renderAgentDashboardPage } from "../pages/agent-dashboard.js";
 import { renderOrgControlPanelPage } from "../pages/org-control-panel.js";
-import { requireRole } from "../lib/rbac.js";
+import { renderOrgGetStartedPage } from "../pages/org-get-started.js";
+import { requireRole, hasRole } from "../lib/rbac.js";
+import { resolveOrgId } from "../lib/org-scope.js";
 import { renderTrustPage } from "../pages/trust-page.js";
 import { renderTrustPackagePage } from "../pages/trust-package.js";
 import { renderDpaPage } from "../pages/dpa.js";
@@ -933,22 +935,48 @@ publicRoutes.get("/dashboard/agents", authMiddleware("evaluate"), async (c) => {
 
 // Org control panel — members, tool rules, org tolerance, violations.
 // Analysts and auditors read; only org_admin sees the mutation controls.
-publicRoutes.get(
-  "/dashboard/org",
-  authMiddleware("evaluate"),
-  requireRole("org_admin", "security_analyst", "auditor"),
-  async (c) => {
-    const baseUrl = getBaseUrl(c);
-    const apiKey = c.get("apiKey");
-    const html = await renderOrgControlPanelPage(
-      baseUrl,
-      apiKey.id,
-      apiKey.name,
-      apiKey.role ?? "developer",
-    );
-    return c.html(html);
-  },
-);
+//
+// The role guard runs INSIDE the handler rather than as middleware, because a
+// key with no organization is not a permissions failure — it is someone who has
+// not created an organization yet, and answering them with a problem+json 403
+// naming three roles they cannot obtain is how this feature stayed invisible to
+// a customer who had already paid for it. Read-only either way: the page offers,
+// POST /v1/orgs/bootstrap provisions.
+publicRoutes.get("/dashboard/org", authMiddleware("evaluate"), async (c) => {
+  const baseUrl = getBaseUrl(c);
+  const apiKey = c.get("apiKey");
+
+  const orgId = await resolveOrgId(apiKey.id).catch(() => null);
+  if (!orgId) {
+    return c.html(renderOrgGetStartedPage(baseUrl, apiKey.id, apiKey.name));
+  }
+
+  if (!hasRole(apiKey, "org_admin", "security_analyst", "auditor")) {
+    return problem(c, {
+      status: 403,
+      title: "Insufficient role",
+      detail:
+        "This panel requires one of the following roles: org_admin, security_analyst, auditor. Your key is in an organization but does not hold one of them.",
+      code: ErrorCode.AUTH_FORBIDDEN_ROLE,
+      retryable: false,
+      required_roles: ["org_admin", "security_analyst", "auditor"],
+      current_role: apiKey.role ?? "developer",
+      org_id: orgId,
+      _help: {
+        ask_an_admin:
+          "An org_admin can change your role: PUT /v1/orgs/:id/members/:keyId/role",
+      },
+    });
+  }
+
+  const html = await renderOrgControlPanelPage(
+    baseUrl,
+    apiKey.id,
+    apiKey.name,
+    apiKey.role ?? "developer",
+  );
+  return c.html(html);
+});
 
 // Trust & Security page
 publicRoutes.get("/trust", (c) => {
@@ -2821,6 +2849,16 @@ publicRoutes.post("/v1/keys/generate", async (c) => {
       created_at: key.created_at,
       expires_at: expiresAt.toISOString(),
       note: "Store this key securely. It will not be shown again in full. Renews automatically while in use; expires after 30 idle days (fails closed with 401). Self-revoke anytime with DELETE /v1/keys/self.",
+      // A key on its own screens prompts. It does not govern anything until it
+      // belongs to an organization, and nothing used to say so — the control
+      // plane was reachable in one request and mentioned on no surface a new
+      // caller reads. No extra query: this is a constant.
+      governance: {
+        detail:
+          "This key belongs to no organization, so org tool rules do not apply to it. Create one to govern which tools your agents may use. Included on every plan.",
+        create_organization: { method: "POST", url: "/v1/orgs/bootstrap" },
+        dashboard: "/dashboard/org",
+      },
     }, 201);
   } catch (err) {
     return keygenProblem(c, classifyKeygenDatabaseFailure(err), err);
