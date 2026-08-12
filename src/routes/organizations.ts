@@ -1169,3 +1169,211 @@ organizationRoutes.get(
     });
   },
 );
+
+// ── Member removal ─────────────────────────────────────────────────────
+//
+// "Dilan resigns on Friday. What do I do on Monday?" had no answer: no member
+// delete route at all, DELETE /v1/keys/:id needs admin scope no customer holds,
+// and demoting a role leaves the key authenticating and screening exactly as
+// before. An org_admin could add members and change roles and never remove one.
+
+type RemovalMode = "revoke" | "release";
+
+/**
+ * What removing a member does to the key.
+ *
+ * `revoke` is the default because offboarding means the key stops working.
+ * `release` exists for the contractor whose key should survive outside the
+ * organization — it leaves the key valid but ungoverned, which is a decision an
+ * admin should have to ask for rather than get by accident.
+ */
+function parseRemovalMode(raw: string | undefined): RemovalMode | null {
+  if (raw === undefined || raw === "" || raw === "revoke") return "revoke";
+  if (raw === "release") return "release";
+  return null;
+}
+
+/** Removing the last org_admin would leave an organization nobody can administer. */
+async function wouldStrandOrg(orgId: string, keyId: string): Promise<boolean> {
+  const admins = await prisma.apiKey.count({
+    where: { orgId, role: "org_admin", revokedAt: null, id: { not: keyId } },
+  });
+  return admins === 0;
+}
+
+organizationRoutes.delete(
+  "/v1/orgs/:id/members/:keyId",
+  authMiddleware("evaluate"),
+  requireRole("org_admin"),
+  requireCsrf(),
+  async (c) => {
+    const orgId = c.req.param("id")!;
+    const keyId = c.req.param("keyId")!;
+    const callerKey = c.get("apiKey");
+
+    const denied = await denyIfNotOwnOrg(c, orgId);
+    if (denied) return denied;
+
+    const mode = parseRemovalMode(c.req.query("mode"));
+    if (!mode) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: 'mode must be "revoke" (default — the key stops working) or "release" (the key keeps working, outside the org).',
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+
+    // Removing yourself locks you out of the organization you administer, and
+    // is almost never what an admin means. Mirrors the self-demotion guard.
+    if (keyId === callerKey.id) {
+      return problem(c, {
+        status: 409,
+        title: "Cannot remove yourself",
+        detail: "You cannot remove the key you are calling with. Ask another org_admin, or remove a different key.",
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+
+    const target = await prisma.apiKey.findFirst({
+      where: { id: keyId, orgId },
+      select: { id: true, name: true, role: true, keyPrefix: true, revokedAt: true },
+    });
+    if (!target) {
+      return problem(c, {
+        status: 404,
+        title: "Not found",
+        detail: "No member key with that id in this organization.",
+        code: ErrorCode.RESOURCE_NOT_FOUND,
+        retryable: false,
+      });
+    }
+
+    if (target.role === "org_admin" && (await wouldStrandOrg(orgId, keyId))) {
+      return problem(c, {
+        status: 409,
+        title: "Last org_admin",
+        detail: "This is the only org_admin key. Promote another member first, or the organization would have nobody who can administer it.",
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+
+    await prisma.apiKey.update({
+      where: { id: keyId },
+      data:
+        mode === "revoke"
+          ? { orgId: null, role: "developer", revokedAt: target.revokedAt ?? new Date() }
+          : { orgId: null, role: "developer" },
+    });
+    await invalidateApiKeyCache(target.keyPrefix).catch(() => {});
+
+    auditLog({
+      action: "member_removed",
+      apiKeyId: callerKey.id,
+      detail: `Removed key "${target.name}" (${keyId}) from org ${orgId} with mode=${mode}`,
+    });
+
+    return c.json({
+      keyId,
+      name: target.name,
+      removed: true,
+      mode,
+      detail:
+        mode === "revoke"
+          ? "The key has been revoked and no longer authenticates."
+          : "The key has left the organization and still works, ungoverned by its rules.",
+    });
+  },
+);
+
+// DELETE /v1/orgs/:id/members/by-user/:userId — offboard a person
+//
+// The panel's own note says one employee holding three keys appears three
+// times. Now that keys carry a real account, an admin can act on the person.
+organizationRoutes.delete(
+  "/v1/orgs/:id/members/by-user/:userId",
+  authMiddleware("evaluate"),
+  requireRole("org_admin"),
+  requireCsrf(),
+  async (c) => {
+    const orgId = c.req.param("id")!;
+    const userId = c.req.param("userId")!;
+    const callerKey = c.get("apiKey");
+
+    const denied = await denyIfNotOwnOrg(c, orgId);
+    if (denied) return denied;
+
+    const mode = parseRemovalMode(c.req.query("mode"));
+    if (!mode) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: 'mode must be "revoke" or "release".',
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+
+    // Only this org's keys. A person's keys in another organization are that
+    // organization's business.
+    const keys = await prisma.apiKey.findMany({
+      where: { orgId, userId },
+      select: { id: true, name: true, role: true, keyPrefix: true },
+    });
+    if (keys.length === 0) {
+      return problem(c, {
+        status: 404,
+        title: "Not found",
+        detail: "That account holds no keys in this organization.",
+        code: ErrorCode.RESOURCE_NOT_FOUND,
+        retryable: false,
+      });
+    }
+
+    if (keys.some((k) => k.id === callerKey.id)) {
+      return problem(c, {
+        status: 409,
+        title: "Cannot remove yourself",
+        detail: "One of that account's keys is the key you are calling with.",
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+
+    const remainingAdmins = await prisma.apiKey.count({
+      where: { orgId, role: "org_admin", revokedAt: null, id: { notIn: keys.map((k) => k.id) } },
+    });
+    if (keys.some((k) => k.role === "org_admin") && remainingAdmins === 0) {
+      return problem(c, {
+        status: 409,
+        title: "Last org_admin",
+        detail: "That account holds the only org_admin key. Promote another member first.",
+        code: ErrorCode.VALIDATION_INVALID_INPUT,
+        retryable: false,
+      });
+    }
+
+    const now = new Date();
+    await prisma.apiKey.updateMany({
+      where: { id: { in: keys.map((k) => k.id) } },
+      data: mode === "revoke" ? { orgId: null, role: "developer", revokedAt: now } : { orgId: null, role: "developer" },
+    });
+    await Promise.all(keys.map((k) => invalidateApiKeyCache(k.keyPrefix).catch(() => {})));
+
+    auditLog({
+      action: "member_offboarded",
+      apiKeyId: callerKey.id,
+      detail: `Offboarded user ${userId} from org ${orgId}: ${keys.length} key(s), mode=${mode}`,
+    });
+
+    return c.json({
+      userId,
+      removed: keys.length,
+      mode,
+      keys: keys.map((k) => ({ id: k.id, name: k.name })),
+    });
+  },
+);

@@ -8,6 +8,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { VALID_ROLES } from "../lib/rbac.js";
 
 import {
   computeRuleExposure,
@@ -21,6 +22,7 @@ import {
   CEILING_FORM_FIELDS,
   type OrgAgentSummary,
   type MemberInput,
+  memberActionsCell,
 } from "./org-control-panel.js";
 import { CEILING_FIELDS } from "../routes/org-policy.js";
 import type { ToolRule } from "../lib/tool-policy.js";
@@ -352,5 +354,35 @@ describe("CEILING_FORM_FIELDS", () => {
     for (const field of CEILING_FORM_FIELDS) {
       assert.ok(field.label.trim().length > 0, `${String(field.key)} has no label`);
     }
+  });
+});
+
+// ── Member management controls ───────────────────────────────────────
+//
+// Offboarding was the question with no answer: no member-delete route, and a
+// panel that displayed an organization it could not administer. These controls
+// are the second lock, not the only one — the API refuses non-admins too.
+
+describe("memberActionsCell", () => {
+  const member = { id: "key_1", role: "developer", name: "dilan-key" };
+
+  it("offers every role the code enforces", () => {
+    const html = memberActionsCell(member);
+    for (const role of VALID_ROLES) assert.ok(html.includes(`value="${role}"`), `missing ${role}`);
+  });
+
+  it("preselects the role the member currently holds", () => {
+    assert.match(memberActionsCell(member), /value="developer" selected/);
+  });
+
+  it("carries the key id both controls need", () => {
+    const html = memberActionsCell(member);
+    assert.equal((html.match(/data-key-id="key_1"/g) ?? []).length, 2);
+  });
+
+  it("escapes a hostile key name rather than interpolating it", () => {
+    const html = memberActionsCell({ ...member, name: '"><script>x()</script>' });
+    assert.ok(!html.includes("<script>x()</script>"));
+    assert.ok(html.includes("&lt;script&gt;"));
   });
 });

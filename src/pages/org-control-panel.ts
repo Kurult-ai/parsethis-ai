@@ -35,6 +35,7 @@ import {
 import { resolveToolList, type ToolPolicyMode, type ToolRule } from "../lib/tool-policy.js";
 import { TOOL_CATEGORIES, getCategory } from "../lib/tool-catalog.js";
 import { SELF_SERVICE_USER_ID } from "../lib/constants.js";
+import { VALID_ROLES } from "../lib/rbac.js";
 import type { ScreeningPolicy } from "../types.js";
 
 // ─── Escaping and formatting ───────────────────────────────────────────
@@ -161,6 +162,26 @@ export function ownerLabel(
   return member.ownerVerified
     ? email
     : `${email} <span class="ocp-sub" title="This address has not been confirmed, so this person cannot create an organization.">unverified</span>`;
+}
+
+/**
+ * The role select and Remove control for one member row.
+ *
+ * Rendered only when the caller is an org_admin, and rendered by *omission* for
+ * everyone else — an auditor's page must not contain a disabled version of a
+ * control they may not use. The API refuses them too; this is the second lock,
+ * not the only one.
+ */
+export function memberActionsCell(member: Pick<MemberRow, "id" | "role" | "name">): string {
+  const options = VALID_ROLES.map(
+    (role) =>
+      `<option value="${escapeHtml(role)}"${role === member.role ? " selected" : ""}>${escapeHtml(role)}</option>`,
+  ).join("");
+
+  return `        <td class="ocp-manage">
+          <select class="ocp-role-select" data-key-id="${escapeHtml(member.id)}" aria-label="Role for ${escapeHtml(member.name)}">${options}</select>
+          <button type="button" class="ocp-member-remove" data-key-id="${escapeHtml(member.id)}" data-key-name="${escapeHtml(member.name)}">Remove</button>
+        </td>`;
 }
 
 /** What a rule matches, in words an operator can check against reality. */
@@ -659,10 +680,11 @@ export async function renderOrgControlPanelPage(
         <td><span class="ocp-role">${escapeHtml(m.role)}</span></td>
         <td class="ocp-mono">${escapeHtml(timeAgo(m.lastUsedAt))}</td>
         <td class="ocp-mono">${escapeHtml(tolerance)}${clampNote ? `<br>${clampNote}` : ""}</td>
+${isAdmin ? memberActionsCell(m) : ""}
       </tr>`;
         })
         .join("\n")
-    : `<tr><td colspan="5" class="ocp-empty">${
+    : `<tr><td colspan="${isAdmin ? 6 : 5}" class="ocp-empty">${
         orgId
           ? "No member keys yet."
           : "This key belongs to no organization, so there is nothing to govern. An org_admin adds it to one."
@@ -844,6 +866,12 @@ export async function renderOrgControlPanelPage(
   .ocp-head h1 { margin:0; font-size:2.1em; }
   .ocp-head .ocp-who { font-family:var(--mono); font-size:12px; color:var(--text-soft); letter-spacing:.08em; }
   .ocp-badge { font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--accent2); background:var(--accent-dim); border-radius:999px; padding:3px 11px; }
+  .ocp-manage { white-space:nowrap; }
+  .ocp-manage select { background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:4px 6px; font-family:var(--mono); font-size:11px; }
+  .ocp-manage button { margin-left:6px; background:transparent; color:var(--text-dim); border:1px solid var(--border); border-radius:6px; padding:4px 9px; font-size:11px; font-family:inherit; cursor:pointer; }
+  .ocp-manage button:hover { color:var(--text); border-color:var(--text-soft); }
+  .ocp-manage button[disabled] { opacity:.5; cursor:default; }
+  .ocp-manage select:focus-visible, .ocp-manage button:focus-visible { outline:2px solid var(--accent, #6366f1); outline-offset:2px; }
   .ocp-zone { margin-top:28px; background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
   .ocp-zone-primary { border-color:var(--border2); }
   .ocp-zone-head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; padding:16px 20px; border-bottom:1px solid var(--border); }
@@ -914,7 +942,7 @@ export async function renderOrgControlPanelPage(
   </div>
   <p class="ocp-note">A member here is an <strong>API key</strong>, not a person. <code>ApiKey.orgId</code> and <code>ApiKey.role</code> are the only membership edge in the schema, so one employee holding three keys appears three times. Per-person identity needs an org member table and is not built yet. The owner column is the account that holds the key: a key created from an account shows that account's email, and a key minted anonymously says so rather than showing a placeholder address.</p>
   <table class="ocp-t">
-    <thead><tr><th>Key</th><th>Owner email</th><th>Role</th><th>Last used</th><th>Effective tolerance</th></tr></thead>
+    <thead><tr><th>Key</th><th>Owner</th><th>Role</th><th>Last used</th><th>Effective tolerance</th>${isAdmin ? "<th>Manage</th>" : ""}</tr></thead>
     <tbody>
 ${memberBody}
     </tbody>
@@ -1090,11 +1118,44 @@ ${readOnlyNote}
         .catch(function (err) { say(err.message); });
     });
   });
+
+${isAdmin ? `  // ── Member management ────────────────────────────────────────────────
+  // Present only for org_admin: these elements do not exist in an analyst's or
+  // auditor's page at all, so there is nothing here for them to bind to.
+  var orgId = document.body.getAttribute('data-org-id');
+
+  Array.prototype.forEach.call(document.querySelectorAll('.ocp-role-select'), function (sel) {
+    sel.addEventListener('change', function () {
+      var keyId = sel.getAttribute('data-key-id');
+      say('Changing role…');
+      send('PUT', '/v1/orgs/' + encodeURIComponent(orgId) + '/members/' + encodeURIComponent(keyId) + '/role', { role: sel.value })
+        .then(function () { say('Role changed. Reloading…'); location.reload(); })
+        .catch(function (err) { say(err.message); });
+    });
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.ocp-member-remove'), function (btn) {
+    btn.addEventListener('click', function () {
+      var keyId = btn.getAttribute('data-key-id');
+      var keyName = btn.getAttribute('data-key-name') || 'this key';
+      // Removing revokes by default: offboarding means the key stops working.
+      if (!window.confirm('Remove "' + keyName + '" from this organization?\\n\\nThe key is revoked and stops authenticating immediately.')) return;
+      btn.disabled = true;
+      say('Removing…');
+      send('DELETE', '/v1/orgs/' + encodeURIComponent(orgId) + '/members/' + encodeURIComponent(keyId))
+        .then(function () { say('Member removed. Reloading…'); location.reload(); })
+        .catch(function (err) { btn.disabled = false; say(err.message); });
+    });
+  });
+` : ""}
 })();
 </script>
 `;
 
   return renderPage({
+    // The client needs the org id for the member-management calls, and it is
+    // not otherwise present in the markup.
+    bodyAttributes: orgId ? `data-org-id="${escapeHtml(orgId)}"` : undefined,
     title: "Org control panel",
     description:
       "Org governance console: member keys and their roles, the tool rules every agent inherits, the org risk tolerance, and recent tool policy violations.",
