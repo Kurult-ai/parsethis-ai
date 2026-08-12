@@ -8,11 +8,18 @@ const { closeQueue } = await import("../queue.js");
 const { disconnectRedis } = await import("../redis.js");
 const { disconnectDb } = await import("../db.js");
 
+// The teardown closes the queue, Redis and the database. A test declared
+// *inside* it registers after the run has ended, which node:test reports as
+// "hook generated asynchronous activity after the test ended" and fails the
+// file — while every assertion in it passes locally. It has been red in CI on
+// this alone; the brace below was in the wrong place.
 after(async () => {
   await closeQueue();
   await disconnectRedis();
   await disconnectDb();
+});
 
+describe("POST /v1/screen-output — request validation", () => {
   it("returns problem+json instead of 500 when context is not a string", async () => {
     const res = await app.request("/v1/screen-output", {
       method: "POST",

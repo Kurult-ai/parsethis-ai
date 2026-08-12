@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 
 const baseUrl = (process.env.PARSE_BASE_URL || "https://www.parsethis.ai").replace(/\/$/, "");
-const requireX402 = process.env.PARSE_SMOKE_REQUIRE_X402
-  ? process.env.PARSE_SMOKE_REQUIRE_X402 !== "false"
-  : !/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(baseUrl);
+// x402 is a deployment choice, not a health property. This used to default to
+// "required" for any non-localhost host, so the smoke asserted enabled === true
+// against a deployment that sets X402_ENABLED=false on purpose — and CI has
+// been red on it. Set PARSE_SMOKE_REQUIRE_X402=true where x402 is expected to
+// be live; otherwise the check below verifies coherence rather than presence.
+const requireX402 = process.env.PARSE_SMOKE_REQUIRE_X402 === "true";
 const apiKey = process.env.PARSE_SMOKE_API_KEY || process.env.PARSE_API_KEY || "";
 
 async function readJson(path, init) {
@@ -37,8 +40,26 @@ checks.push({ path: version.path, status: version.status, ok: true, commit: vers
 
 const pricing = await readJson("/v1/pricing");
 assert(pricing.status === 200, `/v1/pricing status ${pricing.status}`);
-assert(!requireX402 || pricing.json?.enabled === true, "/v1/pricing enabled is not true");
-checks.push({ path: pricing.path, status: pricing.status, ok: true, network: pricing.json?.network_name || pricing.json?.network });
+assert(!requireX402 || pricing.json?.enabled === true, "/v1/pricing enabled is not true (PARSE_SMOKE_REQUIRE_X402=true)");
+// Whether or not x402 is switched on, the endpoint must not advertise a
+// half-configured payment path: enabled with no payTo would take money nowhere.
+if (pricing.json?.enabled === true) {
+  assert(
+    pricing.json?.payTo && pricing.json.payTo !== "not_configured",
+    "/v1/pricing is enabled but payTo is not configured",
+  );
+  assert(
+    pricing.json?.facilitator && pricing.json.facilitator !== "not_configured",
+    "/v1/pricing is enabled but facilitator is not configured",
+  );
+}
+checks.push({
+  path: pricing.path,
+  status: pricing.status,
+  ok: true,
+  x402_enabled: pricing.json?.enabled === true,
+  network: pricing.json?.network_name || pricing.json?.network,
+});
 
 const openapi = await readJson("/openapi.json");
 assert(openapi.status === 200, `/openapi.json status ${openapi.status}`);
