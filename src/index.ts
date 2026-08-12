@@ -6,6 +6,7 @@ import { cleanup } from "./auth.js";
 import { disconnectDb } from "./db.js";
 import { getRedis, disconnectRedis } from "./redis.js";
 import { runMigrations } from "./migrate.js";
+import { ensureSelfServiceUser } from "./lib/self-service-user.js";
 import { runSemanticPreflight } from "./lib/semantic-preflight.js";
 
 // ── Deployment identity ──────────────────────────────────────────────────
@@ -60,14 +61,27 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
 // container start, and a slow/unreachable database should degrade DB-backed routes
 // rather than taking down public docs/pricing pages. Set MIGRATIONS_REQUIRED=true
 // for strict one-shot migration jobs.
-void runMigrations().catch((err) => {
-  console.error(`[migrate] startup migration failed: ${(err as Error).message}`);
-  if (process.env.MIGRATIONS_REQUIRED === "true") {
-    shutdown("MIGRATIONS_REQUIRED");
-  } else {
-    console.warn("[migrate] continuing startup with degraded database-dependent routes");
-  }
-});
+void runMigrations()
+  .catch((err) => {
+    console.error(`[migrate] startup migration failed: ${(err as Error).message}`);
+    if (process.env.MIGRATIONS_REQUIRED === "true") {
+      shutdown("MIGRATIONS_REQUIRED");
+    } else {
+      console.warn("[migrate] continuing startup with degraded database-dependent routes");
+    }
+  })
+  // Deliberately after the catch, so it runs whether or not migrations
+  // succeeded — a half-migrated database is exactly when this row goes missing.
+  // Not only in the migration file either: a database built with `prisma db
+  // push` never runs the SQL migrations at all. This row is what stands between
+  // a paying customer and a key that cannot be upgraded, and one idempotent
+  // upsert on a fixed id is cheap enough to pay for on every boot.
+  .then(() =>
+    ensureSelfServiceUser().catch((err) => {
+      console.error(`[startup] could not ensure the self-service user: ${(err as Error).message}`);
+      console.warn("[startup] signup keys will fall back to Redis and checkout cannot grant a tier");
+    }),
+  );
 
 // Ask the model provider, once, whether it will actually answer us — and say
 // so in the log. The semantic layer has twice been silently dead in production

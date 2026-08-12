@@ -65,6 +65,22 @@ billingWebhookRoute.post("/v1/billing/webhook", async (c) => {
         const stripeCustomerId = session.customer as string;
         const stripeSubscriptionId = session.subscription as string;
 
+        // The customer has already been charged by the time this arrives, so a
+        // key we cannot find is a paid-for plan nobody will receive. Name it in
+        // the log — the generic catch below reports only the exception message,
+        // and a foreign-key violation here reads as an empty string.
+        const keyExists = await prisma.apiKey.findUnique({ where: { id: apiKeyId }, select: { id: true } });
+        if (!keyExists) {
+          console.error(
+            `[billing] PAID BUT NOT GRANTED: no api_keys row for ${apiKeyId} (tier=${tier}, `
+            + `customer=${stripeCustomerId}, subscription=${stripeSubscriptionId}). `
+            + (apiKeyId.startsWith("redis_")
+              ? "This key was issued by the Redis fallback and cannot be upgraded; grant the tier manually."
+              : "Grant the tier manually."),
+          );
+          return c.json({ error: "API key not found for completed checkout" }, 500);
+        }
+
         // Fetch subscription to get period info and price
         const stripe = getStripe();
         const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);

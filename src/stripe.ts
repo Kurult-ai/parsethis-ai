@@ -81,7 +81,7 @@ export async function createCheckoutSession(apiKeyId: string, tier: PaidTier, ba
     const url = new URL("https://stripe.mock/checkout/session");
     url.searchParams.set("client_reference_id", apiKeyId);
     url.searchParams.set("tier", tier);
-    url.searchParams.set("success_url", `${baseUrl}/dashboard/billing?session_id={CHECKOUT_SESSION_ID}`);
+    url.searchParams.set("success_url", `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`);
     url.searchParams.set("cancel_url", `${baseUrl}/pricing`);
     return url.toString();
   }
@@ -97,7 +97,7 @@ export async function createCheckoutSession(apiKeyId: string, tier: PaidTier, ba
     line_items: [{ price: priceId, quantity: 1 }],
     client_reference_id: apiKeyId,
     metadata: { apiKeyId, tier },
-    success_url: `${baseUrl}/dashboard/billing?session_id={CHECKOUT_SESSION_ID}`,
+    success_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${baseUrl}/pricing`,
   });
   return session.url!;
