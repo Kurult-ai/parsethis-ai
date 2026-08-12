@@ -29,6 +29,7 @@ import { getOrgToolPolicy, invalidateOrgToolPolicy } from "../lib/tool-policy-st
 import { resolveToolList, resolveToolDecision, type ToolAction, type ToolPolicyMode, type ToolRule, type ToolScope } from "../lib/tool-policy.js";
 import { TOOL_CATEGORIES, getCategory } from "../lib/tool-catalog.js";
 import { explainInertRule } from "../lib/tool-policy-inert.js";
+import { listUnclassifiedTools, dismissUnclassifiedTool } from "../lib/unclassified-tools.js";
 
 export const toolPolicyRoutes = new Hono<AppEnv>();
 
@@ -653,6 +654,66 @@ toolPolicyRoutes.get(
           }
         : { expand: "Add ?expand=1 for the full match set behind each category." }),
     });
+  },
+);
+
+// ─── GET /v1/org/tool-policy/unclassified — the review queue ───────────
+//
+// Tool names an org's agents declare that no category and no rule recognises.
+// The catalog cannot be extended to cover names nobody outside the company has
+// ever seen — prospect run 8 walked a `category: browser` ban by declaring
+// `portal_reader`, which is simply what the engineer had called his internal
+// wrapper. Noticing scales where guessing does not.
+
+toolPolicyRoutes.get(
+  "/v1/org/tool-policy/unclassified",
+  authMiddleware("evaluate"),
+  requireRole("org_admin", "security_analyst", "auditor"),
+  async (c) => {
+    const apiKey = c.get("apiKey");
+    let orgId: string | null;
+    try {
+      orgId = await resolveOrgId(apiKey.id);
+    } catch (err) {
+      return serviceDependencyProblem(c, err);
+    }
+    if (!orgId) return orgRequired(c, "read unclassified tools");
+
+    const tools = await listUnclassifiedTools(orgId);
+    return c.json({
+      tools,
+      count: tools.length,
+      ...(tools.length > 0
+        ? {
+            note:
+              "These names matched no catalog category and no rule, so no decision has ever been " +
+              "made about them. Ban one with an exact rule, or leave it — but it is no longer " +
+              "invisible. Switching the org to allowlist mode blocks unknown names by default.",
+          }
+        : {}),
+    });
+  },
+);
+
+// ─── DELETE /v1/org/tool-policy/unclassified/:tool — dismiss ───────────
+
+toolPolicyRoutes.delete(
+  "/v1/org/tool-policy/unclassified/:tool",
+  authMiddleware("evaluate"),
+  requireRole("org_admin"),
+  requireCsrf(),
+  async (c) => {
+    const apiKey = c.get("apiKey");
+    let orgId: string | null;
+    try {
+      orgId = await resolveOrgId(apiKey.id);
+    } catch (err) {
+      return serviceDependencyProblem(c, err);
+    }
+    if (!orgId) return orgRequired(c, "dismiss an unclassified tool");
+
+    const removed = await dismissUnclassifiedTool(orgId, c.req.param("tool")!);
+    return c.json({ dismissed: removed });
   },
 );
 

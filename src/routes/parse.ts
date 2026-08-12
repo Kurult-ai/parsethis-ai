@@ -21,6 +21,7 @@ import { autoRegisterAgentFromScreening } from "../lib/agent-auto-register.js";
 import { extractAgentId } from "../lib/agent-id.js";
 import { exceptionHelp } from "./agent-registry.js";
 import { recordUnclassifiedTools } from "../lib/unclassified-tools.js";
+import { recordToolRefusals } from "../lib/tool-refusals.js";
 import { unknownTopLevelFieldWarnings } from "../lib/request-warnings.js";
 import { recordToolPolicyCheckFailure } from "../lib/tool-policy-health.js";
 import { recordScreening } from "../lib/compliance/coverage-attestation.js";
@@ -876,6 +877,11 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
           // The moment the workaround becomes tempting is the moment to name
           // the sanctioned path — with the trace id already filled in, so
           // filing costs one paste rather than a hunt for who to email.
+          void recordToolRefusals(
+            apiKey.id,
+            blocked.map((d) => ({ tool: d.tool, reason: d.reason, agentId: orgScopeAgentId })),
+            "screening",
+          );
           toolPolicyReport._help = exceptionHelp(
             blocked.map((d) => d.tool),
             { agentId: orgScopeAgentId, traceId: (result as { trace_id?: string; id?: string }).trace_id ?? result.id },

@@ -77,6 +77,18 @@ Three-layer defense:
 2. **LLM Analysis** — Semantic risk scoring via `llmRiskAnalysis()` with nonce-tagged delimiters, multi-window sampling, model diversity
 3. **Sandbox Execution** — Isolated execution via `src/lib/sandbox-client.ts` with HMAC auth, SSRF-guarded URL prefetch, DOM-aware hidden content extraction
 
+**A verdict must be reproducible.** The semantic layer ran at `temperature: 0.3`
+with no seed, and prospect run 8 sent one benign sentence nine times for scores
+of 0.3 to 8.8 — including one `critical / block`, because a sampled severity
+crossing 7 flips an `llm.*` flag's `action_floor` from `sandbox` to `block`. A
+block nobody can reproduce is indistinguishable from a bug and gets treated as
+one. Three changes hold the line: greedy sampling with a per-prompt `seed`; a
+15-minute verdict cache (`src/lib/screening-cache.ts`) keyed on prompt, model,
+mode and policy mode, surfaced as `determinism` on the response; and an
+LLM-only reading may no longer hard-floor a block without the deterministic
+pattern layer having fired too. `riskScore >= 7` still blocks on the combined
+judgement — what changed is that one sample's opinion cannot floor it alone.
+
 ### Trust Verification (`src/lib/trust-verification/`)
 6-layer agent trust pipeline:
 - `orchestrator.ts` — Input validation + scoring coordination
@@ -141,6 +153,19 @@ Two org-wide controls sit above the per-key policy. Both follow the same rule:
 a narrower scope may **tighten** the org result and never loosen it, mirroring
 `DelegationChain`, where a child may restrict its parent's grant but never
 expand it.
+
+**One exception, and it is an object rather than a loophole.** A scoped `allow`
+carrying `grantedByRequestId` came from an approved `ToolExceptionRequest` and
+does override an org block, until `expiresAt`. Prospect run 8 measured why: a
+governed engineer with a legitimate need for a banned capability had no
+sanctioned path at all, and renaming his tool took ten seconds. The only
+exception an admin could actually grant was org-wide, which re-admitted the
+agent that caused the incident she wrote the rule for. `POST
+/v1/exception-requests` is open to `developer`; `org_admin` decides; the grant
+is scoped to the requesting agent, expires in 90 days by default, and records
+who asked and who approved. A scoped `allow` written by hand still cannot
+loosen — and is now refused at write time (422 naming the dominating rule)
+rather than stored inert at priority 999.
 
 **Tool rules** (`OrgToolRule`) decide which connectors, plugins and MCP servers
 an org's agents may use. A rule matches by catalog category, exact name, or name
@@ -213,10 +238,37 @@ otherwise a governed member could create a second org and move their agents
 there to escape the first one's rules. The guard is
 `checkBootstrapEligibility()`, kept pure so that rule is unit-tested.
 
-Known gap: a key with no org that opens `/dashboard/org` gets the raw 403 from
-`requireRole`, not a page explaining how to create one. The nav links to it from
-the agent and compliance dashboards, so that is a visible dead end until the
-route renders a get-started state.
+`/dashboard/my-agents` is the surface for the person a control is *done to*
+rather than the one administering it: what is blocked, which rule did it, who
+to ask, and the state of their exception requests. Every role reaches it,
+including `developer`, and an in-org non-admin who opens `/dashboard/org` is
+redirected there instead of being handed raw problem+json.
+
+`src/lib/governance-surface.ts` exempts governance paths from the per-key rate
+limit. The limit meters screening, which is what the plans sell; reading the
+rules you are bound by, dry-running a tool list, or filing an exception request
+are none of those, and metering them makes the sanctioned path slower than the
+workaround. An admin could also 429 halfway through writing the rules.
+
+**Two things that looked governed and were not**, both closed:
+`agent_id` at the top level of a screening body disabled the freeze,
+agent-scoped rules, data governance, volume budgets and coverage — silently, on
+a 200 — because seven call sites read `body.metadata?.agent_id` directly while
+`extractAgentId` accepted both placements. All of them now use
+`src/lib/agent-id.ts`, and a misplaced or unknown top-level field returns a
+`warnings` entry. And the tool-policy check still fails open, but no longer
+silently: the response carries `tool_policy.evaluated: false` with
+`reason: "check_failed"` and the failure is counted per org.
+
+`recordAgentCall()` existed and was called from nowhere, so `coverage_pct` was
+structurally always 100 or 0 for every organization that ever used it. The
+gateway now writes the denominator; without one configured, `coverage_pct` is
+`null` with a stated reason rather than a number that cannot come out below
+100. Relatedly, screening calls carrying an `agent_id` used to auto-create an
+`Organization` named "Default Organization" — a side door contradicting the
+careful 403 `POST /v1/orgs/bootstrap` gives the same key. Both auto-provision
+sites are gone; `scripts/cleanup-orphan-orgs.sql` clears the rows already
+written.
 
 ## Brand & Claims Enforcement
 

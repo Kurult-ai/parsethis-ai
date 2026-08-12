@@ -27,6 +27,7 @@ import {
 } from "../lib/compliance/delegation-chain.js";
 import { getOrgToolPolicy } from "../lib/tool-policy-store.js";
 import { resolveToolList } from "../lib/tool-policy.js";
+import { recordToolRefusals } from "../lib/tool-refusals.js";
 import type { ToolPolicyMode, ToolRule, ToolScope } from "../lib/tool-policy.js";
 
 export const agentRegistryRoutes = new Hono<AppEnv>();
@@ -294,6 +295,13 @@ agentRegistryRoutes.post("/v1/agents", authMiddleware("evaluate"), async (c) => 
     apiKeyId: apiKey.id,
   });
   if (registrationBlock) {
+    void recordToolRefusals(
+      apiKey.id,
+      (registrationBlock.rules ?? []).flatMap((r) =>
+        r.tools.map((t) => ({ tool: t, reason: r.reason, agentId: body.name?.trim() ?? null })),
+      ),
+      "registration",
+    );
     return problem(c, {
       status: 422,
       title: "Tool blocked by org policy",
@@ -507,6 +515,13 @@ agentRegistryRoutes.put("/v1/agents/:id", authMiddleware("evaluate"), async (c) 
       agentId,
     });
     if (updateBlock) {
+      void recordToolRefusals(
+        apiKey.id,
+        (updateBlock.rules ?? []).flatMap((r) =>
+          r.tools.map((t) => ({ tool: t, reason: r.reason, agentId })),
+        ),
+        "registration",
+      );
       return problem(c, {
         status: 422,
         title: "Tool blocked by org policy",
@@ -1030,6 +1045,37 @@ agentRegistryRoutes.get(
 
       const policy = await getEffectivePolicy(agentId);
 
+      // The org tool policy belongs in "effective policy".
+      //
+      // This endpoint used to return the agent's declared tools and an
+      // enforcement mode and say nothing about what the org had banned. It was
+      // the only 200 prospect run 8's blocked engineer got out of eight
+      // attempts, and it omitted the single fact he was looking for. An
+      // endpoint named for the effective policy has to include the part doing
+      // the blocking.
+      let toolDecisions: Array<Record<string, unknown>> = [];
+      let blockedNow: string[] = [];
+      if (orgId) {
+        try {
+          const { mode, rules } = await getOrgToolPolicy(orgId);
+          const resolved = resolveToolList(policy.tools, rules, mode, {
+            agentId,
+            apiKeyId: apiKey.id,
+            role: apiKey.role,
+          });
+          toolDecisions = resolved.decisions.map((d) => ({
+            tool: d.tool,
+            action: d.action,
+            why: d.reason,
+            decided_by: d.source,
+            rule_id: d.matchedRule?.id ?? null,
+          }));
+          blockedNow = resolved.blocked.map((d) => d.tool);
+        } catch (err) {
+          console.error("[agent-registry] effective tool policy failed:", (err as Error).message);
+        }
+      }
+
       return c.json({
         agent_id: policy.agentId,
         root_agent_id: policy.rootAgentId,
@@ -1038,6 +1084,15 @@ agentRegistryRoutes.get(
         enforcement_mode: policy.enforcementMode,
         inherited_grants: policy.inheritedGrants,
         depth: policy.depth,
+        org_tool_policy: {
+          decisions: toolDecisions,
+          blocked: blockedNow,
+          ...(blockedNow.length > 0
+            ? {
+                _help: exceptionHelp(blockedNow, { agentId }),
+              }
+            : {}),
+        },
       });
     } catch (err) {
       console.error("[agent-registry] effective-policy error:", (err as Error).message);

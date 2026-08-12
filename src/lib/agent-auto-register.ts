@@ -80,6 +80,24 @@ export async function autoRegisterAgentFromScreening(
       ? body.metadata!.data_classification!
       : [];
 
+    // `agent_id` is a name in this field, but callers routinely send the
+    // registry id — it is what every other endpoint takes, and the 422 quotes
+    // one back at them. Creating a second, "discovered" agent named after the
+    // first one's id puts a ghost duplicate on the owner's dashboard and
+    // splits that agent's coverage across two rows. If the value resolves to a
+    // real agent in this org, touch it instead.
+    const byId = await prisma.agentRegistry.findFirst({
+      where: { id: agentId, orgId },
+      select: { id: true },
+    });
+    if (byId) {
+      await prisma.agentRegistry.update({
+        where: { id: byId.id },
+        data: { lastSeenAt: new Date() },
+      });
+      return;
+    }
+
     // Upsert by (orgId, agentName) — if the agent already exists, leave it as-is.
     // Only create on first discovery.
     await prisma.agentRegistry.upsert({

@@ -160,7 +160,9 @@ change. Included on every plan, Free upward.
 - Create one and become its org_admin: POST ${baseUrl}/v1/orgs/bootstrap with {"name":"Your Org"}. Requires a key owned by an account with a confirmed email — an anonymously generated key is refused.
 - Ban a capability under every name it ships with: POST ${baseUrl}/v1/org/tool-policy/rules with {"kind":"category","pattern":"browser","action":"block"}. That one rule decides browser_use, playwright, computer_use and the mcp__* names.
 - Dry-run before you commit: POST ${baseUrl}/v1/org/tool-policy/test with {"tools":["playwright","send_email"]}.
-- Configure one agent without touching the rest: GET/PUT ${baseUrl}/v1/orgs/:id/agents/:agentId. A rule scoped to one agent may only tighten the org result; there is no way to grant an exception.
+- Configure one agent without touching the rest: GET/PUT ${baseUrl}/v1/orgs/:id/agents/:agentId. A rule you write by hand may only tighten the org result, and one that would change nothing is refused at write time rather than stored inert.
+- Grant a scoped exception when someone has a legitimate need: they POST ${baseUrl}/v1/exception-requests, an org_admin approves with PUT ${baseUrl}/v1/exception-requests/:id. The approval creates a rule scoped to that one agent, carrying who asked, who approved, and an expiry — the only thing in Parse permitted to loosen an org-wide ban.
+- See names no category recognises: GET ${baseUrl}/v1/org/tool-policy/unclassified. A closed name list cannot cover a company's internal wrappers, so unknown names are surfaced for review rather than guessed at.
 - Set a ceiling members inherit: PUT ${baseUrl}/v1/org/policy-defaults. A locked field returns 422 on a member's write rather than clamping silently.
 - Prove it: GET ${baseUrl}/v1/compliance/policy-history returns who changed which rule, when, and what it was before.
 - Enforce without trusting self-declaration: POST ${baseUrl}/v1/gateway/configure, then send OpenAI-compatible calls to ${baseUrl}/v1/gateway/chat/completions. The gateway reads the tools array off the wire, so an agent that declares nothing to the registry is still governed.
@@ -174,6 +176,9 @@ change. Included on every plan, Free upward.
 - Org governance (tool rules, roles, ceiling, audit trail) is included on every plan, including Free. Tiers differ on volume, rate limit, SIEM forwarding and evidence packs.
 - Org roles: org_admin, security_analyst, auditor, developer.
 - A tool ban is enforced at three points: agent registration (422 on a declared tool), screening (reads metadata.tool_permissions or body.tools), and the org gateway (reads the tools array off the wire, so it does not depend on the agent declaring anything).
+- Blocked by an org rule? The 422 and the screening response both carry an _help block naming POST ${baseUrl}/v1/exception-requests with the trace id filled in. Reading the rules, dry-running a tool list and filing a request are open to every role and are not rate limited.
+- ${baseUrl}/dashboard/my-agents is the page for someone governed by an org rather than administering one: what is blocked, who decided it, and the state of their exception requests.
+- agent_id is read from metadata.agent_id or the top level of the body. Both work; misplacing it used to disable the agent freeze silently.
 - Risk taxonomy: ${DETECTION_FACTS.riskCategoryCount} categories (${riskCategoryList()}).
 - Detection pipeline: deterministic pattern matching, structural risk analysis, optional LLM semantic analysis, and optional sandbox execution.
 - Pattern rules: ${DETECTION_FACTS.patternRuleCount} deterministic rules in the hosted detector.
@@ -759,6 +764,99 @@ discoveryRoutes.get("/openapi.json", (c) => {
             },
           },
           responses: { "200": { description: "Mode updated" }, "403": { description: "Requires org_admin" } },
+        },
+      },
+      "/v1/exception-requests": {
+        post: {
+          operationId: "createToolExceptionRequest",
+          summary: "Ask for an exception to a tool ban",
+          description:
+            "The route from a refusal to a decision. Open to every role including `developer` — the person who needs this is the one who can do nothing else in the org. An approved request creates a rule scoped to the requesting agent alone, carrying provenance and an expiry, and that is the only thing in Parse permitted to loosen an org-wide ban. Returns 409 if the tool is not actually blocked for you.",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["tool", "reason"],
+                  properties: {
+                    tool: { type: "string", description: "Exactly as it appeared in blocked_tools on the refusal." },
+                    agent_id: { type: "string", description: "Scopes the grant to one agent. Without it the grant is scoped to your key." },
+                    trace_id: { type: "string", description: "The trace of the refusal, so the approver can read it rather than take your word." },
+                    reason: { type: "string", description: "What the agent does and why the banned capability is the only way. The approver reads this." },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Request filed; the response names your org's admins" },
+            "409": { description: "Already allowed, or an identical request is already open" },
+          },
+        },
+        get: {
+          operationId: "listToolExceptionRequests",
+          summary: "My exception requests, or the org queue",
+          description:
+            "A developer sees their own requests. org_admin, security_analyst and auditor see the whole organization's.",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "status", in: "query", schema: { type: "string", enum: ["pending", "approved", "denied", "withdrawn"] } }],
+          responses: { "200": { description: "Requests" } },
+        },
+      },
+      "/v1/exception-requests/{id}": {
+        get: {
+          operationId: "getToolExceptionRequest",
+          summary: "One exception request",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "The request" }, "404": { description: "Not in your organization" } },
+        },
+        put: {
+          operationId: "decideToolExceptionRequest",
+          summary: "Approve, deny, or withdraw",
+          description:
+            "approve and deny require org_admin. withdraw is for the person who filed it. Approving mints the scoped, expiring grant; the default expiry is 90 days and the maximum is 365.",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["action"],
+                  properties: {
+                    action: { type: "string", enum: ["approve", "deny", "withdraw"] },
+                    note: { type: "string", description: "Quoted back to the requester." },
+                    expires_in_days: { type: "integer", minimum: 1, maximum: 365, default: 90 },
+                  },
+                },
+              },
+            },
+          },
+          responses: { "200": { description: "Decided" }, "409": { description: "Already decided" } },
+        },
+      },
+      "/v1/org/tool-policy/unclassified/{tool}": {
+        delete: {
+          operationId: "dismissUnclassifiedTool",
+          summary: "Dismiss a reviewed tool name",
+          description: "Removes one entry from the review list, once an admin has classified or banned it.",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "tool", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Dismissed" }, "403": { description: "Requires org_admin" } },
+        },
+      },
+      "/v1/org/tool-policy/unclassified": {
+        get: {
+          operationId: "listUnclassifiedTools",
+          summary: "Tool names no category recognises",
+          description:
+            "Names an org's agents declare that match no catalog category and no rule, so no decision has ever been made about them. A closed name list cannot cover a company's internal wrappers; this makes the unknown ones visible instead of guessing at them.",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Review list" } },
         },
       },
       "/v1/org/tool-policy/rules": {
