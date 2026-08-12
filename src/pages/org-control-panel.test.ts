@@ -23,6 +23,7 @@ import {
   type OrgAgentSummary,
   type MemberInput,
   memberActionsCell,
+  describeRevisionDiff,
 } from "./org-control-panel.js";
 import { CEILING_FIELDS } from "../routes/org-policy.js";
 import type { ToolRule } from "../lib/tool-policy.js";
@@ -384,5 +385,62 @@ describe("memberActionsCell", () => {
     const html = memberActionsCell({ ...member, name: '"><script>x()</script>' });
     assert.ok(!html.includes("<script>x()</script>"));
     assert.ok(html.includes("&lt;script&gt;"));
+  });
+});
+
+// ── Policy history ───────────────────────────────────────────────────
+//
+// The revisions were always written correctly and never readable: the API
+// scoped its query by the caller's key id against a column holding org ids, and
+// the panel had no history zone at all.
+
+describe("describeRevisionDiff", () => {
+  it("reads the { old, new } shape computeDiff actually writes", () => {
+    const lines = describeRevisionDiff({
+      autoBlockThreshold: { old: null, new: 5 },
+      enforcementMode: { old: "monitor", new: "block" },
+    });
+    assert.ok(lines.includes("autoBlockThreshold: — → 5"));
+    assert.ok(lines.includes("enforcementMode: monitor → block"));
+  });
+
+  it("also reads { from, to }, so a future writer does not vanish silently", () => {
+    assert.deepEqual(describeRevisionDiff({ enforcementMode: { from: "warn", to: "block" } }), [
+      "enforcementMode: warn → block",
+    ]);
+  });
+
+  it("summarises a tool rule instead of printing [object Object]", () => {
+    const lines = describeRevisionDiff({
+      rules: { old: [], new: [{ kind: "category", pattern: "browser", action: "block", scope_type: null, scope_id: null }] },
+    });
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /block browser \(category\), whole org/);
+    assert.ok(!lines[0].includes("[object Object]"));
+  });
+
+  it("names the scope when a rule targets one agent", () => {
+    const lines = describeRevisionDiff({
+      rules: { old: [], new: [{ kind: "exact", pattern: "playwright", action: "block", scope_type: "agent", scope_id: "ag_1" }] },
+    });
+    assert.match(lines[0], /agent ag_1/);
+  });
+
+  it("renders booleans as on and off, and empty arrays as none", () => {
+    assert.deepEqual(describeRevisionDiff({ bypassEnabled: { old: true, new: false } }), [
+      "bypassEnabled: on → off",
+    ]);
+    assert.deepEqual(describeRevisionDiff({ locked_fields: { old: [], new: ["autoBlockThreshold"] } }), [
+      "locked_fields: none → autoBlockThreshold",
+    ]);
+  });
+
+  it("drops a field whose value did not actually change", () => {
+    assert.deepEqual(describeRevisionDiff({ enforcementMode: { old: "block", new: "block" } }), []);
+  });
+
+  it("survives a null or malformed diff rather than throwing", () => {
+    assert.deepEqual(describeRevisionDiff(null), []);
+    assert.deepEqual(describeRevisionDiff({ weird: null } as never), []);
   });
 });

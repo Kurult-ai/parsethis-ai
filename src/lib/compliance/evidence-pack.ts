@@ -82,38 +82,48 @@ function normaliseFramework(raw: string): FrameworkId {
 // ─── Main entry point ─────────────────────────────────────────────────────
 
 export async function generateEvidencePack(
-  orgId: string,
+  apiKeyId: string,
   frameworkRaw: string,
   dateFrom: Date,
   dateTo: Date,
+  /**
+   * The caller's ORGANIZATION, when they have one. Screening and audit events
+   * belong to a key; policy revisions and the agent registry belong to an
+   * organization. This parameter used to be called `orgId` and was passed a key
+   * id, so the pack reported "0 policy changes" and zero agents for every
+   * organization that has ever existed — the same conflation that made
+   * GET /v1/compliance/policy-history read empty.
+   */
+  orgId?: string | null,
 ): Promise<EvidencePack> {
   const framework = normaliseFramework(frameworkRaw);
 
   // ── Gather evidence from all data sources in parallel ──
   const [screenings, auditEvents, policyRevisions, agents] = await Promise.all([
     prisma.screeningEvent.findMany({
-      where: { apiKeyId: orgId, createdAt: { gte: dateFrom, lte: dateTo } },
+      where: { apiKeyId, createdAt: { gte: dateFrom, lte: dateTo } },
       orderBy: { createdAt: "asc" },
     }),
     prisma.auditEvent.findMany({
-      where: { apiKeyId: orgId, createdAt: { gte: dateFrom, lte: dateTo } },
+      where: { apiKeyId, createdAt: { gte: dateFrom, lte: dateTo } },
       orderBy: { createdAt: "asc" },
     }),
     // PolicyRevision table may not exist yet — use raw query, swallow errors
-    prisma.$queryRawUnsafe(
-      `SELECT * FROM policy_revisions WHERE org_id = $1 AND created_at >= $2 AND created_at <= $3 ORDER BY created_at ASC`,
-      orgId,
-      dateFrom,
-      dateTo,
-    )
-      .then((r) => r as unknown[])
-      .catch(() => [] as unknown[]),
-    prisma.$queryRawUnsafe(
-      `SELECT * FROM agent_registry WHERE org_id = $1`,
-      orgId,
-    )
-      .then((r) => r as unknown[])
-      .catch(() => [] as unknown[]),
+    orgId
+      ? prisma.$queryRawUnsafe(
+          `SELECT * FROM policy_revisions WHERE org_id = $1 AND created_at >= $2 AND created_at <= $3 ORDER BY created_at ASC`,
+          orgId,
+          dateFrom,
+          dateTo,
+        )
+          .then((r) => r as unknown[])
+          .catch(() => [] as unknown[])
+      : Promise.resolve([] as unknown[]),
+    orgId
+      ? prisma.$queryRawUnsafe(`SELECT * FROM agent_registry WHERE org_id = $1`, orgId)
+          .then((r) => r as unknown[])
+          .catch(() => [] as unknown[])
+      : Promise.resolve([] as unknown[]),
   ]);
 
   // ── Build summary ──

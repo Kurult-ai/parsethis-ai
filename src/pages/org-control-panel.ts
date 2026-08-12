@@ -393,6 +393,84 @@ export function violationVerdictLabel(blocked: boolean): string {
   return blocked ? "blocked" : "would block";
 }
 
+/** The panel shows a working window, not the whole history; the API has the rest. */
+const REVISION_LIMIT = 20;
+
+export interface PolicyRevisionRow {
+  id: string;
+  version: number;
+  changedBy: string;
+  changeReason: string | null;
+  /**
+   * computeDiff writes { field: { old, new } } — see src/lib/policy-revision.ts.
+   * from/to is tolerated on read so a future writer using the other spelling
+   * renders rather than vanishing.
+   */
+  diff: Record<string, { old?: unknown; new?: unknown; from?: unknown; to?: unknown }> | null;
+  createdAt: Date;
+}
+
+/**
+ * A policy change in the words an auditor needs: which field, what it was, what
+ * it became. `diff` is written by createPolicyRevision as { field: { from, to } }.
+ *
+ * A revision with no readable diff still renders — "recorded, no field-level
+ * diff" is a true statement about the record, and silently dropping the row
+ * would understate how many changes were made.
+ */
+export function describeRevisionDiff(diff: PolicyRevisionRow["diff"]): string[] {
+  if (!diff || typeof diff !== "object") return [];
+  const out: string[] = [];
+  for (const [field, raw] of Object.entries(diff)) {
+    if (!raw || typeof raw !== "object") continue;
+    // computeDiff writes { old, new }. from/to is accepted too so a future
+    // writer using the other spelling renders instead of silently vanishing.
+    const change = raw as { old?: unknown; new?: unknown; from?: unknown; to?: unknown };
+    const before = formatRevisionValue("old" in change ? change.old : change.from);
+    const after = formatRevisionValue("new" in change ? change.new : change.to);
+    if (before === after) continue;
+    out.push(`${field}: ${before} → ${after}`);
+  }
+  return out;
+}
+
+function formatRevisionValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "boolean") return value ? "on" : "off";
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "none";
+    // A tool-policy snapshot stores whole rule objects. Joining those printed
+    // "[object Object]" at an auditor, which is worse than saying less.
+    return value
+      .map((entry) => (typeof entry === "object" && entry !== null ? summariseRule(entry) : String(entry)))
+      .join("; ");
+  }
+  if (typeof value === "object") return summariseRule(value);
+  return String(value);
+}
+
+/**
+ * One rule in a sentence: "block browser (category), whole org".
+ *
+ * Snapshots are serialised with snake_case scope fields while the in-memory
+ * ToolRule uses camelCase, so read both — printing "[object Object]" at an
+ * auditor is worse than printing less.
+ */
+function summariseRule(value: object): string {
+  const rule = value as {
+    action?: unknown; kind?: unknown; pattern?: unknown;
+    scopeType?: unknown; scopeId?: unknown; scope_type?: unknown; scope_id?: unknown;
+  };
+  if (rule.action && rule.pattern) {
+    const scopeType = rule.scopeType ?? rule.scope_type;
+    const scopeId = rule.scopeId ?? rule.scope_id;
+    const scope = scopeType && scopeId ? `${scopeType} ${scopeId}` : "whole org";
+    return `${rule.action} ${rule.pattern} (${rule.kind ?? "?"}), ${scope}`;
+  }
+  const json = JSON.stringify(value);
+  return json.length > 90 ? `${json.slice(0, 90)}…` : json;
+}
+
 // ─── Read helpers (read-only) ──────────────────────────────────────────
 
 /**
@@ -485,6 +563,8 @@ export async function renderOrgControlPanelPage(
     agentId: string | null;
   }> = [];
   let violationTotal = 0;
+  let revisions: PolicyRevisionRow[] = [];
+  let revisionTotal = 0;
 
   // The product default a key with no stored policy runs under. Imported
   // lazily so this page module stays free of the route graph.
@@ -617,6 +697,35 @@ export async function renderOrgControlPanelPage(
       ceiling = await getOrgPolicyCeiling(orgId);
     } catch {
       ceiling = null;
+    }
+
+    // Policy history. Every rule, mode and tolerance change is versioned with a
+    // before, an after, an author and the admin's own reason string — and until
+    // now none of it was readable anywhere, because the API scoped the query by
+    // the caller's key id against a column holding organization ids.
+    try {
+      const rows = await prisma.policyRevision.findMany({
+        where: { orgId },
+        orderBy: { createdAt: "desc" },
+        take: REVISION_LIMIT,
+        select: { id: true, version: true, changedBy: true, changeReason: true, diff: true, createdAt: true },
+      });
+      revisions = rows.map((r) => ({
+        id: r.id,
+        version: r.version,
+        changedBy: r.changedBy,
+        changeReason: r.changeReason,
+        diff: r.diff as PolicyRevisionRow["diff"],
+        createdAt: r.createdAt,
+      }));
+    } catch {
+      revisions = [];
+    }
+
+    try {
+      revisionTotal = await prisma.policyRevision.count({ where: { orgId } });
+    } catch {
+      revisionTotal = revisions.length;
     }
 
     try {
@@ -841,6 +950,25 @@ ${isAdmin ? memberActionsCell(m) : ""}
 
   // ─── Zone 4: Violations ──────────────────────────────────────────────
 
+  const revisionBody = revisions.length
+    ? revisions
+        .map((r) => {
+          const changes = describeRevisionDiff(r.diff);
+          const detail = changes.length
+            ? changes.map((c) => `<div class="ocp-sub">${escapeHtml(c)}</div>`).join("")
+            : `<span class="ocp-sub">recorded, no field-level diff</span>`;
+          return `<tr>
+        <td class="ocp-mono">v${r.version}</td>
+        <td>${r.changeReason ? escapeHtml(r.changeReason) : '<span class="ocp-sub">no reason given</span>'}${detail}</td>
+        <td class="ocp-mono ocp-dim">${escapeHtml(r.changedBy)}</td>
+        <td class="ocp-mono">${escapeHtml(timeAgo(r.createdAt))}</td>
+      </tr>`;
+        })
+        .join("\n")
+    : `<tr><td colspan="4" class="ocp-empty">${
+        orgId ? "No policy changes recorded yet." : "This key belongs to no organization."
+      }</td></tr>`;
+
   const violationBody = violations.length
     ? violations
         .map((v) => {
@@ -1013,6 +1141,21 @@ ${violationBody}
     </tbody>
   </table>
   <p class="ocp-note">Under the <code>monitor</code> dial the pipeline runs and records a verdict without stopping anything, so those rows read "would block" — the enforcement did not happen.</p>
+</section>
+
+<!-- ═══ Zone 5 · Policy history ═══ -->
+<section class="ocp-zone">
+  <div class="ocp-zone-head">
+    <h2>Policy history</h2><span class="ocp-meta">WHO CHANGED WHAT</span>
+    <span class="ocp-right">${revisionTotal > 0 ? `${revisionTotal.toLocaleString("en-US")} recorded${revisions.length < revisionTotal ? ` · showing ${revisions.length}` : ""}` : "no data yet"}</span>
+  </div>
+  <table class="ocp-t">
+    <thead><tr><th>Version</th><th>Change</th><th>By</th><th>When</th></tr></thead>
+    <tbody>
+${revisionBody}
+    </tbody>
+  </table>
+  <p class="ocp-note">Every tool rule, mode and tolerance change is versioned with a before and an after. The full history, including changes older than the ${REVISION_LIMIT} shown here, is at <code>GET /v1/compliance/policy-history</code> and in your evidence export.</p>
 </section>
 ${readOnlyNote}
 

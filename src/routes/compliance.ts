@@ -278,6 +278,7 @@ complianceRoutes.post("/v1/compliance/export", authMiddleware("evaluate"), requi
       framework,
       dateFrom,
       dateTo,
+      await resolveOrgId(apiKey.id),
     );
 
     // Store export record (best effort — table might not exist yet)
