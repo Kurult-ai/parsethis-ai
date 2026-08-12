@@ -7,7 +7,7 @@ import { auditLog } from "../lib/audit-log.js";
 import { formatBypassPolicy, hashBypassCodeword } from "../lib/bypass-codeword.js";
 import { serviceDependencyProblem } from "../lib/problem-response.js";
 import { createPolicyRevision, snapshotFromScreeningPolicy, computeDiff } from "../lib/policy-revision.js";
-import { clampedFields } from "../lib/org-policy-ceiling.js";
+import { clampedFields, clampReport } from "../lib/org-policy-ceiling.js";
 import { getOrgPolicyCeiling } from "../lib/org-policy-store.js";
 import {
   validateRule,
@@ -332,9 +332,18 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
   // ceiling merely tightens are allowed through — auth.ts applies the
   // tighten-only merge at read time. Fails open, because a governance lookup
   // failure must not block a policy write.
+  // Held outside the try so the success response can report what the ceiling
+  // did to this write, and so the audit revision can be written against the
+  // caller's organization. A lookup failure leaves both null and the response
+  // simply says nothing, which is the same fail-open posture as the check.
+  let orgCeiling: Awaited<ReturnType<typeof getOrgPolicyCeiling>> | null = null;
+  let callerOrgId: string | null = null;
+
   try {
     const keyRow = await prisma.apiKey.findUnique({ where: { id: apiKey.id }, select: { orgId: true } });
+    callerOrgId = keyRow?.orgId ?? null;
     const ceiling = keyRow?.orgId ? await getOrgPolicyCeiling(keyRow.orgId) : null;
+    orgCeiling = ceiling;
     const locked = ceiling?.lockedFields ?? [];
     if (ceiling && locked.length > 0) {
       const submitted = { ...(c.get("policy") ?? DEFAULT_POLICY), ...updateData } as ScreeningPolicy;
@@ -415,18 +424,35 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
     });
 
     // Create a PolicyRevision row capturing old→new snapshots and diff
+    // `policy_revisions.org_id` carries a foreign key to organizations, so
+    // passing the API key id here violated it on every single write — the
+    // helper swallowed the error and the change went unaudited. A key outside
+    // any organization has no org-scoped trail to write to, so skip cleanly
+    // rather than failing on every request.
     const newPolicySnapshot = snapshotFromScreeningPolicy(policy);
-    await createPolicyRevision(
-      apiKey.id,
-      oldPolicySnapshot,
-      newPolicySnapshot,
-      apiKey.id,
-      changeReason,
-    );
+    if (callerOrgId) {
+      await createPolicyRevision(
+        callerOrgId,
+        oldPolicySnapshot,
+        newPolicySnapshot,
+        apiKey.id,
+        changeReason ?? `Key policy updated (${environment})`,
+      );
+    }
 
     // Advisory for production
     const warnings = environment === "production" ? await getDashboardAdvisory(apiKey.id, environment) : [];
-    return c.json({ ...formatPolicyResponse(policy, tier), ...(warnings.length > 0 ? { advisory: warnings } : {}) });
+
+    // Report what is in force, not what was asked for. A field the org tightens
+    // is stored as written and clamped on every read; answering with the stored
+    // value told an employee they were in monitor mode at threshold 9 while the
+    // engine ran block at 5.
+    const report = clampReport(policy as unknown as ScreeningPolicy, orgCeiling);
+    return c.json({
+      ...formatPolicyResponse(report.effective as typeof policy, tier),
+      ...(report.org_clamped ? { org_clamped: report.org_clamped } : {}),
+      ...(warnings.length > 0 ? { advisory: warnings } : {}),
+    });
   } catch (err) {
     console.error("[policy] PUT error:", (err as Error).message);
     return serviceDependencyProblem(c, err);

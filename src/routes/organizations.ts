@@ -422,7 +422,31 @@ organizationRoutes.post(
     // cross-tenant theft, pulling that org's key, its agents and its screening
     // history into this one. Harmless while the route required admin scope;
     // not harmless now that an org_admin can reach it.
-    const claimable = claimableKeyFilter(callerKey.scopes?.includes("admin") ?? false, orgId);
+    const isAdminScoped = callerKey.scopes?.includes("admin") ?? false;
+    const claimable = claimableKeyFilter(isAdminScoped, orgId);
+
+    // A key that belongs to someone else is REFUSED, not quietly skipped. The
+    // old response lumped "already yours", "does not exist" and "belongs to a
+    // rival org" into one 200 reading `claimed: 0`, so an admin trying to pull
+    // back a key that had escaped into another organization was told there was
+    // nothing to do. Correctly refused; reported as a no-op.
+    if (!isAdminScoped) {
+      const requested = await prisma.apiKey.findMany({
+        where: { id: { in: body.keyIds } },
+        select: { id: true, orgId: true },
+      });
+      const foreign = requested.filter((k) => k.orgId && k.orgId !== orgId);
+      if (foreign.length > 0) {
+        return problem(c, {
+          status: 409,
+          title: "Key belongs to another organization",
+          detail: `${foreign.length} of the keys you asked for already belong to a different organization. Only an admin-scoped caller may migrate a key between organizations.`,
+          code: ErrorCode.VALIDATION_INVALID_INPUT,
+          retryable: false,
+          conflicting_key_ids: foreign.map((k) => k.id),
+        });
+      }
+    }
 
     const keysToUpdate = await prisma.apiKey.findMany({
       where: {
@@ -436,7 +460,7 @@ organizationRoutes.post(
       return c.json({
         orgId,
         claimed: 0,
-        message: "No keys needed claiming (all already belong to this org or not found)",
+        message: "No keys needed claiming — they already belong to this organization, or no key with those ids exists.",
         rescopeSummary: { screeningEvents: 0, auditEvents: 0, agentRegistry: 0 },
       });
     }
