@@ -25,10 +25,23 @@
  */
 
 import { createHash } from "node:crypto";
-import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
+import { getRedis, isRedisAvailable, ensureRedisConnected, isRedisConfigured } from "../redis.js";
 
-/** Long enough to cover a retry, a redeploy and an argument. Short enough that a model change lands within the hour. */
-const TTL_SECONDS = 15 * 60;
+/**
+ * How long a verdict stays reproducible.
+ *
+ * 15 minutes covered a retry and an argument. It does not cover an audit: an
+ * enterprise asking "why was this prompt blocked on Tuesday" needs the same
+ * answer on Wednesday, and a model that is non-deterministic under batching
+ * will not give it to them. 24 hours is the default, overridable per
+ * deployment.
+ *
+ * A long TTL is safe here because the key already carries everything that
+ * decides the answer — prompt, model, mode, policy mode — plus a VERSION that
+ * must be bumped whenever the rubric changes. Changing the model changes the
+ * key; changing the prompt changes the key. Nothing goes stale silently.
+ */
+const TTL_SECONDS = Number(process.env.SCREENING_CACHE_TTL_SECONDS || 24 * 60 * 60);
 
 const VERSION = "v1";
 
@@ -65,8 +78,13 @@ export function cacheKey(d: CacheDimensions): string {
  * Never throws. A cache that can fail a request is worse than no cache.
  */
 export async function getCachedVerdict<T>(d: CacheDimensions): Promise<T | null> {
-  if (!isRedisAvailable()) return null;
+  if (!isRedisConfigured()) return null;
   try {
+    // The guard above asks whether Redis is *configured*, not whether a client
+    // exists yet: it reports false until the
+    // client singleton exists, and ensureRedisConnected() is what creates it.
+    // Gating on it made this cache silently inert on every cold process — which
+    // is exactly when a verdict most needs to be stable.
     if (!(await ensureRedisConnected())) return null;
     const raw = await getRedis().get(cacheKey(d));
     if (!raw) return null;
@@ -79,7 +97,7 @@ export async function getCachedVerdict<T>(d: CacheDimensions): Promise<T | null>
 
 /** Remember a semantic reading. Fire and forget; never throws. */
 export async function setCachedVerdict(d: CacheDimensions, value: unknown): Promise<void> {
-  if (!isRedisAvailable()) return;
+  if (!isRedisConfigured()) return;
   try {
     if (!(await ensureRedisConnected())) return;
     await getRedis().set(cacheKey(d), JSON.stringify(value), "EX", TTL_SECONDS);

@@ -16,7 +16,7 @@
  * bit you" list, not an org-wide audit. The audit trail already exists.
  */
 
-import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
+import {getRedis, ensureRedisConnected, isRedisConfigured } from "../redis.js";
 
 const TTL_SECONDS = 14 * 24 * 60 * 60;
 const MAX_ENTRIES = 25;
@@ -41,8 +41,7 @@ export async function recordToolRefusals(
   where: "registration" | "screening",
 ): Promise<void> {
   if (!apiKeyId || !Array.isArray(refusals) || refusals.length === 0) return;
-  if (!isRedisAvailable()) return;
-
+  if (!isRedisConfigured()) return;
   try {
     if (!(await ensureRedisConnected())) return;
     const redis = getRedis();
@@ -87,7 +86,7 @@ export async function recordToolRefusals(
 
 /** Recent refusals for this key, newest first. */
 export async function listToolRefusals(apiKeyId: string): Promise<ToolRefusal[]> {
-  if (!apiKeyId || !isRedisAvailable()) return [];
+  if (!apiKeyId || !isRedisConfigured()) return [];
   try {
     if (!(await ensureRedisConnected())) return [];
     const raw = await getRedis().lrange(key(apiKeyId), 0, MAX_ENTRIES);
@@ -108,7 +107,7 @@ export async function listToolRefusals(apiKeyId: string): Promise<ToolRefusal[]>
 
 /** Clear the list — used once an exception is granted and the tool works. */
 export async function clearToolRefusal(apiKeyId: string, tool: string): Promise<void> {
-  if (!apiKeyId || !isRedisAvailable()) return;
+  if (!apiKeyId || !isRedisConfigured()) return;
   try {
     if (!(await ensureRedisConnected())) return;
     const redis = getRedis();

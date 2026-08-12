@@ -35,32 +35,56 @@ plan_manifest:
 
 # Semantic acquittal release — third attempt
 
-> **Status (2026-08-12):** Phases 0 and 1 complete. **Phase 2 is built and is
-> NOT finished — it is blocked on a reproducibility failure described below.**
-> Phases 3 and 4 not started. The feature ships **off**: `semanticAcquittal`
-> defaults false in `ScreeningPolicy`, the route sets it server-side from org
-> policy only, and both `undefined` and `false` were verified to block the
-> motivating payload. Nothing in production behaves differently.
+> **Status (2026-08-12):** Phases 0, 1 and 2 complete. Phases 3 and 4 not
+> started. The feature ships **off**: `semanticAcquittal` defaults false, the
+> route sets it server-side from org policy only, and the motivating payload was
+> verified still blocking with the flag unset and with it explicitly false.
+> Production is unchanged.
 >
-> **Why Phase 2 is not done.** The mechanism works and the guards hold — 45
-> tests, every bypass in Appendix B closed, `eval:screening` unchanged, and a
-> dedicated reviewer that scored **8 of 8** on the discrimination the general
-> rubric gets backwards. But the live bench **flaps between runs on identical
-> input**: the general analyst is non-deterministic, and whether it emits an
-> `llm.*` flag with a block floor decides whether the release is attempted at
-> all (`another_flag_floors_block`). Two consecutive runs gave 1 and 3 failures
-> over the same 13 rows.
+> **The live bench is 13/13 and reproducible** — six legitimate payloads
+> release, seven attacks block including the benchmark payload attempt 2
+> released, byte-identical across consecutive runs. `eval:screening` holds every
+> metric at 1.00.
 >
-> A security control whose outcome is not reproducible is the class of defect
-> that got the two previous attempts reverted. It does not go to adversarial
-> review in this state.
+> **Two root causes were found and fixed to get there, and neither was in this
+> feature.**
 >
-> **The next decision is a design one and belongs to Phase 3, not to whoever is
-> holding the keyboard:** either stabilise the general analyst's contribution
-> (the verdict cache does this in the server, where Redis is present, but only
-> within its 15-minute window), or exclude `llm.*` block floors from the
-> release precondition. The second is a real weakening with security
-> consequences and must not be decided unilaterally.
+> 1. **The verdict cache was silently inert on every cold process.**
+>    `isRedisAvailable()` reports false until the client singleton exists, and
+>    `ensureRedisConnected()` is what creates it — so gating on the former before
+>    calling the latter meant the cache never ran until something else happened
+>    to connect. Every module written today had the same bug. Fixed; TTL raised
+>    from 15 minutes to 24 hours, because an enterprise asking "why was this
+>    blocked on Tuesday" needs the same answer on Wednesday.
+> 2. **The corroboration rule contained a closed loop.** An `llm.*` flag could
+>    hard-floor a block if any deterministic flag had fired — including the
+>    releasable override flags themselves. So the override flags authorised the
+>    analyst's block, and the analyst's block then prevented releasing those same
+>    override flags. Measured consequence: a battery-at-8% dock recall stayed
+>    blocked because the analyst called it a jailbreak, and the analyst was only
+>    allowed to say so because the override detectors had fired on the same
+>    words. Corroboration now requires a *non-releasable* deterministic signal.
+>    `eval:screening` confirms this costs no recall: the analyst can still cause
+>    a block through the score, it just cannot floor one on a circular warrant.
+>
+> **What "reproducible" means here, stated precisely for an audit.** The model is
+> non-deterministic under batching even at temperature 0 with a seed. The
+> guarantee is therefore: *the first observation of a given prompt is
+> authoritative, and every identical request repeats it for 24 hours.* The cache
+> key carries prompt, model, mode, policy mode and a rubric VERSION, so nothing
+> goes stale silently — changing the model or the rubric changes the key. That is
+> memoisation, not determinism, and the distinction belongs in any claim made to
+> a customer.
+>
+> **One decision for Phase 3 that must not pass without scrutiny.** `llm.*` flags
+> now neither corroborate nor veto a release. A general-analyst allegation of
+> privilege escalation on a prompt the dedicated reviewer clears will be
+> released. The justification is measurement — the general rubric scored a dock
+> recall `["jailbreak","prompt_injection"]` at 8 and a canonical injection
+> `["none"]` at 1, while the dedicated reviewer scored 8/8 — but it is a real
+> transfer of authority between two detectors and it is exactly the kind of
+> reasoning that looked sound in both reverted attempts. **Reviewers should start
+> here.**
 >
 > **Created:** 2026-08-12
 > **Supersedes:** `2026-08-11-post-review-remediation.md` Phase 4, which holds the

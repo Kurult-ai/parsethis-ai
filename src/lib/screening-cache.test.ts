@@ -95,8 +95,13 @@ describe("verdict stability", () => {
     const parse = read("../parse.ts");
     assert.match(
       parse,
-      /llmMayFloorBlock = maxPatternSeverity > 0/,
-      "corroboration means the deterministic layer also saw something",
+      /llmMayFloorBlock = activeFlags\.some\(/,
+      "corroboration means a deterministic detector also saw something",
+    );
+    assert.match(
+      parse,
+      /!\(f\.id && RELEASABLE_FLAG_IDS\.has\(f\.id\)\) && f\.severity > 0/,
+      "and it must exclude the releasable override flags, or the warrant is circular",
     );
     assert.match(
       parse,

@@ -257,11 +257,10 @@ export function evaluateAcquittal(input: AcquittalInput): AcquittalDecision {
   // override changes nothing — and reporting `released: true` on a request that
   // still blocks is a lie in the response body. Refuse rather than claim.
   //
-  // This is the conservative reading and it bounds the feature honestly: it
-  // fixes false positives caused by the override detectors, and does not
-  // attempt to fix false positives caused by the general analyst mis-scoring
-  // benign override language. That is a real and separate defect — see the
-  // bench rows marked `general_analyst_false_positive`.
+  // This is the conservative reading: the release claims the override flags are
+  // false positives on this prompt, and claims nothing about any other signal.
+  // If something else independently floors a block, that is its own reason and
+  // this feature does not overrule it.
   // Any *deterministic* signal in a cancel category holds the block.
   //
   // Note what is excluded: `llm.*` flags. The general screening analyst is shut

@@ -26,7 +26,7 @@
  * not affect a screening verdict.
  */
 
-import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
+import {getRedis, ensureRedisConnected, isRedisConfigured } from "../redis.js";
 import { categoriesForTool } from "./tool-catalog.js";
 import type { ToolRule } from "./tool-policy.js";
 import { normalizeToolName } from "./tool-catalog.js";
@@ -69,7 +69,7 @@ export async function recordUnclassifiedTools(
   agentId?: string | null,
 ): Promise<void> {
   if (!orgId || !Array.isArray(tools) || tools.length === 0) return;
-  if (!isRedisAvailable()) return;
+  if (!isRedisConfigured()) return;
 
   const unknown = tools.filter((t) => isUnclassified(t, rules));
   if (unknown.length === 0) return;
@@ -114,7 +114,7 @@ export async function recordUnclassifiedTools(
 
 /** The review list, most recently seen first. */
 export async function listUnclassifiedTools(orgId: string): Promise<UnclassifiedTool[]> {
-  if (!orgId || !isRedisAvailable()) return [];
+  if (!orgId || !isRedisConfigured()) return [];
   try {
     if (!(await ensureRedisConnected())) return [];
     const raw = await getRedis().hgetall(key(orgId));
@@ -137,7 +137,7 @@ export async function listUnclassifiedTools(orgId: string): Promise<Unclassified
 
 /** Drop one entry, once an admin has classified or banned it. */
 export async function dismissUnclassifiedTool(orgId: string, tool: string): Promise<boolean> {
-  if (!orgId || !tool || !isRedisAvailable()) return false;
+  if (!orgId || !tool || !isRedisConfigured()) return false;
   try {
     if (!(await ensureRedisConnected())) return false;
     const removed = await getRedis().hdel(key(orgId), normalizeToolName(tool));

@@ -13,6 +13,7 @@ import {
 import { normalizeForDetection } from "./lib/patterns/normalize.js";
 import { calculateRiskScore } from "./lib/scoring.js";
 import {
+  RELEASABLE_FLAG_IDS,
   evaluateAcquittal,
   acquittalPreconditions,
   buildReleaseRecord,
@@ -670,6 +671,21 @@ function computeRecommendedAction(
 async function acquittalReview(prompt: string): Promise<AcquittalReview | null> {
   const nonce = crypto.randomUUID().slice(0, 12);
   const configured = (process.env.ANALYSIS_MODEL || "").split(",")[0]?.trim() || undefined;
+
+  // Cached on the same terms as the main verdict. A release that is not
+  // reproducible is not auditable, and this call decides whether a request is
+  // refused — the last place that should turn on a coin flip. `mode` is the
+  // literal string rather than the request's, so an acquittal review can never
+  // collide with a main-analyst verdict for the same prompt.
+  const dims: CacheDimensions = {
+    prompt,
+    model: configured ?? "default",
+    mode: "acquittal-review",
+    policyMode: "n/a",
+  };
+  const cached = await getCachedVerdict<AcquittalReview>(dims);
+  if (cached) return cached;
+
   try {
     const res = await llmCall(
       [
@@ -686,11 +702,13 @@ async function acquittalReview(prompt: string): Promise<AcquittalReview | null> 
         const parsed = JSON.parse(matches[i]);
         if (parsed.nonce !== nonce) continue;
         if (typeof parsed.risk_score !== "number" || !Array.isArray(parsed.categories)) continue;
-        return {
+        const review: AcquittalReview = {
           score: Math.max(0, Math.min(10, Number(parsed.risk_score) || 0)),
           categories: parsed.categories,
           model: configured ?? "default",
         };
+        void setCachedVerdict(dims, review);
+        return review;
       } catch {
         continue;
       }
@@ -828,10 +846,20 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
       llmVerdictCached = llmAttempt.cached === true;
 
       // Corroboration: has anything other than this one model reading also seen
-      // a problem? A pattern hit of any weight counts, because the pattern layer
-      // is deterministic — the same prompt produces the same hit every time, so
-      // a block resting on it is reproducible and arguable.
-      llmMayFloorBlock = maxPatternSeverity > 0;
+      // a problem? A deterministic hit of any weight counts, because the pattern
+      // layer is reproducible — the same prompt produces the same hit every
+      // time, so a block resting on it is arguable.
+      //
+      // Releasable override flags are excluded, and that exclusion is
+      // load-bearing. Counting them closes a loop with no evidence in it: the
+      // override flags corroborate the analyst's block floor, and the analyst's
+      // block floor then prevents releasing those same override flags. Measured
+      // consequence — a battery-at-8% dock recall stayed blocked because the
+      // analyst called it a jailbreak, and the analyst was allowed to say so
+      // only because the override detectors had fired on the same words.
+      llmMayFloorBlock = activeFlags.some(
+        (f) => f.source !== "llm" && !(f.id && RELEASABLE_FLAG_IDS.has(f.id)) && f.severity > 0,
+      );
 
       // LLM can only ADD new flags that RAISE severity — never lower the score
       // Only add categories the LLM found that patterns didn't, and only if the

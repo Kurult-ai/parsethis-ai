@@ -12,7 +12,7 @@
  * failure on top of the first.
  */
 
-import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
+import {getRedis, ensureRedisConnected, isRedisConfigured } from "../redis.js";
 import { prisma } from "../db.js";
 
 const TTL_SECONDS = 90 * 24 * 60 * 60;
@@ -27,7 +27,7 @@ function redisKey(orgId: string, day: string): string {
 
 /** Record one failed tool-policy evaluation for the org holding this key. */
 export async function recordToolPolicyCheckFailure(apiKeyId: string): Promise<void> {
-  if (!apiKeyId || !isRedisAvailable()) return;
+  if (!apiKeyId || !isRedisConfigured()) return;
   try {
     const key = await prisma.apiKey.findUnique({
       where: { id: apiKeyId },
@@ -54,7 +54,7 @@ export async function getToolPolicyCheckFailures(
   const daily: Array<{ date: string; failed: number }> = [];
   let total = 0;
 
-  if (!orgId || !isRedisAvailable() || !(await ensureRedisConnected())) {
+  if (!orgId || !isRedisConfigured() || !(await ensureRedisConnected())) {
     return { total: 0, daily };
   }
 

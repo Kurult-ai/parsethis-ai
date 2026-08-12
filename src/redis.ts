@@ -62,6 +62,23 @@ export function isRedisAvailable(): boolean {
   return redis !== null && redis.status !== "end";
 }
 
+/**
+ * Whether Redis is *configured* for this process, as opposed to whether a
+ * client happens to have been created yet.
+ *
+ * `isRedisAvailable()` answers the second question — it is false until
+ * `getRedis()` has run — and callers that gated on it before calling
+ * `ensureRedisConnected()` (which is what creates the client) silently did
+ * nothing on every cold process. That made the screening verdict cache inert
+ * exactly when a verdict most needs to be reproducible.
+ *
+ * Gating on this instead keeps the fast path for deployments with no Redis at
+ * all, without disabling the cache on a cold start in deployments that have it.
+ */
+export function isRedisConfigured(): boolean {
+  return Boolean(process.env.REDIS_URL) || isRedisAvailable();
+}
+
 export async function ensureRedisConnected(): Promise<boolean> {
   const client = redis ?? getRedis();
   if (client.status === "ready") return true;
