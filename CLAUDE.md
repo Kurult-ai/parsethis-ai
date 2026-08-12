@@ -181,6 +181,19 @@ Members are API keys, not users: `ApiKey.orgId` + `ApiKey.role` is the only
 membership edge. Per-employee identity needs an `OrgMember` join table and is
 not built. See `docs/org-tool-governance-plan.md`.
 
+Both controls are org-scoped, and a fresh key belongs to no org.
+`POST /v1/orgs/bootstrap` lets an unaffiliated key create one and become its
+`org_admin`; `POST /v1/orgs` still requires `admin` scope and provisions on
+someone else's behalf. **A key that already belongs to an org is refused** —
+otherwise a governed member could create a second org and move their agents
+there to escape the first one's rules. The guard is
+`checkBootstrapEligibility()`, kept pure so that rule is unit-tested.
+
+Known gap: a key with no org that opens `/dashboard/org` gets the raw 403 from
+`requireRole`, not a page explaining how to create one. The nav links to it from
+the agent and compliance dashboards, so that is a visible dead end until the
+route renders a get-started state.
+
 ## Brand & Claims Enforcement
 
 `docs/brand-guidelines.md` is the binding brand document and `docs/style-guide.md` is the visual-system source of truth (Event Horizon theme: tokens, typography, atmosphere tiers) (positioning: agent

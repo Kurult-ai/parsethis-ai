@@ -628,6 +628,27 @@ Two org-wide controls let an administrator set what their teams' agents may do,
 rather than trusting each agent to declare it. Both are managed from
 `/dashboard/org` or the API below, and both are audited.
 
+### First, get an organization
+
+Both controls are scoped to an organization, and a new API key belongs to none.
+Create one — the key that calls this becomes its `org_admin`:
+
+```bash
+curl -X POST https://www.parsethis.ai/v1/orgs/bootstrap \
+  -H "Authorization: Bearer pfa_live_yourkey" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Acme Health"}'
+```
+
+A key may belong to only one organization, so calling this from a key that is
+already a member returns 403 naming the org it is in. That restriction is the
+point: without it, a member could create a second organization and move their
+agents there to escape the first one's rules. To add colleagues' existing keys,
+an admin uses `POST /v1/orgs/:id/claim-keys`.
+
+`POST /v1/orgs` still exists for provisioning on someone else's behalf and
+requires an admin-scoped key.
+
 ### Controlling which tools agents may use
 
 The common case is banning a capability outright — for example, a company that

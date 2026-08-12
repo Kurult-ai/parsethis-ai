@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../auth.js";
 import { prisma } from "../db.js";
-import { problem, ErrorCode } from "../lib/problem-response.js";
+import { problem, ErrorCode, serviceDependencyProblem } from "../lib/problem-response.js";
 import { auditLog } from "../lib/audit-log.js";
 import { invalidateApiKeyCache } from "../result-store.js";
 import { requireRole, VALID_ROLES, type Role } from "../lib/rbac.js";
@@ -118,6 +118,147 @@ organizationRoutes.post(
     });
 
     return c.json(org, 201);
+  },
+);
+
+/**
+ * Who may bootstrap their own organization. Pure so the rule can be tested
+ * without a database — it is the only thing standing between org tool rules
+ * and a governed employee creating an ungoverned org to escape them.
+ */
+export type BootstrapGate =
+  | { ok: true }
+  | { ok: false; reason: "no_record" | "already_in_org"; orgId?: string };
+
+export function checkBootstrapEligibility(
+  record: { orgId: string | null } | null | undefined,
+): BootstrapGate {
+  // Synthetic keys (master, demo, x402, Redis fallback) have no row to own an
+  // organization with; those callers use POST /v1/orgs.
+  if (!record) return { ok: false, reason: "no_record" };
+  if (record.orgId) return { ok: false, reason: "already_in_org", orgId: record.orgId };
+  return { ok: true };
+}
+
+// ── POST /v1/orgs/bootstrap — self-serve first organization ─────────────
+//
+// POST /v1/orgs above provisions on someone else's behalf and needs `admin`
+// scope. Self-service keys carry ["analyze","evaluate","chat"], so without
+// this route a customer had no way to obtain an organization at all: every
+// governance surface answered 403 while the agent and compliance dashboards
+// both linked to /dashboard/org.
+//
+// The gate here is org membership, not scope. A key that ALREADY belongs to an
+// organization is refused, because otherwise a governed employee could stand up
+// an ungoverned org and move their agents into it — the one escape hatch that
+// would make org tool rules unenforceable.
+organizationRoutes.post(
+  "/v1/orgs/bootstrap",
+  authMiddleware("evaluate"),
+  async (c) => {
+    const callerKey = c.get("apiKey");
+
+    const body = await c.req
+      .json<{ name?: string; slug?: string }>()
+      .catch(() => ({}) as { name?: string; slug?: string });
+
+    if (!body.name || typeof body.name !== "string" || body.name.trim().length === 0) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "name is required and must be a non-empty string",
+        code: ErrorCode.VALIDATION_REQUIRED,
+        retryable: false,
+      });
+    }
+
+    if (body.name.length > 200) {
+      return problem(c, {
+        status: 400,
+        title: "Validation failure",
+        detail: "name must be 200 characters or fewer",
+        code: ErrorCode.VALIDATION_TOO_LARGE,
+        retryable: false,
+      });
+    }
+
+    let callerRecord: { id: string; orgId: string | null; keyPrefix: string } | null;
+    try {
+      callerRecord = await prisma.apiKey.findUnique({
+        where: { id: callerKey.id },
+        select: { id: true, orgId: true, keyPrefix: true },
+      });
+    } catch (err) {
+      console.error("[orgs] bootstrap caller lookup failed:", (err as Error).message);
+      return serviceDependencyProblem(c, err);
+    }
+
+    const gate = checkBootstrapEligibility(callerRecord);
+    if (!gate.ok) {
+      return gate.reason === "no_record"
+        ? problem(c, {
+            status: 403,
+            title: "Key cannot own an organization",
+            detail:
+              "This key has no stored record to attach an organization to. Generate a standard API key, or use POST /v1/orgs with an admin-scoped key.",
+            code: ErrorCode.AUTH_INSUFFICIENT_SCOPE,
+            retryable: false,
+          })
+        : problem(c, {
+            status: 403,
+            title: "Already in an organization",
+            detail:
+              "This key already belongs to an organization, and a key may belong to only one. Ask an org_admin to change your role, or use a key that is not yet claimed.",
+            code: ErrorCode.AUTH_FORBIDDEN_ROLE,
+            retryable: false,
+            org_id: gate.orgId,
+          });
+    }
+
+    let org: { id: string; name: string; slug: string; planTier: string };
+    try {
+      const slug = body.slug?.trim() || (await generateUniqueSlug(body.name));
+
+      const clash = await prisma.organization.findUnique({ where: { slug }, select: { id: true } });
+      if (clash) {
+        return problem(c, {
+          status: 409,
+          title: "Conflict",
+          detail: `Slug "${slug}" is already taken`,
+          code: ErrorCode.VALIDATION_INVALID_INPUT,
+          retryable: false,
+        });
+      }
+
+      // One transaction: an org whose creator is not its admin would leave the
+      // caller locked out of the surface they just created.
+      org = await prisma.$transaction(async (tx) => {
+        const created = await tx.organization.create({
+          data: { name: body.name!.trim(), slug, ownerId: callerKey.id, planTier: "free" },
+        });
+        await tx.apiKey.update({
+          where: { id: callerKey.id },
+          data: { orgId: created.id, role: "org_admin" },
+        });
+        return created;
+      });
+    } catch (err) {
+      console.error("[orgs] bootstrap failed:", (err as Error).message);
+      return serviceDependencyProblem(c, err);
+    }
+
+    // The validated-key cache holds orgId and role; without this the caller
+    // keeps hitting 403 on their own new organization until the entry expires.
+    const callerPrefix = callerRecord?.keyPrefix;
+    if (callerPrefix) await invalidateApiKeyCache(callerPrefix).catch(() => {});
+
+    auditLog({
+      action: "org_bootstrapped",
+      apiKeyId: callerKey.id,
+      detail: `Created org "${org.name}" (${org.slug}) and became org_admin`,
+    });
+
+    return c.json({ ...org, role: "org_admin" }, 201);
   },
 );
 
