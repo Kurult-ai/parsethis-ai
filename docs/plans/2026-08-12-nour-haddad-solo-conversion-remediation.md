@@ -16,10 +16,30 @@
 > sentence appeared on **five** surfaces, not two (item 6).
 >
 > Unrelated pre-existing breakage found while running the gates:
-> `src/__tests__/public-contact-email.test.ts` fails 3/7 at HEAD because it expects
-> `CONTACT_EMAIL === "d@kurult.ai"` while `src/lib/constants.ts` says
-> `danservfinn@gmail.com`. Both files are unmodified at HEAD, so the contradiction
-> predates this work. Not fixed here — it needs a decision about which value is right.
+> `src/__tests__/public-contact-email.test.ts` failed 3/7 at HEAD because it expected
+> `CONTACT_EMAIL === "d@kurult.ai"` while `src/lib/constants.ts` said
+> `danservfinn@gmail.com`. Both files were unmodified at HEAD, so the contradiction
+> predated this work — and the test was right: every sales and support `mailto:` on
+> the public pages rendered a personal Gmail address. **Resolved:** `CONTACT_EMAIL`
+> is now `d@kurult.ai`, matching the Stripe account email, and the one hardcoded
+> copy in `content/blog/guides/parse-for-design-systems.md` was updated with it.
+> The suite passes.
+>
+> **Deploy mechanism, corrected.** This service is not deployed by pushing to
+> GitHub. Production is the launchd agent `com.kublai.parse-for-agents`
+> (`WorkingDirectory: /Users/kublai/parse-for-agents-live`, `node --import tsx
+> src/index.ts`, port 3001) behind the `kublai-mac-mini` cloudflared tunnel. It
+> imports modules **once at boot**, so a push changes nothing until the agent is
+> restarted:
+>
+> ```
+> launchctl kickstart -k gui/$(id -u)/com.kublai.parse-for-agents
+> ```
+>
+> Two consequences worth fixing separately: production serves from a **working
+> directory**, so any uncommitted edit goes live the moment the service restarts
+> for any reason; and a stale `pm2` entry named `parse-api` sits in `errored` with
+> 92 restarts, serving nothing.
 
 **Source:** `~/reports/parse-prospect/2026-08-11-nour-haddad-solo.html`
 **Goal:** remove the four blockers and five frictions that kept a qualified Solo buyer on the free tier.

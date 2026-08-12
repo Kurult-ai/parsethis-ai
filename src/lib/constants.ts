@@ -1,5 +1,7 @@
 /** Canonical external URLs — single source of truth */
-export const CONTACT_EMAIL = "danservfinn@gmail.com";
+// The monitored support mailbox. Every sales and support mailto on the public
+// pages renders from this, so it must not be a personal address.
+export const CONTACT_EMAIL = "d@kurult.ai";
 
 /**
  * Demo API key used by the public /demo page and Prompt Guard playground.

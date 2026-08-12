@@ -62,4 +62,4 @@ Parse is for the boundary where untrusted text crosses into your agent's context
 
 ---
 
-Questions about integrating Parse into a design-systems pipeline? Email danservfinn@gmail.com.
+Questions about integrating Parse into a design-systems pipeline? Email d@kurult.ai.
