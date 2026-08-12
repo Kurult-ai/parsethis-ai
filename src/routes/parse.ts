@@ -18,6 +18,12 @@ import {
 } from "../lib/screening-event-log.js";
 import { codewordBypassAllowed } from "../lib/bypass-codeword.js";
 import { autoRegisterAgentFromScreening } from "../lib/agent-auto-register.js";
+import { extractAgentId } from "../lib/agent-id.js";
+import { exceptionHelp } from "./agent-registry.js";
+import { recordUnclassifiedTools } from "../lib/unclassified-tools.js";
+import { recordToolRefusals } from "../lib/tool-refusals.js";
+import { unknownTopLevelFieldWarnings } from "../lib/request-warnings.js";
+import { recordToolPolicyCheckFailure } from "../lib/tool-policy-health.js";
 import { recordScreening } from "../lib/compliance/coverage-attestation.js";
 import { isAgentFrozen } from "../lib/freeze-cache.js";
 import { checkDataAccess } from "../lib/data-governance/check-access.js";
@@ -71,7 +77,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   // in the response metadata.
   let verifiedIdentity: Record<string, unknown> | undefined;
   const agentSignature = c.req.header("x-agent-signature");
-  const sigAgentId = body.metadata?.agent_id;
+  const sigAgentId = extractAgentId(body);
   if (agentSignature && sigAgentId && typeof sigAgentId === "string") {
     try {
       const identity = await prisma.signedIdentity.findFirst({
@@ -113,7 +119,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   // ── Kill Switch: fast-path check for frozen agents ──
   // If the request includes a metadata.agent_id and that agent is frozen,
   // return an immediate block verdict — skip the entire pipeline.
-  const freezeAgentId = body.metadata?.agent_id;
+  const freezeAgentId = extractAgentId(body);
   if (freezeAgentId && typeof freezeAgentId === "string") {
     const frozen = await isAgentFrozen(freezeAgentId);
     if (frozen) {
@@ -468,6 +474,15 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   const result = await parsePrompt(body);
   const parseLatencyMs = Date.now() - parseStart;
 
+  // Say what was ignored. A misplaced field still screens fine and still
+  // returns 200, so silence here reads as "your request was understood" when
+  // it was not — which is how a top-level agent_id used to switch off the
+  // agent freeze without leaving a mark.
+  const requestWarnings = unknownTopLevelFieldWarnings(body);
+  if (requestWarnings.length > 0) {
+    (result as unknown as Record<string, unknown>).warnings = requestWarnings;
+  }
+
   // Denominator for the degraded counter below. Without it /status could only
   // ask "did anything fail this hour", which flips the whole layer to degraded
   // on a single transient blip — crying wolf for exactly the one-off failures a
@@ -588,7 +603,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
 
   // ── Coverage attestation: record this screening (fire-and-forget) ──
   // Tracks which agents are being screened by Parse for coverage reporting.
-  const coverageAgentId = body.metadata?.agent_id;
+  const coverageAgentId = extractAgentId(body);
   if (coverageAgentId && typeof coverageAgentId === "string") {
     recordScreening(apiKey.id, coverageAgentId).catch(() => {});
   }
@@ -650,7 +665,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   //   monitor → recorded only
   //   warn    → warning annotation added
   //   block   → request blocked
-  const dgAgentId = body.metadata?.agent_id;
+  const dgAgentId = extractAgentId(body);
   const dgDataSources = body.metadata?.data_sources;
   if (
     dgAgentId &&
@@ -703,7 +718,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   //   warn    → warning annotation added
   //   block   → request blocked
   if (policy?.enforceToolAllowlist) {
-    const toolAgentId = body.metadata?.agent_id;
+    const toolAgentId = extractAgentId(body);
     // Gather requested tools from metadata.tool_permissions or body.tools
     const bodyTools = (body as any).tools;
     const requestedTools: string[] = Array.isArray(body.metadata?.tool_permissions)
@@ -803,11 +818,22 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
 
       if (orgRequestedTools.length > 0) {
         const { mode, rules } = await getOrgToolPolicy(orgToolKey.orgId);
+        const orgScopeAgentId = extractAgentId(body);
         const { blocked, needsApproval } = resolveToolList(orgRequestedTools, rules, mode, {
-          agentId: body.metadata?.agent_id,
+          agentId: orgScopeAgentId ?? undefined,
           apiKeyId: apiKey.id,
           role: apiKey.role,
         });
+
+        // A name no category recognises is not a pass — it is a question the
+        // org has never been asked. Record it for review rather than letting an
+        // unknown wrapper name walk through a ban silently.
+        void recordUnclassifiedTools(
+          orgToolKey.orgId,
+          orgRequestedTools,
+          rules,
+          orgScopeAgentId,
+        );
 
         if (needsApproval.length > 0) {
           for (const d of needsApproval) {
@@ -816,6 +842,10 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
               severity: 5,
               label: `Org policy holds tool for approval: ${d.tool}`,
               detail: d.reason,
+              // Every other flag carries an id. Without one here, a SIEM rule
+              // or a client filtering `flags` by id drops the governance flag
+              // and keeps the rest.
+              id: "org.tool_policy_approval",
               source: "org_tool_policy",
             });
           }
@@ -834,6 +864,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
               severity: 7,
               label: `Org policy blocks tool: ${d.tool}`,
               detail: d.reason,
+              id: "org.tool_policy_violation",
               source: "org_tool_policy",
             });
           }
@@ -843,6 +874,18 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
           (result as unknown as Record<string, unknown>).tool_policy_violations =
             blocked.map((d) => d.tool);
           toolPolicyReport.blocked = blocked.map((d) => d.tool);
+          // The moment the workaround becomes tempting is the moment to name
+          // the sanctioned path — with the trace id already filled in, so
+          // filing costs one paste rather than a hunt for who to email.
+          void recordToolRefusals(
+            apiKey.id,
+            blocked.map((d) => ({ tool: d.tool, reason: d.reason, agentId: orgScopeAgentId })),
+            "screening",
+          );
+          toolPolicyReport._help = exceptionHelp(
+            blocked.map((d) => d.tool),
+            { agentId: orgScopeAgentId, traceId: (result as { trace_id?: string; id?: string }).trace_id ?? result.id },
+          );
 
           // Enforcement: under "block" mode, escalate risk and block
           if (enforcementMode === "block") {
@@ -858,7 +901,25 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     }
   } catch (otpErr) {
     console.error("[tool-policy] screening check failed:", (otpErr as Error).message);
-    // Fail open — don't block screening on governance check failure
+    // Fail open, but never silently. Screening stays up when the policy store
+    // is unreachable — that is the right trade for availability — and the
+    // response has to admit that the rules did not run, or the org reads a
+    // clean verdict as evidence its ban was enforced. The undeclared-tools
+    // path already sets this precedent; this matches its shape and wording.
+    (result as unknown as Record<string, unknown>).tool_policy = {
+      declared: Array.isArray((body as unknown as { tools?: unknown }).tools)
+        ? ((body as unknown as { tools: unknown[] }).tools).length
+        : Array.isArray(body.metadata?.tool_permissions)
+          ? body.metadata!.tool_permissions!.length
+          : 0,
+      evaluated: false,
+      reason: "check_failed",
+      note:
+        "Your organization's tool rules could not be read for this request, so they were not " +
+        "applied to it. Screening still ran. This request is not evidence that the tools it " +
+        "declared are permitted.",
+    };
+    recordToolPolicyCheckFailure(apiKey.id).catch(() => {});
   }
 
   // ── Egress Destination Control (Task 8.3) ──
@@ -976,7 +1037,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   // ── Volume Budget Tracking (Task 8.4) ──
   // When request metadata includes records_accessed or bytes_accessed,
   // track usage against the agent's volume budgets and enforce limits.
-  const volAgentId = body.metadata?.agent_id;
+  const volAgentId = extractAgentId(body);
   const recordsAccessed = body.metadata?.records_accessed;
   const bytesAccessed = body.metadata?.bytes_accessed;
 

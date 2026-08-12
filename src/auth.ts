@@ -16,6 +16,7 @@ import { problem, ErrorCode } from "./lib/problem-response.js";
 import { isAuthFailureLimited, recordAuthFailure } from "./lib/auth-dos-guard.js";
 import { applyOrgPolicyCeiling } from "./lib/org-policy-ceiling.js";
 import { getOrgPolicyCeiling } from "./lib/org-policy-store.js";
+import { isGovernanceSurface } from "./lib/governance-surface.js";
 import { PLAN_LIMITS } from "./lib/product-facts.js";
 import { SELF_SERVICE_USER_ID } from "./lib/constants.js";
 
@@ -427,11 +428,28 @@ export function authMiddleware(requiredScope?: string) {
       });
     }
 
+    // Governance is not metered.
+    //
+    // The rate limit exists to meter screening, which is what the plans sell.
+    // Reading the rules you are governed by, dry-running a tool list, filing an
+    // exception request or approving one are none of those things, and metering
+    // them punishes exactly the behaviour the control needs. Prospect run 8's
+    // engineer hit a 429 while trying to find out why his deploy was refused —
+    // and the alternative to reading the policy is not reading the policy.
+    //
+    // An admin setting up rules on the free tier could also 429 mid-setup, which
+    // has been an open finding since run 7.
+    const metered = !isGovernanceSurface(new URL(c.req.url).pathname);
+
     // Check rate limit
-    const rateCheck = await checkRateLimit(keyStr, apiKeyRecord.rateLimit);
-    c.header("X-RateLimit-Limit", String(apiKeyRecord.rateLimit));
-    c.header("X-RateLimit-Remaining", String(rateCheck.remaining));
-    c.header("X-RateLimit-Reset", String(Math.ceil(rateCheck.resetMs / 1000)));
+    const rateCheck = metered
+      ? await checkRateLimit(keyStr, apiKeyRecord.rateLimit)
+      : { allowed: true, remaining: apiKeyRecord.rateLimit, resetMs: 0 };
+    if (metered) {
+      c.header("X-RateLimit-Limit", String(apiKeyRecord.rateLimit));
+      c.header("X-RateLimit-Remaining", String(rateCheck.remaining));
+      c.header("X-RateLimit-Reset", String(Math.ceil(rateCheck.resetMs / 1000)));
+    }
 
     if (!rateCheck.allowed) {
       const retryAfter = Math.ceil(rateCheck.resetMs / 1000);

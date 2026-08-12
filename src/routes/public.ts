@@ -51,6 +51,7 @@ import { recordActivationEvent, getActivationFunnel, type ActivationEvent } from
 import { renderBillingDashboardPage } from "../pages/billing.js";
 import { renderAgentDashboardPage } from "../pages/agent-dashboard.js";
 import { renderOrgControlPanelPage } from "../pages/org-control-panel.js";
+import { renderMyAgentsPage } from "../pages/my-agents.js";
 import { renderOrgGetStartedPage } from "../pages/org-get-started.js";
 import { requireRole, hasRole } from "../lib/rbac.js";
 import { resolveOrgId } from "../lib/org-scope.js";
@@ -947,6 +948,19 @@ publicRoutes.get("/dashboard/agents", authMiddleware("evaluate"), async (c) => {
 // naming three roles they cannot obtain is how this feature stayed invisible to
 // a customer who had already paid for it. Read-only either way: the page offers,
 // POST /v1/orgs/bootstrap provisions.
+// GET /dashboard/my-agents — the page for the governed, not the governor.
+publicRoutes.get("/dashboard/my-agents", authMiddleware("evaluate"), async (c) => {
+  const apiKey = c.get("apiKey");
+  return c.html(
+    await renderMyAgentsPage(
+      getBaseUrl(c),
+      apiKey.id,
+      apiKey.name,
+      apiKey.role ?? "developer",
+    ),
+  );
+});
+
 publicRoutes.get("/dashboard/org", authMiddleware("evaluate"), async (c) => {
   const baseUrl = getBaseUrl(c);
   const apiKey = c.get("apiKey");
@@ -957,21 +971,11 @@ publicRoutes.get("/dashboard/org", authMiddleware("evaluate"), async (c) => {
   }
 
   if (!hasRole(apiKey, "org_admin", "security_analyst", "auditor")) {
-    return problem(c, {
-      status: 403,
-      title: "Insufficient role",
-      detail:
-        "This panel requires one of the following roles: org_admin, security_analyst, auditor. Your key is in an organization but does not hold one of them.",
-      code: ErrorCode.AUTH_FORBIDDEN_ROLE,
-      retryable: false,
-      required_roles: ["org_admin", "security_analyst", "auditor"],
-      current_role: apiKey.role ?? "developer",
-      org_id: orgId,
-      _help: {
-        ask_an_admin:
-          "An org_admin can change your role: PUT /v1/orgs/:id/members/:keyId/role",
-      },
-    });
+    // A person typed a URL into a browser. Answering with raw problem+json —
+    // which is what this did — tells them nothing and looks like a bug. The
+    // org-less branch four lines up already renders a real page; this is its
+    // sibling. Their own page shows everything they are actually subject to.
+    return c.redirect("/dashboard/my-agents", 302);
   }
 
   const html = await renderOrgControlPanelPage(
@@ -1202,7 +1206,7 @@ person who sent the message.</p>
       </tr>
       <tr>
         <td><code>GET/PUT /v1/orgs/:id/agents/:agentId</code></td>
-        <td>What one agent may do, which rule decided each answer, and how to tighten it. A rule scoped to one agent may only make the org result stricter — there is no way to grant an agent an exception.</td>
+        <td>What one agent may do, which rule decided each answer, and how to tighten it. A rule you write by hand may only make the org result stricter. The one thing that loosens it is an <strong>approved exception request</strong>, which records who asked, who approved, and when it expires.</td>
       </tr>
       <tr>
         <td><code>GET/PUT /v1/org/policy-defaults</code></td>
@@ -1248,6 +1252,44 @@ person who sent the message.</p>
     </tbody>
   </table>
 </div>
+
+<h3 id="blocked">If you have been blocked</h3>
+
+<p class="answer-capsule">You did not choose Parse, your deploy just started failing, and you have a standup in the morning. This section is for you.</p>
+
+<p><strong>A 422 is a decision, not an outage.</strong> If a deploy comes back <code>422 Tool blocked by org policy</code>, Parse is working — someone in your organization wrote a rule, and the response quotes their reason verbatim. The same decision at request time comes back on <code>POST /v1/parse</code> as a <code>tool_policy_violation</code> flag with <code>tool_policy.blocked</code> naming the tool. Neither is a bug in your code.</p>
+
+<div class="table-wrapper">
+  <table>
+    <thead>
+      <tr><th>What you want to know</th><th>How to find out</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Everything that will break before I redeploy</td>
+        <td><code>POST /v1/org/tool-policy/test</code> with your whole <code>tools</code> list. Writes nothing, open to every role, and not rate limited.</td>
+      </tr>
+      <tr>
+        <td>Which rule did this, and who wrote it</td>
+        <td><code>GET /v1/org/tool-policy</code> lists the rules that bind you, each with the reason its author gave. <code>/dashboard/my-agents</code> shows the same thing as a page, with your org's admins named.</td>
+      </tr>
+      <tr>
+        <td>What my own agent is allowed to do</td>
+        <td><code>GET /v1/agents/:id/effective-policy</code> — every declared tool, its verdict, and which rule decided it.</td>
+      </tr>
+      <tr>
+        <td>How to get an exception</td>
+        <td><code>POST /v1/exception-requests</code> with the tool, your agent id, and why the banned capability is the only way your agent can do its job. The <code>_help</code> block on the refusal has this pre-filled, including the trace id.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p><strong>What an approved exception does.</strong> An <code>org_admin</code> approves or denies. An approval creates a rule scoped to your agent alone, carrying the request that justified it and an expiry — 90 days by default. No other agent in the organization is affected, which is why this is the sanctioned path and editing the org-wide rule is not.</p>
+
+<p><strong>What it will not do.</strong> Nobody can grant themselves anything, including an <code>org_admin</code> acting on their own request without recording it. A rule scoped to one agent that is written by hand, rather than through an approved request, is refused at write time with a 422 naming the rule that dominates it — so an exception can never look granted while doing nothing.</p>
+
+<p class="answer-capsule">Two honest notes. A tool name your organization has never seen — an internal wrapper, say — matches no category and is allowed by default in <code>blocklist</code> mode; it is recorded for your admins to review rather than silently passing. And a runtime block returns <strong>HTTP 200</strong> with <code>recommended_action: "block"</code>, because screening returns a verdict rather than refusing the call. A client that checks only <code>response.ok</code> will sail past it.</p>
 
 <p class="answer-capsule">If your agents are ones you did not build and cannot review, the gateway is the point that matters: an <code>org_admin</code> configures it with <code>POST /v1/gateway/configure</code>, and the provider credential is encrypted at rest and never returned by any route.</p>
 

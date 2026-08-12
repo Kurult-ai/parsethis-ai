@@ -24,10 +24,10 @@ import {
   persistScreeningEventData,
   shouldPersistScreeningEventForApiKey,
 } from "../screening-event-log.js";
-import { recordScreening } from "../compliance/coverage-attestation.js";
 import { auditLog } from "../audit-log.js";
 import { prisma } from "../../db.js";
 import { getOrgToolPolicy } from "../tool-policy-store.js";
+import { recordAgentCall, recordScreening } from "../compliance/coverage-attestation.js";
 import { resolveToolDecision } from "../tool-policy.js";
 import type { ToolDecision, ToolPolicyMode, ToolRule, ToolScope } from "../tool-policy.js";
 
@@ -368,9 +368,19 @@ export async function handleProxyRequest(
   const screeningId = crypto.randomUUID();
   const preScreenStart = Date.now();
 
+  // Coverage denominator. The gateway is the only place Parse sees a call it
+  // did not necessarily screen, so it is the only place a coverage percentage
+  // can come from. Nothing called recordAgentCall() before this line, which is
+  // why /v1/coverage reported 100% for every org that ever used it — the
+  // denominator was structurally always zero.
+  const coverageAgentId =
+    (typeof options.request.user === "string" && options.request.user.trim()) || "gateway";
+  void recordAgentCall(apiKeyId, coverageAgentId);
+
   // 1. Pre-screen input messages
   const preScreen = await preScreenMessages(options.request.messages, apiKeyId);
   const preScreenLatency = Date.now() - preScreenStart;
+  void recordScreening(apiKeyId, coverageAgentId);
 
   // 2. Org tool policy — resolved before logging so removals reach the audit trail
   const toolFilter = await applyOrgToolPolicy(options.request, apiKeyId, enforcementMode);
@@ -489,9 +499,16 @@ export async function handleStreamingProxyRequest(
   const screeningId = crypto.randomUUID();
   const preScreenStart = Date.now();
 
+  // Same coverage bookkeeping as the non-streaming path — a streamed call is
+  // still a call, and leaving it out would understate the denominator.
+  const coverageAgentId =
+    (typeof options.request.user === "string" && options.request.user.trim()) || "gateway";
+  void recordAgentCall(apiKeyId, coverageAgentId);
+
   // Pre-screen input messages
   const preScreen = await preScreenMessages(options.request.messages, apiKeyId);
   const preScreenLatency = Date.now() - preScreenStart;
+  void recordScreening(apiKeyId, coverageAgentId);
 
   // Org tool policy — resolved before logging so removals reach the audit trail
   const toolFilter = await applyOrgToolPolicy(options.request, apiKeyId, enforcementMode);

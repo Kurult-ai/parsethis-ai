@@ -26,8 +26,10 @@ import { requireRole, VALID_ROLES } from "../lib/rbac.js";
 import { requireCsrf } from "../lib/csrf.js";
 import { createPolicyRevision } from "../lib/policy-revision.js";
 import { getOrgToolPolicy, invalidateOrgToolPolicy } from "../lib/tool-policy-store.js";
-import { resolveToolList, type ToolAction, type ToolPolicyMode, type ToolRule, type ToolScope } from "../lib/tool-policy.js";
+import { resolveToolList, resolveToolDecision, type ToolAction, type ToolPolicyMode, type ToolRule, type ToolScope } from "../lib/tool-policy.js";
 import { TOOL_CATEGORIES, getCategory } from "../lib/tool-catalog.js";
+import { explainInertRule } from "../lib/tool-policy-inert.js";
+import { listUnclassifiedTools, dismissUnclassifiedTool } from "../lib/unclassified-tools.js";
 
 export const toolPolicyRoutes = new Hono<AppEnv>();
 
@@ -232,7 +234,67 @@ function serializeRule(rule: ToolRule): Record<string, unknown> {
     scope_id: rule.scopeId,
     priority: rule.priority,
     reason: rule.reason ?? null,
+    ...(rule.grantedByRequestId
+      ? { granted_by_request_id: rule.grantedByRequestId }
+      : {}),
+    ...(rule.expiresAt ? { expires_at: new Date(rule.expiresAt as string | Date).toISOString() } : {}),
   };
+}
+
+/**
+ * The rule list with each entry marked live or not.
+ *
+ * Reading a rule list and believing an exception is in force, when it is not,
+ * is what cost prospect run 8 a wasted round trip between an engineer and his
+ * security lead. New rules can no longer be written inert, but rows created
+ * before that check existed are still in the table, and a rule can go dead
+ * later when someone adds a stricter one above it. So the listing says.
+ */
+function annotateEffectiveness(
+  rules: ToolRule[],
+  mode: ToolPolicyMode,
+): Array<Record<string, unknown>> {
+  const now = Date.now();
+  return rules.map((rule) => {
+    const serialized = serializeRule(rule);
+
+    const expired =
+      !!rule.expiresAt && new Date(rule.expiresAt as string | Date).getTime() <= now;
+    if (expired) {
+      return { ...serialized, effective: false, ineffective_reason: "expired" };
+    }
+    if (!rule.scopeType || !rule.scopeId) {
+      return { ...serialized, effective: true };
+    }
+
+    const scope =
+      rule.scopeType === "agent"
+        ? { agentId: rule.scopeId }
+        : rule.scopeType === "api_key"
+          ? { apiKeyId: rule.scopeId }
+          : { role: rule.scopeId };
+
+    const withRule = resolveToolDecision(rule.pattern, rules, mode, scope);
+    const withoutRule = resolveToolDecision(
+      rule.pattern,
+      rules.filter((r) => r.id !== rule.id),
+      mode,
+      scope,
+    );
+
+    if (withRule.action === withoutRule.action && withRule.matchedRule?.id !== rule.id) {
+      return {
+        ...serialized,
+        effective: false,
+        ineffective_reason:
+          rule.action === "allow"
+            ? "scoped_allow_cannot_loosen"
+            : "dominated_by_another_rule",
+        dominated_by: withRule.matchedRule?.id ?? null,
+      };
+    }
+    return { ...serialized, effective: true };
+  });
 }
 
 function snapshot(mode: ToolPolicyMode, rules: ToolRule[]): Record<string, unknown> {
@@ -244,7 +306,10 @@ function snapshot(mode: ToolPolicyMode, rules: ToolRule[]): Record<string, unkno
 toolPolicyRoutes.get(
   "/v1/org/tool-policy",
   authMiddleware("evaluate"),
-  requireRole("org_admin", "security_analyst", "auditor"),
+  // A member can read the rules that govern them. Mutations remain org_admin.
+  // Rules are not secrets — they are the terms someone is working under, and
+  // an engineer who cannot read them files bugs against the wrong team.
+  requireRole("org_admin", "security_analyst", "auditor", "developer"),
   async (c) => {
     const apiKey = c.get("apiKey");
 
@@ -259,10 +324,20 @@ toolPolicyRoutes.get(
 
     try {
       const policy = await getOrgToolPolicy(orgId);
+      const rules = annotateEffectiveness(policy.rules, policy.mode);
+      const inert = rules.filter((r) => r.effective === false).length;
       return c.json({
         mode: policy.mode,
-        rules: policy.rules.map(serializeRule),
+        rules,
         rule_count: policy.rules.length,
+        ...(inert > 0
+          ? {
+              ineffective_rule_count: inert,
+              note:
+                `${inert} rule(s) here change no outcome. A scoped allow cannot loosen an org ` +
+                `block; to grant one agent an exception, approve a tool exception request.`,
+            }
+          : {}),
       });
     } catch (err) {
       console.error("[tool-policy] GET policy error:", (err as Error).message);
@@ -371,6 +446,39 @@ toolPolicyRoutes.post(
 
     try {
       const previous = await getOrgToolPolicy(orgId);
+
+      // Refuse a rule that cannot change any answer.
+      //
+      // A scoped `allow` under an org-wide block used to return 201 and sit at
+      // the top of the rule list doing nothing. In prospect run 8 a security
+      // lead created exactly that, told the blocked engineer to retry, and he
+      // was still blocked — both of them assuming the other had made a
+      // mistake. The write is where that should have been caught, and the
+      // resolver needed to answer it is already imported here.
+      const inert = explainInertRule(
+        {
+          id: "candidate",
+          kind: input.kind,
+          pattern: input.pattern,
+          action: input.action,
+          scopeType: input.scopeType,
+          scopeId: input.scopeId,
+          priority: input.priority,
+          reason: input.reason,
+        },
+        previous.rules,
+        previous.mode,
+      );
+      if (inert) {
+        return problem(c, {
+          status: 422,
+          title: "Rule would have no effect",
+          detail: inert.detail,
+          code: ErrorCode.VALIDATION_INVALID_INPUT,
+          retryable: false,
+          ...inert.extra,
+        });
+      }
 
       const created = await prisma.orgToolRule.create({
         data: {
@@ -507,19 +615,105 @@ toolPolicyRoutes.delete(
 toolPolicyRoutes.get(
   "/v1/org/tool-policy/catalog",
   authMiddleware("evaluate"),
-  requireRole("org_admin", "security_analyst", "auditor"),
+  requireRole("org_admin", "security_analyst", "auditor", "developer"),
   (c) => {
+    // `?expand=1` returns the whole match set.
+    //
+    // The default stays six representative names, because a picker should not
+    // render matching machinery. But prospect run 8 caught an admin who could
+    // not narrow her own ban: `playwright` is blocked by `category: browser`
+    // and is not among that category's six samples, so converting the category
+    // rule into exact rules meant guessing at a list she had no way to read.
+    // Different job, different view.
+    const expand = c.req.query("expand") === "1" || c.req.query("expand") === "true";
+
     return c.json({
       categories: TOOL_CATEGORIES.map((cat) => ({
         slug: cat.slug,
         label: cat.label,
         description: cat.description,
-        // Representative names only. The full match set (prefixes, substrings)
-        // is matching machinery, not something a picker should render.
         sample_tools: cat.exact.slice(0, 6),
+        exact_count: cat.exact.length,
+        ...(expand
+          ? {
+              matches: {
+                exact: [...cat.exact].sort(),
+                prefixes: [...cat.prefixes].sort(),
+                contains: [...cat.contains].sort(),
+              },
+            }
+          : {}),
       })),
       total: TOOL_CATEGORIES.length,
+      ...(expand
+        ? {
+            note:
+              "A tool matches a category if its normalized name is in `exact`, starts with a " +
+              "`prefix`, or contains one of `contains`. Names outside all three are unmatched — " +
+              "see the unclassified-tool review list for ones your agents actually declare.",
+          }
+        : { expand: "Add ?expand=1 for the full match set behind each category." }),
     });
+  },
+);
+
+// ─── GET /v1/org/tool-policy/unclassified — the review queue ───────────
+//
+// Tool names an org's agents declare that no category and no rule recognises.
+// The catalog cannot be extended to cover names nobody outside the company has
+// ever seen — prospect run 8 walked a `category: browser` ban by declaring
+// `portal_reader`, which is simply what the engineer had called his internal
+// wrapper. Noticing scales where guessing does not.
+
+toolPolicyRoutes.get(
+  "/v1/org/tool-policy/unclassified",
+  authMiddleware("evaluate"),
+  requireRole("org_admin", "security_analyst", "auditor"),
+  async (c) => {
+    const apiKey = c.get("apiKey");
+    let orgId: string | null;
+    try {
+      orgId = await resolveOrgId(apiKey.id);
+    } catch (err) {
+      return serviceDependencyProblem(c, err);
+    }
+    if (!orgId) return orgRequired(c, "read unclassified tools");
+
+    const tools = await listUnclassifiedTools(orgId);
+    return c.json({
+      tools,
+      count: tools.length,
+      ...(tools.length > 0
+        ? {
+            note:
+              "These names matched no catalog category and no rule, so no decision has ever been " +
+              "made about them. Ban one with an exact rule, or leave it — but it is no longer " +
+              "invisible. Switching the org to allowlist mode blocks unknown names by default.",
+          }
+        : {}),
+    });
+  },
+);
+
+// ─── DELETE /v1/org/tool-policy/unclassified/:tool — dismiss ───────────
+
+toolPolicyRoutes.delete(
+  "/v1/org/tool-policy/unclassified/:tool",
+  authMiddleware("evaluate"),
+  requireRole("org_admin"),
+  requireCsrf(),
+  async (c) => {
+    const apiKey = c.get("apiKey");
+    let orgId: string | null;
+    try {
+      orgId = await resolveOrgId(apiKey.id);
+    } catch (err) {
+      return serviceDependencyProblem(c, err);
+    }
+    if (!orgId) return orgRequired(c, "dismiss an unclassified tool");
+
+    const removed = await dismissUnclassifiedTool(orgId, c.req.param("tool")!);
+    return c.json({ dismissed: removed });
   },
 );
 
@@ -528,7 +722,13 @@ toolPolicyRoutes.get(
 toolPolicyRoutes.post(
   "/v1/org/tool-policy/test",
   authMiddleware("evaluate"),
-  requireRole("org_admin", "security_analyst", "auditor"),
+  // Deliberately open to `developer`. This endpoint writes nothing and answers
+  // the one question a blocked engineer has — "what am I allowed to use?" —
+  // before they redeploy. Closing it did not make the policy harder to learn:
+  // prospect run 8 mapped the whole shape of it in four minutes by hitting the
+  // 422 one tool at a time. It only made the sanctioned path slower than the
+  // workaround, which is how a control loses.
+  requireRole("org_admin", "security_analyst", "auditor", "developer"),
   async (c) => {
     const apiKey = c.get("apiKey");
     const body = await c.req.json();

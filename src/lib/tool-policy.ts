@@ -6,6 +6,14 @@
  * result but never loosen it: a rule scoped to one agent cannot allow what the
  * org blocks. This mirrors DelegationChain, where a child may restrict its
  * parent's grant and never expand it.
+ *
+ * One exception, and it is an object rather than a loophole. A scoped `allow`
+ * that carries `grantedByRequestId` came from a ToolExceptionRequest: a named
+ * person asked, a named admin approved, and it expires. Those loosen, because
+ * the alternative measured in prospect run 8 was not compliance — an engineer
+ * with a legitimate need and no sanctioned path renamed his tool in ten seconds
+ * and the ban never saw it again. A rule an admin writes by hand still cannot
+ * loosen, so the property that makes the control worth buying is unchanged.
  */
 
 import { normalizeToolName, toolMatchesCategory } from "./tool-catalog.js";
@@ -23,6 +31,13 @@ export interface ToolRule {
   scopeId: string | null;
   priority: number;
   reason?: string | null;
+  /**
+   * The approved exception request behind this rule, when there is one. Only a
+   * rule with provenance may loosen the org result.
+   */
+  grantedByRequestId?: string | null;
+  /** When this rule stops applying. Null never expires. */
+  expiresAt?: Date | string | null;
 }
 
 export interface ToolScope {
@@ -127,6 +142,40 @@ function describeRule(rule: ToolRule): string {
   return `${base[0].toUpperCase()}${base.slice(1)}${note}`;
 }
 
+/**
+ * Why a grant beat a ban. Both halves are named, because the person reading
+ * this is usually trying to work out whether the exception they were promised
+ * is actually in force.
+ */
+function describeGrant(grant: ToolRule, overridden: ToolRule): string {
+  const scope = grant.scopeType ? `${grant.scopeType} ${grant.scopeId}` : "the whole org";
+  const until = grant.expiresAt
+    ? ` until ${new Date(grant.expiresAt as string | Date).toISOString()}`
+    : " with no expiry";
+  const why = typeof grant.reason === "string" && grant.reason.trim() ? ` ${grant.reason.trim()}` : "";
+  return (
+    `Allowed by an approved exception (request ${grant.grantedByRequestId}) scoped to ${scope}${until}.` +
+    `${why} This overrides ${describeRule(overridden).charAt(0).toLowerCase()}${describeRule(overridden).slice(1)}`
+  );
+}
+
+/**
+ * A grant is a scoped `allow` that came from an approved exception request and
+ * has not expired. Only these may loosen the org result.
+ */
+function isLiveGrant(rule: ToolRule, now: number): boolean {
+  if (rule.action !== "allow") return false;
+  if (!rule.scopeType) return false;
+  if (!rule.grantedByRequestId) return false;
+  return !isExpired(rule, now);
+}
+
+function isExpired(rule: ToolRule, now: number): boolean {
+  if (!rule.expiresAt) return false;
+  const at = rule.expiresAt instanceof Date ? rule.expiresAt.getTime() : Date.parse(String(rule.expiresAt));
+  return Number.isFinite(at) && at <= now;
+}
+
 export function resolveToolDecision(
   tool: string,
   rules: ToolRule[],
@@ -137,8 +186,13 @@ export function resolveToolDecision(
   const orgMatches: ToolRule[] = [];
   const scopedMatches: ToolRule[] = [];
 
+  const now = Date.now();
+
   for (const rule of Array.isArray(rules) ? rules : []) {
     if (!isValidRule(rule)) continue;
+    // An expired grant is not a rule. Letting one linger would mean an
+    // exception quietly outliving the change window it was approved for.
+    if (isExpired(rule, now)) continue;
     let matches = false;
     try {
       matches = ruleMatchesTool(rule, normalizedTool);
@@ -169,8 +223,23 @@ export function resolveToolDecision(
   let winner: ToolRule;
   let source: "org" | "scoped";
   if (orgWinner && scopedWinner) {
-    // Strictest of the two, org winning ties. Priority is compared only within
-    // a partition — a high-priority scoped allow still cannot beat an org block.
+    // An approved, unexpired exception wins outright. This is the one way a
+    // narrower scope loosens a broader one, and it costs a named requester, a
+    // named approver and an expiry to get.
+    if (isLiveGrant(scopedWinner, now)) {
+      winner = scopedWinner;
+      source = "scoped";
+      return {
+        tool,
+        action: winner.action,
+        matchedRule: winner,
+        reason: describeGrant(winner, orgWinner),
+        source,
+      };
+    }
+    // Otherwise: strictest of the two, org winning ties. Priority is compared
+    // only within a partition — a hand-written scoped allow at priority 999
+    // still cannot beat an org block.
     if (STRICTNESS[orgWinner.action] >= STRICTNESS[scopedWinner.action]) {
       winner = orgWinner;
       source = "org";

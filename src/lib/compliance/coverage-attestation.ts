@@ -164,7 +164,8 @@ export interface DailyBreakdownEntry {
   date: string;
   total_calls: number;
   screened_calls: number;
-  coverage_pct: number;
+  /** null when nothing measured unscreened traffic that day. */
+  coverage_pct: number | null;
 }
 
 export interface CoverageReport {
@@ -175,7 +176,10 @@ export interface CoverageReport {
   };
   total_agent_calls: number;
   total_screened: number;
-  coverage_pct: number;
+  /** null when there is no denominator — see coverage_unknown_reason. */
+  coverage_pct: number | null;
+  coverage_unknown_reason?: string;
+  note?: string;
   uncovered_agents: UncoveredAgent[];
   daily_breakdown: DailyBreakdownEntry[];
   generated_at: string;
@@ -286,7 +290,10 @@ export async function getCoverageReport(
   for (const agentId of sortedAgentIds) {
     const calls = agentCallTotals[agentId] ?? 0;
     const screened = agentScreenedTotals[agentId] ?? 0;
-    const coveragePct = calls > 0 ? (screened / calls) * 100 : screened > 0 ? 100 : 0;
+    // No denominator, no percentage. `screened > 0 ? 100 : 0` used to sit here
+    // and it was never once correct: nothing in the codebase called
+    // recordAgentCall(), so `calls` was always 0 and every agent reported 100%.
+    const coveragePct = calls > 0 ? (screened / calls) * 100 : null;
 
     // An agent is "uncovered" if it made calls but none were screened,
     // or if coverage is below 100% (partial coverage gap)
@@ -303,7 +310,7 @@ export async function getCoverageReport(
         agent_id: agentId,
         total_calls: calls,
         screened_calls: screened,
-        coverage_pct: Math.round(coveragePct * 100) / 100,
+        coverage_pct: coveragePct === null ? 0 : Math.round(coveragePct * 100) / 100,
         last_seen: lastSeenMap[agentId] ?? null,
       });
     }
@@ -313,26 +320,22 @@ export async function getCoverageReport(
   const dailyBreakdown: DailyBreakdownEntry[] = dailyData.map((day) => {
     const dayCalls = Object.values(day.calls).reduce((a, b) => a + b, 0);
     const dayScreened = Object.values(day.screened).reduce((a, b) => a + b, 0);
-    const dayPct =
-      dayCalls > 0
-        ? (dayScreened / dayCalls) * 100
-        : dayScreened > 0
-          ? 100
-          : 0;
     return {
       date: day.date,
       total_calls: dayCalls,
       screened_calls: dayScreened,
-      coverage_pct: Math.round(dayPct * 100) / 100,
+      coverage_pct: dayCalls > 0 ? Math.round((dayScreened / dayCalls) * 10000) / 100 : null,
     };
   });
 
+  // Coverage is screened-over-total. The total only exists where Parse can see
+  // traffic it did not screen, which is the gateway. Without one configured,
+  // there is no denominator and the honest answer is "unknown" — an
+  // attestation that cannot come out below 100% is not an attestation, and an
+  // org that reads one is being told its ban is enforced on traffic nobody has
+  // ever looked at.
   const coveragePct =
-    totalAgentCalls > 0
-      ? (totalScreened / totalAgentCalls) * 100
-      : totalScreened > 0
-        ? 100
-        : 0;
+    totalAgentCalls > 0 ? Math.round((totalScreened / totalAgentCalls) * 10000) / 100 : null;
 
   return {
     org_id: orgId,
@@ -342,7 +345,16 @@ export async function getCoverageReport(
     },
     total_agent_calls: totalAgentCalls,
     total_screened: totalScreened,
-    coverage_pct: Math.round(coveragePct * 100) / 100,
+    coverage_pct: coveragePct,
+    ...(coveragePct === null
+      ? {
+          coverage_unknown_reason: "no_unscreened_traffic_observed",
+          note:
+            "Parse has screened " + totalScreened + " call(s) for this organization and has no " +
+            "measurement of calls it did not screen, so coverage cannot be stated. Route agent " +
+            "traffic through the org gateway (POST /v1/gateway/configure) to get a denominator.",
+        }
+      : {}),
     uncovered_agents: uncoveredAgents,
     daily_breakdown: dailyBreakdown,
     generated_at: new Date().toISOString(),

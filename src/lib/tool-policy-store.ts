@@ -36,6 +36,8 @@ function toRule(row: {
   scopeId: string | null;
   priority: number;
   reason: string | null;
+  grantedByRequestId?: string | null;
+  expiresAt?: Date | null;
 }): ToolRule {
   return {
     id: row.id,
@@ -44,6 +46,10 @@ function toRule(row: {
     action: row.action as ToolRule["action"],
     scopeType: row.scopeType,
     scopeId: row.scopeId,
+    // Provenance and expiry ride along so the resolver can tell an approved
+    // exception from a hand-written scoped allow without a second query.
+    grantedByRequestId: row.grantedByRequestId ?? null,
+    expiresAt: row.expiresAt ?? null,
     priority: row.priority,
     reason: row.reason,
   };

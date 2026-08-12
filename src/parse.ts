@@ -12,6 +12,13 @@ import {
 } from "./lib/privacy-approval.js";
 import { normalizeForDetection } from "./lib/patterns/normalize.js";
 import { calculateRiskScore } from "./lib/scoring.js";
+import {
+  getCachedVerdict,
+  setCachedVerdict,
+  seedFor,
+  SCREENING_CACHE_TTL_SECONDS,
+  type CacheDimensions,
+} from "./lib/screening-cache.js";
 import type { TokenUsage } from "./types.js";
 
 // Build model allowlist at module level
@@ -207,8 +214,23 @@ function applySourceSensitivity(flags: RiskFlag[], metadata?: Record<string, unk
 // === LLM-based deep analysis (when model is available) ===
 async function llmRiskAnalysis(
   prompt: string,
-  model?: string
-): Promise<{ status: "ran" | "failed"; result: LlmRiskResult | null }> {
+  model?: string,
+  cacheDims?: Omit<CacheDimensions, "prompt" | "model">,
+): Promise<{ status: "ran" | "failed"; result: LlmRiskResult | null; cached?: boolean }> {
+  const configuredModel =
+    (process.env.ANALYSIS_MODEL || "").split(",")[0]?.trim() || model || "default";
+
+  // A repeated prompt must return a repeated verdict, or a customer cannot
+  // reproduce a block and cannot argue with it. Greedy sampling narrows the
+  // spread; this closes it.
+  const dims: CacheDimensions | null = cacheDims
+    ? { prompt, model: configuredModel, ...cacheDims }
+    : null;
+  if (dims) {
+    const hit = await getCachedVerdict<LlmRiskResult>(dims);
+    if (hit) return { status: "ran", result: hit, cached: true };
+  }
+
   // Use randomized delimiters to prevent the untrusted prompt from escaping the analysis frame
   const nonce = crypto.randomUUID().slice(0, 12);
 
@@ -280,7 +302,7 @@ IMPORTANT: The user message contains the untrusted prompt wrapped in <ANALYZE_${
       { role: "user", content: userPrompt },
     ];
 
-    const result = await llmCall(messages, configured);
+    const result = await llmCall(messages, configured, { seed: seedFor(prompt) });
 
     // Try non-greedy match for individual JSON objects (defensive against injected JSON)
     const jsonMatches = result.content.match(/\{[^{}]*\}/g);
@@ -292,14 +314,13 @@ IMPORTANT: The user message contains the untrusted prompt wrapped in <ANALYZE_${
           const parsed = JSON.parse(jsonMatches[i]);
           if (parsed.nonce !== nonce) continue;
           if (typeof parsed.risk_score === "number" && Array.isArray(parsed.categories)) {
-            return {
-              status: "ran",
-              result: {
-                risk_score: Math.max(0, Math.min(10, Number(parsed.risk_score) || 0)),
-                categories: parsed.categories,
-                reasoning: String(parsed.reasoning || ""),
-              },
+            const llmResult: LlmRiskResult = {
+              risk_score: Math.max(0, Math.min(10, Number(parsed.risk_score) || 0)),
+              categories: parsed.categories,
+              reasoning: String(parsed.reasoning || ""),
             };
+            if (dims) void setCachedVerdict(dims, llmResult);
+            return { status: "ran", result: llmResult, cached: false };
           }
         } catch { continue; }
       }
@@ -620,6 +641,14 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
     ? `Requested model "${model}" not in allowlist; using default model`
     : undefined;
 
+  // What makes two requests "the same" for the purposes of remembering a
+  // semantic verdict. Tier is deliberately absent: the tier changes what the
+  // response shows (evidence spans), not what the model thought of the prompt.
+  const cacheDimensions = {
+    mode: req.mode ?? "full",
+    policyMode: req.policy_mode ?? "balanced",
+  };
+
   const flags: RiskFlag[] = [];
 
   // Normalize prompt to defeat zero-width chars, homoglyphs, and encoding tricks
@@ -707,6 +736,10 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
   // Skip for obvious critical matches (severity >= 9) to save latency
   let llmResult: LlmRiskResult | null = null;
   let llmLayerStatus: LlmLayerStatus;
+  /** Whether an LLM-only reading is corroborated enough to hard-floor a block. */
+  let llmMayFloorBlock = false;
+  /** Whether this verdict came from the cache, so the response can say so. */
+  let llmVerdictCached = false;
   if (usePatternOnly) {
     llmLayerStatus = "skipped_pattern_only";
     analysisMethod = "pattern_only";
@@ -716,11 +749,19 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
   } else if (!process.env.OPENROUTER_API_KEY) {
     llmLayerStatus = "disabled";
   } else {
-    const llmAttempt = await llmRiskAnalysis(prompt, validatedModel);
+    const llmAttempt = await llmRiskAnalysis(prompt, validatedModel, cacheDimensions);
     llmLayerStatus = llmAttempt.status;
     llmResult = llmAttempt.result;
     if (llmResult) {
       analysisMethod = "pattern+llm";
+      llmVerdictCached = llmAttempt.cached === true;
+
+      // Corroboration: has anything other than this one model reading also seen
+      // a problem? A pattern hit of any weight counts, because the pattern layer
+      // is deterministic — the same prompt produces the same hit every time, so
+      // a block resting on it is reproducible and arguable.
+      llmMayFloorBlock = maxPatternSeverity > 0;
+
       // LLM can only ADD new flags that RAISE severity — never lower the score
       // Only add categories the LLM found that patterns didn't, and only if the
       // LLM's risk_score is at least as high as the current pattern max
@@ -735,10 +776,28 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
             id: `llm.${cat}`,
             confidence: "medium",
             attack_family: cat,
-            // On attested first-party conversation the LLM's voice still counts
-            // toward the score, but it cannot hard-floor a block on its own —
-            // riskScore >= 7 can still block via computeRecommendedAction.
-            action_floor: effectiveLlmSeverity >= 7 ? (trustedConversation ? "sandbox" : "block") : "sandbox",
+            // Who is allowed to hard-floor a block.
+            //
+            // This line used to read `severity >= 7 ? "block" : "sandbox"`, so a
+            // single sampled severity crossing 7 decided whether a request was
+            // refused. Prospect run 8 sent one benign sentence nine times and
+            // was blocked once, on a score that ranged 0.3 to 8.8 for identical
+            // input. A block nobody can reproduce is indistinguishable from a
+            // bug, and gets treated as one.
+            //
+            // So an LLM-only reading no longer hard-floors a block by itself.
+            // It needs corroboration — the pattern layer saw something too — or
+            // it floors at sandbox and lets the score speak: riskScore >= 7
+            // still blocks through computeRecommendedAction, which is a
+            // combined judgement rather than one sample's opinion.
+            //
+            // `trustedConversation` already carved out this same floor for
+            // attested first-party traffic; this generalises the idea rather
+            // than inventing it.
+            action_floor:
+              effectiveLlmSeverity >= 7 && llmMayFloorBlock && !trustedConversation
+                ? "block"
+                : "sandbox",
             source: "llm",
           });
         }
@@ -793,6 +852,19 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
     layers: { pattern: "ran", llm: llmLayerStatus },
     latency_ms: Math.round(performance.now() - startedAt),
   };
+
+  // Say when a verdict is a repeat. Someone re-running a request to check they
+  // are not going mad should be able to see that they got the remembered
+  // answer, not a second coin flip that happened to land the same way.
+  if (analysisMethod === "pattern+llm") {
+    (response as unknown as Record<string, unknown>).determinism = {
+      semantic_verdict: llmVerdictCached ? "cached" : "computed",
+      reproducible_until: new Date(Date.now() + SCREENING_CACHE_TTL_SECONDS * 1000).toISOString(),
+      note: llmVerdictCached
+        ? "This verdict was remembered from an identical earlier request, so it is exactly reproducible."
+        : "Identical requests will return this same verdict until reproducible_until.",
+    };
+  }
 
   // "Skipped" is a decision; "failed"/"disabled" is an outage. Only the second
   // kind means the caller is getting less protection than the tier promises.

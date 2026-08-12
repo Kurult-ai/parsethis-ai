@@ -10,6 +10,7 @@
  */
 
 import { prisma } from "../db.js";
+import { extractAgentId } from "./agent-id.js";
 import type { ParseRequest } from "../parse.js";
 
 /**
@@ -33,34 +34,21 @@ async function resolveOrgId(apiKeyId: string): Promise<string | null> {
   });
   if (existingOrg) return existingOrg.id;
 
-  // Auto-provision a default org
-  try {
-    const org = await prisma.organization.create({
-      data: {
-        name: "Default Organization",
-        slug: `org-${apiKeyId.slice(-12)}`,
-        ownerId: apiKeyId,
-      },
-    });
-    return org.id;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Extract the agent_id from a screening request.
- * Checks body.agent_id first, then metadata.agent_id.
- */
-function extractAgentId(body: ParseRequest & { agent_id?: string }): string | null {
-  if (typeof body.agent_id === "string" && body.agent_id.trim()) {
-    return body.agent_id.trim();
-  }
-  if (body.metadata?.agent_id && typeof body.metadata.agent_id === "string") {
-    return body.metadata.agent_id.trim();
-  }
+  // No organization, and this is not the place to invent one.
+  //
+  // This used to create an Organization row named "Default Organization" for
+  // any key without one, so a single POST /v1/parse carrying an agent_id wrote
+  // a permanent org that no route can delete. Prospect run 8 made one on
+  // production with two ordinary screening calls and no org endpoint involved;
+  // seven were found in the table, all from test traffic.
+  //
+  // It also contradicted the front door: POST /v1/orgs/bootstrap refuses an
+  // anonymous key with a careful 403 explaining that an organization needs a
+  // person to attach to, and this side door handed the same key one anyway.
+  // An org-less key simply has no agent registry, which is the honest state.
   return null;
 }
+
 
 /**
  * Auto-register an agent discovered from a screening event.
@@ -91,6 +79,24 @@ export async function autoRegisterAgentFromScreening(
     const dataAccess = Array.isArray(body.metadata?.data_classification)
       ? body.metadata!.data_classification!
       : [];
+
+    // `agent_id` is a name in this field, but callers routinely send the
+    // registry id — it is what every other endpoint takes, and the 422 quotes
+    // one back at them. Creating a second, "discovered" agent named after the
+    // first one's id puts a ghost duplicate on the owner's dashboard and
+    // splits that agent's coverage across two rows. If the value resolves to a
+    // real agent in this org, touch it instead.
+    const byId = await prisma.agentRegistry.findFirst({
+      where: { id: agentId, orgId },
+      select: { id: true },
+    });
+    if (byId) {
+      await prisma.agentRegistry.update({
+        where: { id: byId.id },
+        data: { lastSeenAt: new Date() },
+      });
+      return;
+    }
 
     // Upsert by (orgId, agentName) — if the agent already exists, leave it as-is.
     // Only create on first discovery.
