@@ -1178,7 +1178,7 @@ person who sent the message.</p>
       </tr>
       <tr>
         <td><code>GET/PUT/DELETE /v1/policy</code></td>
-        <td>Screening policy for your key: auto-block threshold, screen-all mode.</td>
+        <td>Screening policy for <em>your key</em>: auto-block threshold, screen-all mode. An organization can put a ceiling above this that the key cannot loosen — see <code>/v1/org/policy-defaults</code> below.</td>
       </tr>
       <tr>
         <td><code>POST /v1/approvals</code></td>
@@ -1188,9 +1188,68 @@ person who sent the message.</p>
         <td><code>GET/POST /v1/egress-rules</code></td>
         <td>Egress control — rules and templates for where agent output is allowed to go, with a test endpoint.</td>
       </tr>
+      <tr>
+        <td><code>POST /v1/orgs/bootstrap</code></td>
+        <td>Create your organization and become its <code>org_admin</code>. Included on every plan, Free upward. Everything below is org-scoped.</td>
+      </tr>
+      <tr>
+        <td><code>GET/PUT /v1/org/tool-policy</code></td>
+        <td>Which connectors, plugins and MCP servers your agents may use, and whether the org runs <code>blocklist</code> (allowed until blocked) or <code>allowlist</code> (blocked until allowed).</td>
+      </tr>
+      <tr>
+        <td><code>POST /v1/org/tool-policy/rules</code></td>
+        <td>Add a rule by capability category, exact name, or name prefix. One rule on <code>browser</code> covers <code>browser_use</code>, <code>playwright</code>, <code>computer_use</code> and the <code>mcp__*</code> names the same capability ships under. Dry-run any name with <code>POST /v1/org/tool-policy/test</code>.</td>
+      </tr>
+      <tr>
+        <td><code>GET/PUT /v1/orgs/:id/agents/:agentId</code></td>
+        <td>What one agent may do, which rule decided each answer, and how to tighten it. A rule scoped to one agent may only make the org result stricter — there is no way to grant an agent an exception.</td>
+      </tr>
+      <tr>
+        <td><code>GET/PUT /v1/org/policy-defaults</code></td>
+        <td>Org-wide risk tolerance. A member key inherits it and cannot loosen a locked field — the write returns 422 naming the field, not a silent clamp.</td>
+      </tr>
+      <tr>
+        <td><code>GET/PUT/DELETE /v1/orgs/:id/members/*</code></td>
+        <td>Member keys, their roles, and removing them. Removing revokes by default, because offboarding means the key stops working.</td>
+      </tr>
     </tbody>
   </table>
 </div>
+
+<h3>Where a tool ban actually bites</h3>
+
+<p class="answer-capsule">A ban on a capability holds at three points, and they do not all cover the same case. Two of them read what the agent says about itself; one reads what the request actually carries.</p>
+
+<div class="table-wrapper">
+  <table>
+    <thead>
+      <tr>
+        <th>Point</th>
+        <th>What it sees</th>
+        <th>What it misses</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Registration</strong><br><code>POST/PUT /v1/agents</code></td>
+        <td>The <code>tools[]</code> an agent declares when it registers or is edited. Returns <strong>422</strong> naming the rule.</td>
+        <td>An agent that registers with fewer tools than it uses.</td>
+      </tr>
+      <tr>
+        <td><strong>Screening</strong><br><code>POST /v1/parse</code></td>
+        <td>Tools named in <code>metadata.tool_permissions</code> or <code>body.tools</code> on that request.</td>
+        <td>A request that declares nothing. The response says so — <code>tool_policy.evaluated: false</code> — rather than reporting a clean result.</td>
+      </tr>
+      <tr>
+        <td><strong>Gateway</strong><br><code>POST /v1/gateway/chat/completions</code></td>
+        <td>The <code>tools</code> array on the wire. <strong>Does not depend on the agent declaring anything.</strong></td>
+        <td>Traffic that does not route through the gateway at all — which is what coverage attestation is for.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="answer-capsule">If your agents are ones you did not build and cannot review, the gateway is the point that matters: an <code>org_admin</code> configures it with <code>POST /v1/gateway/configure</code>, and the provider credential is encrypted at rest and never returned by any route.</p>
 
 <h2>Prove — audit trail and evidence</h2>
 

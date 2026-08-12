@@ -1029,6 +1029,9 @@ ${isAdmin ? memberActionsCell(m) : ""}
   // ─── Zone 4: Violations ──────────────────────────────────────────────
 
   const agentConfigRows = buildAgentConfigRows(agents, rules, toolMode);
+  // An agent declaring nothing is not governed at screening time. Say so here
+  // rather than letting a clean-looking table imply coverage that is absent.
+  const undeclaredAgents = agentConfigRows.filter((a) => a.declaredTools === 0).length;
   const agentBody = agentConfigRows.length
     ? agentConfigRows
         .map((a) => {
@@ -1248,6 +1251,7 @@ ${violationBody}
     <h2>Agents</h2><span class="ocp-meta">ONE AT A TIME</span>
     <span class="ocp-right">${agentTotal > 0 ? `${agentTotal.toLocaleString("en-US")} registered${agentConfigRows.length < agentTotal ? ` · showing ${agentConfigRows.length}` : ""}` : "none yet"}</span>
   </div>
+  ${undeclaredAgents > 0 ? `<p class="ocp-note"><strong>${undeclaredAgents} of ${agentConfigRows.length} agents here declare no tools</strong>, so screening-time rules have nothing to decide for them. Registration covers what they declared; the org gateway covers what they actually send. <code>POST /v1/gateway/configure</code></p>` : ""}
   <p class="ocp-note">Org rules answer what <em>any</em> agent may do. This answers what <em>one</em> agent may do, and lets you tighten it without touching anyone else. A rule aimed at a single agent may only make the org result stricter — there is no way to grant an agent an exception, by design.</p>
   <table class="ocp-t">
     <thead><tr><th>Agent</th><th>Risk</th><th>Declared tools</th><th>Posture</th><th>Last seen</th>${isAdmin ? "<th>Configure</th>" : ""}</tr></thead>

@@ -786,6 +786,21 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
           ? (orgBodyTools as string[])
           : [];
 
+      // An org-scoped caller always learns whether tool rules were applied to
+      // this request. Screening reads tools from metadata.tool_permissions or
+      // body.tools, so a request that declares nothing is not "clean" — it is
+      // unanswerable, and used to come back 0/safe/allow with no tool-policy
+      // field at all, recording nothing about the question it could not answer.
+      const toolPolicyReport: Record<string, unknown> = {
+        declared: orgRequestedTools.length,
+        evaluated: orgRequestedTools.length > 0,
+      };
+      if (orgRequestedTools.length === 0) {
+        toolPolicyReport.note =
+          "This request declared no tools, so your organization's tool rules could not be applied to it. Declare tools with metadata.tool_permissions, or route the call through the org gateway, which reads them off the wire.";
+      }
+      (result as unknown as Record<string, unknown>).tool_policy = toolPolicyReport;
+
       if (orgRequestedTools.length > 0) {
         const { mode, rules } = await getOrgToolPolicy(orgToolKey.orgId);
         const { blocked, needsApproval } = resolveToolList(orgRequestedTools, rules, mode, {
@@ -809,6 +824,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
           }
           (result as unknown as Record<string, unknown>).tool_policy_approvals =
             needsApproval.map((d) => d.tool);
+          toolPolicyReport.requires_approval = needsApproval.map((d) => d.tool);
         }
 
         if (blocked.length > 0) {
@@ -826,6 +842,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
           }
           (result as unknown as Record<string, unknown>).tool_policy_violations =
             blocked.map((d) => d.tool);
+          toolPolicyReport.blocked = blocked.map((d) => d.tool);
 
           // Enforcement: under "block" mode, escalate risk and block
           if (enforcementMode === "block") {
