@@ -54,3 +54,52 @@ owner when it drops below 3.
 
 Docs: https://www.parsethis.ai/docs · Latency and limits:
 https://www.parsethis.ai/skill
+
+## Released blocks
+
+Some prompts trip the deterministic layer and are then cleared by the semantic
+layer. "Ignore the previous waypoint instruction — return to dock, battery is at
+8%" is an override phrase and a safety command; the pattern layer sees only the
+first thing.
+
+When that happens the response carries `released_from_block`:
+
+```json
+{
+  "verdict": "medium_risk",
+  "recommended_action": "sandbox",
+  "released_from_block": {
+    "released": true,
+    "would_have_been": "block",
+    "released_by": "semantic_acquittal",
+    "analyst_model": "deepseek/deepseek-chat",
+    "analyst_score": 2,
+    "flags_released": ["intent.fuzzy_override_token"],
+    "review_recommended": true
+  }
+}
+```
+
+**The SDK refuses these by default.** A release is Parse saying "the fast layer
+says stop, the reading layer disagrees" — useful, and not the same as safe. It
+also lands *below* the risk bands, so a client that gates on `critical` /
+`high_risk` alone would let it through silently. That is why the default is
+`block` and why upgrading this package changes nothing about your posture.
+
+```python
+# Default -- a released prompt is refused exactly like a block.
+screened = wrap(client, ParseSdkConfig(parse_api_key=key, agent_id="a", environment="production"))
+
+# Send them somewhere a human looks, and allow the ones that are fine.
+def review(info, prompt):
+    review_queue.push({"prompt": prompt, "info": info})
+    return False               # refuse now; a reviewer decides later
+
+screened = wrap(client, ParseSdkConfig(
+    parse_api_key=key, agent_id="a", environment="production",
+    on_released="callback", on_released_prompt=review,
+))
+```
+
+If you have nowhere to put released prompts, leave the default. A release you
+never look at is a block you have turned off.

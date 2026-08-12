@@ -45,7 +45,7 @@ import threading
 import urllib.request
 import urllib.error
 from dataclasses import dataclass, field
-from typing import Any, Optional, Callable, List
+from typing import Any, Dict, Optional, Callable, List
 
 __version__ = "0.2.0"
 __all__ = [
@@ -72,8 +72,60 @@ class ParseSdkConfig:
     parse_base_url: str = "https://parsethis.ai"
     data_sources: List[str] = field(default_factory=list)
     fail_posture: str = "fail_open"  # "fail_open" | "fail_closed"
+    # What to do when Parse releases a block on a semantic acquittal
+    # (``released_from_block.released`` is true).
+    #
+    #   "block"    -- refuse it, exactly as if it had blocked. Default.
+    #   "allow"    -- let it through. Only sane if you review released prompts.
+    #   "callback" -- ask ``on_released_prompt`` and use its answer.
+    #
+    # The default is the strict one: upgrading this SDK must not loosen
+    # anybody's posture. A released prompt comes back below the risk bands
+    # this SDK gates on, so without this it would simply pass.
+    on_released: str = "block"  # "block" | "allow" | "callback"
+    on_released_prompt: Optional[Callable[[Dict[str, Any], str], bool]] = None
     screen_output: bool = True
     parse_timeout: float = 10.0  # seconds
+
+
+def _blocked(parse_resp: Optional[Dict[str, Any]]) -> bool:
+    """A verdict this SDK refuses.
+
+    Reads ``recommended_action`` as well as the risk bands. It previously read
+    only the bands, which made it blind to the frozen-agent kill switch (verdict
+    "block") and to any action-level decision.
+    """
+    if not parse_resp:
+        return False
+    if parse_resp.get("verdict") in ("critical", "high_risk", "block"):
+        return True
+    return parse_resp.get("recommended_action") == "block"
+
+
+def _release_blocked(
+    parse_resp: Optional[Dict[str, Any]],
+    config: "ParseSdkConfig",
+    prompt: str,
+) -> bool:
+    """True when Parse released a block and this client will not accept it.
+
+    A released prompt comes back below the risk bands — medium_risk / sandbox —
+    so a client gating on bands alone treats it as safe. That is precisely how
+    the two previous attempts at the release feature turned "release to sandbox"
+    into "release to allow" in production. Default is to refuse.
+    """
+    release = (parse_resp or {}).get("released_from_block") or {}
+    if not release.get("released"):
+        return False
+    if config.on_released == "allow":
+        return False
+    if config.on_released == "callback" and config.on_released_prompt:
+        try:
+            return not bool(config.on_released_prompt(release, prompt))
+        except Exception:
+            # A throwing callback must not open the gate.
+            return True
+    return True
 
 
 class ParseScreeningError(Exception):
@@ -304,7 +356,21 @@ def _intercept_async(
                 config,
             )
 
-            if parse_resp and parse_resp.get("verdict") in ("critical", "high_risk"):
+            if _release_blocked(parse_resp, config, prompt):
+                stats.blocked_calls += 1
+                if config.fail_posture == "fail_closed":
+                    raise ParseScreeningError(
+                        "Input blocked by Parse (released from block by "
+                        f"{(parse_resp or {}).get('released_from_block', {}).get('released_by', 'semantic acquittal')}; "
+                        "set on_released to change this)",
+                        verdict=(parse_resp or {}).get("verdict", ""),
+                        risk_score=(parse_resp or {}).get("risk_score", 0),
+                        flags=(parse_resp or {}).get("flags", []),
+                        categories=(parse_resp or {}).get("categories", []),
+                    )
+                return _make_safe_response(body, kind, parse_resp or {})
+
+            if _blocked(parse_resp):
                 stats.blocked_calls += 1
                 if config.fail_posture == "fail_closed":
                     raise ParseScreeningError(
@@ -381,7 +447,21 @@ def _intercept_sync(
                 config,
             )
 
-            if parse_resp and parse_resp.get("verdict") in ("critical", "high_risk"):
+            if _release_blocked(parse_resp, config, prompt):
+                stats.blocked_calls += 1
+                if config.fail_posture == "fail_closed":
+                    raise ParseScreeningError(
+                        "Input blocked by Parse (released from block by "
+                        f"{(parse_resp or {}).get('released_from_block', {}).get('released_by', 'semantic acquittal')}; "
+                        "set on_released to change this)",
+                        verdict=(parse_resp or {}).get("verdict", ""),
+                        risk_score=(parse_resp or {}).get("risk_score", 0),
+                        flags=(parse_resp or {}).get("flags", []),
+                        categories=(parse_resp or {}).get("categories", []),
+                    )
+                return _make_safe_response(body, kind, parse_resp or {})
+
+            if _blocked(parse_resp):
                 stats.blocked_calls += 1
                 if config.fail_posture == "fail_closed":
                     raise ParseScreeningError(

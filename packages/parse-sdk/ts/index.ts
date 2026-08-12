@@ -43,6 +43,21 @@ export interface ParseSdkConfig {
   /** Legacy alias for `failClosed`. `"fail_closed"` is the same as `failClosed: true`.
    *  Used only when `failClosed` is absent. */
   failPosture?: FailPosture;
+  /**
+   * What to do when Parse releases a block on a semantic acquittal
+   * (`released_from_block.released === true`).
+   *
+   *   "block"    — refuse it, exactly as if it had blocked. **Default.**
+   *   "allow"    — let it through. Only sane if you review released prompts.
+   *   "callback" — call `onReleasedPrompt` and use its answer.
+   *
+   * The default is deliberately the strict one: upgrading this SDK must not
+   * loosen anybody's posture. A release is only worth having if released
+   * prompts reach a queue somebody reads — see the README.
+   */
+  onReleased?: "block" | "allow" | "callback";
+  /** Called when `onReleased: "callback"`. Return true to allow the prompt. */
+  onReleasedPrompt?: (info: NonNullable<ParseApiResponse["released_from_block"]>, prompt: string) => boolean | Promise<boolean>;
   /** Whether to screen LLM output after the call. Default `true`. */
   screenOutput?: boolean;
   /** Timeout (ms) for Parse API calls. Default `10_000`. */
@@ -57,6 +72,8 @@ interface ResolvedConfig {
   environment: string;
   dataSources: string[];
   failClosed: boolean;
+  onReleased: "block" | "allow" | "callback";
+  onReleasedPrompt?: (info: NonNullable<ParseApiResponse["released_from_block"]>, prompt: string) => boolean | Promise<boolean>;
   screenOutput: boolean;
   parseTimeoutMs: number;
 }
@@ -85,6 +102,8 @@ function resolveConfig(config: ParseSdkConfig): ResolvedConfig {
     environment: config.environment ?? "production",
     dataSources: config.dataSources ?? [],
     failClosed: config.failClosed ?? config.failPosture === "fail_closed",
+    onReleased: config.onReleased ?? "block",
+    onReleasedPrompt: config.onReleasedPrompt,
     screenOutput: config.screenOutput !== false,
     parseTimeoutMs: config.parseTimeoutMs ?? 10_000,
   };
@@ -140,6 +159,24 @@ interface ParseApiResponse {
   analysis_method?: string;
   frozen?: boolean;
   recommended_action?: string;
+  /**
+   * Present when Parse would have blocked on deterministic signals alone and
+   * the semantic layer cleared it.
+   *
+   * Treat this as a block unless you have somewhere for released prompts to
+   * go. A release is Parse saying "the fast lexical layer says stop, the
+   * reading layer disagrees" — useful, and not the same as safe. `onReleased`
+   * decides; it defaults to `"block"`.
+   */
+  released_from_block?: {
+    released: boolean;
+    would_have_been?: string;
+    released_by?: string;
+    analyst_model?: string;
+    analyst_score?: number;
+    flags_released?: string[];
+    review_recommended?: boolean;
+  };
 }
 
 interface ScreenOutputResponse {
@@ -321,10 +358,45 @@ function interceptAsync(
         );
       }
 
+      // A prompt Parse would have blocked, cleared by the semantic layer.
+      //
+      // This lands *below* the risk bands — a released prompt comes back as
+      // medium_risk/sandbox — so a client that gates on the bands alone treats
+      // it as safe. That is how the two previous attempts at this feature
+      // turned "release to sandbox" into "release to allow" in production.
+      // Default is to refuse it.
+      const release = parseResp?.released_from_block;
+      let releasedAndAllowed = false;
+      if (release?.released) {
+        if (config.onReleased === "allow") {
+          releasedAndAllowed = true;
+        } else if (config.onReleased === "callback" && config.onReleasedPrompt) {
+          releasedAndAllowed = await config.onReleasedPrompt(release, prompt);
+        }
+        if (!releasedAndAllowed) {
+          stats.blockedCalls++;
+          if (config.failClosed) {
+            throw new ParseScreeningError(
+              `Input blocked by Parse (released from block by ${release.released_by ?? "semantic acquittal"}; ` +
+                `set onReleased to change this)`,
+              {
+                verdict: parseResp!.verdict,
+                riskScore: parseResp!.risk_score,
+                flags: parseResp!.flags,
+                categories: parseResp!.categories,
+                traceId: parseResp!.trace_id,
+              },
+            );
+          }
+          return makeSafeResponse(body, kind, parseResp!);
+        }
+      }
+
       // "block" comes from the frozen-agent kill switch and is not one of the
       // risk bands; gating on the bands alone made the kill switch a no-op here.
       if (
         parseResp &&
+        !releasedAndAllowed &&
         (parseResp.verdict === "critical" ||
           parseResp.verdict === "high_risk" ||
           parseResp.verdict === "block" ||

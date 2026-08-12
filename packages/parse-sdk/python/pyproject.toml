@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "parsethis-ai"
-version = "0.2.0"
+version = "0.3.0"
 description = "Parse (parsethis.ai) client: direct prompt/output/trust screening plus a drop-in OpenAI/Anthropic interceptor."
 readme = "README.md"
 license = { text = "ISC" }
