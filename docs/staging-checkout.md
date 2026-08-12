@@ -70,7 +70,19 @@ Three things bite, all worked around in the transcript above:
   `#email`, `#cardNumber`, `#cardExpiry`, `#cardCvc`, `#billingName`,
   `#billingPostalCode`, and `button[data-testid="hosted-payment-submit-button"]`.
 
-## Two defects this environment surfaced
+## Three defects this environment surfaced
+
+**0. A paying customer landed on a 401.** Fixed in code, not yet deployed.
+`success_url` returned buyers to `/dashboard/billing`, which is behind
+`authMiddleware`; a browser arriving from checkout.stripe.com carries no key, so
+the reward for paying was raw JSON asking for a Bearer token. It now points at a
+public `/checkout/success` that reads the tier from the Stripe session
+server-side, then signs the buyer in with the key the pricing page already put in
+`localStorage`, through the same httpOnly cookie the login form sets. Measured
+after the fix: `GET /checkout/success 200` → `POST /admin/login 200` →
+`GET /dashboard/billing 200`, about 300ms from Stripe's redirect to the
+dashboard.
+
 
 **1. Self-service signup keys cannot be written to Postgres.** Fixed in code,
 not yet deployed. `createApiKey()` passed the literal string `"self-service"` as `userId`
