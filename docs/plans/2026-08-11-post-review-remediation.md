@@ -147,6 +147,14 @@ work and is the durable version of the bug.
 
 ## Phase 4 — Acquittal release, redesigned (P2, needs a second adversarial pass)
 
+> **Superseded 2026-08-12** by `2026-08-12-semantic-acquittal-release.md`, which
+> keeps every requirement below and adds the sequencing they were missing: the
+> SDK work has to land *first*, because until a client can act on a released
+> verdict, "release to sandbox" is "release to allow" for every real caller.
+> A third attempt on 2026-08-12 was written and reverted before commit after
+> reproducing failure modes 2, 3 and 4 from `e094fe2` — it had not read this
+> section first. Read the successor plan, not this one, before starting.
+
 The underlying complaint stands and is unfixed: `intent.*` block floors mean the
 semantic layer can only add risk, never clear a false positive. That has cost
 two prospect walkthroughs. The reverted implementation is in `03c8beb`; do not
