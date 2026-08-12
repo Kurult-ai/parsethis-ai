@@ -1,15 +1,31 @@
 # Solo-Tier Conversion Remediation — Nour Haddad Run (Run 6)
 
-> **Execution record (2026-08-12).** Items 1, 2, 4, 5, 6, 7, 8 and 9 are done and
-> committed (`b704b1e`, `2cdac4a`, `c8ca374`, `27528f4`; the `public.ts` and
-> `product-facts.ts` hunks landed in `c32e2ce`, which a concurrent session
-> committed while this work was in the tree). Item 3 and item 10 are **blocked on
-> the Stripe Dashboard**: `POST /v1/accounts/{id}` and `POST /v1/account` both
-> return *"You cannot use this method on your own account: you may only use it on
-> connected accounts."* — Stripe does not permit API edits to your own account's
-> business profile. Both fields must be set at
-> <https://dashboard.stripe.com/settings/public>: **Public business name** →
-> `Parse`, **Business website** → `https://www.parsethis.ai`.
+> **Execution record (2026-08-12) — all items closed, deployed, verified live.**
+> Commits `b704b1e`, `2cdac4a`, `c8ca374`, `27528f4`, `abd8ef0`, `4a00d36`,
+> `28b651d` (the `public.ts` and `product-facts.ts` hunks landed in `c32e2ce`,
+> which a concurrent session committed while this work sat in the tree).
+>
+> Item 3 and item 10 could not be done via API — `POST /v1/accounts/{id}` and
+> `POST /v1/account` both return *"You cannot use this method on your own account:
+> you may only use it on connected accounts."* Stripe does not permit API edits to
+> your own account's business profile; they were applied by hand at
+> <https://dashboard.stripe.com/settings/public> and verified through the API:
+> `business_profile.name = "Parse"`, `url = "parsethis.ai"`, new product
+> description, `requirements.currently_due: []`, `charges_enabled: true` — no
+> review triggered. Checkout now reads *"By subscribing, you authorize **Parse** to
+> charge you"*, zero mentions of the previous personal name.
+>
+> The Stripe **product** description for `prod_V3SlumNuaCG7L9` was a missed surface
+> of item 5 — it still led with "Non-expiring key" at the moment of purchase. It
+> now leads with the two benefits that are real for this buyer.
+>
+> Post-deploy verification (all six steps passed): Solo column live in the
+> calculator; free-tier 429 returns `upgrade` + `upgradeUrl: "/pricing#solo"`;
+> `/docs` has zero "expire in 30 days"; checkout branded Parse; the injection still
+> scores 10/critical/block with `categories: ['prompt_injection']` only and both
+> false-reason flags gone, while the benign angry-customer email still scores 0
+> with zero flags; `/pricing` console clean. Test keys revoked and 401 confirmed;
+> the checkout session was abandoned unpaid.
 >
 > Two corrections to this plan surfaced during execution and are folded in below:
 > the item 1 highlight rule was wrong as written (see item 1), and the expiry
@@ -256,6 +272,29 @@ the analytics this plan's own success depends on. Allow it instead.
 
 **Gate:** /pricing console shows no CSP error; beacon request returns 2xx.
 **Effort:** ~10 minutes.
+
+### 11. Done — Stripe price variables untangled (found during verification)
+
+`TIER_CONFIG.compliance` pointed at `STRIPE_AUDIT_PRICE_ID`, the one-time $47
+audit product's variable. **Corrected framing:** neither variable is set in this
+environment, so nothing was ever mispriced — the earlier "would bill $999 against
+the $47 price" was wrong in practice. The real exposure was latent: wiring the
+audit to a real Stripe price, an ordinary next step, would have put the $999/mo
+tier on sale for $47 once.
+
+Also verified while here: the $47 audit is *not* broken by the missing variable.
+`createAuditCheckoutSession` falls back to inline `price_data` at
+`AUDIT_PRODUCT_CONFIG.priceCents`, so `POST /audit/purchase` returns a working
+$47 session. Only Solo, Pro and Team have real prices in Stripe; the rest of the
+account's prices are legacy parsethe.media products (credit packs, gift packs).
+
+Shipped in `28b651d`: compliance moved to `STRIPE_COMPLIANCE_PRICE_ID`;
+`isTierPurchasable()` added; both checkout routes return 503 naming the contact
+address instead of throwing a 500, with the signup route checking *before* it
+mints a key so a refused tier leaves no stray key against the 100-key cap; five
+tests pin that no subscription tier shares another's variable or the audit's.
+Verified live: `{"tier":"compliance"}` → 503, `{"tier":"solo"}` → 201 with a
+checkout URL.
 
 ### 10. Flagged for decision (not scheduled): Stripe business profile drift
 
