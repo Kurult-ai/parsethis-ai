@@ -42,9 +42,10 @@ import {
 } from "../lib/compliance/alert-rules.js";
 import { getSIEMStatus, checkDestinationHealth } from "../lib/compliance/siem-worker.js";
 import { policyHistoryScope } from "../lib/compliance/policy-history-scope.js";
+import { sealSecret } from "../lib/secret-box.js";
 import { resolveOrgId } from "../lib/org-scope.js";
 import { requireRole } from "../lib/rbac.js";
-import { serviceDependencyProblem } from "../lib/problem-response.js";
+import { problem, ErrorCode, serviceDependencyProblem } from "../lib/problem-response.js";
 
 export const complianceRoutes = new Hono<AppEnv>();
 
@@ -343,6 +344,25 @@ complianceRoutes.post("/v1/compliance/siem", authMiddleware("evaluate"), require
 
   const { platform, endpoint, auth_header, format, event_types } = body;
 
+  // The schema has said "stored encrypted at rest" since this table shipped and
+  // the value went in as plaintext. Seal it. A missing PARSE_SECRET_KEY is a
+  // 503, not a quiet fallback to writing the token in the clear.
+  let sealedAuthHeader: string | null = null;
+  if (auth_header) {
+    try {
+      sealedAuthHeader = sealSecret(String(auth_header));
+    } catch (err) {
+      console.error("[compliance] SIEM auth header could not be sealed:", (err as Error).message);
+      return problem(c, {
+        status: 503,
+        title: "Secret storage unavailable",
+        detail: "This deployment cannot encrypt secrets at rest, so the credential was not stored. Set PARSE_SECRET_KEY and try again.",
+        code: ErrorCode.SERVICE_UNAVAILABLE,
+        retryable: true,
+      });
+    }
+  }
+
   if (!platform || !endpoint) {
     return c.json({ error: "platform and endpoint are required" }, 400);
   }
@@ -360,7 +380,7 @@ complianceRoutes.post("/v1/compliance/siem", authMiddleware("evaluate"), require
   try {
     await prisma.$executeRaw`
       INSERT INTO siem_configs (id, org_id, platform, endpoint, auth_header, format, event_types, active, created_at, updated_at)
-      VALUES (${id}, ${orgId}, ${platform}, ${endpoint}, ${auth_header ?? null}, ${fmt}, ${evtTypes}, true, NOW(), NOW())
+      VALUES (${id}, ${orgId}, ${platform}, ${endpoint}, ${sealedAuthHeader}, ${fmt}, ${evtTypes}, true, NOW(), NOW())
     `;
 
     auditLog({

@@ -437,6 +437,7 @@ model Organization {
   ssoProviders SSOProvider[]
   toolRules   OrgToolRule[]
   policyDefault OrgPolicyDefault?
+  gatewayConfig GatewayConfig?
 
   @@map("organizations")
 }
@@ -542,12 +543,45 @@ model PolicyRevision {
   @@map("policy_revisions")
 }
 
+/// Per-organization LLM gateway.
+///
+/// This model reverses a recorded decision: the gateway deliberately avoided
+/// persistent key custody ("the C17 blast radius is minimized by not persisting
+/// provider keys to disk/database"), and its config lived in one process-global
+/// variable. That made it single-tenant AND unreachable — configuring it needed
+/// an `admin` scope no customer key holds, so the one enforcement point that
+/// does not depend on an agent declaring its own tools did not exist for
+/// customers at all.
+///
+/// The trade is now managed rather than avoided: sealedApiKey is AES-256-GCM
+/// via src/lib/secret-box.ts, no route returns it, and config is scoped to one
+/// organization.
+model GatewayConfig {
+  id             String   @id @default(cuid())
+  orgId          String   @unique @map("org_id")
+  upstreamUrl    String   @map("upstream_url")
+  /// Sealed. Never returned by any route — reads report configured true/false.
+  sealedApiKey   String   @map("sealed_api_key")
+  model          String?
+  enforcementMode String  @default("block") @map("enforcement_mode")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt      @map("updated_at")
+
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("gateway_configs")
+}
+
 model SIEMConfig {
   id            String   @id @default(cuid())
   orgId         String   @map("org_id")
   platform      String   // splunk, datadog, elastic, sentinel, generic_webhook
   endpoint      String
-  authHeader    String?  @map("auth_header")  // stored encrypted at rest
+  /// Sealed with src/lib/secret-box.ts (AES-256-GCM) since 2026-08-12. Rows
+  /// written before that are plaintext and are sealed on their next write; the
+  /// forwarder reads both. Never returned by any route.
+  authHeader    String?  @map("auth_header")
   format        String   @default("cef")  // cef, json, leef, raw
   eventTypes    String[] @default(["screening", "audit", "policy_change", "approval"])
   active        Boolean  @default(true)

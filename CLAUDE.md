@@ -160,7 +160,9 @@ Enforced at three points, so a ban holds however the request arrives:
    every key in the org.
 3. **Gateway** (`src/lib/gateway/proxy-handler.ts`) — blocked entries stripped
    from the OpenAI-compatible `tools` array before forwarding; refused outright
-   under `block`.
+   under `block`. **This is the only one of the three that does not depend on an
+   agent declaring its own tools**: it reads the `tools` array off the wire, so
+   an agent that declares nothing to the registry is still governed here.
 
 **Policy ceiling** (`OrgPolicyDefault`) is the org-wide risk tolerance.
 `ScreeningPolicy` is per `(apiKeyId, environment)`, so without it an employee
@@ -173,6 +175,28 @@ never before it is written: caching the clamped value would delay an admin's
 change until every member key's cache entry expired. A field in `lockedFields`
 takes the org value outright, and `PUT /v1/policy` returns 422 rather than
 clamping such a write silently.
+
+**Gateway custody (supersedes ADR-001 C17).** The gateway used to hold its
+config in one process-global variable and required `admin` scope to set, on the
+reasoning that not persisting provider keys minimised the C17 blast radius. That
+made it single-tenant *and* unreachable: no self-service key carries `admin`, so
+the one enforcement point that does not rely on an agent's own declaration did
+not exist for customers, and the proxy answered 503 telling them to call an
+endpoint they were forbidden to call.
+
+Config is now per organization in `GatewayConfig`, set by `org_admin`. The
+provider key is sealed with `src/lib/secret-box.ts` (AES-256-GCM, key from
+`PARSE_SECRET_KEY`), opened only at the moment of forwarding, never cached in
+plaintext and never returned by any route — reads report `api_key_configured`
+and nothing else. `src/lib/gateway/config-store.ts` **fails closed**, unlike the
+tool-policy and ceiling stores: no config, an inactive one, or a key that cannot
+be opened all mean "do not proxy". Without `PARSE_SECRET_KEY` the credential
+routes answer 503; writing plaintext is not an available fallback.
+
+The same helper retrofits `SIEMConfig.authHeader`, whose schema comment claimed
+"stored encrypted at rest" while `siem-forwarder.ts` read it straight into an
+HTTP header. Rows written before 2026-08-12 are plaintext and are sealed on
+their next write; `openMaybeSealed` reads both.
 
 Both stores are Redis-cached and **fail open** — a governance lookup must never
 break authentication or screening. Invalidate on every write.
@@ -213,6 +237,13 @@ When a feature ships, flip its entry in `FEATURE_STATUS`
 
 Requires: `DATABASE_URL`, `REDIS_URL`, `OPENROUTER_API_KEY`
 Optional: `SANDBOX_URL`, `SANDBOX_HMAC_SECRET`, `ANALYSIS_MODEL`, `DEFAULT_MODEL`, `ALLOWED_ORIGINS`, `PARSE_CSRF_SECRET`
+
+`PARSE_SECRET_KEY` encrypts the few secrets Parse stores for a customer: an
+org's upstream provider key and a SIEM auth header. 32 random bytes, base64 or
+hex (`openssl rand -base64 32`). Unset, those routes answer 503 rather than
+storing the credential in the clear, and the startup log says so. Rotating it
+makes existing sealed values unopenable, so rotate and re-enter the credentials
+in the same maintenance window.
 
 `PARSE_CSRF_SECRET` signs dashboard CSRF tokens. Unset, it falls back to
 `PARSE_APPROVAL_SECRET` then `MASTER_API_KEY`; set it explicitly in production

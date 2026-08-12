@@ -9,7 +9,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { VALID_ROLES } from "../lib/rbac.js";
-import type { ToolRule } from "../lib/tool-policy.js";
 
 import {
   computeRuleExposure,
