@@ -312,18 +312,22 @@ Required verification:
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Compliance</div>
         <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$999<span style="font-size:14px;font-weight:400;color:var(--text-dim);">/mo</span></div>
-        <div style="font-size:13px;color:var(--text-dim);">SIEM, evidence packs, data governance</div>
+        <div style="font-size:13px;color:var(--text-dim);">Prove the control was on, for the period, across every agent</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.compliance.requestsPerMinute} req/min</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">SIEM forwarding (Splunk/Datadog)</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Custom rules &amp; framework mapping</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Evidence packs (OWASP/NIST/SOC&nbsp;2)</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Org model &amp; RBAC</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Evidence packs with the decisions in them — every screen reported rather than refused, and why</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Declaration rate per agent — see a team switching the control off</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Forbid per-request downgrades org-wide, with the change on the audit trail</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">SIEM forwarding (Splunk/Datadog) — decisions streamed with their declarations</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Framework mapping (OWASP/NIST/SOC&nbsp;2) &amp; custom rules</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Data governance (grants, egress, budgets)</li>
-        <li style="padding:6px 0;">${PLAN_LIMITS.compliance.sandboxExecutionsPerHour} sandbox/hr</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.compliance.requestsPerMinute} req/min · ${PLAN_LIMITS.compliance.sandboxExecutionsPerHour} sandbox/hr</li>
+        <li style="padding:6px 0;">Org model &amp; RBAC — free on every plan, including this one</li>
       </ul>
       <a href="mailto:${PRODUCT.contactEmail}?subject=Compliance%20Plan" class="btn btn-primary" style="width:100%;text-align:center;">Talk to sales</a>
+      <div style="font-size:12px;color:var(--text-soft);text-align:center;">
+        Sales-led because it starts with an onboarding review of your trust boundaries and your evidence window. Priced on the controls, not on volume — the calculator below prices the runtime plans.
+      </div>
     </div>
 
     <!-- Volume -->

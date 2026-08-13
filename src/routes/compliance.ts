@@ -135,7 +135,7 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), requi
         select: { id: true, action: true, detail: true, createdAt: true },
       }),
       prisma.auditEvent.count({
-        where: { ...auditScope, action: { in: ["policy_updated", "policy_deleted"] } },
+        where: { ...auditScope, action: { in: ["policy_updated", "policy_deleted", "org_policy_defaults.updated", "org_tool_rule.created", "org_tool_rule.deleted"] } },
       }),
       prisma.$queryRaw<Array<{ agent_id: string; count: bigint; avg_risk: number }>>`
         SELECT
@@ -747,6 +747,108 @@ complianceRoutes.get("/v1/compliance/policy-history", authMiddleware("evaluate")
     return serviceDependencyProblem(c, err);
   }
 });
+
+// ─── GET /v1/compliance/declarations — guard 3 ─────────────────────────
+//
+// The share of an org's traffic declaring a non-execute intended_action, over
+// time and per key. src/lib/analysis-role.ts has always named this as one of
+// the things that stop the subject-role downgrade being a silent off-switch,
+// and /docs promised it to customers, and it did not exist.
+//
+// Why it matters more than a percentage usually does: a caller declaring
+// `summarize` gets findings reported rather than refused. That is correct for a
+// SOC triaging its own alert queue and wrong for a team that has discovered
+// adding one field makes the warnings stop. The org ceiling
+// (allowSubjectRole) can forbid it outright, but an admin who has not forbidden
+// it has, until now, had no way to notice a team's declaration rate climbing.
+// Prospect run 11 downgraded 13 findings including six live injections in
+// eleven minutes and nothing anywhere changed.
+//
+// Read the trend, not the number. A team that always declares is probably
+// doing analysis work legitimately; a team whose rate goes from 2% to 90% in a
+// week has changed something.
+
+complianceRoutes.get(
+  "/v1/compliance/declarations",
+  authMiddleware("evaluate"),
+  requireRole("org_admin", "security_analyst", "auditor"),
+  async (c) => {
+    const apiKey = c.get("apiKey");
+    const days = Math.min(Math.max(Number(c.req.query("days") ?? "30"), 1), 365);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const orgId = await resolveOrgId(apiKey.id);
+    const scope = orgScopedWhere(orgId, apiKey.id);
+    const orgFilter = orgId
+      ? Prisma.sql`k.org_id = ${orgId}`
+      : Prisma.sql`e.api_key_id = ${apiKey.id}`;
+
+    try {
+      const [total, declared, downgraded, byKey, daily] = await Promise.all([
+        prisma.screeningEvent.count({ where: { ...scope, createdAt: { gte: since } } }),
+        prisma.screeningEvent.count({
+          where: { ...scope, analysisRole: "subject", createdAt: { gte: since } },
+        }),
+        // Declarations that actually changed an outcome: the finding stood and
+        // the refusal did not. This is the number an auditor asks about.
+        prisma.screeningEvent.count({
+          where: { ...scope, disposition: "report", createdAt: { gte: since } },
+        }),
+        prisma.$queryRaw<Array<{ api_key_id: string; name: string | null; total: bigint; declared: bigint }>>`
+          SELECT e.api_key_id,
+                 k.name,
+                 count(*) as total,
+                 count(*) FILTER (WHERE e.analysis_role = 'subject') as declared
+          FROM screening_events e
+          JOIN api_keys k ON k.id = e.api_key_id
+          WHERE ${orgFilter} AND e.created_at >= ${since}
+          GROUP BY e.api_key_id, k.name
+          ORDER BY declared DESC
+          LIMIT 50
+        `,
+        prisma.$queryRaw<Array<{ day: Date; total: bigint; declared: bigint }>>`
+          SELECT date_trunc('day', e.created_at) as day,
+                 count(*) as total,
+                 count(*) FILTER (WHERE e.analysis_role = 'subject') as declared
+          FROM screening_events e
+          JOIN api_keys k ON k.id = e.api_key_id
+          WHERE ${orgFilter} AND e.created_at >= ${since}
+          GROUP BY day
+          ORDER BY day ASC
+        `,
+      ]);
+
+      const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 10000) / 100 : null);
+
+      return c.json({
+        period: { from: since.toISOString(), to: new Date().toISOString(), days },
+        total_screenings: total,
+        declared_subject_role: declared,
+        declaration_rate_pct: pct(declared, total),
+        downgraded_findings: downgraded,
+        note:
+          "declaration_rate_pct is the share of screens where the caller declared, via metadata.intended_action, that the agent only analyses this content. downgraded_findings counts the ones where that declaration turned a refusal into a reported finding. A rate climbing toward 100% is the control being switched off a request at a time; forbid it org-wide with allowSubjectRole on PUT /v1/org/policy-defaults.",
+        by_key: byKey.map((r) => ({
+          api_key_id: r.api_key_id,
+          name: r.name,
+          screenings: Number(r.total),
+          declared: Number(r.declared),
+          declaration_rate_pct: pct(Number(r.declared), Number(r.total)),
+        })),
+        daily: daily.map((r) => ({
+          date: new Date(r.day).toISOString().slice(0, 10),
+          screenings: Number(r.total),
+          declared: Number(r.declared),
+          declaration_rate_pct: pct(Number(r.declared), Number(r.total)),
+        })),
+        generated_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("[compliance] declarations error:", (err as Error).message);
+      return serviceDependencyProblem(c, err);
+    }
+  },
+);
 
 // ─── GET /v1/coverage — Coverage attestation report ────────────────────
 //

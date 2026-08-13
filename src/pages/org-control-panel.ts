@@ -381,6 +381,12 @@ const CEILING_FIELD_LABELS: Array<{ field: keyof OrgPolicyCeiling; label: string
   { field: "executeInSandbox", label: "Execute in sandbox" },
   { field: "enforceToolAllowlist", label: "Enforce tool allowlist" },
   { field: "bypassEnabled", label: "Bypass allowed" },
+  // Absent until 2026-08-13, and its own test had been failing to say so. The
+  // form replaces the whole ceiling on save, so a field missing from it is sent
+  // as null: an admin who set this by API and then saved any other setting from
+  // this page silently lost the ban. That is the exact failure the person
+  // signing the attestation is afraid of.
+  { field: "allowSubjectRole", label: "Allow per-request downgrades" },
 ];
 
 /**

@@ -36,20 +36,20 @@
  * ── Why this is not a hole ──
  *
  * A naive caller could declare `summarize` everywhere and switch the product
- * off. Three things stop that being silent, and a fourth is in development:
+ * off. Four things stop that being silent:
  *
  *   1. The declaration is on the record, and so is what it did. The screening
  *      event carries `intended_action`, `disposition` and `analysis_role` as
  *      columns, so a downgraded screen and a refused one are distinguishable
- *      after the fact.
- *   2. An org admin can forbid it or restrict it per agent through the ceiling.
- *   3. Untrusted third-party content is refused the downgrade unless the caller
+ *      after the fact, and the evidence pack lists them.
+ *   2. An org admin can forbid it or restrict it per agent through the ceiling,
+ *      and the change is on the audit trail with the admin's own reason.
+ *   3. GET /v1/compliance/declarations reports the share of traffic declaring a
+ *      non-execute role, overall, per key and per day. A rate climbing toward
+ *      100% is a customer disabling the control.
+ *   4. Untrusted third-party content is refused the downgrade unless the caller
  *      also declares which spans are quoted — untrusted *and* undeclared stays a
  *      block, which is the B4 guard from the acquittal register.
- *
- *   In development: a metric reporting the share of traffic declaring a
- *   non-execute role. A number climbing toward 100% is a customer disabling the
- *   control, and today nothing surfaces that.
  *
  * Keep this list and the paragraph on /docs in step. Prospect run 11 found the
  * page promising four guards when the third did not exist, which cost more

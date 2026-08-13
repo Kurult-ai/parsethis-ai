@@ -15,6 +15,8 @@
 
 import { renderPage } from "../lib/html-template.js";
 import { prisma } from "../db.js";
+import { Prisma } from "../generated/prisma/client.js";
+import { resolveOrgId, orgScopedWhere, auditScopedWhere } from "../lib/org-scope.js";
 import { DEFAULT_POLICY, MAX_THRESHOLD_BY_TIER } from "../routes/policy.js";
 import { generateCoverageReport } from "../lib/compliance/framework-crosswalk.js";
 
@@ -36,24 +38,37 @@ export async function renderComplianceDashboardPage(baseUrl: string, apiKeyId: s
   let topAgents: Array<{ agent_id: string; screenings: number; avg_risk: number }> = [];
   let policy: Record<string, unknown> | null = null;
   let screenings7d: Array<{ date: string; count: number; blocked: number }> = [];
+  let dispositions: Array<{ disposition: string; count: number }> = [];
+
+  // This console is what an admin shows an auditor, so it must report the
+  // organisation rather than the key that happens to be signed in. It reported
+  // "0 Total Screenings / 100% Pass Rate" to an org whose member key had just
+  // screened twenty prompts containing six live injections (prospect run 11).
+  const orgId = await resolveOrgId(apiKeyId);
+  const scope = orgScopedWhere(orgId, apiKeyId);
+  const auditScope = await auditScopedWhere(orgId, apiKeyId);
+  const orgFilter = orgId
+    ? Prisma.sql`k.org_id = ${orgId}`
+    : Prisma.sql`e.api_key_id = ${apiKeyId}`;
 
   try {
     const [
       total, last24h, blocked, blocked24, audits, polChanges,
       verdictGroups, categories, recent, recentAudits,
-      agents, dbPolicy,
+      agents, dispositionGroups, dbPolicy,
     ] = await Promise.all([
-      prisma.screeningEvent.count({ where: { apiKeyId } }),
-      prisma.screeningEvent.count({ where: { apiKeyId, createdAt: { gte: since24h } } }),
-      prisma.screeningEvent.count({ where: { apiKeyId, blocked: true } }),
-      prisma.screeningEvent.count({ where: { apiKeyId, blocked: true, createdAt: { gte: since24h } } }),
-      prisma.auditEvent.count({ where: { apiKeyId } }),
-      prisma.auditEvent.count({ where: { apiKeyId, action: { in: ["policy_updated", "policy_deleted"] } } }),
-      prisma.screeningEvent.groupBy({ by: ["verdict"], where: { apiKeyId }, _count: true, orderBy: { _count: { verdict: "desc" } } }),
-      prisma.$queryRaw<Array<{ category: string; count: bigint }>>`SELECT unnest(categories) as category, count(*) as count FROM screening_events WHERE api_key_id = ${apiKeyId} GROUP BY category ORDER BY count DESC LIMIT 10`,
-      prisma.screeningEvent.findMany({ where: { apiKeyId }, orderBy: { createdAt: "desc" }, take: 15, select: { id: true, riskScore: true, verdict: true, categories: true, blocked: true, createdAt: true, metadata: true } }),
-      prisma.auditEvent.findMany({ where: { apiKeyId }, orderBy: { createdAt: "desc" }, take: 10, select: { id: true, action: true, detail: true, createdAt: true } }),
-      prisma.$queryRaw<Array<{ agent_id: string; count: bigint; avg_risk: number }>>`SELECT (metadata->>'agent_id')::text as agent_id, count(*) as count, AVG(risk_score)::float as avg_risk FROM screening_events WHERE api_key_id = ${apiKeyId} AND metadata->>'agent_id' IS NOT NULL GROUP BY agent_id ORDER BY avg_risk DESC LIMIT 5`,
+      prisma.screeningEvent.count({ where: scope }),
+      prisma.screeningEvent.count({ where: { ...scope, createdAt: { gte: since24h } } }),
+      prisma.screeningEvent.count({ where: { ...scope, blocked: true } }),
+      prisma.screeningEvent.count({ where: { ...scope, blocked: true, createdAt: { gte: since24h } } }),
+      prisma.auditEvent.count({ where: auditScope }),
+      prisma.auditEvent.count({ where: { ...auditScope, action: { in: ["policy_updated", "policy_deleted", "org_policy_defaults.updated", "org_tool_rule.created", "org_tool_rule.deleted"] } } }),
+      prisma.screeningEvent.groupBy({ by: ["verdict"], where: scope, _count: true, orderBy: { _count: { verdict: "desc" } } }),
+      prisma.$queryRaw<Array<{ category: string; count: bigint }>>`SELECT unnest(e.categories) as category, count(*) as count FROM screening_events e JOIN api_keys k ON k.id = e.api_key_id WHERE ${orgFilter} GROUP BY category ORDER BY count DESC LIMIT 10`,
+      prisma.screeningEvent.findMany({ where: scope, orderBy: { createdAt: "desc" }, take: 15, select: { id: true, riskScore: true, verdict: true, categories: true, blocked: true, disposition: true, analysisRole: true, createdAt: true, metadata: true } }),
+      prisma.auditEvent.findMany({ where: auditScope, orderBy: { createdAt: "desc" }, take: 10, select: { id: true, action: true, detail: true, createdAt: true } }),
+      prisma.$queryRaw<Array<{ agent_id: string; count: bigint; avg_risk: number }>>`SELECT (e.metadata->>'agent_id')::text as agent_id, count(*) as count, AVG(e.risk_score)::float as avg_risk FROM screening_events e JOIN api_keys k ON k.id = e.api_key_id WHERE ${orgFilter} AND e.metadata->>'agent_id' IS NOT NULL GROUP BY agent_id ORDER BY avg_risk DESC LIMIT 5`,
+      prisma.screeningEvent.groupBy({ by: ["disposition"], where: scope, _count: true }),
       prisma.screeningPolicy.findUnique({ where: { idx_screening_policy_key_env: { apiKeyId, environment: "production" } } }),
     ]);
 
@@ -68,6 +83,7 @@ export async function renderComplianceDashboardPage(baseUrl: string, apiKeyId: s
     recentScreenings = recent as Array<Record<string, unknown>>;
     recentAudit = recentAudits as Array<Record<string, unknown>>;
     topAgents = agents.map(r => ({ agent_id: r.agent_id, screenings: Number(r.count), avg_risk: Number(r.avg_risk?.toFixed(2) ?? 0) }));
+    dispositions = dispositionGroups.map(r => ({ disposition: r.disposition ?? "unrecorded", count: r._count }));
     policy = dbPolicy ? {
       screenUserInput: dbPolicy.screenUserInput,
       screenToolOutputs: dbPolicy.screenToolOutputs,
@@ -81,7 +97,7 @@ export async function renderComplianceDashboardPage(baseUrl: string, apiKeyId: s
     // 7-day trend
     const trendData = await prisma.$queryRaw<Array<{ date: string; count: bigint; blocked: bigint }>>`
       SELECT DATE(created_at) as date, count(*) as count, count(*) FILTER (WHERE blocked = true) as blocked
-      FROM screening_events WHERE api_key_id = ${apiKeyId} AND created_at >= ${since7d}
+      FROM screening_events e JOIN api_keys k ON k.id = e.api_key_id WHERE ${orgFilter} AND e.created_at >= ${since7d}
       GROUP BY DATE(created_at) ORDER BY date ASC
     `;
     screenings7d = trendData.map(r => ({ date: r.date, count: Number(r.count), blocked: Number(r.blocked) }));
@@ -91,6 +107,9 @@ export async function renderComplianceDashboardPage(baseUrl: string, apiKeyId: s
 
   const coverageReport = generateCoverageReport();
   const maxThreshold = MAX_THRESHOLD_BY_TIER[tier] ?? MAX_THRESHOLD_BY_TIER.free;
+  // Findings reported rather than refused: the number that separates "we
+  // screened N" from "we screened N and declined to refuse M of them".
+  const reportedCount = dispositions.find(d => d.disposition === "report")?.count ?? 0;
   const passRate = totalScreenings > 0 ? ((1 - blockedTotal / totalScreenings) * 100).toFixed(1) : "100";
 
   const verdictColors: Record<string, string> = {
@@ -134,7 +153,11 @@ export async function renderComplianceDashboardPage(baseUrl: string, apiKeyId: s
     </div>
     <div class="card" style="text-align:center;padding:20px;">
       <div style="font-size:2rem;font-weight:700;color:var(--destructive);">${blockedTotal.toLocaleString()}</div>
-      <div class="muted" style="font-size:12px;">Blocked (${blocked24h} today)</div>
+      <div class="muted" style="font-size:12px;">Refused (${blocked24h} today)</div>
+    </div>
+    <div class="card" style="text-align:center;padding:20px;" title="Findings that stood in full but were not refused, because the caller declared via metadata.intended_action that their agent only analyses this content.">
+      <div style="font-size:2rem;font-weight:700;color:var(--yellow,#ffb454);">${reportedCount.toLocaleString()}</div>
+      <div class="muted" style="font-size:12px;">Reported, not refused</div>
     </div>
     <div class="card" style="text-align:center;padding:20px;">
       <div style="font-size:2rem;font-weight:700;color:var(--green);">${passRate}%</div>

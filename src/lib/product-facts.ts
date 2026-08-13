@@ -311,12 +311,14 @@ export const FEATURE_STATUS: FeatureStatusEntry[] = [
   { name: "Delegation Chain", status: "shipped", aliases: ["delegation chain", "agent delegation"] },
   { name: "Policy Engine", status: "shipped", aliases: ["policy engine", "custom rules"] },
   { name: "Evidence Pack", status: "shipped", aliases: ["evidence pack"] },
-  // Guard 3 of the subject-role control (src/lib/analysis-role.ts). Documented
-  // on /docs as though it existed; it does not. Registered here so the claims
-  // gate holds the line until it ships.
+  // Guard 3 of the subject-role control (src/lib/analysis-role.ts). Was
+  // documented on /docs as though it existed, for months, while it did not —
+  // which is the finding that cost prospect run 11 more credibility than the
+  // gap itself. Now GET /v1/compliance/declarations: rate over a period, per
+  // key, with a daily series.
   {
     name: "Declaration Coverage Metric",
-    status: "building",
+    status: "shipped",
     aliases: ["declaration coverage", "declaration rate", "declaration share"],
   },
 

@@ -344,6 +344,10 @@ describe("CEILING_FORM_FIELDS", () => {
     // only two, so booleans render as a select.
     const booleans = CEILING_FORM_FIELDS.filter((f) => f.kind === "boolean").map((f) => String(f.key));
     assert.deepEqual(booleans.sort(), [
+      // Whether member keys may use metadata.intended_action to have a finding
+      // reported rather than refused. Tri-state like the rest: "no opinion" is
+      // not the same as "explicitly permitted".
+      "allowSubjectRole",
       "bypassEnabled",
       "enforceToolAllowlist",
       "executeInSandbox",

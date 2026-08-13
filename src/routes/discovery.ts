@@ -1192,6 +1192,22 @@ discoveryRoutes.get("/openapi.json", (c) => {
           },
         },
       },
+      "/v1/compliance/declarations": {
+        get: {
+          operationId: "getDeclarationRate",
+          summary: "What share of your traffic declares it only analyses content",
+          description:
+            "A caller declaring metadata.intended_action of summarize, extract or route gets findings reported rather than refused. That is correct for a team triaging its own alert queue and wrong for a team that has found that one field makes the warnings stop. This reports the rate overall, per key and per day, plus how many declarations actually turned a refusal into a report. Read the trend: a rate climbing toward 100% is the control being switched off a request at a time. Forbid it outright with allowSubjectRole on PUT /v1/org/policy-defaults.",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "days", in: "query", schema: { type: "integer", minimum: 1, maximum: 365, default: 30 } },
+          ],
+          responses: {
+            "200": { description: "Declaration rate, by key and by day" },
+            "403": { description: "Requires org_admin, security_analyst or auditor" },
+          },
+        },
+      },
       "/v1/compliance/framework-map": {
         get: {
           operationId: "getFrameworkMap",
