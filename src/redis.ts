@@ -28,6 +28,22 @@ export function getRedis(): Redis {
     redis.on("error", (err) => {
       console.error("[redis] Connection error:", err.message);
     });
+
+    // Do not let a cache connection keep a short-lived process alive.
+    //
+    // An open socket is a live libuv handle, so node waits for it before
+    // exiting. A server does not care — its HTTP listener holds the loop open
+    // anyway — but a test file or a one-shot script has nothing else to hold it,
+    // so it hangs until something kills it. That is what happened the moment the
+    // screening verdict cache started actually connecting: `npm test` went from
+    // 24 seconds to a 20-minute CI timeout, because every test file that
+    // screened a prompt ended with a Redis socket nobody would close.
+    //
+    // unref() changes only whether this handle counts toward "is there still
+    // work to do", never how it behaves while the process runs.
+    redis.on("ready", () => {
+      redis?.stream?.unref?.();
+    });
   }
   return redis;
 }

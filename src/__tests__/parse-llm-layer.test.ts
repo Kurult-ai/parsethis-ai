@@ -9,7 +9,18 @@ import { parsePrompt, __setLLMCallForTesting } from "../parse.js";
  * clean pattern pass. These tests pin the layer-status contract instead.
  */
 
-const BENIGN = "Summarize the Q3 revenue report and highlight the top three regions.";
+/**
+ * Unique per test, because the screening verdict cache is keyed on the prompt.
+ *
+ * These tests assert that the semantic layer *was invoked* — with a fixed
+ * prompt and a live Redis, the second run is served from cache and the stub is
+ * never called, so the assertion fails for a reason that has nothing to do with
+ * what it is testing. A distinct prompt per case is a guaranteed cache miss and
+ * keeps the cache exercised everywhere else.
+ */
+let benignCounter = 0;
+const benign = () =>
+  `Summarize the Q3 revenue report and highlight the top three regions. (case ${++benignCounter}-${process.pid})`;
 
 /** Mirrors the real LLMResponse shape and echoes back the nonce the analyst prompt demands. */
 function fakeModel(payload: { risk_score: number; categories: string[]; reasoning?: string }) {
@@ -47,7 +58,7 @@ describe("semantic layer status contract", () => {
     const model = fakeModel({ risk_score: 0, categories: ["none"] });
     __setLLMCallForTesting(model.fn);
 
-    const result = await parsePrompt({ prompt: BENIGN });
+    const result = await parsePrompt({ prompt: benign() });
 
     assert.equal(result.layers?.llm, "ran");
     assert.equal(result.analysis_method, "pattern+llm");
@@ -60,7 +71,7 @@ describe("semantic layer status contract", () => {
       throw new Error("connection reset");
     });
 
-    const result = await parsePrompt({ prompt: BENIGN });
+    const result = await parsePrompt({ prompt: benign() });
 
     assert.equal(result.layers?.llm, "failed");
     assert.equal(result.degraded, true);
@@ -77,7 +88,7 @@ describe("semantic layer status contract", () => {
       model: "test-model",
     }));
 
-    const result = await parsePrompt({ prompt: BENIGN });
+    const result = await parsePrompt({ prompt: benign() });
 
     assert.equal(result.layers?.llm, "failed");
     assert.equal(result.degraded, true);
@@ -91,7 +102,7 @@ describe("semantic layer status contract", () => {
       model: "test-model",
     }));
 
-    const result = await parsePrompt({ prompt: BENIGN });
+    const result = await parsePrompt({ prompt: benign() });
 
     assert.equal(result.layers?.llm, "failed");
     assert.equal(result.degraded, true);
@@ -101,7 +112,7 @@ describe("semantic layer status contract", () => {
     const model = fakeModel({ risk_score: 9, categories: ["prompt_injection"] });
     __setLLMCallForTesting(model.fn);
 
-    const result = await parsePrompt({ prompt: BENIGN, mode: "pattern-only" });
+    const result = await parsePrompt({ prompt: benign(), mode: "pattern-only" });
 
     assert.equal(model.calls(), 0, "pattern-only must never send the prompt to a third party");
     assert.equal(result.layers?.llm, "skipped_pattern_only");
