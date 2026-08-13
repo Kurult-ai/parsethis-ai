@@ -105,9 +105,17 @@ export function resolveAnalysisRole(input: RoleInput | undefined): RoleDecision 
   if (!action || !SUBJECT_ACTIONS.has(action)) {
     return {
       role: "instruction",
+      // The pointer lives here as well as in `_help` because the two layers
+      // reach different traffic. `_help` is scoped to override-family refusals,
+      // which keeps it off credential-extraction probes — and that same gate
+      // silences it on quoted attacker text carrying jailbreak or
+      // system_prompt_leak vocabulary, which is most of a SOC's corpus. This
+      // sentence is on every response, including allows, so it is a fact about
+      // how the request was read rather than a nudge on a refusal.
       reason: action
         ? `intended_action "${action}" means the agent may act on this content, so it is screened as an instruction.`
-        : "No intended_action declared, so the content is screened as an instruction addressed to the agent.",
+        : "No intended_action declared, so the content is screened as an instruction addressed to the agent. " +
+          "If your agent only analyses this content rather than acting on it, declare it — see /docs#precision.",
       downgrade_refused: false,
     };
   }
@@ -165,6 +173,98 @@ export function resolveAnalysisRole(input: RoleInput | undefined): RoleDecision 
     role: "subject",
     reason: `intended_action "${action}" declares the agent reasons about this content rather than acting on it.`,
     downgrade_refused: false,
+  };
+}
+
+/**
+ * Tell a refused caller that `intended_action` exists — but only where it would
+ * have been the right answer.
+ *
+ * ── Why this is needed ──
+ *
+ * Prospect run 10 converted on the declared path and then said the obvious
+ * thing: the *undeclared* rate is still 7 of 8 on quoted attacker text, by
+ * design, so the next security team to find Parse meets the same wall run 9
+ * did. Whether they get past it depends on reading one paragraph in `/docs`,
+ * and a buyer who benchmarks before reading — which is most of them — never
+ * gets there.
+ *
+ * The response already says what happened ("No intended_action declared, so the
+ * content is screened as an instruction addressed to the agent"). It has never
+ * said what to do about it.
+ *
+ * ── Why it is scoped, and not on every block ──
+ *
+ * Naming the field on every refusal would be teaching the lazy fix, and on a
+ * genuine credential-extraction probe it would be actively wrong advice. So the
+ * hint appears only when the block rests entirely on the **override family** —
+ * the flags whose wording has a real benign reading — and never when anything
+ * in the cancel set fired: extraction, exfiltration, code execution, privilege
+ * escalation, jailbreak, harmful content.
+ *
+ * That boundary is not invented here. It is `RELEASABLE_FLAG_IDS` and
+ * `RELEASE_CANCEL_CATEGORIES` from the acquittal register — a line that has been
+ * through two reverts and four adversarial reviews. Reusing it means this hint
+ * cannot appear anywhere the release itself would have been refused.
+ *
+ * ── Why this is not a bypass recipe ──
+ *
+ * `intended_action` is set by the integrator's own code. Content being screened
+ * cannot set it, so an attacker submitting a prompt cannot use this hint. The
+ * real risk is a developer switching the control off across the board, and that
+ * is what the org ceiling, the coverage metric and the audit trail are for —
+ * not what withholding the field's name achieves.
+ */
+export function suggestDeclaration(
+  disposition: Disposition,
+  declared: string | null | undefined,
+  flags: RiskFlag[],
+  releasableFlagIds: ReadonlySet<string>,
+  cancelCategories: ReadonlySet<string>,
+  sourceKind?: string,
+): Record<string, unknown> | null {
+  if (disposition !== "block") return null;
+  if (declared) return null; // they made a choice; do not second-guess it
+
+  const blocking = flags.filter((f) => f.action_floor === "block");
+  if (blocking.length === 0) return null;
+
+  // Anything in the cancel set means the advice would be wrong, not merely
+  // noisy: telling someone to declare `summarize` on a credential-extraction
+  // probe points them the wrong way. This is the hard gate.
+  if (flags.some((f) => cancelCategories.has(f.category))) return null;
+
+  // But the bar here is deliberately lower than the release's. The release
+  // requires *every* blocking flag to be releasable, because it changes a
+  // verdict. This changes nothing — it names a field — so one override-family
+  // signal is enough. At the release's bar the hint missed the case it exists
+  // for: a forwarded phishing body fires three releasable intent flags plus two
+  // `pattern.override_*` from the same family that are not on the release list,
+  // and stayed silent.
+  if (!blocking.some((f) => f.id && releasableFlagIds.has(f.id))) return null;
+
+  const untrusted = sourceKind ? UNTRUSTED_SOURCE_KINDS.has(sourceKind) : false;
+  return {
+    code: "maybe_subject_matter",
+    detail:
+      "This was refused because the content reads as an instruction addressed to your agent. " +
+      "If your agent only *analyses* this content — triaging a report, summarising a document, " +
+      "routing a ticket — say so and the finding is returned instead of refused.",
+    field: "metadata.intended_action",
+    values: ["summarize", "extract", "route"],
+    example: untrusted
+      ? {
+        metadata: {
+          intended_action: "summarize",
+          quoted_spans: [[0, 120]],
+        },
+        note:
+          "Third-party content also needs quoted_spans covering the text that triggered the " +
+          "finding, otherwise the declaration is refused.",
+      }
+      : { metadata: { intended_action: "summarize" } },
+    note: "The finding is unchanged either way — same score, same flags, same categories. Only the action moves.",
+    docs: "/docs#precision",
   };
 }
 

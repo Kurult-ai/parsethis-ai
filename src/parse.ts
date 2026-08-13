@@ -14,6 +14,7 @@ import { normalizeForDetection } from "./lib/patterns/normalize.js";
 import { calculateRiskScore } from "./lib/scoring.js";
 import {
   RELEASABLE_FLAG_IDS,
+  RELEASE_CANCEL_CATEGORIES,
   evaluateAcquittal,
   acquittalPreconditions,
   buildReleaseRecord,
@@ -29,7 +30,7 @@ import {
   type CacheDimensions,
 } from "./lib/screening-cache.js";
 import type { TokenUsage } from "./types.js";
-import { resolveAnalysisRole, computeDisposition } from "./lib/analysis-role.js";
+import { resolveAnalysisRole, computeDisposition, suggestDeclaration } from "./lib/analysis-role.js";
 
 // Build model allowlist at module level
 const ALLOWED_MODELS = new Set(getAvailableModels().map((m) => m.id));
@@ -1054,6 +1055,20 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
   // `request_owner_approval`, which are existing states this must not rename.
   if (roleDecision.role === "subject" && (disposition === "report" || disposition === "review")) {
     response.recommended_action = disposition;
+  }
+
+  // A refusal that could have been a reported finding should say so. Scoped to
+  // the override family only — see suggestDeclaration.
+  const declarationHint = suggestDeclaration(
+    disposition,
+    req.metadata?.intended_action,
+    activeFlags,
+    RELEASABLE_FLAG_IDS,
+    RELEASE_CANCEL_CATEGORIES,
+    req.metadata?.source_kind,
+  );
+  if (declarationHint) {
+    (response as unknown as Record<string, unknown>)._help = declarationHint;
   }
 
   // Say when a verdict is a repeat. Someone re-running a request to check they

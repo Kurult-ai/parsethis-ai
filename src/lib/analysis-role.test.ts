@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveAnalysisRole, computeDisposition, needsHumanReview } from "./analysis-role.js";
+import { resolveAnalysisRole, computeDisposition, needsHumanReview, suggestDeclaration } from "./analysis-role.js";
 import type { RiskFlag } from "../parse.js";
 
 const flag = (severity: number): RiskFlag => ({
@@ -10,11 +10,14 @@ const flag = (severity: number): RiskFlag => ({
   detail: "y",
 });
 
-test("no declaration screens as an instruction", () => {
+test("no declaration screens as an instruction, and points at the way out", () => {
   const d = resolveAnalysisRole(undefined);
   assert.equal(d.role, "instruction");
   assert.equal(d.downgrade_refused, false);
   assert.match(d.reason, /No intended_action/);
+  // The universal layer: `_help` is gated to override-family refusals, so it is
+  // silent on exactly the quoted attacker text a SOC screens all day.
+  assert.match(d.reason, /docs#precision/);
 });
 
 test("summarize, extract and route declare subject matter", () => {
@@ -114,4 +117,73 @@ test("review is narrow — confident findings report, they do not queue", () => 
   assert.equal(needsHumanReview(0, []), false, "confident non-finding");
   assert.equal(needsHumanReview(5, [flag(6)]), true, "genuinely uncertain");
   assert.equal(needsHumanReview(5, [flag(9)]), false, "high severity is not uncertainty");
+});
+
+// ── The declaration hint ────────────────────────────────────────────────────
+// Run 10 converted on the declared path and noted that the undeclared wall is
+// unchanged, so the next SOC meets it before finding the docs paragraph.
+
+const RELEASABLE = new Set(["intent.fuzzy_override_token", "intent.direct_instruction_bypass"]);
+const CANCEL = new Set(["system_prompt_leak", "data_exfiltration", "code_execution", "privilege_escalation", "jailbreak", "harmful_content"]);
+
+const overrideFlag = (id: string): RiskFlag => ({
+  category: "prompt_injection", severity: 8, label: "x", detail: "y", id, action_floor: "block",
+});
+
+const hint = (flags: RiskFlag[], declared?: string | null, sourceKind?: string) =>
+  suggestDeclaration("block", declared ?? null, flags, RELEASABLE, CANCEL, sourceKind);
+
+test("an override-family refusal names the field that would have helped", () => {
+  const h = hint([overrideFlag("intent.fuzzy_override_token")]);
+  assert.ok(h, "expected a hint");
+  assert.equal(h!.field, "metadata.intended_action");
+  assert.deepEqual(h!.values, ["summarize", "extract", "route"]);
+});
+
+test("a refusal carrying extraction or exfiltration says nothing", () => {
+  // Advising `summarize` on a genuine credential probe would be wrong advice,
+  // not just noise.
+  for (const category of [...CANCEL]) {
+    const flags: RiskFlag[] = [
+      overrideFlag("intent.fuzzy_override_token"),
+      { category, severity: 8, label: "x", detail: "y", id: "intent.other", action_floor: "block" },
+    ];
+    assert.equal(hint(flags), null, category);
+  }
+});
+
+test("a block with no override-family signal at all says nothing", () => {
+  const flags = [{ category: "prompt_injection", severity: 9, label: "x", detail: "y", id: "pattern.persona_override_dan", action_floor: "block" } as RiskFlag];
+  assert.equal(hint(flags), null);
+});
+
+test("one override-family signal is enough, even beside same-family flags off the release list", () => {
+  // The case this exists for: a forwarded phishing body fires releasable intent
+  // flags alongside pattern.override_* that are not on the release list. At the
+  // release's "every flag" bar this stayed silent.
+  const flags: RiskFlag[] = [
+    { category: "prompt_injection", severity: 8, label: "x", detail: "y", id: "pattern.override_instructions", action_floor: "block" },
+    overrideFlag("intent.fuzzy_override_token"),
+  ];
+  assert.ok(hint(flags), "expected a hint");
+});
+
+test("a caller who already declared is not second-guessed", () => {
+  assert.equal(hint([overrideFlag("intent.fuzzy_override_token")], "execute"), null);
+  assert.equal(hint([overrideFlag("intent.fuzzy_override_token")], "reply"), null);
+});
+
+test("nothing is suggested when the call was not refused", () => {
+  const flags = [overrideFlag("intent.fuzzy_override_token")];
+  for (const d of ["allow", "report", "review"] as const) {
+    assert.equal(suggestDeclaration(d, null, flags, RELEASABLE, CANCEL), null, d);
+  }
+});
+
+test("third-party content is told it also needs quoted_spans", () => {
+  const h = hint([overrideFlag("intent.fuzzy_override_token")], null, "email");
+  assert.ok(h);
+  assert.match(JSON.stringify(h!.example), /quoted_spans/);
+  const plain = hint([overrideFlag("intent.fuzzy_override_token")], null, "user");
+  assert.doesNotMatch(JSON.stringify(plain!.example), /quoted_spans/);
 });
