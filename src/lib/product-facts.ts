@@ -300,10 +300,25 @@ export const FEATURE_STATUS: FeatureStatusEntry[] = [
 
   // ── Compliance ────────────────────────────────────────────────────────────
   { name: "Compliance Dashboard", status: "shipped", aliases: ["compliance dashboard"] },
+  // Was "shipped" while POST /v1/compliance/siem returned 500 on every call —
+  // the model declared `eventTypes` with no @map while the raw INSERT wrote
+  // `event_types`, and the org_id was the caller's key id against a column with
+  // a foreign key to organizations. That is how /trust CC4 and the Compliance
+  // pricing card claimed a feature nobody could switch on, past this gate.
+  // Fixed and covered by a route-level test in the same commit that restored
+  // this entry (migration 020, src/routes/compliance-siem.test.ts).
   { name: "SIEM Forwarding", status: "shipped", aliases: ["SIEM", "SIEM forwarding", "SIEM integration"] },
   { name: "Delegation Chain", status: "shipped", aliases: ["delegation chain", "agent delegation"] },
   { name: "Policy Engine", status: "shipped", aliases: ["policy engine", "custom rules"] },
   { name: "Evidence Pack", status: "shipped", aliases: ["evidence pack"] },
+  // Guard 3 of the subject-role control (src/lib/analysis-role.ts). Documented
+  // on /docs as though it existed; it does not. Registered here so the claims
+  // gate holds the line until it ships.
+  {
+    name: "Declaration Coverage Metric",
+    status: "building",
+    aliases: ["declaration coverage", "declaration rate", "declaration share"],
+  },
 
   // ── Data governance ───────────────────────────────────────────────────────
   { name: "Data Governance", status: "shipped", aliases: ["data governance"] },

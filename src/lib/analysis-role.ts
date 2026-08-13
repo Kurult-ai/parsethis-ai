@@ -36,17 +36,29 @@
  * ── Why this is not a hole ──
  *
  * A naive caller could declare `summarize` everywhere and switch the product
- * off. Four things stop that being silent:
+ * off. Three things stop that being silent, and a fourth is in development:
  *
- *   1. The declaration is on the record (receipt + audit + screening event).
+ *   1. The declaration is on the record, and so is what it did. The screening
+ *      event carries `intended_action`, `disposition` and `analysis_role` as
+ *      columns, so a downgraded screen and a refused one are distinguishable
+ *      after the fact.
  *   2. An org admin can forbid it or restrict it per agent through the ceiling.
- *   3. A coverage metric reports the share of traffic declaring a non-execute
- *      role. A number climbing toward 100% is a customer disabling the control.
- *   4. Untrusted third-party content is refused the downgrade unless the caller
+ *   3. Untrusted third-party content is refused the downgrade unless the caller
  *      also declares which spans are quoted — untrusted *and* undeclared stays a
  *      block, which is the B4 guard from the acquittal register.
  *
- * Plan: docs/plans/2026-08-13-precision-remediation.md Phases 2 and 3.
+ *   In development: a metric reporting the share of traffic declaring a
+ *   non-execute role. A number climbing toward 100% is a customer disabling the
+ *   control, and today nothing surfaces that.
+ *
+ * Keep this list and the paragraph on /docs in step. Prospect run 11 found the
+ * page promising four guards when the third did not exist, which cost more
+ * credibility than the gap itself — the buyer's read was "a vendor who
+ * documents a control they haven't built has told me something about
+ * everything else they've documented."
+ *
+ * Plans: docs/plans/2026-08-13-precision-remediation.md Phases 2 and 3;
+ * docs/plans/2026-08-13-marcus-oyelaran-control-assurance-remediation.md.
  */
 
 import type { RiskFlag } from "../parse.js";

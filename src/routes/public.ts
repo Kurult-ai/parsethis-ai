@@ -1435,13 +1435,18 @@ and never acts on it. Findings are reported in full — same score, same flags,
 same evidence — and not refused. <code>execute</code> and <code>reply</code>, and
 omitting the field, keep today's behaviour.</p>
 
-<p>Four things stop that being a way to switch Parse off: the declaration is
-recorded on the receipt and in the audit trail, an org admin can forbid it
-through <code>allowSubjectRole</code> on
-<code>/v1/org/policy-defaults</code>, a coverage metric reports the share of your
-traffic declaring it, and third-party content
+<p>Three things stop that being a way to switch Parse off: the declaration and
+the disposition it produced are both recorded on the screening event, an org
+admin can forbid it outright through <code>allowSubjectRole</code> on
+<code>/v1/org/policy-defaults</code>, and third-party content
 (<code>source_kind: retrieved_doc</code> and friends) is refused the downgrade
 unless you also declare <code>quoted_spans</code>.</p>
+
+<p>A fourth is in development: a metric reporting the share of your traffic
+declaring a non-execute <code>intended_action</code>, so an admin can see a
+team's declaration rate climbing without being told. Until it ships, the org
+ceiling is the control that holds — it changes behaviour rather than reporting
+on it.</p>
 
 <h3>The precision dial, and what it cannot do</h3>
 
