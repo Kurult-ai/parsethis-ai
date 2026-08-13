@@ -327,14 +327,22 @@ complianceRoutes.post("/v1/compliance/export", authMiddleware("evaluate"), requi
 complianceRoutes.get("/v1/compliance/siem", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst", "auditor"), async (c) => {
   const apiKey = c.get("apiKey");
   try {
-    const configs = await prisma.$queryRaw<PrismaSIEMConfig[]>`
-      SELECT * FROM siem_configs WHERE org_id = ${apiKey.id} ORDER BY created_at DESC
-    `;
+    // Scoped by organisation, not by the calling key's id. `org_id = apiKey.id`
+    // was the same conflation fixed in policy-history after run 7 — it meant an
+    // admin never saw the destinations their own org had configured.
+    const orgId = await resolveOrgId(apiKey.id);
+    if (!orgId) return c.json({ configs: [] });
+
+    const configs = (await prisma.sIEMConfig.findMany({
+      where: { orgId },
+      orderBy: { createdAt: "desc" },
+    })) as unknown as PrismaSIEMConfig[];
     // Don't expose auth headers
     const safe = configs.map(({ authHeader, ...rest }) => ({ ...rest, auth_header_configured: Boolean(authHeader) }));
     return c.json({ configs: safe });
-  } catch {
-    return c.json({ configs: [], note: "SIEM table not yet migrated. Run prisma migrate." });
+  } catch (err) {
+    console.error("[compliance] siem list error:", (err as Error).message);
+    return c.json({ configs: [], note: "SIEM destinations could not be read." });
   }
 });
 
@@ -372,16 +380,41 @@ complianceRoutes.post("/v1/compliance/siem", authMiddleware("evaluate"), require
     return c.json({ error: `Invalid platform. Valid: ${validPlatforms.join(", ")}` }, 400);
   }
 
-  const id = crypto.randomUUID();
-  const orgId = apiKey.id;
   const fmt = format ?? "json";
   const evtTypes = event_types ?? ["screening", "audit", "policy_change", "approval"];
 
+  // A SIEM destination belongs to an organisation, not to the key that happened
+  // to create it — `siem_configs.org_id` has a foreign key to organizations(id).
+  // This used to be `apiKey.id`, so even once the column names matched, the
+  // insert would have failed that constraint.
+  const orgId = await resolveOrgId(apiKey.id);
+  if (!orgId) {
+    return problem(c, {
+      status: 400,
+      title: "No organization",
+      detail:
+        "SIEM forwarding is configured per organization and this key belongs to none. Create one with POST /v1/orgs/bootstrap, then configure forwarding as its org_admin.",
+      code: ErrorCode.VALIDATION_INVALID_INPUT,
+      retryable: false,
+    });
+  }
+
   try {
-    await prisma.$executeRaw`
-      INSERT INTO siem_configs (id, org_id, platform, endpoint, auth_header, format, event_types, active, created_at, updated_at)
-      VALUES (${id}, ${orgId}, ${platform}, ${endpoint}, ${sealedAuthHeader}, ${fmt}, ${evtTypes}, true, NOW(), NOW())
-    `;
+    // Written through the Prisma client rather than raw SQL so a column name
+    // cannot drift from the schema again. That drift is what made this endpoint
+    // return 500 on every call since the table shipped.
+    const created = await prisma.sIEMConfig.create({
+      data: {
+        orgId,
+        platform,
+        endpoint,
+        authHeader: sealedAuthHeader,
+        format: fmt,
+        eventTypes: evtTypes,
+        active: true,
+      },
+      select: { id: true, platform: true, endpoint: true, format: true, eventTypes: true, active: true },
+    });
 
     auditLog({
       action: "siem_config_created",
@@ -389,10 +422,25 @@ complianceRoutes.post("/v1/compliance/siem", authMiddleware("evaluate"), require
       detail: `SIEM config created: ${platform} → ${endpoint}`,
     });
 
-    return c.json({ id, platform, endpoint, format: fmt, event_types: evtTypes, status: "active" });
+    return c.json({
+      id: created.id,
+      platform: created.platform,
+      endpoint: created.endpoint,
+      format: created.format,
+      event_types: created.eventTypes,
+      status: created.active ? "active" : "inactive",
+    });
   } catch (err) {
+    // Never hand the driver's message back to the caller: on an authenticated
+    // endpoint that is a free read of the schema. Log it, return a problem.
     console.error("[compliance] siem create error:", (err as Error).message);
-    return c.json({ error: "Failed to create SIEM config", detail: (err as Error).message }, 500);
+    return problem(c, {
+      status: 500,
+      title: "SIEM destination could not be saved",
+      detail: "Parse could not store this SIEM destination. The error has been logged; try again, and contact support if it persists.",
+      code: ErrorCode.INTERNAL_ERROR,
+      retryable: true,
+    });
   }
 });
 

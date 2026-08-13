@@ -661,7 +661,11 @@ model SIEMConfig {
   /// forwarder reads both. Never returned by any route.
   authHeader    String?  @map("auth_header")
   format        String   @default("cef")  // cef, json, leef, raw
-  eventTypes    String[] @default(["screening", "audit", "policy_change", "approval"])
+  /// @map is load-bearing: without it Prisma names the column "eventTypes"
+  /// while every sibling is snake_case, and the raw INSERT that used to write
+  /// this row wrote `event_types`. That mismatch made POST /v1/compliance/siem
+  /// return 500 on every call for the life of the feature.
+  eventTypes    String[] @default(["screening", "audit", "policy_change", "approval"]) @map("event_types")
   active        Boolean  @default(true)
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt      @map("updated_at")
