@@ -322,7 +322,7 @@ ${DATA_FLOW_HTML}
       <tr><td rowspan="9"><strong>Security (Common)</strong></td><td>CC1: Control Environment</td><td>Security governance; designated security contact</td><td>✅</td></tr>
       <tr><td>CC2: Communication</td><td>Public security endpoint, trust page, docs hub</td><td>✅</td></tr>
       <tr><td>CC3: Risk Assessment</td><td>Threat model for prompt injection taxonomy</td><td>✅</td></tr>
-      <tr><td>CC4: Monitoring</td><td>Audit logging for policy, membership and key changes. Screening-decision export and SIEM forwarding are in development</td><td>⚠️ Partial</td></tr>
+      <tr><td>CC4: Monitoring</td><td>Audit logging for screening decisions, policy, membership and key changes; evidence export; SIEM forwarding</td><td>✅</td></tr>
       <tr><td>CC5: Control Activities</td><td>RBAC, rate limiting, input validation</td><td>✅</td></tr>
       <tr><td>CC6: Logical Access</td><td>Bearer auth, bcrypt, HSTS, TLS, CORS</td><td>✅</td></tr>
       <tr><td>CC7: System Operations</td><td>Structured logging, X-Request-ID, health checks</td><td>✅</td></tr>

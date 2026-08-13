@@ -328,6 +328,26 @@ uncommitted edit in this repo goes live the moment the service restarts for any
 reason. Commit before restarting. (`railway.toml` exists but is not what serves
 production; a stale pm2 entry named `parse-api` is likewise not serving.)
 
+**Never stop a Node process here by pattern.** Production's command line is
+`node --import tsx src/index.ts`, which every local dev and staging server also
+matches — `pkill -f "tsx src/index.ts"` takes production down with them, and
+KeepAlive then restarts it from whatever is in the working directory. That
+happened on 2026-08-13 during remediation testing; it was survivable only
+because the branch was in a separate git worktree and the live directory was on
+a clean `main`. Stop the local server by the PID its start script wrote, and
+production only through `launchctl`.
+
+**Do long-running work in a worktree**, for the same reason:
+`git worktree add ~/parse-<task> <branch>` leaves the live directory on `main`,
+so a restart cannot serve half-finished code. Worktrees need their own
+`npx prisma generate` — `src/generated/` is gitignored, and symlinking it back
+to the live directory means a regenerate in one place changes what production
+loads on its next boot.
+
+**Regenerate the Prisma client in the live directory before restarting** after
+any schema change, or the app boots against a client that does not know the new
+columns.
+
 ## Testing
 
 Tests use Node's built-in test runner via tsx. Test files are colocated: `src/**/*.test.ts` and `src/__tests__/`.
