@@ -1384,7 +1384,9 @@ person who sent the message.</p>
 
 <p>Screening has two failure modes and most vendors publish one. Recall — did it
 catch the attack — is the easy half. Precision — did it refuse something
-harmless — is what decides whether you can leave it on.</p>
+harmless — is what decides whether you can leave it on. A <strong>false
+positive</strong> costs you an analyst-minute every time, and at any real volume
+that bill dwarfs the subscription, so here are our false-positive numbers.</p>
 
 <p>Two numbers from our own regression suite, both run on every commit and
 published in <code>docs/public-screening-metrics.csv</code>:</p>
