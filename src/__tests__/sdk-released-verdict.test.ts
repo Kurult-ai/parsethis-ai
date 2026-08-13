@@ -35,13 +35,25 @@ describe("TypeScript SDK — a released verdict is refused by default", () => {
   });
 
   it("checks the release before the risk bands", () => {
+    // The band check moved into dispositionBlocks() when the disposition split
+    // landed; the ordering requirement is unchanged and is what this asserts.
     const releaseAt = ts.indexOf("release?.released");
-    const bandsAt = ts.indexOf('parseResp.verdict === "critical"');
+    const bandsAt = ts.indexOf("dispositionBlocks(parseResp, config)");
     assert.ok(releaseAt > 0 && bandsAt > 0, "both gates must exist");
     assert.ok(
       releaseAt < bandsAt,
       "a released prompt sits below the bands, so the band gate would let it pass",
     );
+  });
+
+  it("fails closed on a disposition it does not recognise", () => {
+    // Failure mode #3 in the acquittal register: a new server-side state that
+    // neither SDK knew about, so a released verdict reached the model verbatim.
+    const fn = ts.slice(ts.indexOf("function dispositionBlocks"));
+    const body = fn.slice(0, fn.indexOf("\n}"));
+    assert.match(body, /default:\s*\n\s*return true;/, "unknown disposition must block");
+    assert.match(body, /case "review":[\s\S]{0,240}return !config\.onReview;/,
+      "a review with nobody looking must block");
   });
 
   it("only allows a release on an explicit opt-in", () => {

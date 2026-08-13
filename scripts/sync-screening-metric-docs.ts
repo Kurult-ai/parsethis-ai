@@ -9,6 +9,10 @@ const OVERVIEW_PATH = "docs/overview.md";
 const COMPLETION_AUDIT_PATH = "docs/screening-completion-audit.md";
 
 const OVERVIEW_LABELS: Record<string, string> = {
+  benign_instruction_noun_precision: "Benign instruction-noun precision",
+  override_mention_declared_precision: "Quoted-override mention precision (declared)",
+  prospect_run_9_benign_precision: "Prospect run 9 benign precision",
+  prospect_run_9_attack_recall: "Prospect run 9 attack recall",
   owner_private_context_protection_recall: "Owner-private-context protection recall",
   owner_approval_precision: "Owner-approval precision",
   owner_approval_recall: "Owner-approval recall",

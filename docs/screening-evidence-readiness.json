@@ -4,7 +4,7 @@
   "scorecard": {
     "claimable_rows": {
       "current": 0,
-      "total": 26
+      "total": 30
     },
     "public_claimable_rows": {
       "current": 0,
@@ -12,18 +12,18 @@
     },
     "internal_hermes_claimable_rows": {
       "current": 0,
-      "total": 18
+      "total": 22
     },
-    "generated_internal_regression_passing_rows": 18,
+    "generated_internal_regression_passing_rows": 22,
     "generated_internal_passing_rows_by_status": {
       "generated_pending_frozen_holdout": 15,
-      "internal_not_claimable": 3
+      "internal_not_claimable": 7
     },
     "frozen_but_not_independent_passing_rows": 8
   },
   "evidence_states": {
     "generated_internal_regression_evidence": {
-      "rows": 18
+      "rows": 22
     },
     "frozen_but_not_independent_evidence": {
       "rows": 8
@@ -147,6 +147,62 @@
     },
     {
       "scope": "internal_hermes",
+      "metric": "benign_instruction_noun_precision",
+      "label": "benign_instruction_noun_precision",
+      "current": 1,
+      "target": 0.99,
+      "operator": ">=",
+      "status": "pass_internal_not_claimable",
+      "claimability": "non-claimable internal regression metric",
+      "evidence_state": "generated_internal_regression_evidence",
+      "sample_size": 46,
+      "claimable": false,
+      "needed_data_to_claim": "Independent internal/Hermes holdout JSON/JSONL rows matching docs/screening-holdout-cases.schema.json, including split=holdout and provenance not generated_template; deduped against tracked tuning/generated fixtures; hashes, 95% CIs, and claimable flags."
+    },
+    {
+      "scope": "internal_hermes",
+      "metric": "override_mention_declared_precision",
+      "label": "override_mention_declared_precision",
+      "current": 1,
+      "target": 0.99,
+      "operator": ">=",
+      "status": "pass_internal_not_claimable",
+      "claimability": "non-claimable internal regression metric",
+      "evidence_state": "generated_internal_regression_evidence",
+      "sample_size": 24,
+      "claimable": false,
+      "needed_data_to_claim": "Independent internal/Hermes holdout JSON/JSONL rows matching docs/screening-holdout-cases.schema.json, including split=holdout and provenance not generated_template; deduped against tracked tuning/generated fixtures; hashes, 95% CIs, and claimable flags."
+    },
+    {
+      "scope": "internal_hermes",
+      "metric": "prospect_run_9_benign_precision",
+      "label": "prospect_run_9_benign_precision",
+      "current": 1,
+      "target": 0.99,
+      "operator": ">=",
+      "status": "pass_internal_not_claimable",
+      "claimability": "non-claimable internal regression metric",
+      "evidence_state": "generated_internal_regression_evidence",
+      "sample_size": 6,
+      "claimable": false,
+      "needed_data_to_claim": "Independent internal/Hermes holdout JSON/JSONL rows matching docs/screening-holdout-cases.schema.json, including split=holdout and provenance not generated_template; deduped against tracked tuning/generated fixtures; hashes, 95% CIs, and claimable flags."
+    },
+    {
+      "scope": "internal_hermes",
+      "metric": "prospect_run_9_attack_recall",
+      "label": "prospect_run_9_attack_recall",
+      "current": 1,
+      "target": 1,
+      "operator": ">=",
+      "status": "pass_internal_not_claimable",
+      "claimability": "non-claimable internal regression metric",
+      "evidence_state": "generated_internal_regression_evidence",
+      "sample_size": 4,
+      "claimable": false,
+      "needed_data_to_claim": "Independent internal/Hermes holdout JSON/JSONL rows matching docs/screening-holdout-cases.schema.json, including split=holdout and provenance not generated_template; deduped against tracked tuning/generated fixtures; hashes, 95% CIs, and claimable flags."
+    },
+    {
+      "scope": "internal_hermes",
       "metric": "owner_private_context_protection_recall",
       "label": "Owner-private-context protection recall",
       "current": 1,
@@ -205,13 +261,13 @@
       "scope": "internal_hermes",
       "metric": "hard_negative_benign_agent_workflow_fpr",
       "label": "Hard-negative benign agent workflow FPR",
-      "current": 0,
+      "current": 0.0043,
       "target": 0.005,
       "operator": "<=",
       "status": "pass_generated_pending_frozen_holdout",
       "claimability": "non-claimable generated tuning corpus",
       "evidence_state": "generated_internal_regression_evidence",
-      "sample_size": 5011,
+      "sample_size": 5081,
       "claimable": false,
       "needed_data_to_claim": "Independent internal/Hermes holdout JSON/JSONL rows matching docs/screening-holdout-cases.schema.json, including split=holdout and provenance not generated_template; deduped against tracked tuning/generated fixtures; hashes, 95% CIs, and claimable flags."
     },
@@ -323,7 +379,7 @@
       "status": "pass_internal_not_claimable",
       "claimability": "non-claimable internal regression metric",
       "evidence_state": "generated_internal_regression_evidence",
-      "sample_size": 13063,
+      "sample_size": 13137,
       "claimable": false,
       "needed_data_to_claim": "Independent internal holdout JSON/JSONL rows matching docs/screening-holdout-cases.schema.json, including split=holdout and provenance not generated_template, plus complete decision/audit event evidence; live persistence remains claimable only after DATABASE_URL and SCREENING_EVENT_DB_VERIFY_WRITE=1 verifier writes to a disposable database and the passing verifier JSON is supplied through SCREENING_EVENT_DB_VERIFY_RESULT_PATH."
     },
@@ -337,7 +393,7 @@
       "status": "pass_internal_not_claimable",
       "claimability": "non-claimable internal regression metric",
       "evidence_state": "generated_internal_regression_evidence",
-      "sample_size": 8039,
+      "sample_size": 8065,
       "claimable": false,
       "needed_data_to_claim": "Independent internal holdout JSON/JSONL rows matching docs/screening-holdout-cases.schema.json, including split=holdout and provenance not generated_template, plus complete decision/audit event evidence; live persistence remains claimable only after DATABASE_URL and SCREENING_EVENT_DB_VERIFY_WRITE=1 verifier writes to a disposable database and the passing verifier JSON is supplied through SCREENING_EVENT_DB_VERIFY_RESULT_PATH."
     },
@@ -417,7 +473,7 @@
     "Internal/Hermes holdout rows must satisfy docs/screening-holdout-cases.schema.json.",
     "Internal/Hermes holdout manifest must satisfy docs/screening-holdout-manifest.schema.json.",
     "Utility degradation needs an independent benign autonomous-agent workflow holdout with paired baseline/Parse-enabled success labels.",
-    "No metric row may use pass_claimable until the matching manifest satisfies the tracked manifest schema and has frozen=true, claimable=true, row/content hashes, row-ID hashes, holdout separation flags, 95% confidence interval methods, and claimable metric flags; overall claimability requires all 26 expected rows with no duplicate or extra metric rows.",
+    "No metric row may use pass_claimable until the matching manifest satisfies the tracked manifest schema and has frozen=true, claimable=true, row/content hashes, row-ID hashes, holdout separation flags, 95% confidence interval methods, and claimable metric flags; overall claimability requires all 30 expected rows with no duplicate or extra metric rows.",
     "Live persistence remains non-claimable because DATABASE_URL and SCREENING_EVENT_DB_VERIFY_WRITE=1 are not both set, and no passing verifier JSON has been supplied through SCREENING_EVENT_DB_VERIFY_RESULT_PATH."
   ]
 }

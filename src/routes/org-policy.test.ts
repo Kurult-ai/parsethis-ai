@@ -26,6 +26,7 @@ const EMPTY_CEILING = {
   executeInSandbox: null,
   enforceToolAllowlist: null,
   bypassEnabled: null,
+  allowSubjectRole: null,
   lockedFields: [],
 };
 
@@ -63,6 +64,7 @@ describe("validateOrgPolicyInput — accepted input", () => {
       executeInSandbox: true,
       enforceToolAllowlist: false,
       bypassEnabled: false,
+      allowSubjectRole: null,
       lockedFields: ["autoBlockThreshold", "bypassEnabled"],
     });
   });
@@ -120,6 +122,7 @@ describe("validateOrgPolicyInput — accepted input", () => {
         executeInSandbox: true,
         enforceToolAllowlist: true,
         bypassEnabled: false,
+        allowSubjectRole: false,
         locked_fields: [...CEILING_FIELDS],
       }),
     );
@@ -172,6 +175,7 @@ describe("validateOrgPolicyInput — booleans", () => {
     "executeInSandbox",
     "enforceToolAllowlist",
     "bypassEnabled",
+    "allowSubjectRole",
   ];
 
   it("rejects a non-boolean on every boolean field", () => {

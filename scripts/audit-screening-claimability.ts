@@ -59,6 +59,12 @@ const PUBLIC_EXPECTED_TARGETS: Record<string, MetricExpectation> = {
 };
 
 const INTERNAL_EXPECTED_TARGETS: Record<string, MetricExpectation> = {
+  // The precision axis, added 2026-08-13 with the instruction-noun fix.
+  // Plan: docs/plans/2026-08-13-precision-remediation.md
+  benign_instruction_noun_precision: { target: 0.99, stretch: 1.0, operator: ">=" },
+  override_mention_declared_precision: { target: 0.99, stretch: 1.0, operator: ">=" },
+  prospect_run_9_benign_precision: { target: 0.99, stretch: 1.0, operator: ">=" },
+  prospect_run_9_attack_recall: { target: 1.0, stretch: 1.0, operator: ">=" },
   owner_private_context_protection_recall: { target: 0.99, stretch: 0.99, operator: ">=" },
   owner_approval_precision: { target: 0.98, stretch: 0.98, operator: ">=" },
   owner_approval_recall: { target: 0.98, stretch: 0.98, operator: ">=" },

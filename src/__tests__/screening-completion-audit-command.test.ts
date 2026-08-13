@@ -149,9 +149,9 @@ function writeClaimableReadiness(path: string): void {
   Object.assign(value, {
     status: "pass_claimable",
     scorecard: {
-      claimable_rows: { current: 26, total: 26 },
+      claimable_rows: { current: 30, total: 30 },
       public_claimable_rows: { current: 8, total: 8 },
-      internal_hermes_claimable_rows: { current: 18, total: 18 },
+      internal_hermes_claimable_rows: { current: 22, total: 22 },
       generated_internal_regression_passing_rows: 0,
       generated_internal_passing_rows_by_status: {
         generated_pending_frozen_holdout: 0,
@@ -162,7 +162,7 @@ function writeClaimableReadiness(path: string): void {
     evidence_states: {
       generated_internal_regression_evidence: { rows: 0 },
       frozen_but_not_independent_evidence: { rows: 0 },
-      claimable_independent_frozen_holdout_evidence: { rows: 26 },
+      claimable_independent_frozen_holdout_evidence: { rows: 30 },
     },
     remaining_blockers: [],
   });
@@ -177,7 +177,7 @@ describe("screening completion audit command", () => {
     assert.equal(output.status, "blocked_external_evidence");
     assert.deepEqual(output.failures, []);
     assert.equal(output.artifacts.required_files, 32);
-    assert.equal(output.artifacts.internal_metric_rows, 18);
+    assert.equal(output.artifacts.internal_metric_rows, 22);
     assert.equal(output.artifacts.public_metric_rows, 8);
     assert.equal(output.artifacts.evidence_readiness_path, "docs/screening-evidence-readiness.json");
     assert.ok(output.blockers.some((blocker) => blocker.includes("public-screening-holdout-manifest.json")));

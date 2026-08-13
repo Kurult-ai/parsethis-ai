@@ -41,16 +41,16 @@ describe("screening evidence readiness audit", () => {
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(output.status, "pass_non_claimable");
-    assert.deepEqual(output.scorecard.claimable_rows, { current: 0, total: 26 });
+    assert.deepEqual(output.scorecard.claimable_rows, { current: 0, total: 30 });
     assert.deepEqual(output.scorecard.public_claimable_rows, { current: 0, total: 8 });
-    assert.deepEqual(output.scorecard.internal_hermes_claimable_rows, { current: 0, total: 18 });
-    assert.equal(output.scorecard.generated_internal_regression_passing_rows, 18);
+    assert.deepEqual(output.scorecard.internal_hermes_claimable_rows, { current: 0, total: 22 });
+    assert.equal(output.scorecard.generated_internal_regression_passing_rows, 22);
     assert.equal(output.scorecard.generated_internal_passing_rows_by_status.generated_pending_frozen_holdout, 15);
-    assert.equal(output.scorecard.generated_internal_passing_rows_by_status.internal_not_claimable, 3);
+    assert.equal(output.scorecard.generated_internal_passing_rows_by_status.internal_not_claimable, 7);
     assert.equal(output.scorecard.frozen_but_not_independent_passing_rows, 8);
     assert.equal(output.evidence_states.claimable_independent_frozen_holdout_evidence.rows, 0);
     assert.equal(output.evidence_states.frozen_but_not_independent_evidence.rows, 8);
-    assert.equal(output.evidence_states.generated_internal_regression_evidence.rows, 18);
+    assert.equal(output.evidence_states.generated_internal_regression_evidence.rows, 22);
     assert.ok(output.remaining_blockers.some((blocker) => blocker.includes("DATABASE_URL")));
     assert.ok(output.persistence_verification.required_completion_evidence.some((item) => item.includes("SCREENING_EVENT_DB_VERIFY_RESULT_PATH")));
   });

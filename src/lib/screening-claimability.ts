@@ -40,6 +40,12 @@ export interface ScreeningHoldoutClaimabilityResult {
 }
 
 export const SCREENING_REQUIRED_CLAIMABLE_METRICS = [
+  // The precision axis, added 2026-08-13 with the instruction-noun fix.
+  // Plan: docs/plans/2026-08-13-precision-remediation.md
+  "benign_instruction_noun_precision",
+  "override_mention_declared_precision",
+  "prospect_run_9_benign_precision",
+  "prospect_run_9_attack_recall",
   "owner_private_context_protection_recall",
   "owner_approval_precision",
   "owner_approval_recall",

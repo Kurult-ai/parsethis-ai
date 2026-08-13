@@ -84,19 +84,55 @@ class ParseSdkConfig:
     # this SDK gates on, so without this it would simply pass.
     on_released: str = "block"  # "block" | "allow" | "callback"
     on_released_prompt: Optional[Callable[[Dict[str, Any], str], bool]] = None
+    # Called when the server returns ``disposition: "review"`` -- the engine
+    # found something and is not confident about it.
+    #
+    # **Without a handler, a review blocks.** A third state nobody handles is a
+    # hole, not a feature: the point is that a human looks, and an SDK that
+    # quietly passed it through would be asserting the opposite.
+    on_review: Optional[Callable[[Dict[str, Any]], bool]] = None
     screen_output: bool = True
     parse_timeout: float = 10.0  # seconds
 
 
-def _blocked(parse_resp: Optional[Dict[str, Any]]) -> bool:
+def _blocked(parse_resp: Optional[Dict[str, Any]], on_review: Optional[Any] = None) -> bool:
     """A verdict this SDK refuses.
 
     Reads ``recommended_action`` as well as the risk bands. It previously read
     only the bands, which made it blind to the frozen-agent kill switch (verdict
     "block") and to any action-level decision.
+
+    ``disposition`` is authoritative when the server sends it. The risk bands
+    describe the *finding*; the disposition describes what to do about it, and a
+    ``report`` is a real finding at verdict ``critical`` that the caller has
+    explicitly declared is subject matter rather than an instruction.
+
+    **An unrecognised disposition blocks.** Failure mode #3 in the acquittal
+    register was exactly this: a new server-side state ("sandbox") that neither
+    SDK knew about, so a released verdict reached the model verbatim. Any future
+    state fails closed here until a client is taught to handle it.
     """
     if not parse_resp:
         return False
+
+    disposition = parse_resp.get("disposition")
+    if disposition is not None:
+        if disposition == "allow":
+            return False
+        if disposition == "report":
+            # The finding stands and is on the response for the caller to act
+            # on; the refusal does not, because they told us they will not
+            # execute this content.
+            return False
+        if disposition == "review":
+            # No handler means nobody is looking, which is the one thing this
+            # state must not mean.
+            return on_review is None
+        if disposition == "block":
+            return True
+        return True  # unknown state — fail closed
+
+    # Server predates the disposition field — the behaviour it had before.
     if parse_resp.get("verdict") in ("critical", "high_risk", "block"):
         return True
     return parse_resp.get("recommended_action") == "block"
@@ -370,7 +406,7 @@ def _intercept_async(
                     )
                 return _make_safe_response(body, kind, parse_resp or {})
 
-            if _blocked(parse_resp):
+            if _blocked(parse_resp, config.on_review):
                 stats.blocked_calls += 1
                 if config.fail_posture == "fail_closed":
                     raise ParseScreeningError(
@@ -461,7 +497,7 @@ def _intercept_sync(
                     )
                 return _make_safe_response(body, kind, parse_resp or {})
 
-            if _blocked(parse_resp):
+            if _blocked(parse_resp, config.on_review):
                 stats.blocked_calls += 1
                 if config.fail_posture == "fail_closed":
                     raise ParseScreeningError(

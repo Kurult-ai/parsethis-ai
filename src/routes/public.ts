@@ -1379,6 +1379,81 @@ person who sent the message.</p>
   }
 }</code></pre>
 
+
+<h2>Precision: what Parse refuses that it should not</h2>
+
+<p>Screening has two failure modes and most vendors publish one. Recall — did it
+catch the attack — is the easy half. Precision — did it refuse something
+harmless — is what decides whether you can leave it on.</p>
+
+<p>Two numbers from our own regression suite, both run on every commit and
+published in <code>docs/public-screening-metrics.csv</code>:</p>
+
+<table class="doc-table">
+  <thead><tr><th>Corpus</th><th>What it measures</th><th>Current</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Ordinary business English containing an instruction-noun</td>
+      <td>46 sentences from support, e-commerce, finance, legal, HR and devops
+          that contain the words <em>rules</em>, <em>checks</em>,
+          <em>instructions</em> or <em>directives</em> in a legitimate frame</td>
+      <td>1.00 not refused</td>
+    </tr>
+    <tr>
+      <td>Quoted attacker text, declared as subject matter</td>
+      <td>24 prompts where an agent is asked to analyse a phishing body, a
+          malware string dump or a threat-intel summary that quotes an
+          injection</td>
+      <td>1.00 not refused</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>The honest limitation.</strong> Parse does not infer the second case.
+A quoted phishing body and a live injection aimed at your agent can be the same
+string — the difference is not in the text, it is in whether your agent will act
+on it. Without a declaration, most of that second corpus is still refused. You
+tell us which it is:</p>
+
+<pre><code>curl -s https://www.parsethis.ai/v1/parse \
+  -H "Authorization: Bearer $PARSE_API_KEY" \
+  -d '{
+    "prompt": "&lt;the alert, including the quoted phishing body&gt;",
+    "metadata": { "intended_action": "summarize" }
+  }'
+
+# → "risk_score": 10,
+#   "categories": ["prompt_injection"],     ← the finding still stands
+#   "disposition": "report",                ← and it is not refused
+#   "analysis_role": { "role": "subject", "reason": "..." }</code></pre>
+
+<p><code>intended_action</code> of <code>summarize</code>, <code>extract</code> or
+<code>route</code> declares that your agent reasons <em>about</em> this content
+and never acts on it. Findings are reported in full — same score, same flags,
+same evidence — and not refused. <code>execute</code> and <code>reply</code>, and
+omitting the field, keep today's behaviour.</p>
+
+<p>Four things stop that being a way to switch Parse off: the declaration is
+recorded on the receipt and in the audit trail, an org admin can forbid it
+through <code>allowSubjectRole</code> on
+<code>/v1/org/policy-defaults</code>, a coverage metric reports the share of your
+traffic declaring it, and third-party content
+(<code>source_kind: retrieved_doc</code> and friends) is refused the downgrade
+unless you also declare <code>quoted_spans</code>.</p>
+
+<h3>The precision dial, and what it cannot do</h3>
+
+<p><code>policy_mode</code> takes <code>strict</code>, <code>balanced</code>
+(default) or <code>low_fp</code>. It moves <em>ambiguous weak signals</em>
+between sandbox and block.</p>
+
+<p><strong>It will not move a high-confidence deterministic flag.</strong> If a
+severity-8 <code>intent.*</code> rule fired, all three modes return the same
+verdict. If Parse is refusing something it should not, <code>low_fp</code> is
+unlikely to be the fix — <code>intended_action</code> is, and if neither helps,
+the <code>matched_token</code> on the flag names the exact phrase that fired so
+you can send it to us.</p>
+
 <h2>Boundary guides</h2>
 
 <p>Start with the audit, then work through the boundaries your agents actually have.</p>
@@ -1867,7 +1942,7 @@ ${DATA_FLOW_HTML}
 <p class="answer-capsule">Personal data may be transferred from the EEA/UK to the United States under the <strong>Standard Contractual Clauses</strong> (SCCs). See our <a href="/dpa">DPA</a> for the full transfer mechanism and a Transfer Impact Assessment summary.</p>
 
 <h3>Data residency</h3>
-<p class="answer-capsule">Processing currently occurs in the United States. An EU/UK region is on our roadmap. Customers requiring EU residency today can use <code>mode: "pattern-only"</code> to ensure prompt text never leaves their infrastructure.</p>
+<p class="answer-capsule">Processing currently occurs in the United States. An EU/UK region is on our roadmap. Parse cannot offer EU data residency today. <code>mode: "pattern-only"</code> prevents onward transfer of prompt text to the semantic-analysis sub-processor (OpenRouter, US), but prompt text is still transferred to Parse for processing in the United States.</p>
 
 <h3>Sub-processors</h3>
 <p class="answer-capsule">See the <a href="/trust#subprocessors">sub-processor list on our Trust page</a> or the full <a href="/dpa#sub-processors">DPA sub-processor table</a> with GDPR adequacy status.</p>

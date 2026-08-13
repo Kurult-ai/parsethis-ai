@@ -31,6 +31,7 @@ export interface OrgPolicyCeiling {
   executeInSandbox?: boolean | null;
   enforceToolAllowlist?: boolean | null;
   bypassEnabled?: boolean | null;
+  allowSubjectRole?: boolean | null;
   lockedFields?: string[];
 }
 
@@ -111,6 +112,17 @@ export function applyOrgPolicyCeiling(
       : ceiling.bypassEnabled === false
         ? false
         : (policy.bypassEnabled ?? false);
+  }
+
+  // Inverted for the same reason: the subject-role downgrade turns a refusal
+  // into a reported finding, so an org switching it off must win. A member key
+  // can never turn it back on. See src/lib/analysis-role.ts.
+  if (typeof ceiling.allowSubjectRole === "boolean") {
+    merged.allowSubjectRole = isLocked(ceiling, "allowSubjectRole")
+      ? ceiling.allowSubjectRole
+      : ceiling.allowSubjectRole === false
+        ? false
+        : (policy.allowSubjectRole ?? true);
   }
 
   return merged;

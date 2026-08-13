@@ -306,6 +306,37 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
         retryable: false,
       });
     }
+    // quoted_spans is the caller declaring which parts of the prompt are quoted
+    // material. It is load-bearing — it is what lets third-party content be
+    // treated as subject matter — so a malformed one is a 400 rather than a
+    // silently ignored field. See src/lib/analysis-role.ts.
+    if (body.metadata.quoted_spans !== undefined) {
+      const spans = body.metadata.quoted_spans as unknown;
+      const valid =
+        Array.isArray(spans) &&
+        spans.every(
+          (s) =>
+            Array.isArray(s) &&
+            s.length === 2 &&
+            typeof s[0] === "number" &&
+            typeof s[1] === "number" &&
+            Number.isInteger(s[0]) &&
+            Number.isInteger(s[1]) &&
+            s[0] >= 0 &&
+            s[1] > s[0] &&
+            s[1] <= (typeof body.prompt === "string" ? body.prompt.length : 0),
+        );
+      if (!valid) {
+        return problem(c, {
+          status: 400,
+          title: "Validation failure",
+          detail:
+            "metadata.quoted_spans must be an array of [start, end] integer offsets within prompt, with 0 <= start < end <= prompt.length",
+          code: ErrorCode.VALIDATION_INVALID_TYPE,
+          retryable: false,
+        });
+      }
+    }
     if (body.metadata.tool_permissions !== undefined && (!Array.isArray(body.metadata.tool_permissions) || !body.metadata.tool_permissions.every((item) => typeof item === "string"))) {
       return problem(c, {
         status: 400,
@@ -471,10 +502,22 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
 
   // ── Run risk analysis (synchronous — pattern + LLM) ──
   const parseStart = Date.now();
+
+  // Compute the warnings from what the CALLER sent, before the server writes
+  // its own fields onto the body below. Doing this after the write made every
+  // response carry a warning that `semanticAcquittal` "is not a field Parse
+  // reads" — about a field the server itself had just added.
+  const requestWarnings = unknownTopLevelFieldWarnings(body);
+
   // Server-controlled: the acquittal release is an org opt-in, never something
   // a caller can turn on for their own request.
   const screeningPolicy = c.get("policy");
   body.semanticAcquittal = screeningPolicy?.semanticAcquittal === true;
+  // Also server-controlled. `metadata.intended_action` is the caller's
+  // declaration; whether that declaration is honoured is the org's decision,
+  // and it is resolved here from the clamped policy so a member key cannot
+  // grant itself the downgrade. Undefined means allowed.
+  body.allowSubjectRole = screeningPolicy?.allowSubjectRole !== false;
 
   const result = await parsePrompt(body);
   const parseLatencyMs = Date.now() - parseStart;
@@ -483,7 +526,6 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   // returns 200, so silence here reads as "your request was understood" when
   // it was not — which is how a top-level agent_id used to switch off the
   // agent freeze without leaving a mark.
-  const requestWarnings = unknownTopLevelFieldWarnings(body);
   if (requestWarnings.length > 0) {
     (result as unknown as Record<string, unknown>).warnings = requestWarnings;
   }
@@ -1261,7 +1303,19 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   // echo exactly which substring tripped which rule), and the anonymous demo
   // already returns richer detail at 5/hr than the old collapse gave paying
   // evaluators at 10/min.
-  if (tier === "free" && apiKey.id !== "master" && apiKey.id !== "demo") {
+  //
+  // `matched_token` is NOT gated. It is the phrase that fired the rule, and it
+  // is what makes a false positive diagnosable: prospect run 9 bisected one
+  // across seven API calls because the only field that could have answered it
+  // was paid, and free tier is where every evaluation happens. An evaluator who
+  // cannot see why cannot recommend the product. The full `evidence` window —
+  // the enumeration-useful part, since it echoes surrounding text — stays paid.
+  //
+  // The anonymous demo used to be exempt here, so a stranger with no key saw
+  // `evidence` spans that a signed-up free key had stripped. Signing up cost
+  // the caller information, which is a strange funnel. The demo is now treated
+  // as free tier, so the two agree.
+  if ((tier === "free" || apiKey.id === "demo") && apiKey.id !== "master") {
     result.flags = result.flags.map((flag) => {
       const { evidence: _evidence, ...rest } = flag;
       return rest;

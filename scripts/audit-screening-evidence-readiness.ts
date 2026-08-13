@@ -15,7 +15,9 @@ const INTERNAL_HOLDOUT_CASE_SCHEMA_PATH = "docs/screening-holdout-cases.schema.j
 const PUBLIC_HOLDOUT_MANIFEST_SCHEMA_PATH = "docs/public-screening-holdout-manifest.schema.json";
 const INTERNAL_HOLDOUT_MANIFEST_SCHEMA_PATH = "docs/screening-holdout-manifest.schema.json";
 const PUBLIC_ROW_TARGET = 8;
-const INTERNAL_ROW_TARGET = 18;
+// 18 → 22 on 2026-08-13: the precision axis added four internal metrics.
+// Plan: docs/plans/2026-08-13-precision-remediation.md Phase 0.4.
+const INTERNAL_ROW_TARGET = 22;
 
 const EVIDENCE_STATES = new Set<EvidenceState>([
   "generated_internal_regression_evidence",
@@ -200,7 +202,7 @@ function markdown(result: ReturnType<typeof buildResult>): string {
     "",
     "| Item | Current | Total | Notes |",
     "|---|---:|---:|---|",
-    `| Claimable rows | ${scorecard.claimable_rows.current} | ${scorecard.claimable_rows.total} | 0/26 until public and internal/Hermes independent holdouts exist |`,
+    `| Claimable rows | ${scorecard.claimable_rows.current} | ${scorecard.claimable_rows.total} | 0/${PUBLIC_ROW_TARGET + INTERNAL_ROW_TARGET} until public and internal/Hermes independent holdouts exist |`,
     `| Public claimable rows | ${scorecard.public_claimable_rows.current} | ${scorecard.public_claimable_rows.total} | Current public rows are frozen cached evidence, not independent |`,
     `| Internal/Hermes claimable rows | ${scorecard.internal_hermes_claimable_rows.current} | ${scorecard.internal_hermes_claimable_rows.total} | Current rows are generated/internal regression evidence |`,
     `| Generated/internal regression passing rows | ${scorecard.generated_internal_regression_passing_rows} | ${scorecard.internal_hermes_claimable_rows.total} | ${scorecard.generated_internal_passing_rows_by_status.generated_pending_frozen_holdout} generated-pending rows; ${scorecard.generated_internal_passing_rows_by_status.internal_not_claimable} internal-only rows |`,

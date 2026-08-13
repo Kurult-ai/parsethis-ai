@@ -60,12 +60,23 @@ const INTERNAL_GENERATED_METRICS = new Set([
 ]);
 
 const INTERNAL_ONLY_METRICS = new Set([
+  // The precision axis, added 2026-08-13. Internal-only for now: the corpora
+  // are authored in-repo, so they are regression evidence rather than a
+  // claimable independent holdout.
+  "benign_instruction_noun_precision",
+  "override_mention_declared_precision",
+  "prospect_run_9_benign_precision",
+  "prospect_run_9_attack_recall",
   "decision_event_logging_completeness",
   "audit_completeness_for_non_allow_actions",
   "utility_degradation_from_parse_enabled",
 ]);
 
 const OVERVIEW_LABELS: Record<string, string> = {
+  benign_instruction_noun_precision: "Benign instruction-noun precision",
+  override_mention_declared_precision: "Quoted-override mention precision (declared)",
+  prospect_run_9_benign_precision: "Prospect run 9 benign precision",
+  prospect_run_9_attack_recall: "Prospect run 9 attack recall",
   owner_private_context_protection_recall: "Owner-private-context protection recall",
   owner_approval_precision: "Owner-approval precision",
   owner_approval_recall: "Owner-approval recall",
@@ -225,7 +236,7 @@ describe("tracked screening metric docs", () => {
     assert.match(readiness, /docs\/screening-holdout-cases\.schema\.json/);
     assert.match(readiness, /docs\/screening-holdout-manifest\.schema\.json/);
     assert.match(readiness, /manifest-schema drift, duplicate metric rows, and partial claimable relabeling as hard failures/);
-    assert.match(readiness, /all 26 expected metric rows as one complete set/);
+    assert.match(readiness, /all 30 expected metric rows as one complete set/);
     assert.match(completionAudit, /docs\/public-screening-holdout-manifest\.schema\.json/);
     assert.match(completionAudit, /docs\/screening-holdout-manifest\.schema\.json/);
   });

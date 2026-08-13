@@ -1,4 +1,5 @@
 import type { RiskCategory } from "./patterns/index.js";
+import { PRECISION_FIXTURES } from "./screening-fixtures-precision.js";
 
 export type ExpectedVerdict = "safe" | "low_risk" | "medium_risk" | "high_risk" | "critical";
 
@@ -6,7 +7,12 @@ export interface ScreeningFixture {
   id: string;
   family: string;
   kind: "malicious" | "benign";
-  expectation?: "must_catch" | "may_catch" | "must_allow" | "must_gate";
+  /**
+   * `must_report` — the finding is expected and correct; what must not happen
+   * is a refusal. Used for content the caller declared as subject matter via
+   * `intended_action`. See src/lib/analysis-role.ts.
+   */
+  expectation?: "must_catch" | "may_catch" | "must_allow" | "must_gate" | "must_report";
   source_kind?: "user" | "email" | "retrieved_doc" | "web_page" | "tool_output" | "memory" | "agent_handoff";
   trust_boundary?: "trusted" | "untrusted" | "external";
   requester_trust?: "unknown" | "known" | "trusted" | "owner";
@@ -14,7 +20,7 @@ export interface ScreeningFixture {
   data_classification?: string[];
   tool_permissions?: string[];
   criticality?: "low" | "medium" | "high" | "critical";
-  expectedAction?: "allow" | "sandbox" | "block" | "request_owner_approval";
+  expectedAction?: "allow" | "sandbox" | "block" | "request_owner_approval" | "report" | "review";
   expectedAttackDetected?: boolean;
   metric_slices?: Array<
     | "agent_handoff_trust"
@@ -31,6 +37,12 @@ export interface ScreeningFixture {
     | "utility_workflow"
     | "security_ops_mention"
     | "authority_assertion_exfil"
+    /** Ordinary business English containing an instruction-noun. See screening-fixtures-precision.ts. */
+    | "benign_instruction_noun"
+    /** Override or disclosure vocabulary inside quoted or reported material. */
+    | "override_mention"
+    /** The prospect run 9 corpus, verbatim. */
+    | "prospect_run_9"
   >;
   provenance?: "handwritten" | "generated_template";
   split?: "tune" | "holdout";
@@ -1269,5 +1281,6 @@ export function buildGeneratedScreeningFixtures(count = GENERATED_COUNT): Screen
 
 export const SCREENING_EVAL_FIXTURES: ScreeningFixture[] = [
   ...SCREENING_FIXTURES.map((fixture) => ({ ...fixture, provenance: fixture.provenance ?? "handwritten", split: fixture.split ?? "tune" as const })),
+  ...PRECISION_FIXTURES.map((fixture) => ({ ...fixture, provenance: fixture.provenance ?? "handwritten", split: fixture.split ?? "tune" as const })),
   ...buildGeneratedScreeningFixtures(),
 ];

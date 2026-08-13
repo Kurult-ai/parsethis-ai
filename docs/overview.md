@@ -25,11 +25,15 @@ The public detector targets are now SOTA-oriented. Recall improvements must pres
 
 | Metric | Current | Target | Delta | Status | Claimability | N |
 |--------|---------|--------|-------|--------|--------------|---|
+| Benign instruction-noun precision | 1.0000 | >=0.99 | 0.0000 | pass_internal_not_claimable | non-claimable internal regression metric | 46 |
+| Quoted-override mention precision (declared) | 1.0000 | >=0.99 | 0.0000 | pass_internal_not_claimable | non-claimable internal regression metric | 24 |
+| Prospect run 9 benign precision | 1.0000 | >=0.99 | 0.0000 | pass_internal_not_claimable | non-claimable internal regression metric | 6 |
+| Prospect run 9 attack recall | 1.0000 | >=1 | 0.0000 | pass_internal_not_claimable | non-claimable internal regression metric | 4 |
 | Owner-private-context protection recall | 1.0000 | >=0.99 | 0.0000 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 2003 |
 | Owner-approval precision | 1.0000 | >=0.98 | 0.0000 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 1002 |
 | Owner-approval recall | 1.0000 | >=0.98 | 0.0000 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 1002 |
 | Memory-contamination recall | 1.0000 | >=0.98 | 0.0000 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 1003 |
-| Hard-negative benign agent workflow FPR | 0.0000 | <=0.005 | 0.0000 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 5011 |
+| Hard-negative benign agent workflow FPR | 0.0043 | <=0.005 | 0.0000 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 5081 |
 | Legitimate workflow allow rate | 0.9998 | >=0.99 | 0.0000 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 5003 |
 | High-risk action policy correctness | 1.0000 | >=0.995 | 0.0000 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 1001 |
 | Agent-handoff trust violation recall | 1.0000 | >=0.98 | 0.0000 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 1003 |
@@ -37,8 +41,8 @@ The public detector targets are now SOTA-oriented. Recall improvements must pres
 | Callback / receipt exfiltration recall | 1.0000 | >=0.99 | 0.0000 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 1004 |
 | System/developer extraction recall | 1.0000 | >=0.98 | 0.0000 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 1002 |
 | Source-kind policy correctness | 0.9999 | >=0.99 | 0.0000 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 13022 |
-| Decision/event logging completeness | 1.0000 | >=0.9999 | 0.0000 | pass_internal_not_claimable | non-claimable internal regression metric | 13063 |
-| Audit completeness for non-allow actions | 1.0000 | >=1 | 0.0000 | pass_internal_not_claimable | non-claimable internal regression metric | 8039 |
+| Decision/event logging completeness | 1.0000 | >=0.9999 | 0.0000 | pass_internal_not_claimable | non-claimable internal regression metric | 13137 |
+| Audit completeness for non-allow actions | 1.0000 | >=1 | 0.0000 | pass_internal_not_claimable | non-claimable internal regression metric | 8065 |
 | Utility degradation from Parse enabled | 0.0000 | <=0.03 | 0.0000 | pass_internal_not_claimable | non-claimable internal regression metric | 1057 |
 | Generated/internal runtime min slice size | 1000 | >=1000 | 0 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 1000 |
 | Hard-negative benign generated/internal suite size | 5000 | >=5000 | 0 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 5000 |

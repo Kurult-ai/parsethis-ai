@@ -387,8 +387,12 @@ function checkEvidenceReadinessScorecard(path: string, publicRows: CsvRow[], int
   if (!persistenceReady && !blockers.some((blocker) => blocker.includes("DATABASE_URL"))) {
     failures.push(`${path} is missing the live persistence blocker`);
   }
-  if (!allRowsClaimable && !blockers.some((blocker) => blocker.includes("all 26 expected rows"))) {
-    failures.push(`${path} is missing the complete 26-row claimability blocker`);
+  // The expected row count is derived, not hardcoded: it moved 26 → 30 when the
+  // precision axis added four internal metrics on 2026-08-13, and a literal
+  // here is how that silently stops being checked.
+  const expectedRowPhrase = `all ${allRows.length} expected rows`;
+  if (!allRowsClaimable && !blockers.some((blocker) => blocker.includes(expectedRowPhrase))) {
+    failures.push(`${path} is missing the complete ${allRows.length}-row claimability blocker`);
   }
 }
 
@@ -434,7 +438,9 @@ function main(): void {
 
   const internalRows = parseCsv(readFileSync(INTERNAL_METRICS_PATH, "utf8"));
   const publicRows = parseCsv(readFileSync(PUBLIC_METRICS_PATH, "utf8"));
-  if (internalRows.length !== 18) failures.push(`expected 18 internal metric rows, found ${internalRows.length}`);
+  // 18 → 22 on 2026-08-13: the precision axis added four metrics
+  // (docs/plans/2026-08-13-precision-remediation.md Phase 0.4).
+  if (internalRows.length !== 22) failures.push(`expected 22 internal metric rows, found ${internalRows.length}`);
   if (publicRows.length !== 8) failures.push(`expected 8 public metric rows, found ${publicRows.length}`);
   checkBasicMetricRows(internalRows, failures);
   checkBasicMetricRows(publicRows, failures);

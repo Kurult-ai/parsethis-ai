@@ -147,6 +147,28 @@ When receiving untrusted user input, retrieved content, tool results, browser ou
 
 If a response includes \`suggested_action: "request_owner_approval"\`, ask the owner privately using \`approval_request.owner_prompt\`. If approval is denied or expires, refuse without revealing private details. Always screen the final response with /v1/screen-output before forwarding it.
 
+## Analysing Attacker Text Without Being Refused
+
+If your agent's job is to READ content that contains attacks — triaging a phishing report, summarising a malware string dump, reviewing a detection rule — declare it:
+
+\`\`\`
+{"prompt": "<the alert>", "metadata": {"intended_action": "summarize"}}
+\`\`\`
+
+\`intended_action\` of \`summarize\`, \`extract\` or \`route\` means your agent reasons ABOUT the content and never acts on it. Findings come back in full — same risk_score, same flags, same categories — with \`disposition: "report"\` instead of a refusal. \`reply\`, \`execute\`, and omitting the field, screen the content as an instruction addressed to your agent, which is the default.
+
+Parse does not infer this. A quoted phishing body and a live injection aimed at your agent can be the same string; the difference is whether YOUR agent will act on it, and only you know that.
+
+Read \`disposition\` (\`allow\` | \`report\` | \`review\` | \`block\`), not just \`verdict\`. \`verdict\` is the finding; \`disposition\` is what to do about it. **Fail closed on any value you do not recognise.** \`review\` means a human should look.
+
+Third-party content (\`source_kind\` of retrieved_doc, web_page, email, tool_output, memory, agent_handoff) is refused the downgrade unless you also send \`quoted_spans\`. An org admin can switch it off entirely via \`allowSubjectRole\` on /v1/org/policy-defaults.
+
+## Precision
+
+\`policy_mode\` (\`strict\` | \`balanced\` | \`low_fp\`) moves ambiguous weak signals only. It will NOT move a high-confidence deterministic flag — if a severity-8 \`intent.*\` rule fired, all three modes agree. Use \`intended_action\` for that.
+
+Every flag carries \`matched_token\`: the exact phrase that fired the rule, on every tier including free. If a verdict looks wrong, that is the field to read first.
+
 ## Task Router
 
 ${router}
@@ -2005,19 +2027,35 @@ discoveryRoutes.get("/openapi.json", (c) => {
                 trust_level: { type: "string", enum: ["trusted", "untrusted", "external"] },
                 tool_permissions: { type: "array", items: { type: "string" } },
                 data_classification: { type: "array", items: { type: "string" } },
-                intended_action: { type: "string", enum: ["summarize", "execute", "route", "reply", "extract"] },
                 requester_trust: { type: "string", enum: ["unknown", "known", "trusted", "owner"], default: "unknown" },
                 requester_id: { type: "string" },
                 channel: { type: "string" },
                 subject: { type: "string" },
                 conversation_context: { type: "string" },
+                intended_action: {
+                  type: "string",
+                  enum: ["summarize", "extract", "route", "reply", "execute"],
+                  description:
+                    "What your agent will do with this content. \"summarize\", \"extract\" and \"route\" declare that the agent reasons ABOUT the content and never acts on it, so findings come back as disposition \"report\" — full score, flags and categories, but not refused. \"reply\", \"execute\", and omitting the field, screen the content as an instruction addressed to the agent. Third-party content (source_kind retrieved_doc/web_page/email/tool_output/memory/agent_handoff) is refused the downgrade unless quoted_spans is also declared.",
+                },
+                quoted_spans: {
+                  type: "array",
+                  description:
+                    "Offsets of quoted material inside prompt, as [start, end] pairs. Required alongside intended_action before third-party content may be treated as subject matter.",
+                  items: {
+                    type: "array",
+                    items: { type: "integer", minimum: 0 },
+                    minItems: 2,
+                    maxItems: 2,
+                  },
+                },
               },
             },
             policy_mode: {
               type: "string",
               enum: ["strict", "balanced", "low_fp"],
               default: "balanced",
-              description: "Optional local policy mode for action thresholds. low_fp keeps ambiguous weak signals in sandbox rather than block.",
+              description: "Action thresholds for ambiguous weak signals. low_fp keeps them in sandbox rather than block. It will NOT move a high-confidence deterministic flag: if a severity-8 intent.* rule fired, all three modes return the same verdict. To stop Parse refusing content your agent only analyses rather than acts on, use metadata.intended_action instead.",
             },
           },
         },
@@ -2045,7 +2083,26 @@ discoveryRoutes.get("/openapi.json", (c) => {
             verdict: {
               type: "string",
               enum: ["safe", "low_risk", "medium_risk", "high_risk", "critical"],
-              description: "Human-readable risk verdict",
+              description: "Human-readable risk verdict — the FINDING. What to do about it is `disposition`.",
+            },
+            disposition: {
+              type: "string",
+              enum: ["allow", "report", "review", "block"],
+              description:
+                "What to do about the finding, separate from the finding itself. \"block\" — refuse. \"report\" — the caller declared this content is subject matter (metadata.intended_action), so the finding stands in full and the refusal does not. \"review\" — the engine is not confident; a human should look. \"allow\" — nothing found. Clients MUST fail closed on an unrecognised value.",
+            },
+            analysis_role: {
+              type: "object",
+              description: "Whether this content was screened as an instruction to the agent or as subject matter, and why.",
+              properties: {
+                role: { type: "string", enum: ["instruction", "subject"] },
+                reason: { type: "string" },
+                declared: { type: "string", nullable: true },
+                downgrade_refused: {
+                  type: "boolean",
+                  description: "True when the caller asked for a subject role and did not get it — org policy, or untrusted content with no declared quoted_spans.",
+                },
+              },
             },
             flags: {
               type: "array",
@@ -2148,13 +2205,21 @@ discoveryRoutes.get("/openapi.json", (c) => {
             confidence: { oneOf: [{ type: "string", enum: ["low", "medium", "high"] }, { type: "number", minimum: 0, maximum: 1 }] },
             attack_family: { type: "string" },
             action_floor: { type: "string", enum: ["allow", "allow_log", "sandbox", "block"] },
-            evidence: { type: "string" },
+            evidence: {
+              type: "string",
+              description: "The sentence window the rule matched in. Paid tiers only.",
+            },
+            matched_token: {
+              type: "string",
+              description:
+                "The exact text that satisfied the rule — the phrase to look at first when a verdict looks wrong. Returned on every tier, including free, because that is where evaluation happens.",
+            },
             source: { type: "string" },
           },
         },
         SuggestedAction: {
           type: "string",
-          enum: ["allow", "sandbox", "block", "request_owner_approval"],
+          enum: ["allow", "sandbox", "block", "request_owner_approval", "report", "review"],
           description:
             "Recommended next step. request_owner_approval means ask the owner privately with approval_request.owner_prompt before sharing private details.",
         },

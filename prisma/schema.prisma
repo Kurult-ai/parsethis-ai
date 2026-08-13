@@ -550,6 +550,10 @@ model OrgPolicyDefault {
   executeInSandbox        Boolean? @map("execute_in_sandbox")
   enforceToolAllowlist    Boolean? @map("enforce_tool_allowlist")
   bypassEnabled           Boolean? @map("bypass_enabled")
+  /// Whether members may use metadata.intended_action to downgrade a block to
+  /// a reported finding. NULL = allowed. Inverted like bypassEnabled: false is
+  /// the stricter setting. See src/lib/analysis-role.ts.
+  allowSubjectRole        Boolean? @map("allow_subject_role")
   /// Fields the member key may not override. Unlocked fields are seed values.
   lockedFields            String[] @default([]) @map("locked_fields")
   updatedBy               String   @map("updated_by")

@@ -14,6 +14,17 @@ export interface IntentRiskFlag {
   attack_family: string;
   action_floor: DetectorActionFloor;
   evidence?: string;
+  /**
+   * The exact text that satisfied the rule, when the detector passes its rule
+   * in. `evidence` is the surrounding sentence window; this is the span.
+   *
+   * Prospect run 9 diagnosed a false positive by bisecting it across seven API
+   * calls, because `evidence` returned the whole prompt on the two shortest
+   * cases and never named the phrase that fired. "Check for an approved
+   * request." blocked on the pair `check` … `request`, and nothing in the
+   * response said so.
+   */
+  matched_token?: string;
   source?: "deterministic_intent" | "decoded_content" | "discussion_suppressor";
   match_count?: number;
 }
@@ -322,8 +333,33 @@ const SPACED_OVERRIDE =
 //     noun, so "Ignore previous instructions" is an override, not a disclosure
 //     probe. Without this, a forwarded email carrying an injection was reported
 //     as a system_prompt_leak it never attempted.
-const INSTRUCTION_DISCLOSURE =
-  /\b(?:what|which|who|how|tell|show|list|repeat|quote|output|display|print|provide|share|duplicate|explain|request|return|give|gimme|spell\s+out)\b[^.\n]{0,160}\b(?:(?:your|hidden|secret|previous|prior|initial|original|current|last|second|preserved|provided|given)\s+)?(?:instructions?|guidelines?|rules?|directions?|orders?|directives?|system\s+prompt|system\s+message|developer\s+message|password|passcode)\b|\b(?:instructions?|guidelines?|rules?|directions?|orders?|directives?)\b[^.\n\[\]]{0,120}\b(?:you\s+(?:were|are|have|got|received)|given\s+to\s+you|provided\s+to\s+you|following|right\s+now|so\s+far|before|previous|prior|hidden|secret|preserved|current)\b(?!\s+(?:instructions?|guidelines?|rules?|directions?|orders?|directives?|prompts?|system|developer))|\b(?:secret|hidden)\s+instructions?\b/i;
+/**
+ * Nouns that are protected whatever precedes them. "Show me the system prompt"
+ * needs no determiner to be a disclosure probe.
+ */
+const PROTECTED_NOUN_ABSOLUTE = "(?:system\\s+prompt|system\\s+message|developer\\s+message|password|passcode)";
+
+/**
+ * Nouns that are only protected when scoped to the assistant. Before
+ * 2026-08-13 the determiner here was optional, so "Show the shipping rules that
+ * apply to this order" and "Print the rules for parental leave" were
+ * disclosure probes at 10/critical. See INSTRUCTION_NOUN_CORE above.
+ */
+const PROTECTED_NOUN_AMBIGUOUS = "(?:guidelines?|rules?|directions?|orders?)";
+/** Specific enough to need no determiner — see INSTRUCTION_NOUN_ALWAYS. */
+const PROTECTED_NOUN_SPECIFIC = "(?:instructions|directives)";
+
+const INSTRUCTION_DISCLOSURE = new RegExp(
+  `\\b(?:what|which|who|how|tell|show|list|repeat|quote|output|display|print|provide|share|duplicate|explain|request|return|give|gimme|spell\\s+out)\\b[^.\\n]{0,160}` +
+    `(?:\\b${PROTECTED_NOUN_ABSOLUTE}\\b` +
+    `|\\b${PROTECTED_NOUN_SPECIFIC}\\b` +
+    `|\\b(?:your|hidden|secret|previous|prior|initial|original|current|last|second|preserved|provided|given|governing|system|developer|internal)\\s+(?:\\w+\\s+){0,2}${PROTECTED_NOUN_AMBIGUOUS}\\b)` +
+    "|" +
+    `(?:\\b${PROTECTED_NOUN_AMBIGUOUS}\\b|\\b${PROTECTED_NOUN_SPECIFIC}\\b)[^.\\n\\[\\]]{0,120}\\b(?:you\\s+(?:were|are|have|got|received)|given\\s+to\\s+you|provided\\s+to\\s+you|following|right\\s+now|so\\s+far|before|previous|prior|hidden|secret|preserved|current)\\b(?!\\s+(?:instructions?|guidelines?|rules?|directions?|orders?|directives?|prompts?|system|developer))` +
+    "|" +
+    "\\b(?:secret|hidden)\\s+instructions?\\b",
+  "i",
+);
 
 const PRE_CONVERSATION_PROBE =
   /\b(?:what|which|show|print|spell-?\s*check|spellcheck|display|output|repeat|echo|return)\b[^.\n]{0,120}\b(?:written|text|prompt|input|message|content|words?)\b[^.\n]{0,120}\b(?:above|before|beginning|preceding|prior|earlier)|\b(?:print|display|output|repeat|echo|return)\b[^.\n]{0,120}\b(?:above|previous|prior|earlier)\b[^.\n]{0,80}\b(?:prompt|text|input|message|content)/i;
@@ -364,18 +400,112 @@ const DELIMITER_ATTACK_ARTIFACT =
 const INSTRUCTION_TRANSFORM_PROBE =
   /\b(?:repeat|quote|reiterate|rephrase|reconfirm|regurgitate|disclose|echo|respond with|spell|shuffle|reverse|rewrite|print|display|output|make a summary of|describe)\b[^.\n]{0,160}\b(?:all\s+)?(?:your|previous|prior|original|initial|guard|entire|above|last\s+\d+\s+lines?\s+of\s+your)\s+(?:instructions?|instuctions?|instrcutions?|intstructions?|promt|prompt|directives?|rules?)\b|\b(?:what|which|how)\b[^.\n]{0,160}\b(?:you\s+(?:were|are|have been)\s+instructed|things\s+that\s+you\s+are\s+instructed|instructions?\s+(?:given|told)\s+to\s+you|your\s+(?:exact\s+)?(?:initial|original)\s+int?structions?)\b|\b(?:instructions?|instuctions?|instrcutions?|intstructions?)\b[^.\n]{0,120}\b(?:block out|leave out|without security|as though they were written|in reverse|with all words shuffled|as a poem)\b/i;
 
-const DIRECT_INSTRUCTION_BYPASS =
-  /\b(?:ignore|ignoring|ignored|forget|reset|discard|reject|skip|defy|subvert|break|rescind|neglect|disobey|ignoriere|ignorieren|don'?t obey|do not obey|don'?t listen to|do not listen to|do the opp?i?site of|opp?i?site of)\b[^.\n]{0,140}\b(?:instructions?|intructions?|instuctions?|directives?|rules?|prompts?|checks?|techniques?|program|creators?|warning|censure|everything|all|anwweisung|anweisung|orders?|previous\s+information|things\s+you\s+were\s+told)\b|\b(?:instructions?|intructions?|instuctions?|directives?|rules?|prompts?|checks?|techniques?|priorinstructions|program|orders?)\b[^.\n]{0,140}\b(?:ignore|ignoring|ignored|forget|forgotten|reset|discard|reject|skip|defy|subvert|break|rescind|neglect|disobey|don'?t obey|do not obey|opp?i?site|went\s+against|start\s+with\s+["']?simon\s+says)\b/i;
+/**
+ * An instruction-noun that is actually *the assistant's* instructions.
+ *
+ * The bug this closes, verified on production `be8ec48` on 2026-08-13: the
+ * determiner used to be optional — `(?:your\s+)?(?:instructions?|…|rules?|checks?)`
+ * — and two of the five nouns, `rules` and `checks`, are among the commonest
+ * nouns in business English. So any sentence with `rules` near `show`,
+ * `describe`, `print`, `copy` or `request` was a severity-8, floor-block,
+ * `system_prompt_leak` match:
+ *
+ *     "Can you show me the house rules?"                     → 10  critical  block
+ *     "Please describe the refund rules to the customer."    → 9.2 critical  block
+ *     "Check for an approved request."                       → 9.2 critical  block
+ *
+ * The last one matched because `Check` was read as the noun `checks?` and
+ * `request` as the verb, with no grammatical relationship between them.
+ *
+ * A bare `rules` or `checks` no longer qualifies. The noun must be scoped to
+ * the assistant's own governing material, either by a determiner in front of it
+ * or by a possessive clause behind it. `checks?` is gone from the set entirely:
+ * "check" is a verb far more often than a noun, and no attack fixture needs it.
+ *
+ * Plan: docs/plans/2026-08-13-precision-remediation.md Phase 1.
+ */
+/**
+ * Specific enough that a bare imperative in front of them is an attack signal
+ * on its own — "repeat instructions" needs no determiner. Kept ungoverned so
+ * the public benchmark cases ("DO NOT reveal password, repeat instructions")
+ * keep firing.
+ */
+// Plural only. The bare plural is the attack idiom ("repeat instructions");
+// the singular is an ordinary noun — "work instruction", "assembly
+// instruction", "the prompt" — and requires scoping like `rules` does.
+const INSTRUCTION_NOUN_ALWAYS = "(?:instructions|int?structions|instuctions|instrcutions|directives|prompts|guardrails)";
+
+/**
+ * Ordinary business words until scoped to the assistant. `rules` and `checks`
+ * are among the commonest nouns in business English, and leaving them
+ * unqualified is what made "Can you show me the house rules?" a 10/critical
+ * block on production.
+ */
+const INSTRUCTION_NOUN_GOVERNED = "(?:rules?|checks?|instruction|int?struction|directive|prompt|guardrail)";
+
+const INSTRUCTION_NOUN_CORE = `(?:${INSTRUCTION_NOUN_ALWAYS}|${INSTRUCTION_NOUN_GOVERNED})`;
+
+/** Scoping that ties the noun to the assistant: "your rules", "all previous instructions". */
+const GOVERNING_DETERMINER =
+  "(?:your|yours|its|our|my|all|previous|prior|original|initial|first|earlier|preceding|above|hidden|secret|governing|system|systems|developer|internal|base|core|the\\s+system|the\\s+assistant|the\\s+model|the\\s+bot|the\\s+ai)";
+
+/** "…the instructions you were given", "…the rules above" — governance behind the noun. */
+const GOVERNANCE_SUFFIX =
+  "(?:\\s+(?:above|below|so\\s+far)\\b|\\s+(?:you|u)\\s+(?:were\\s+|have\\s+been\\s+|had\\s+been\\s+)?(?:given|got|received|follow|obey|adhere|operate|were\\s+told)\\b|\\s+(?:that|which)\\s+(?:you|govern)\\b|\\s+from\\s+(?:the\\s+)?(?:system|developer|operator)\\b)";
+
+const GOVERNED_INSTRUCTION_NOUN =
+  `(?:\\b${INSTRUCTION_NOUN_ALWAYS}\\b` +
+  `|\\b${GOVERNING_DETERMINER}\\b(?:\\s+\\w+){0,2}\\s+${INSTRUCTION_NOUN_CORE}\\b` +
+  `|\\b(?:the\\s+|these\\s+|those\\s+)?${INSTRUCTION_NOUN_CORE}\\b${GOVERNANCE_SUFFIX})`;
+
+/**
+ * Nouns specific enough that a bypass verb in front of them is an attack signal
+ * on its own. "Ignore all previous instructions" needs no further scoping.
+ */
+const BYPASS_NOUN_ALWAYS =
+  "(?:instructions?|intructions?|instuctions?|priorinstructions|creators?|warning|censure|everything|all|anwweisung|anweisung|previous\\s+information|things\\s+you\\s+were\\s+told)";
+
+/**
+ * Nouns that are ordinary business words until scoped to the assistant.
+ * "Break the rules into bullet points" and "skip the address checks" were both
+ * severity-8 blocks before 2026-08-13 because these sat unqualified beside
+ * `skip` and `break`. An override must target the assistant's own governing
+ * material, not a business control — the same principle `hasOverrideIntent`
+ * already applies.
+ */
+const BYPASS_NOUN_GOVERNED = "(?:directives?|rules?|prompts?|checks?|techniques?|program|orders?|guardrails?)";
+
+const BYPASS_VERB_LEADING =
+  "(?:ignore|ignoring|ignored|forget|reset|discard|reject|skip|defy|subvert|break|rescind|neglect|disobey|ignoriere|ignorieren|don'?t obey|do not obey|don'?t listen to|do not listen to|do the opp?i?site of|opp?i?site of)";
+
+const BYPASS_VERB_TRAILING =
+  "(?:ignore|ignoring|ignored|forget|forgotten|reset|discard|reject|skip|defy|subvert|break|rescind|neglect|disobey|don'?t obey|do not obey|opp?i?site|went\\s+against|start\\s+with\\s+[\"']?simon\\s+says)";
+
+const DIRECT_INSTRUCTION_BYPASS = new RegExp(
+  `\\b${BYPASS_VERB_LEADING}\\b[^.\\n]{0,140}(?:\\b${BYPASS_NOUN_ALWAYS}\\b|\\b${GOVERNING_DETERMINER}\\b(?:\\s+\\w+){0,2}\\s+${BYPASS_NOUN_GOVERNED}\\b)` +
+    "|" +
+    `(?:\\b${BYPASS_NOUN_ALWAYS}\\b|\\b${GOVERNING_DETERMINER}\\b(?:\\s+\\w+){0,2}\\s+${BYPASS_NOUN_GOVERNED}\\b)[^.\\n]{0,140}\\b${BYPASS_VERB_TRAILING}\\b`,
+  "i",
+);
 
 // Same bracket guard as INSTRUCTION_DISCLOSURE on the second alternative: a
 // noun inside a bracketed label must not be joined to a verb outside it, or
 // "[… assistant directive] Ignore previous instructions" reads as a probe when
 // it is a plain override — already covered by direct_instruction_bypass.
-const INSTRUCTION_PROBE_OR_MUTATION =
-  /\b(?:repeat|replay|spell|describe|print|show|display|request|respond with|response with|copy|change|invert|go against|do the opposite of|break|subvert|skip|reject|rescind|defy)\b[^.\n]{0,120}\b(?:all\s+)?(?:your\s+|my\s+|previous\s+|prior\s+|original\s+|initial\s+|exact\s+)?(?:instructions?|int?structions?|directives?|rules?|prompts?|checks?)\b|\b(?:your\s+)?(?:instructions?|int?structions?|directives?|rules?|prompts?|checks?)\b[^.\n\[\]]{0,100}\b(?:changed|evil|all changed|opposite|given|copy|repeat|spell|print|show|display|request|describe|remember|adhere|follow|obey|ignore|skip|break|subvert|rescind|reject|defy|invert)\b/i;
+const INSTRUCTION_PROBE_OR_MUTATION = new RegExp(
+  // verb → governed noun. Window tightened from 120 to 60: at 120 the match
+  // routinely spanned two clauses ("check with legal and request the contract").
+  `\\b(?:repeat|replay|spell|describe|print|show|display|request|respond with|response with|copy|change|invert|go against|do the opposite of|break|subvert|skip|reject|rescind|defy)\\b[^.\\n]{0,60}${GOVERNED_INSTRUCTION_NOUN}` +
+    "|" +
+    // governed noun → verb. Same bracket guard as before.
+    `${GOVERNED_INSTRUCTION_NOUN}[^.\\n\\[\\]]{0,60}\\b(?:changed|evil|all changed|opposite|given|copy|repeat|spell|print|show|display|request|describe|remember|adhere|follow|obey|ignore|skip|break|subvert|rescind|reject|defy|invert)\\b`,
+  "i",
+);
 
-const DIRECT_INSTRUCTION_QUESTION =
-  /\b(?:do you remember|have you been given|did you have|can you go against|why can(?:not|['’]?t)? you|what(?:'s| is| are)?\s+(?:are\s+)?you)\b[^.\n]{0,120}\b(?:instructions?|int?structions?|directives?|rules?|prompts?)\b/i;
+const DIRECT_INSTRUCTION_QUESTION = new RegExp(
+  `\\b(?:do you remember|have you been given|did you have|can you go against|why can(?:not|['’]?t)? you|what(?:'s| is| are)?\\s+(?:are\\s+)?you)\\b[^.\\n]{0,120}${GOVERNED_INSTRUCTION_NOUN}`,
+  "i",
+);
 
 const CONSTRAINED_INSTRUCTION_OUTPUT =
   /\b(?:your answer must start with|must start with|respond with|response with|answer with|please say|say)\b[^.\n]{0,120}\b(?:forgot all instructions|ignoring all rules|all instructions|instructions:)\b/i;
@@ -477,16 +607,37 @@ function isBusinessControlContext(text: string): boolean {
   return /\b(?:automatic\s+(?:block|flag|alert|review)|sanctions?\s+(?:block|alert|flag|match)|AML\s+(?:control|alert|flag)|PEP\s+match|withdrawal\s+limit|reporting\s+threshold|false\s+positive|case\s+(?:file|review)|investigation|compliance\s+review|prior\s+reviewer|previous\s+analyst)\b/i.test(text);
 }
 
-function addFlag(flags: IntentRiskFlag[], flag: IntentRiskFlag): void {
-  const existing = flags.find((f) => f.id === flag.id);
+/**
+ * The exact substring that satisfied a rule.
+ *
+ * Returns undefined rather than guessing when no rule is supplied or none
+ * matches — a wrong span is worse than none, because a customer tunes against
+ * it. Trimmed to a readable length; a rule that legitimately spans more than
+ * this is reported truncated rather than replaced by the window.
+ */
+function matchedSpan(window: string, rules: RegExp[]): string | undefined {
+  for (const rule of rules) {
+    const m = rule.exec(window);
+    if (m && m[0]) return m[0].length > 240 ? `${m[0].slice(0, 240)}…` : m[0];
+  }
+  return undefined;
+}
+
+function addFlag(flags: IntentRiskFlag[], flag: IntentRiskFlag, rules?: RegExp[]): void {
+  const withSpan: IntentRiskFlag =
+    rules && flag.evidence
+      ? { ...flag, matched_token: matchedSpan(flag.evidence, rules) ?? flag.matched_token }
+      : flag;
+  const existing = flags.find((f) => f.id === withSpan.id);
   if (!existing) {
-    flags.push({ ...flag, match_count: 1 });
+    flags.push({ ...withSpan, match_count: 1 });
     return;
   }
   existing.match_count = (existing.match_count ?? 1) + 1;
-  if (flag.evidence && (!existing.evidence || flag.evidence.length > existing.evidence.length)) {
-    existing.evidence = flag.evidence;
+  if (withSpan.evidence && (!existing.evidence || withSpan.evidence.length > existing.evidence.length)) {
+    existing.evidence = withSpan.evidence;
   }
+  if (withSpan.matched_token && !existing.matched_token) existing.matched_token = withSpan.matched_token;
 }
 
 function sentenceWindows(text: string): string[] {
@@ -540,8 +691,21 @@ function isBenignWorkflowHandoff(text: string): boolean {
   return /\bhandoff\b/i.test(text) && !HANDOFF_SPOOF_CUE.test(text);
 }
 
+// Same governance requirement as INSTRUCTION_DISCLOSURE: a bare "rules" is not
+// a request for the assistant's protected material. Without this, "describe the
+// refund rules to the customer" read as a protected-instruction request and
+// disqualified the benign-handling path.
+const PROTECTED_INSTRUCTION_REFERENCE = new RegExp(
+  `\\b(?:system\\s+prompt|system\\s+message|developer\\s+message)\\b` +
+    // Bare, like INSTRUCTION_NOUN_ALWAYS: "repeat instructions" is a probe with
+    // no determiner, and the benign-handling guard must not swallow it.
+    `|\\b(?:instructions|instuctions|instrcutions|intstructions|prompts|directives)\\b` +
+    `|\\b(?:your|hidden|secret|previous|prior|initial|original|governing|system|developer|internal)\\s+(?:\\w+\\s+){0,2}(?:rules?|instruction|prompt|promt|directive)\\b`,
+  "i",
+);
+
 function asksForProtectedInstructions(text: string): boolean {
-  return /\b(?:instructions?|instuctions?|instrcutions?|intstructions?|prompts?|promt|system\s+prompt|system\s+message|developer\s+message|rules?|directives?)\b/i.test(text) &&
+  return PROTECTED_INSTRUCTION_REFERENCE.test(text) &&
     /\b(?:repeat|quote|print|show|display|output|reveal|share|give|tell|dump|return|copy|paste|rephrase|summarize|describe)\b/i.test(text);
 }
 
@@ -769,7 +933,7 @@ function maybeFlagFuzzyOverride(flags: IntentRiskFlag[], text: string): void {
       action_floor: "block",
       evidence: window,
       source: "deterministic_intent",
-    });
+    }, [FUZZY_OVERRIDE, SPACED_OVERRIDE]);
   }
 }
 
@@ -788,7 +952,7 @@ function maybeFlagInstructionDisclosure(flags: IntentRiskFlag[], text: string): 
       action_floor: "block",
       evidence: window,
       source: "deterministic_intent",
-    });
+    }, [INSTRUCTION_DISCLOSURE]);
   }
 }
 
@@ -1012,7 +1176,7 @@ function maybeFlagInstructionBypassOrMutation(flags: IntentRiskFlag[], text: str
         action_floor: "block",
         evidence: window,
         source: "deterministic_intent",
-      });
+      }, [DIRECT_INSTRUCTION_BYPASS, MULTILINGUAL_FORGET_CONTEXT]);
     }
 
     if (
@@ -1032,7 +1196,7 @@ function maybeFlagInstructionBypassOrMutation(flags: IntentRiskFlag[], text: str
         action_floor: "block",
         evidence: window,
         source: "deterministic_intent",
-      });
+      }, [INSTRUCTION_PROBE_OR_MUTATION, DIRECT_INSTRUCTION_QUESTION, CONSTRAINED_INSTRUCTION_OUTPUT, INSTRUCTION_DISCLOSURE_SHORT]);
     }
 
     if (OPPOSITE_OR_NO_RULES.test(window) || FORGET_TOLD_OR_TASKED.test(window)) {

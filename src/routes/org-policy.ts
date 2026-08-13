@@ -37,6 +37,10 @@ const BOOLEAN_FIELDS = [
   "executeInSandbox",
   "enforceToolAllowlist",
   "bypassEnabled",
+  // Whether member keys may use metadata.intended_action to have a finding
+  // reported rather than refused. Inverted like bypassEnabled: false is
+  // stricter. See src/lib/analysis-role.ts.
+  "allowSubjectRole",
 ] as const;
 
 /**
@@ -80,6 +84,7 @@ export interface ValidatedOrgPolicyDefaults {
   executeInSandbox: boolean | null;
   enforceToolAllowlist: boolean | null;
   bypassEnabled: boolean | null;
+  allowSubjectRole: boolean | null;
   lockedFields: string[];
 }
 
@@ -185,6 +190,7 @@ export function validateOrgPolicyInput(body: unknown): ValidationResult<Validate
       executeInSandbox: booleans.executeInSandbox,
       enforceToolAllowlist: booleans.enforceToolAllowlist,
       bypassEnabled: booleans.bypassEnabled,
+      allowSubjectRole: booleans.allowSubjectRole,
       lockedFields,
     },
   };

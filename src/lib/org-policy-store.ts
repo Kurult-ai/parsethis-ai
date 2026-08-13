@@ -29,6 +29,7 @@ function toCeiling(row: {
   executeInSandbox: boolean | null;
   enforceToolAllowlist: boolean | null;
   bypassEnabled: boolean | null;
+  allowSubjectRole: boolean | null;
   lockedFields: string[];
 }): OrgPolicyCeiling {
   return {
@@ -40,6 +41,7 @@ function toCeiling(row: {
     screenForwardedMessages: row.screenForwardedMessages,
     executeInSandbox: row.executeInSandbox,
     enforceToolAllowlist: row.enforceToolAllowlist,
+    allowSubjectRole: row.allowSubjectRole,
     bypassEnabled: row.bypassEnabled,
     lockedFields: Array.isArray(row.lockedFields) ? row.lockedFields : [],
   };

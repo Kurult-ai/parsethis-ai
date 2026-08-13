@@ -37,6 +37,16 @@ export interface ParseSdkConfig {
   environment?: string;
   /** Optional data source IDs the agent is accessing (data governance). */
   dataSources?: string[];
+  /**
+   * Called when the server returns `disposition: "review"` — the engine found
+   * something and is not confident about it.
+   *
+   * **Without a handler, a `review` blocks.** A third state nobody handles is a
+   * hole, not a feature: the whole point is that a human looks, and an SDK that
+   * quietly passed it through would be asserting the opposite. Return `true` to
+   * proceed, `false` to refuse.
+   */
+  onReview?: (verdict: ParseApiResponse) => boolean | Promise<boolean>;
   /** Throw `ParseScreeningError` on a block verdict instead of returning a safe
    *  placeholder response. Defaults to `false` (fail open). */
   failClosed?: boolean;
@@ -74,6 +84,7 @@ interface ResolvedConfig {
   failClosed: boolean;
   onReleased: "block" | "allow" | "callback";
   onReleasedPrompt?: (info: NonNullable<ParseApiResponse["released_from_block"]>, prompt: string) => boolean | Promise<boolean>;
+  onReview?: (verdict: ParseApiResponse) => boolean | Promise<boolean>;
   screenOutput: boolean;
   parseTimeoutMs: number;
 }
@@ -104,6 +115,7 @@ function resolveConfig(config: ParseSdkConfig): ResolvedConfig {
     failClosed: config.failClosed ?? config.failPosture === "fail_closed",
     onReleased: config.onReleased ?? "block",
     onReleasedPrompt: config.onReleasedPrompt,
+    onReview: config.onReview,
     screenOutput: config.screenOutput !== false,
     parseTimeoutMs: config.parseTimeoutMs ?? 10_000,
   };
@@ -159,6 +171,13 @@ interface ParseApiResponse {
   analysis_method?: string;
   frozen?: boolean;
   recommended_action?: string;
+  /**
+   * What to do about the finding, separate from the finding itself.
+   * `report` means the caller declared this content is subject matter their
+   * agent reasons about rather than acts on, so the finding stands and the
+   * refusal does not. Absent on servers older than 2026-08-13.
+   */
+  disposition?: "allow" | "report" | "review" | "block";
   /**
    * Present when Parse would have blocked on deterministic signals alone and
    * the semantic layer cleared it.
@@ -309,6 +328,48 @@ async function parseCall<T extends object>(
 // ─── Intercept logic ────────────────────────────────────────────────────────
 
 /** Intercept a function that returns a promise (async create calls). */
+/**
+ * Whether this SDK refuses the call.
+ *
+ * `disposition` is authoritative when the server sends it. The risk bands
+ * describe the *finding*; the disposition describes what to do about it, and a
+ * `report` is a real finding at verdict `critical` that the caller has
+ * explicitly declared is subject matter rather than an instruction.
+ *
+ * An unrecognised disposition blocks. Failure mode #3 in the acquittal register
+ * was precisely this: a new server-side state ("sandbox") that neither SDK knew
+ * about, so a released verdict reached the model verbatim. Any future state
+ * fails closed here until a client is taught to handle it.
+ */
+function dispositionBlocks(resp: ParseApiResponse, config: ResolvedConfig): boolean {
+  const disposition = resp.disposition;
+  if (disposition !== undefined) {
+    switch (disposition) {
+      case "allow":
+        return false;
+      case "report":
+        // The finding stands and is on the response for the caller to act on;
+        // the refusal does not, because they told us they will not execute it.
+        return false;
+      case "review":
+        // No handler means nobody is looking, which is the one thing this state
+        // must not mean.
+        return !config.onReview;
+      case "block":
+        return true;
+      default:
+        return true;
+    }
+  }
+  // Server predates the disposition field — the behaviour it had before.
+  return (
+    resp.verdict === "critical" ||
+    resp.verdict === "high_risk" ||
+    (resp.verdict as string) === "block" ||
+    resp.recommended_action === "block"
+  );
+}
+
 function interceptAsync(
   original: (...args: unknown[]) => Promise<unknown>,
   kind: "prompt" | "message",
@@ -394,14 +455,15 @@ function interceptAsync(
 
       // "block" comes from the frozen-agent kill switch and is not one of the
       // risk bands; gating on the bands alone made the kill switch a no-op here.
-      if (
-        parseResp &&
-        !releasedAndAllowed &&
-        (parseResp.verdict === "critical" ||
-          parseResp.verdict === "high_risk" ||
-          parseResp.verdict === "block" ||
-          parseResp.recommended_action === "block")
-      ) {
+      //
+      // `disposition`, when the server sends it, is authoritative over the risk
+      // bands — a `report` carries a real finding at verdict `critical`, and
+      // reading the band alone would refuse content the caller explicitly
+      // declared as subject matter. An unrecognised disposition **blocks**: a
+      // new server state that an old client silently passed through is exactly
+      // failure mode #3 from the acquittal register, where a released verdict
+      // reached the model because neither SDK knew the word "sandbox".
+      if (parseResp && !releasedAndAllowed && dispositionBlocks(parseResp, config)) {
         stats.blockedCalls++;
         if (config.failClosed) {
           throw new ParseScreeningError(

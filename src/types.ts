@@ -23,6 +23,12 @@ export interface ScreeningPolicy {
    * `docs/plans/2026-08-12-semantic-acquittal-release.md`.
    */
   semanticAcquittal?: boolean;
+  /**
+   * Whether a caller may use `metadata.intended_action` to have a finding
+   * reported rather than refused. Undefined means allowed; an org admin sets
+   * false to switch it off org-wide. See `src/lib/analysis-role.ts`.
+   */
+  allowSubjectRole?: boolean;
   defaultMode?: "full" | "pattern-only";
   environment?: string;
 }

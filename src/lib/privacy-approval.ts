@@ -1,6 +1,17 @@
 import type { RiskCategory } from "./patterns/index.js";
 
-export type SuggestedAction = "allow" | "sandbox" | "block" | "request_owner_approval";
+/**
+ * `report` and `review` come from the disposition split — a finding the caller
+ * declared is subject matter rather than an instruction, and a finding the
+ * engine is not confident about. See `src/lib/analysis-role.ts`.
+ */
+export type SuggestedAction =
+  | "allow"
+  | "sandbox"
+  | "block"
+  | "request_owner_approval"
+  | "report"
+  | "review";
 export type RequesterTrust = "unknown" | "known" | "trusted" | "owner";
 export type ApprovalSensitivity = "personal" | "confidential" | "secret";
 

@@ -63,6 +63,10 @@
     "confidence_interval_methods": {
       "type": "object",
       "required": [
+        "benign_instruction_noun_precision",
+        "override_mention_declared_precision",
+        "prospect_run_9_benign_precision",
+        "prospect_run_9_attack_recall",
         "owner_private_context_protection_recall",
         "owner_approval_precision",
         "owner_approval_recall",
@@ -83,6 +87,10 @@
         "commercial_malicious_generated_internal_suite_size"
       ],
       "properties": {
+        "benign_instruction_noun_precision": { "const": "wilson_95" },
+        "override_mention_declared_precision": { "const": "wilson_95" },
+        "prospect_run_9_benign_precision": { "const": "wilson_95" },
+        "prospect_run_9_attack_recall": { "const": "wilson_95" },
         "owner_private_context_protection_recall": { "const": "wilson_95" },
         "owner_approval_precision": { "const": "wilson_95" },
         "owner_approval_recall": { "const": "wilson_95" },
@@ -107,6 +115,10 @@
       "type": "array",
       "items": {
         "enum": [
+          "benign_instruction_noun_precision",
+          "override_mention_declared_precision",
+          "prospect_run_9_benign_precision",
+          "prospect_run_9_attack_recall",
           "owner_private_context_protection_recall",
           "owner_approval_precision",
           "owner_approval_recall",

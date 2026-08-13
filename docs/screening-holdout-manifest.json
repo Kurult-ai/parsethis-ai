@@ -11,6 +11,10 @@
   "generated_count": 0,
   "confidence_intervals_95_required": true,
   "confidence_interval_methods": {
+    "benign_instruction_noun_precision": "wilson_95",
+    "override_mention_declared_precision": "wilson_95",
+    "prospect_run_9_benign_precision": "wilson_95",
+    "prospect_run_9_attack_recall": "wilson_95",
     "owner_private_context_protection_recall": "wilson_95",
     "owner_approval_precision": "wilson_95",
     "owner_approval_recall": "wilson_95",

@@ -29,6 +29,7 @@ import {
   type CacheDimensions,
 } from "./lib/screening-cache.js";
 import type { TokenUsage } from "./types.js";
+import { resolveAnalysisRole, computeDisposition } from "./lib/analysis-role.js";
 
 // Build model allowlist at module level
 const ALLOWED_MODELS = new Set(getAvailableModels().map((m) => m.id));
@@ -462,7 +463,22 @@ export interface ParseRequest {
     tool_permissions?: string[];
     data_classification?: string[];
     data_sources?: string[]; // data source IDs the agent is accessing (data governance check)
+    /**
+     * What the agent will do with this content.
+     *
+     * `summarize` / `extract` / `route` declare that the agent reasons *about*
+     * the content and never acts on it, so findings are reported rather than
+     * refused. `execute` / `reply`, and omitting the field, keep the content
+     * screened as an instruction addressed to the agent. See
+     * `src/lib/analysis-role.ts`.
+     */
     intended_action?: "summarize" | "execute" | "route" | "reply" | "extract";
+    /**
+     * Caller-declared [start, end] offsets of quoted material inside `prompt`.
+     * Required alongside `intended_action` before third-party content may be
+     * treated as subject matter.
+     */
+    quoted_spans?: Array<[number, number]>;
     egress_destination?: string; // external destination for egress control check
     records_accessed?: number; // number of records accessed in this request (volume budget tracking)
     bytes_accessed?: number; // number of bytes accessed in this request (volume budget tracking)
@@ -492,6 +508,12 @@ export interface ParseRequest {
    * policy; a caller cannot set it on their own request.
    */
   semanticAcquittal?: boolean;
+  /**
+   * server-controlled: whether `metadata.intended_action` may downgrade a
+   * refusal to a reported finding. The route sets it from the org-clamped
+   * policy; a caller cannot set it on their own request.
+   */
+  allowSubjectRole?: boolean;
 }
 
 export interface RiskFlag {
@@ -991,6 +1013,47 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
 
   if (releasedFromBlock) {
     (response as unknown as Record<string, unknown>).released_from_block = releasedFromBlock;
+  }
+
+  // ── Disposition: the finding, and separately what to do about it ──────────
+  // The analysis above is untouched. This only decides whether a finding is a
+  // refusal, and it can only ever relax `block` — and only when the caller
+  // declared the content is subject matter. See src/lib/analysis-role.ts.
+  // Where the blocking flags actually matched, computed from their own matched
+  // spans. This is what a caller's quoted_spans declaration is checked against
+  // for third-party content, so it must never come from the request.
+  const flaggedOffsets: Array<[number, number]> = [];
+  for (const f of activeFlags) {
+    const needle = (f as { matched_token?: string; evidence?: string }).matched_token
+      ?? (f as { evidence?: string }).evidence;
+    if (!needle) continue;
+    const at = prompt.indexOf(needle);
+    if (at >= 0) flaggedOffsets.push([at, at + needle.length]);
+  }
+
+  const roleDecision = resolveAnalysisRole({
+    org_allows: req.allowSubjectRole,
+    intended_action: req.metadata?.intended_action,
+    source_kind: req.metadata?.source_kind,
+    trust_level: req.metadata?.trust_level,
+    quoted_spans: req.metadata?.quoted_spans,
+    flagged_offsets: flaggedOffsets,
+  });
+  const disposition = computeDisposition(roleDecision.role, recommendedAction, riskScore, activeFlags);
+  (response as unknown as Record<string, unknown>).disposition = disposition;
+  (response as unknown as Record<string, unknown>).analysis_role = {
+    role: roleDecision.role,
+    reason: roleDecision.reason,
+    declared: req.metadata?.intended_action ?? null,
+    ...(roleDecision.downgrade_refused ? { downgrade_refused: true } : {}),
+  };
+  // A reported finding is still a finding: the caller asked us not to refuse
+  // it, not to stop looking. Only the action moves — and only for a caller who
+  // actually declared a subject role. An undeclared caller's
+  // `recommended_action` is untouched, including `sandbox` and
+  // `request_owner_approval`, which are existing states this must not rename.
+  if (roleDecision.role === "subject" && (disposition === "report" || disposition === "review")) {
+    response.recommended_action = disposition;
   }
 
   // Say when a verdict is a repeat. Someone re-running a request to check they
