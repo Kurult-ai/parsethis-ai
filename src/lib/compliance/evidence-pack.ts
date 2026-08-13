@@ -11,6 +11,7 @@
 
 import { createHash } from "node:crypto";
 import { prisma } from "../../db.js";
+import { orgScopedWhere, auditScopedWhere } from "../org-scope.js";
 import {
   OWASP_LLM_2025,
   NIST_AI_RMF,
@@ -38,10 +39,36 @@ export interface ControlMapping {
 
 export interface EvidencePackSummary {
   totalEvents: number;
+  screeningCount: number;
   blockedCount: number;
+  /**
+   * What Parse did, counted. "We screened N prompts" is the sentence the pack
+   * already supported; "of those, M were reported rather than refused because
+   * a caller declared the content was subject matter" is the one an auditor
+   * asks next, and it had no answer anywhere in the product.
+   */
+  dispositionCounts: Record<string, number>;
   topRiskCategories: Array<{ category: string; count: number }>;
   policyChanges: number;
   agentCount: number;
+}
+
+/** One screening decision, as it appears in the evidence. No prompt text. */
+export interface EvidencePackDecision {
+  at: string;
+  screeningId: string;
+  apiKeyId: string;
+  agentId?: string;
+  riskScore: number;
+  verdict: string;
+  categories: string[];
+  /** block | report | review | allow — what Parse did about the finding. */
+  disposition: string;
+  /** instruction | subject — whether the caller declared this as material to analyse. */
+  analysisRole?: string;
+  /** The declaration itself, when one was made: summarize | extract | route | reply | execute. */
+  intendedAction?: string;
+  ruleIds: string[];
 }
 
 export interface EvidencePack {
@@ -49,6 +76,29 @@ export interface EvidencePack {
   period: { from: string; to: string };
   framework: string;
   summary: EvidencePackSummary;
+  /**
+   * Every screen in the period where the caller declared the content as subject
+   * matter, and what Parse did about it. Most will be `report` — the finding
+   * stood and the refusal did not — but a declaration that was refused anyway
+   * (the org ceiling forbids downgrades) or allowed anyway (nothing was found)
+   * belongs here too: the question is who declared what, not only which
+   * declarations changed an outcome.
+   *
+   * This is the list an auditor asks for by name, and the reason the pack
+   * exists rather than the control descriptions below.
+   */
+  declaredDecisions: EvidencePackDecision[];
+  /** The refusals, for the same period. */
+  refusals: EvidencePackDecision[];
+  /**
+   * The org-wide ceiling across the period, so a reader can see whether member
+   * keys were permitted to downgrade at all, and when that changed.
+   */
+  subjectRoleControl: {
+    allowSubjectRole: boolean | null;
+    locked: boolean;
+    changes: Array<{ at: string; from: unknown; to: unknown; reason: string }>;
+  };
   controlMappings: ControlMapping[];
   integrityHash: string;
 }
@@ -99,13 +149,20 @@ export async function generateEvidencePack(
   const framework = normaliseFramework(frameworkRaw);
 
   // ── Gather evidence from all data sources in parallel ──
+  // Scoped to the organisation when there is one. A pack covering only the
+  // admin's own key is a pack covering no traffic, which is what prospect run
+  // 11 generated: 11,456 bytes describing capabilities, with zero screening
+  // decisions in it, for an org that had just screened twenty prompts.
+  const screeningScope = orgScopedWhere(orgId ?? null, apiKeyId);
+  const auditScope = await auditScopedWhere(orgId ?? null, apiKeyId);
+
   const [screenings, auditEvents, policyRevisions, agents] = await Promise.all([
     prisma.screeningEvent.findMany({
-      where: { apiKeyId, createdAt: { gte: dateFrom, lte: dateTo } },
+      where: { ...screeningScope, createdAt: { gte: dateFrom, lte: dateTo } },
       orderBy: { createdAt: "asc" },
     }),
     prisma.auditEvent.findMany({
-      where: { apiKeyId, createdAt: { gte: dateFrom, lte: dateTo } },
+      where: { ...auditScope, createdAt: { gte: dateFrom, lte: dateTo } },
       orderBy: { createdAt: "asc" },
     }),
     // PolicyRevision table may not exist yet — use raw query, swallow errors
@@ -140,12 +197,71 @@ export async function generateEvidencePack(
 
   const blockedCount = screenings.filter((s) => s.blocked).length;
 
+  // Counted from the disposition column, not from the score. A finding the
+  // caller declared as subject matter is reported, not refused, and counting it
+  // as a block is what let a customer's dashboard overstate its own enforcement.
+  const dispositionCounts: Record<string, number> = {};
+  for (const s of screenings) {
+    const d = (s.disposition ?? "unrecorded") as string;
+    dispositionCounts[d] = (dispositionCounts[d] ?? 0) + 1;
+  }
+
+  const toDecision = (s: (typeof screenings)[number]): EvidencePackDecision => {
+    const meta = (s.metadata ?? {}) as Record<string, unknown>;
+    return {
+      at: s.createdAt.toISOString(),
+      screeningId: s.id,
+      apiKeyId: s.apiKeyId,
+      agentId: typeof meta.agent_id === "string" ? meta.agent_id : undefined,
+      riskScore: s.riskScore,
+      verdict: s.verdict,
+      categories: s.categories,
+      disposition: (s.disposition ?? "unrecorded") as string,
+      analysisRole: (s.analysisRole ?? undefined) as string | undefined,
+      intendedAction: typeof meta.intended_action === "string" ? meta.intended_action : undefined,
+      ruleIds: Array.isArray(meta.rule_ids) ? (meta.rule_ids as string[]) : [],
+    };
+  };
+
+  // The two lists an auditor actually reads: what we found and declined to
+  // refuse because the caller declared it, and what we refused.
+  const declaredDecisions = screenings
+    .filter((s) => s.analysisRole === "subject" || s.disposition === "report")
+    .map(toDecision);
+  const refusals = screenings.filter((s) => s.disposition === "block").map(toDecision);
+
   const summary: EvidencePackSummary = {
     totalEvents: screenings.length + auditEvents.length,
+    screeningCount: screenings.length,
     blockedCount,
+    dispositionCounts,
     topRiskCategories,
     policyChanges: policyRevisions.length,
     agentCount: agents.length,
+  };
+
+  // The state of the org-wide downgrade control across the period, and every
+  // change to it. "Prove it was set for the whole period" is the question this
+  // answers; behaviour alone could not.
+  const ceilingRow = orgId
+    ? await prisma.orgPolicyDefault
+        .findUnique({ where: { orgId }, select: { allowSubjectRole: true, lockedFields: true } })
+        .catch(() => null)
+    : null;
+  const subjectRoleControl = {
+    allowSubjectRole: ceilingRow?.allowSubjectRole ?? null,
+    locked: (ceilingRow?.lockedFields ?? []).includes("allowSubjectRole"),
+    changes: (policyRevisions as Array<Record<string, unknown>>).flatMap((r) => {
+      const diff = (r.diff ?? {}) as Record<string, { old?: unknown; new?: unknown }>;
+      const change = diff.allowSubjectRole;
+      if (!change) return [];
+      return [{
+        at: new Date(r.created_at as string).toISOString(),
+        from: change.old ?? null,
+        to: change.new ?? null,
+        reason: String(r.change_reason ?? ""),
+      }];
+    }),
   };
 
   // ── Build framework control mappings ──
@@ -163,6 +279,9 @@ export async function generateEvidencePack(
     period: { from: dateFrom.toISOString(), to: dateTo.toISOString() },
     framework,
     summary,
+    declaredDecisions,
+    refusals,
+    subjectRoleControl,
     controlMappings,
   };
 

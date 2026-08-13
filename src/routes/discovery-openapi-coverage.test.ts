@@ -24,7 +24,7 @@ import { app } from "../app.js";
  * narrower one that holds. Widening the spec to the rest of the API is real
  * work and its own change; this stops the specific regression that cost a sale.
  */
-const GOVERNANCE_PREFIXES = ["/v1/orgs", "/v1/org/", "/v1/gateway"];
+const GOVERNANCE_PREFIXES = ["/v1/orgs", "/v1/org/", "/v1/gateway", "/v1/compliance/", "/v1/coverage"];
 
 /** Governance routes that are deliberately undocumented, each with the reason. */
 const UNDOCUMENTED = new Set<string>([
@@ -36,6 +36,14 @@ const UNDOCUMENTED = new Set<string>([
   // spec would obscure it rather than clarify.
   "/v1/orgs/:id/domains/:domain/verify",
   "/v1/orgs/:id/domains/:domain",
+  // Single-framework view of /v1/compliance/framework-map, which is documented
+  // and returns every framework. A second near-identical entry would obscure
+  // the crosswalk rather than clarify it.
+  "/v1/compliance/framework-map/:framework",
+  // Older alias of /v1/coverage, kept for callers that already use it. The
+  // documented path is /v1/coverage; publishing both invites new integrations
+  // against the one we would rather retire.
+  "/v1/compliance/coverage",
 ]);
 
 /** Hono writes `:id`; OpenAPI writes `{id}`. */

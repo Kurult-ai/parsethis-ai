@@ -15,6 +15,7 @@
 import { Hono } from "hono";
 import { authMiddleware } from "../auth.js";
 import { prisma } from "../db.js";
+import { Prisma } from "../generated/prisma/client.js";
 import type { AppEnv } from "../types.js";
 import { auditLog } from "../lib/audit-log.js";
 import { randomUUID } from "node:crypto";
@@ -43,7 +44,7 @@ import {
 import { getSIEMStatus, checkDestinationHealth } from "../lib/compliance/siem-worker.js";
 import { policyHistoryScope } from "../lib/compliance/policy-history-scope.js";
 import { sealSecret } from "../lib/secret-box.js";
-import { resolveOrgId } from "../lib/org-scope.js";
+import { resolveOrgId, orgScopedWhere, auditScopedWhere } from "../lib/org-scope.js";
 import { requireRole } from "../lib/rbac.js";
 import { problem, ErrorCode, serviceDependencyProblem } from "../lib/problem-response.js";
 
@@ -56,6 +57,17 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), requi
   const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
+  // The org this key belongs to, or itself. Everything below is scoped through
+  // this — an org_admin asking about compliance is asking about their
+  // organisation, not about the traffic they personally generated.
+  const orgId = await resolveOrgId(apiKey.id);
+  const scope = orgScopedWhere(orgId, apiKey.id);
+  const auditScope = await auditScopedWhere(orgId, apiKey.id);
+  // The two raw aggregates below join api_keys to reach org_id.
+  const orgFilter = orgId
+    ? Prisma.sql`k.org_id = ${orgId}`
+    : Prisma.sql`e.api_key_id = ${apiKey.id}`;
+
   try {
     const [
       totalScreenings,
@@ -63,6 +75,7 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), requi
       blockedTotal,
       blocked24h,
       verdictGroups,
+      dispositionGroups,
       catGroups,
       recentScreenings,
       auditCount,
@@ -71,26 +84,35 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), requi
       topAgentsByRisk,
       policyRow,
     ] = await Promise.all([
-      prisma.screeningEvent.count({ where: { apiKeyId: apiKey.id } }),
-      prisma.screeningEvent.count({ where: { apiKeyId: apiKey.id, createdAt: { gte: since24h } } }),
-      prisma.screeningEvent.count({ where: { apiKeyId: apiKey.id, blocked: true } }),
-      prisma.screeningEvent.count({ where: { apiKeyId: apiKey.id, blocked: true, createdAt: { gte: since24h } } }),
+      prisma.screeningEvent.count({ where: scope }),
+      prisma.screeningEvent.count({ where: { ...scope, createdAt: { gte: since24h } } }),
+      prisma.screeningEvent.count({ where: { ...scope, blocked: true } }),
+      prisma.screeningEvent.count({ where: { ...scope, blocked: true, createdAt: { gte: since24h } } }),
       prisma.screeningEvent.groupBy({
         by: ["verdict"],
-        where: { apiKeyId: apiKey.id },
+        where: scope,
         _count: true,
         orderBy: { _count: { verdict: "desc" } },
       }),
+      // What Parse DID, beside what it found. "We screened N prompts" and "we
+      // screened N and reported rather than refused M of them" are different
+      // sentences to an auditor, and only the first one was answerable.
+      prisma.screeningEvent.groupBy({
+        by: ["disposition"],
+        where: scope,
+        _count: true,
+      }),
       prisma.$queryRaw<Array<{ category: string; count: bigint }>>`
-        SELECT unnest(categories) as category, count(*) as count
-        FROM screening_events
-        WHERE api_key_id = ${apiKey.id}
+        SELECT unnest(e.categories) as category, count(*) as count
+        FROM screening_events e
+        JOIN api_keys k ON k.id = e.api_key_id
+        WHERE ${orgFilter}
         GROUP BY category
         ORDER BY count DESC
         LIMIT 10
       `,
       prisma.screeningEvent.findMany({
-        where: { apiKeyId: apiKey.id },
+        where: scope,
         orderBy: { createdAt: "desc" },
         take: 20,
         select: {
@@ -99,28 +121,31 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), requi
           verdict: true,
           categories: true,
           blocked: true,
+          disposition: true,
+          analysisRole: true,
           createdAt: true,
           metadata: true,
         },
       }),
-      prisma.auditEvent.count({ where: { apiKeyId: apiKey.id } }),
+      prisma.auditEvent.count({ where: auditScope }),
       prisma.auditEvent.findMany({
-        where: { apiKeyId: apiKey.id },
+        where: auditScope,
         orderBy: { createdAt: "desc" },
         take: 10,
         select: { id: true, action: true, detail: true, createdAt: true },
       }),
       prisma.auditEvent.count({
-        where: { apiKeyId: apiKey.id, action: { in: ["policy_updated", "policy_deleted"] } },
+        where: { ...auditScope, action: { in: ["policy_updated", "policy_deleted"] } },
       }),
       prisma.$queryRaw<Array<{ agent_id: string; count: bigint; avg_risk: number }>>`
         SELECT
-          (metadata->>'agent_id')::text as agent_id,
+          (e.metadata->>'agent_id')::text as agent_id,
           count(*) as count,
-          AVG(risk_score)::float as avg_risk
-        FROM screening_events
-        WHERE api_key_id = ${apiKey.id}
-          AND metadata->>'agent_id' IS NOT NULL
+          AVG(e.risk_score)::float as avg_risk
+        FROM screening_events e
+        JOIN api_keys k ON k.id = e.api_key_id
+        WHERE ${orgFilter}
+          AND e.metadata->>'agent_id' IS NOT NULL
         GROUP BY agent_id
         ORDER BY avg_risk DESC
         LIMIT 5
@@ -154,6 +179,10 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), requi
         policy_changes: policyChanges,
       },
       risk_distribution: verdictGroups.map(r => ({ verdict: r.verdict, count: r._count })),
+      // block = refused. report = the caller declared the content is subject
+      // matter, so the finding stands and the refusal does not. Rows with a
+      // null disposition predate the column (migration 019).
+      dispositions: dispositionGroups.map(r => ({ disposition: r.disposition ?? "unrecorded", count: r._count })),
       top_categories: catGroups.map(r => ({ category: r.category, count: Number(r.count) })),
       recent_screenings: recentScreenings,
       recent_audit: recentAudit,
@@ -170,6 +199,7 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), requi
     return c.json({
       kpis: { total_screenings: 0, screenings_24h: 0, total_blocked: 0, blocked_24h: 0, pass_rate: "100", total_audit_events: 0, policy_changes: 0 },
       risk_distribution: [],
+      dispositions: [],
       top_categories: [],
       recent_screenings: [],
       recent_audit: [],
@@ -190,15 +220,26 @@ complianceRoutes.get("/v1/compliance/audit-trail", authMiddleware("evaluate"), r
   const toDate = c.req.query("to");
   const verdict = c.req.query("verdict");
   const blockedOnly = c.req.query("blocked") === "true";
+  const dispositionFilter = c.req.query("disposition");
 
-  const where: Record<string, unknown> = { apiKeyId: apiKey.id };
+  // The decision log for the caller's organisation, not for the caller's own
+  // key. An org_admin asking "what did we screen" was previously answered with
+  // "what did you personally screen", which for an admin who runs no traffic is
+  // an empty list.
+  const orgId = await resolveOrgId(apiKey.id);
+  const where: Record<string, unknown> = { ...orgScopedWhere(orgId, apiKey.id) };
   if (fromDate || toDate) {
     where.createdAt = {};
     if (fromDate) (where.createdAt as Record<string, unknown>).gte = new Date(fromDate);
     if (toDate) (where.createdAt as Record<string, unknown>).lte = new Date(toDate);
   }
   if (verdict) where.verdict = verdict;
+  // `blocked` now means refused, so this filter returns refusals rather than
+  // every high-scoring finding including the ones deliberately not refused.
   if (blockedOnly) where.blocked = true;
+  // Answers the auditor's second question directly: show me the screens that
+  // were reported rather than refused because a caller declared them.
+  if (dispositionFilter) where.disposition = dispositionFilter;
 
   try {
     const [events, total] = await Promise.all([

@@ -1123,6 +1123,165 @@ discoveryRoutes.get("/openapi.json", (c) => {
           responses: { "200": { description: "Revisions, newest first" }, "403": { description: "Requires org_admin, security_analyst or auditor" } },
         },
       },
+      "/v1/compliance/summary": {
+        get: {
+          operationId: "getComplianceSummary",
+          summary: "Posture overview for your organization",
+          description:
+            "Verdict counts, disposition counts, top categories and recent decisions for the whole organization — not just the calling key. `dispositions` separates what Parse found from what it did: `block` is a refusal, `report` is a finding the caller declared as subject matter via metadata.intended_action, so the finding stands and the refusal does not.",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            "200": { description: "KPIs, verdict and disposition distribution, recent screenings and audit events" },
+            "403": { description: "Requires org_admin, security_analyst or auditor" },
+          },
+        },
+      },
+      "/v1/compliance/audit-trail": {
+        get: {
+          operationId: "getComplianceAuditTrail",
+          summary: "The decision log: what was screened and what came back",
+          description:
+            "Screening decisions for your organization, newest first. Filter with `verdict`, `blocked=true` for refusals only, or `disposition=report` for findings that were reported rather than refused because a caller declared them. No prompt or output text is stored or returned.",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "limit", in: "query", schema: { type: "integer", maximum: 500, default: 100 } },
+            { name: "offset", in: "query", schema: { type: "integer", default: 0 } },
+            { name: "from", in: "query", schema: { type: "string", format: "date-time" } },
+            { name: "to", in: "query", schema: { type: "string", format: "date-time" } },
+            { name: "verdict", in: "query", schema: { type: "string" } },
+            { name: "blocked", in: "query", schema: { type: "boolean" }, description: "Refusals only." },
+            {
+              name: "disposition",
+              in: "query",
+              schema: { type: "string", enum: ["block", "report", "review", "allow"] },
+              description: "What Parse did about the finding.",
+            },
+          ],
+          responses: {
+            "200": { description: "Screening decisions, newest first" },
+            "403": { description: "Requires org_admin or security_analyst" },
+          },
+        },
+      },
+      "/v1/compliance/export": {
+        post: {
+          operationId: "exportEvidencePack",
+          summary: "Evidence pack for auditors and vendor reviews",
+          description:
+            "A tamper-evident pack for the period: disposition counts, the screens that were reported rather than refused (each with the declaration that caused it), the refusals, the state of the org-wide allowSubjectRole control and every change to it, and framework control mappings. Carries a SHA-256 integrity hash over the whole document.",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: false,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    format: { type: "string", enum: ["json", "csv"], default: "json" },
+                    framework: { type: "string", enum: ["owasp-llm", "nist-ai-rmf", "eu-ai-act", "iso-42001", "soc2", "all"], default: "all" },
+                    from: { type: "string", format: "date-time" },
+                    to: { type: "string", format: "date-time" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "Evidence pack" },
+            "403": { description: "Requires org_admin, security_analyst or auditor" },
+          },
+        },
+      },
+      "/v1/compliance/framework-map": {
+        get: {
+          operationId: "getFrameworkMap",
+          summary: "Map screening controls to framework line items",
+          description: "Crosswalk from Parse's detection categories to OWASP LLM 2025, NIST AI RMF, the EU AI Act, ISO/IEC 42001 and SOC 2.",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Crosswalk" }, "403": { description: "Requires org_admin, security_analyst or auditor" } },
+        },
+      },
+      "/v1/compliance/siem": {
+        get: {
+          operationId: "listSIEMDestinations",
+          summary: "SIEM destinations configured for this organization",
+          description: "Auth headers are never returned; each destination reports only whether one is configured.",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Destinations" }, "403": { description: "Requires org_admin, security_analyst or auditor" } },
+        },
+        post: {
+          operationId: "createSIEMDestination",
+          summary: "Forward screening decisions to Splunk, Datadog, Elastic or a webhook",
+          description:
+            "Each forwarded screening event carries the verdict, the risk score, the categories, `intended_action` and `recommended_action` — so the share of traffic declaring a non-execute role can be measured in your own SIEM. The auth header is encrypted at rest and never returned.",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["platform", "endpoint"],
+                  properties: {
+                    platform: { type: "string", enum: ["splunk", "datadog", "elastic", "sentinel", "generic_webhook"] },
+                    endpoint: { type: "string", format: "uri" },
+                    auth_header: { type: "string" },
+                    format: { type: "string", enum: ["cef", "json", "leef", "raw"], default: "json" },
+                    event_types: { type: "array", items: { type: "string", enum: ["screening", "audit", "policy_change", "approval"] } },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "Destination created" },
+            "400": { description: "This key belongs to no organization" },
+            "403": { description: "Requires org_admin or security_analyst" },
+            "503": { description: "This deployment cannot encrypt secrets at rest" },
+          },
+        },
+      },
+      "/v1/compliance/siem/test": {
+        post: {
+          operationId: "testSIEMDestination",
+          summary: "Send a test event to a SIEM destination before saving it",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            "200": { description: "Delivery result" },
+            "403": { description: "Requires org_admin or security_analyst" },
+          },
+        },
+      },
+      "/v1/compliance/siem/{id}": {
+        delete: {
+          operationId: "deleteSIEMDestination",
+          summary: "Stop forwarding to a destination",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "Deleted" },
+            "403": { description: "Requires org_admin or security_analyst" },
+          },
+        },
+      },
+      "/v1/coverage/export": {
+        get: {
+          operationId: "exportCoverageCSV",
+          summary: "Per-agent coverage rows as CSV",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "CSV, one row per agent" } },
+        },
+      },
+      "/v1/coverage": {
+        get: {
+          operationId: "getCoverageAttestation",
+          summary: "Which declared trust boundaries are actually screened",
+          description:
+            "`total_screened` counts the screens Parse performed for your organization; `screened_attributed_to_agent` counts the subset naming an agent, which is the only part that can enter the ratio. `coverage_pct` is null unless a gateway supplies a denominator of calls Parse did not screen — an attestation that cannot come out below 100% is not an attestation.",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Coverage report" } },
+        },
+      },
       "/v1/gateway/configure": {
         post: {
           operationId: "configureOrgGateway",

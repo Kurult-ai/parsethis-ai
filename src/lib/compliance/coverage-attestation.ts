@@ -175,7 +175,13 @@ export interface CoverageReport {
     to: string;
   };
   total_agent_calls: number;
+  /** Screens Parse performed for this org in the period, from the event log. */
   total_screened: number;
+  /**
+   * Of those, the ones naming an agent. Only these can enter the coverage
+   * ratio, because only they can be matched against observed agent calls.
+   */
+  screened_attributed_to_agent?: number;
   /** null when there is no denominator — see coverage_unknown_reason. */
   coverage_pct: number | null;
   coverage_unknown_reason?: string;
@@ -337,6 +343,26 @@ export async function getCoverageReport(
   const coveragePct =
     totalAgentCalls > 0 ? Math.round((totalScreened / totalAgentCalls) * 10000) / 100 : null;
 
+  // The counts above are attributed to a registered agent, which is what the
+  // coverage ratio needs. They are NOT the number of screens the org performed:
+  // a screen carrying no `agent_id` is invisible to them. Prospect run 11 read
+  // `total_screened: 0` here while /v1/screening/metrics reported 20 for a key
+  // in the same org, in the same minute — and the note below asserted the zero
+  // as fact. Two Parse endpoints disagreeing about one number is worse for an
+  // attestation than either being absent, so report both and name the
+  // difference.
+  let screeningEventCount = 0;
+  try {
+    screeningEventCount = await prisma.screeningEvent.count({
+      where: {
+        apiKey: { orgId },
+        createdAt: { gte: dateRange.from, lte: dateRange.to },
+      },
+    });
+  } catch {
+    // best-effort: a degraded database must not fail the attestation read
+  }
+
   return {
     org_id: orgId,
     date_range: {
@@ -344,15 +370,20 @@ export async function getCoverageReport(
       to: dateRange.to.toISOString(),
     },
     total_agent_calls: totalAgentCalls,
-    total_screened: totalScreened,
+    total_screened: screeningEventCount,
+    screened_attributed_to_agent: totalScreened,
     coverage_pct: coveragePct,
     ...(coveragePct === null
       ? {
           coverage_unknown_reason: "no_unscreened_traffic_observed",
           note:
-            "Parse has screened " + totalScreened + " call(s) for this organization and has no " +
-            "measurement of calls it did not screen, so coverage cannot be stated. Route agent " +
-            "traffic through the org gateway (POST /v1/gateway/configure) to get a denominator.",
+            "Parse screened " + screeningEventCount + " call(s) for this organization in this period" +
+            (screeningEventCount > totalScreened
+              ? ", of which " + totalScreened + " named an agent"
+              : "") +
+            ". It has no measurement of calls it did not screen, so a coverage percentage cannot " +
+            "be stated. Route agent traffic through the org gateway (POST /v1/gateway/configure) " +
+            "to get a denominator.",
         }
       : {}),
     uncovered_agents: uncoveredAgents,
