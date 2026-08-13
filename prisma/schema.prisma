@@ -198,6 +198,13 @@ model ScreeningEvent {
   latencyMs  Int      @map("latency_ms")
   blocked    Boolean  @default(false)
   wouldBlock Boolean? @map("would_block")
+  /// What Parse did: "block" | "report" | "review" | "allow". `blocked` says
+  /// whether it refused; this says why. A finding reported under a caller's
+  /// `intended_action` declaration is `report` with `blocked = false`.
+  disposition String? @map("disposition")
+  /// "instruction" or "subject" — whether the content was screened as addressed
+  /// to the agent or declared as material the agent only analyses.
+  analysisRole String? @map("analysis_role")
   enforcementMode String? @map("enforcement_mode")
   environment String @default("production")
   metadata   Json?    @map("metadata")
@@ -208,6 +215,9 @@ model ScreeningEvent {
   @@index([apiKeyId, createdAt(sort: Desc)], name: "idx_screening_apikey_created")
   @@index([createdAt(sort: Desc)], name: "idx_screening_created")
   @@index([verdict], name: "idx_screening_verdict")
+  /// Serves the org-scoped compliance queries: the declaration-share metric
+  /// groups by disposition over a period for one organisation.
+  @@index([disposition, createdAt(sort: Desc)], name: "idx_screening_disposition_created")
   @@map("screening_events")
 }
 

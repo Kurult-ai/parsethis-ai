@@ -30,6 +30,15 @@ export interface ScreeningEventData {
   latencyMs: number;
   blocked: boolean;
   wouldBlock?: boolean;
+  /**
+   * What Parse decided to do: "block" | "report" | "review" | "allow". Also in
+   * `metadata.recommended_action`, but a column is what the compliance surfaces
+   * can GROUP BY — the declaration-share metric and the evidence pack both need
+   * it, and JSON extraction in an aggregate is the reason neither existed.
+   */
+  disposition?: string;
+  /** "instruction" (screened as addressed to the agent) or "subject" (declared as content to analyse). */
+  analysisRole?: string | null;
   enforcementMode?: string;
   metadata: ScreeningEventMetadata;
 }
@@ -79,6 +88,18 @@ function getMatrixCellFromResult(result: ParseResponse): string | undefined {
   return undefined;
 }
 
+/**
+ * Extract the analysis role from a ParseResponse.
+ *
+ * `analysis_role` is attached as a dynamic property in `src/parse.ts` rather
+ * than declared on the interface, the same way the approval-matrix fields are,
+ * so it is read the same way.
+ */
+function getAnalysisRoleFromResult(result: ParseResponse): string | null {
+  const r = result as unknown as { analysis_role?: { role?: string } };
+  return r.analysis_role?.role ?? null;
+}
+
 export function buildScreeningEventData(input: {
   apiKeyId: string;
   request: ParseRequest;
@@ -89,16 +110,26 @@ export function buildScreeningEventData(input: {
 }): ScreeningEventData {
   const ruleIds = screeningRuleIds(input.result);
   const recommendedAction = screeningDecisionAction(input.result);
-  const threshold = input.autoBlockThreshold ?? 7;
   const mode = input.enforcementMode ?? "block";
 
-  // The raw verdict: would this have been blocked if mode were "block"?
-  const wouldBlock = input.result.risk_score >= threshold;
+  // `blocked` records what Parse DID, not how bad the finding was. A caller who
+  // declared `intended_action` gets the finding in full with `disposition:
+  // "report"` and no refusal, and that row must not be counted as a block —
+  // prospect run 11 measured `blocked_total` rising on exactly such a screen, so
+  // an org reading its own dashboard saw refusals that never happened. The score
+  // still decides the verdict; the disposition decides the refusal. This is the
+  // same distinction /docs and /llms.txt tell callers to make: "`verdict` is the
+  // finding; `disposition` is what to do about it."
+  const refused = recommendedAction === "block";
 
-  // What actually gets blocked depends on the enforcement mode:
-  // - "block": blocks as normal
-  // - "monitor"/"warn": never actually block (counterfactual only)
-  const blocked = mode === "block" ? wouldBlock : false;
+  // The counterfactual: would this have been refused had mode been "block"?
+  // A `report`/`review`/`allow` disposition would not have been, whatever the score.
+  const wouldBlock = refused;
+
+  // What actually gets blocked also depends on the enforcement mode:
+  // - "block": refuses as normal
+  // - "monitor"/"warn": never actually refuses (counterfactual only)
+  const blocked = mode === "block" ? refused : false;
 
   return {
     apiKeyId: input.apiKeyId,
@@ -109,6 +140,8 @@ export function buildScreeningEventData(input: {
     latencyMs: input.latencyMs,
     blocked,
     wouldBlock,
+    disposition: recommendedAction,
+    analysisRole: getAnalysisRoleFromResult(input.result),
     enforcementMode: mode,
     metadata: compactMetadata({
       request_id: input.result.id,
