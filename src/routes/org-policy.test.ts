@@ -268,3 +268,84 @@ describe("validateOrgPolicyInput — the casing trap", () => {
     assert.match(result.detail, /has no org value/);
   });
 });
+
+/**
+ * The ceiling has to be readable, not just enforceable.
+ *
+ * `allowSubjectRole` was accepted by PUT, clamped correctly at runtime, and
+ * absent from serializeCeiling — the single shape used by the GET, the PUT
+ * response, and both snapshots handed to createPolicyRevision. So prospect run
+ * 11 set the control, watched the member key's downgrade get refused exactly as
+ * designed, and then could not show anyone it had been set: the read-back
+ * omitted it and the policy revision's diff was `{}`.
+ *
+ * A guard that changes behaviour and leaves no record is useless to the person
+ * whose signature is on the attestation.
+ */
+const { serializeCeiling } = await import("./org-policy.js");
+
+describe("serializeCeiling", () => {
+  it("reports every ceiling field, including allowSubjectRole", () => {
+    const keys = Object.keys(serializeCeiling(null));
+    for (const field of CEILING_FIELDS) {
+      assert.ok(keys.includes(field), `serializeCeiling omits ${field}`);
+    }
+    assert.ok(keys.includes("locked_fields"));
+  });
+
+  it("covers exactly the ceiling fields plus locked_fields, so nothing new is missed", () => {
+    // Fails when a column is added to OrgPolicyDefault and not reported. That
+    // omission is invisible in production: the write succeeds, the read looks
+    // healthy, and the audit trail records a change to a field it cannot name.
+    assert.deepEqual(
+      Object.keys(serializeCeiling(null)).sort(),
+      [...CEILING_FIELDS, "locked_fields"].sort(),
+    );
+  });
+
+  it("round-trips a set allowSubjectRole rather than dropping it", () => {
+    const serialized = serializeCeiling({
+      autoBlockThreshold: 5,
+      enforcementMode: "block",
+      defaultMode: null,
+      screenUserInput: null,
+      screenToolOutputs: null,
+      screenForwardedMessages: null,
+      executeInSandbox: null,
+      enforceToolAllowlist: null,
+      bypassEnabled: null,
+      allowSubjectRole: false,
+      lockedFields: ["allowSubjectRole"],
+    } as Parameters<typeof serializeCeiling>[0]);
+
+    assert.equal(serialized.allowSubjectRole, false, "false is an opinion, not absence");
+    assert.deepEqual(serialized.locked_fields, ["allowSubjectRole"]);
+  });
+
+  it("reports an unconfigured ceiling as null rather than as permitted", () => {
+    assert.equal(serializeCeiling(null).allowSubjectRole, null);
+  });
+});
+
+describe("validateOrgPolicyInput — reason", () => {
+  it("accepts a reason, which the revision records", () => {
+    // The handler has always read body.reason; ACCEPTED_FIELDS rejected the
+    // request before it ran, so every revision said "Org policy defaults
+    // updated" and an admin could not put their own words in the audit trail.
+    const value = accepted(validateOrgPolicyInput({
+      allowSubjectRole: false,
+      reason: "SOC2 CC7.2 — engineers may not downgrade screening per request",
+    }));
+    assert.equal(value.allowSubjectRole, false);
+  });
+
+  it("keeps reason out of the persisted ceiling", () => {
+    const value = accepted(validateOrgPolicyInput({ allowSubjectRole: false, reason: "why" }));
+    assert.ok(!("reason" in value), "reason belongs to the revision, not to the row");
+  });
+
+  it("still refuses a genuinely unknown field", () => {
+    const result = rejection(validateOrgPolicyInput({ allowSubjectRole: false, resaon: "typo" }));
+    assert.match(result.detail, /Unknown field/);
+  });
+});

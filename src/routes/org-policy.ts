@@ -60,7 +60,15 @@ export const CEILING_FIELDS = [
  * camelCase value fields beside it will type, and dropping it silently is how
  * an unlocked ceiling shipped believing itself locked.
  */
-const ACCEPTED_FIELDS = new Set<string>([...CEILING_FIELDS, "locked_fields", "lockedFields"]);
+/**
+ * `reason` is not a ceiling field — it is why the ceiling changed, and it goes
+ * to the policy revision rather than to the row. The PUT handler has always
+ * read `body.reason`, but it was absent from this set, so the unknown-field
+ * check rejected the request before the handler ran and every revision was
+ * recorded as the generic "Org policy defaults updated". An admin proving to an
+ * auditor that a control was deliberately set needs their own words in the log.
+ */
+const ACCEPTED_FIELDS = new Set<string>([...CEILING_FIELDS, "locked_fields", "lockedFields", "reason"]);
 
 const VALID_ENFORCEMENT_MODES = new Set(["monitor", "warn", "block"]);
 const VALID_DEFAULT_MODES = new Set(["full", "pattern-only"]);
@@ -220,7 +228,21 @@ function orgRequired(c: Parameters<typeof problem>[0], verb: string) {
   });
 }
 
-function serializeCeiling(ceiling: OrgPolicyCeiling | null): Record<string, unknown> {
+/**
+ * The one shape the ceiling is reported in — by GET, by the PUT response, and
+ * by both snapshots handed to createPolicyRevision.
+ *
+ * That makes an omission here expensive. `allowSubjectRole` was missing, so an
+ * admin could set the control, receive a 200 that did not mention it, read it
+ * back and not see it, and then find a policy revision whose snapshot omitted
+ * it with an empty diff. Prospect run 11: the guard changed behaviour perfectly
+ * and could not be shown to have done so, which is useless to the person whose
+ * signature is on the attestation.
+ *
+ * Every column on OrgPolicyDefault belongs here. `serializeCeiling covers every
+ * ceiling field` in org-policy.test.ts fails if a new one is added and missed.
+ */
+export function serializeCeiling(ceiling: OrgPolicyCeiling | null): Record<string, unknown> {
   return {
     autoBlockThreshold: ceiling?.autoBlockThreshold ?? null,
     enforcementMode: ceiling?.enforcementMode ?? null,
@@ -231,6 +253,7 @@ function serializeCeiling(ceiling: OrgPolicyCeiling | null): Record<string, unkn
     executeInSandbox: ceiling?.executeInSandbox ?? null,
     enforceToolAllowlist: ceiling?.enforceToolAllowlist ?? null,
     bypassEnabled: ceiling?.bypassEnabled ?? null,
+    allowSubjectRole: ceiling?.allowSubjectRole ?? null,
     locked_fields: ceiling?.lockedFields ?? [],
   };
 }

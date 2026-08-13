@@ -22,8 +22,27 @@
 -- Plan: docs/plans/2026-08-13-marcus-oyelaran-control-assurance-remediation.md
 -- Phase 2, item 5.
 
+-- Idempotent: the startup migration runner re-applies the directory on every
+-- boot, and a bare RENAME COLUMN fails the second time, which degrades every
+-- database-dependent route. Rename only if the old column is still there.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'siem_configs' AND column_name = 'eventTypes'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'siem_configs' AND column_name = 'event_types'
+  ) THEN
+    ALTER TABLE siem_configs RENAME COLUMN "eventTypes" TO event_types;
+  END IF;
+END $$;
+
+-- A deployment that never had the camelCase column (a fresh database created
+-- from the current schema) still needs the column to exist.
 ALTER TABLE siem_configs
-  RENAME COLUMN "eventTypes" TO event_types;
+  ADD COLUMN IF NOT EXISTS event_types TEXT[]
+  DEFAULT ARRAY['screening', 'audit', 'policy_change', 'approval'];
 
 COMMENT ON COLUMN siem_configs.event_types IS
   'Which event streams forward to this destination: screening, audit, policy_change, approval.';
