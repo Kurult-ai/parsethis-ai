@@ -1,5 +1,60 @@
 # Control-Assurance Remediation — Marcus Oyelaran Run (Run 11)
 
+> **Execution record (2026-08-13) — all eleven items implemented on branch
+> `fix/control-assurance-run11`, verified against a real database. Not yet
+> deployed to production; the backfill in item 1 needs a maintenance window.**
+>
+> Commits: `4335619` (item 1), `e11431e` (items 6, 7), `b542e2c` (item 5),
+> `bf2f393` (item 4), `4792b3c` (items 2, 3, 8, 11), `ac1c0d4` (items 9, 10).
+>
+> **Verified on staging at the run's own scenario** — the same org, the same
+> member key, the same twenty screens:
+>
+> | Measurement | Run 11 | After |
+> |---|---|---|
+> | `/v1/compliance/summary` `total_screenings` | 0 | **21** |
+> | `total_blocked` | would have said 14 | **1** (the one real refusal) |
+> | dispositions | did not exist | `{report: 13, review: 1, allow: 6, block: 1}` |
+> | `/v1/compliance/audit-trail` | `{"events":[],"total":0}` | **21**, `?disposition=report` returns the 13 |
+> | `/dashboard/compliance` | 0 screenings · 0 blocked · 100% pass | **21 · 1 refused · 13 reported-not-refused · 95.2%** |
+> | Evidence pack | 11,456 bytes, no decisions | **20,969 bytes**, 16 declared decisions, 1 refusal, the ceiling's history |
+> | `/v1/coverage` `total_screened` | 0 (contradicting its sibling) | **21** (agreeing) |
+> | Policy revision diff | `{}` | `{"allowSubjectRole": {"old": true, "new": false}}` with the admin's reason |
+> | `POST /v1/compliance/siem` | 500, leaking SQL | round trip verified |
+> | Declaration rate | did not exist | **76.19%**, attributed to `team4-claims-agent` |
+>
+> **Three things this pass found that the report did not.**
+>
+> 1. **`CEILING_FORM_FIELDS` omitted `allowSubjectRole`, and its own test had
+>    been failing on `main` saying so.** The panel's ceiling form replaces the
+>    whole ceiling on save, so an admin who set the ban by API and then saved
+>    any other setting from the dashboard silently lost it. Pre-existing, and
+>    the most severe single defect in this plan. Fixed in `ac1c0d4`.
+> 2. **`POST /v1/compliance/siem` had a third defect** beyond the column
+>    mismatch: `org_id` was set to the caller's API key id against a column with
+>    a foreign key to `organizations(id)`, so the insert would have failed even
+>    with matching names. SIEM forwarding has never worked for anyone.
+> 3. **Migration 020 was not idempotent** on first write. The startup runner
+>    re-applies the directory on every boot and a bare `RENAME COLUMN` fails the
+>    second time, degrading every database-dependent route. Caught by running
+>    it, not by reading it. Both migrations are now idempotent and were applied
+>    twice each to prove it.
+>
+> **Operational note, reported rather than buried.** While stopping a local test
+> server I ran `pkill -f "tsx src/index.ts"`, which matches production's process
+> line as well. Production restarted at 17:59:29Z — a few seconds of downtime —
+> and came back healthy on `efa6ff3` because the live working directory had
+> already been returned to a clean `main` and this work moved to a separate
+> git worktree. That precaution is the only reason a half-finished branch did
+> not go live. **Never pattern-match on that process line on this machine**; the
+> service must be stopped by PID or through `launchctl`.
+>
+> **Remaining before this ships:** deploy and the item 1 backfill. See
+> "Deploy note" at the foot of this plan — the backfill corrects historical
+> rows that currently overstate enforcement, and its affected-row count should
+> be recorded. On staging it moved 13 rows.
+
+
 Source report: `~/reports/parse-prospect/2026-08-13-marcus-oyelaran-control-assurance.html`
 Walkthrough host: production `efa6ff3`, staging `efa6ff3`, 2026-08-13.
 
