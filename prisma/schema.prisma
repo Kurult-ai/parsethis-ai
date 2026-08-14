@@ -866,3 +866,25 @@ model SSOProvider {
   @@index([providerType], name: "idx_sso_providers_type")
   @@map("sso_providers")
 }
+
+/// Availability evidence (prospect run 13).
+///
+/// /status could only report `process.uptime()` — time since the last restart —
+/// which is the one availability number that can only ever hurt: a reviewer who
+/// loads the page shortly after a deploy sees "10m" with nothing around it to
+/// say whether that is normal. There was no history to put it in context.
+///
+/// One row per minute the process is alive. The gaps ARE the outage record: if
+/// Parse is down, or the machine is off, no row is written and the missing
+/// minutes are the evidence. That is why this is a heartbeat table rather than
+/// an incident table someone has to remember to write to.
+///
+/// `at` is truncated to the minute and unique, so a restart inside the same
+/// minute cannot double-count and a backfill cannot duplicate.
+model ServiceHeartbeat {
+  at        DateTime @id            // minute-truncated UTC instant
+  commit    String?                 // build serving that minute, for correlating a gap with a deploy
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("service_heartbeats")
+}

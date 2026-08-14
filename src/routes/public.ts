@@ -83,7 +83,8 @@ import { renderLoginPage } from "../pages/login-page.js";
 import { renderForgotPasswordPage } from "../pages/forgot-password-page.js";
 import { renderAccountDashboard } from "../pages/account-dashboard.js";
 import { createPortalSession, isStripeEnabled } from "../stripe.js";
-import { PRODUCT, PLAN_LIMITS, DETECTION_FACTS, X402_PAYMENT } from "../lib/product-facts.js";
+import { PRODUCT, PLAN_LIMITS, DETECTION_FACTS, X402_PAYMENT, governingLawClause } from "../lib/product-facts.js";
+import { getAvailability } from "../lib/availability.js";
 import { recordGeoSurfaceHit } from "../lib/geo-analytics.js";
 import { getVariant, isValidVariant, isAdminRequest, getRequestId, EXPERIMENTS } from "../lib/ab-test.js";
 
@@ -1195,9 +1196,15 @@ publicRoutes.get("/quickstart", (c) => c.redirect("/docs/quickstart", 301));
 publicRoutes.get("/guides", (c) => c.redirect("/docs", 301));
 
 // RFC 9116 security.txt
+//
+// `Expires` is a MUST in RFC 9116 §2.5.5, and its absence made this file
+// non-conformant to any scanner that checks — which is most of the ones a
+// customer's security team runs. Computed at request time so it can never go
+// stale: a pinned date silently expires the file the day it passes.
 publicRoutes.get("/.well-known/security.txt", (c) => {
+  const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
   return c.text(
-    `Contact: mailto:security@parsethis.ai\nPreferred-Languages: en\nCanonical: https://www.parsethis.ai/.well-known/security.txt\nPolicy: https://www.parsethis.ai/trust#vulnerability-disclosure\n`,
+    `Contact: mailto:security@parsethis.ai\nExpires: ${expires}\nPreferred-Languages: en\nCanonical: https://www.parsethis.ai/.well-known/security.txt\nPolicy: https://www.parsethis.ai/trust#vulnerability-disclosure\n`,
     200,
     { "Content-Type": "text/plain" }
   );
@@ -2329,7 +2336,7 @@ publicRoutes.get("/terms", (c) => {
 
 <h2>11. Governing Law and Dispute Resolution</h2>
 
-<p class="answer-capsule">These Terms shall be governed by the laws of the jurisdiction in which Parse operates, without regard to conflict of law principles. Any disputes shall be resolved through good-faith negotiations first, and if unresolved, through binding arbitration or the appropriate courts.</p>
+<p class="answer-capsule">${governingLawClause()} Any disputes shall be resolved through good-faith negotiations first, and if unresolved, through binding arbitration or the appropriate courts.</p>
 
 <h2>12. General Provisions</h2>
 
@@ -2776,6 +2783,10 @@ publicRoutes.get("/status", async (c) => {
   const deployment = getDeploymentMetadata();
   const uptimeSeconds = Math.floor(process.uptime());
   const deps = await collectPublicDependencies();
+  // Availability history. Wrapped by getAvailability itself, which returns an
+  // empty window rather than throwing when the table is absent (pre-migration)
+  // or the database is unreachable — /status must render either way.
+  const availability = await getAvailability(30);
   const degraded = deps.some((d) => d.status === "down" || d.status === "degraded");
   const overall: "operational" | "degraded" = degraded ? "degraded" : "operational";
 
@@ -2793,6 +2804,19 @@ publicRoutes.get("/status", async (c) => {
       runtime: deployment.runtime,
       node_version: process.version,
       uptime_seconds: uptimeSeconds,
+      availability_30d: availability.uptimePct === null
+        ? null
+        : {
+            uptime_pct: Number(availability.uptimePct.toFixed(3)),
+            observed_minutes: availability.observedMinutes,
+            possible_minutes: availability.possibleMinutes,
+            measured_since: availability.since?.toISOString() ?? null,
+            outages: availability.outages.map((o) => ({
+              from: o.from.toISOString(),
+              to: o.to.toISOString(),
+              minutes: o.minutes,
+            })),
+          },
       checked_at: new Date().toISOString(),
       dependencies: deps.map((d) => ({ name: d.name, status: d.status })),
       liveness_probe: "/health",
@@ -2833,6 +2857,51 @@ publicRoutes.get("/status", async (c) => {
     .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`)
     .join("\n      ");
 
+  // Availability section. A vendor-security reviewer (prospect run 13) read
+  // "Uptime 10m 16s" on this page with no history around it and scored
+  // availability as unevidenced — the one number published was the only one
+  // that could hurt. The window below is measured from heartbeats, and the
+  // caveats are on the page because a reviewer who finds an unstated limit
+  // stops trusting the stated ones.
+  const fmtDuration = (mins: number): string =>
+    mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
+
+  const availabilityHtml = availability.uptimePct === null
+    ? `<p class="answer-capsule">No availability history yet. Measurement starts when this
+build has been running long enough to record it; until then this page reports only the
+live state above, and the honest answer to "what is your uptime record" is that there
+is not one to show.</p>`
+    : `<div class="table-wrapper">
+  <table>
+    <tbody>
+      <tr><td>Measured availability</td><td><strong>${availability.uptimePct.toFixed(3)}%</strong></td></tr>
+      <tr><td>Window</td><td>${availability.days} days, measured since <code>${availability.since?.toISOString() ?? "—"}</code></td></tr>
+      <tr><td>Minutes observed</td><td>${availability.observedMinutes.toLocaleString()} of ${availability.possibleMinutes.toLocaleString()}</td></tr>
+      <tr><td>Outages recorded</td><td>${availability.outages.length === 0 ? "None" : String(availability.outages.length)}</td></tr>
+    </tbody>
+  </table>
+</div>
+${availability.outages.length === 0 ? "" : `<div class="table-wrapper">
+  <table>
+    <thead><tr><th>Outage start (UTC)</th><th>End (UTC)</th><th>Duration</th></tr></thead>
+    <tbody>
+      ${availability.outages.map((o) => `<tr><td><code>${o.from.toISOString()}</code></td><td><code>${o.to.toISOString()}</code></td><td>${fmtDuration(o.minutes)}</td></tr>`).join("\n      ")}
+    </tbody>
+  </table>
+</div>`}
+<p style="font-size:14px;color:var(--text-dim)">How this is measured, including what it
+cannot see. Parse writes one row a minute while it is running, and the gaps are the
+outage record — a process that has crashed cannot report its own crash, so missing
+minutes are the evidence. The denominator is capped at the age of the oldest
+measurement, so a short history reports a short window rather than a misleading
+percentage. Two limits worth knowing: this cannot tell a software outage from the host
+being switched off, and it cannot see an outage where Parse is healthy but the network
+in front of it is not — only an external prober would catch that, and Parse does not run
+one. Restarts of a minute or less are not counted as outages, because deploys are
+frequent and are not incidents. Parse runs on a single node; there is no failover, and
+the recovery procedure is manual. Backups run every six hours and each run is verified
+by restoring it.</p>`;
+
   const content = `
 <h1>Status</h1>
 
@@ -2852,6 +2921,9 @@ liveness probe for machines, and returns the same build identity as JSON.</p>
 <p style="font-size:14px;color:var(--text-dim)">This deploy runs from source rather
 than a compiled artifact, so the build time is the time the process started. The commit
 is read from the checkout at boot.</p>
+
+<h2>Availability</h2>
+${availabilityHtml}
 
 <h2>Dependencies</h2>
 <div class="table-wrapper">

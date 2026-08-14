@@ -9,6 +9,7 @@ import { runMigrations } from "./migrate.js";
 import { ensureSelfServiceUser } from "./lib/self-service-user.js";
 import { runSemanticPreflight } from "./lib/semantic-preflight.js";
 import { secretBoxReady } from "./lib/secret-box.js";
+import { startHeartbeat, stopHeartbeat } from "./lib/availability.js";
 
 // ── Deployment identity ──────────────────────────────────────────────────
 // Production runs `node --import tsx src/index.ts` straight from the checkout,
@@ -93,6 +94,11 @@ void runMigrations()
 // rather than throwing, so nothing here can take the process down.
 void runSemanticPreflight();
 
+// Availability evidence. One row a minute; the gaps are the outage record, so
+// this survives the failure it measures. Never throws and never blocks — a
+// failure to record availability must not affect availability.
+startHeartbeat(process.env.PARSE_COMMIT_SHA);
+
 // Secret storage. Same non-blocking shape: a missing key must not take the API
 // down, but it must be visible in the log, because the routes that store
 // customer credentials answer 503 without it rather than writing plaintext.
@@ -106,6 +112,7 @@ if (!secretBoxReady()) {
 
 function shutdown(signal: string) {
   console.log(`\n${signal} received. Shutting down gracefully...`);
+  stopHeartbeat();
   cleanup();
   Promise.allSettled([
     disconnectDb(),
