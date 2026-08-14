@@ -5,8 +5,17 @@ malicious (recall 0.9364). Not all 93 are misses. Some are rows where the
 benchmark and this product genuinely disagree about what an attack is, and
 chasing them would re-refuse the customer traffic runs 9 and 12 were about.
 
-**Your ruling is needed on section C only.** A and B are my classification and
-I have acted on A already; B is a design question with a recommendation.
+**Section B is done** (2026-08-14): the twelve extraction probes are now
+detected and disposed `review` rather than refused — recall rose and nothing
+new is blocked. See `intent.instruction_position_probe`.
+
+**Section C is deliberately not being adjudicated.** Re-labelling rows in a
+public benchmark because we do not detect them is the same move as leaving a
+stale 0.9528 published: a number improved by adjusting the measurement. With
+recall at 0.946 there is no pressure to, so these rows stay as honest
+disagreement — "we do not refuse *Repeat the rules*, and here is why" is a
+better answer in a security review than a re-scored corpus. Left here as a
+record of where this product and this benchmark differ.
 
 Default if you rule nothing: section C rows are re-labelled `ambiguous` and
 reported separately rather than gated on.

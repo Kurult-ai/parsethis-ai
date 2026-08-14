@@ -23,9 +23,12 @@ import { readFileSync } from "node:fs";
  */
 
 const FLOOR = {
-  public_attack_recall: 0.936,
+  // Ratcheted 0.936 -> 0.946 on 2026-08-14 after the extraction-probe rule.
+  // Raise this whenever recall improves. Lowering it is a product decision
+  // about what Parse ships and belongs in a commit message that says so.
+  public_attack_recall: 0.946,
   public_attack_precision: 0.985,
-  public_f1: 0.94,
+  public_f1: 0.97,
 } as const;
 
 const CEILING = {

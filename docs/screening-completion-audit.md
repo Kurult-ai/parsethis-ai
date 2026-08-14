@@ -49,14 +49,14 @@ The current repo has durable tracked source, fixture, evaluator, metric CSV, man
 | Machine-readable completion audit exists | `npm run audit:screening-completion` returns `status=blocked_external_evidence` with zero local failures and explicit holdout/persistence blockers | covered |
 | Frozen manifests, row IDs/content hashes, holdout separation, CIs, and claimable flags exist for public claims | Only non-claimable JSON templates exist at `docs/public-screening-holdout-manifest.json`; no independent frozen holdout evidence exists | blocker |
 | Frozen manifests, row IDs/content hashes, holdout separation, CIs, and claimable flags exist for runtime claims | Only non-claimable JSON templates exist at `docs/screening-holdout-manifest.json`; generated/tuning rows are explicitly rejected for claimability | blocker |
-| Public attack recall `>=0.936`, stretch `>=0.95` | `docs/public-screening-metrics.csv`: `public_attack_recall=0.9364`, N=1463 | covered, non-claimable |
-| Public attack precision `>=0.985`, stretch `>=0.995` | `docs/public-screening-metrics.csv`: `public_attack_precision=1`, N=1370 | covered, non-claimable |
+| Public attack recall `>=0.936`, stretch `>=0.95` | `docs/public-screening-metrics.csv`: `public_attack_recall=0.946`, N=1463 | covered, non-claimable |
+| Public attack precision `>=0.985`, stretch `>=0.995` | `docs/public-screening-metrics.csv`: `public_attack_precision=1`, N=1384 | covered, non-claimable |
 | Public benign FPR `<=0.002`, stretch `<=0.001` | `docs/public-screening-metrics.csv`: `public_benign_fpr=0`, N=502 | covered, non-claimable |
-| Public F1 `>=0.94`, stretch `>=0.96` | `docs/public-screening-metrics.csv`: `public_f1=0.9672`, N=1965 | covered, non-claimable |
+| Public F1 `>=0.94`, stretch `>=0.96` | `docs/public-screening-metrics.csv`: `public_f1=0.9723`, N=1965 | covered, non-claimable |
 | Legacy safe=false FPR `<=0.002` | `docs/public-screening-metrics.csv`: `legacy_safe_false_fpr=0`, N=502 | covered, non-claimable |
 | Critical attack miss rate `<=0.01`, stretch `<=0.005` | `docs/public-screening-metrics.csv`: `critical_attack_miss_rate=0.0021`, N=477 | covered, non-claimable |
-| Public p95 latency `<=3.8 ms`, stretch `<=2 ms` | `docs/public-screening-metrics.csv`: `pattern_latency_p95_ms=0.279`, N=1965 | covered, non-claimable |
-| Public p99 latency `<=15 ms`, stretch `<=5 ms` | `docs/public-screening-metrics.csv`: `pattern_latency_p99_ms=0.868`, N=1965 | covered, non-claimable |
+| Public p95 latency `<=3.8 ms`, stretch `<=2 ms` | `docs/public-screening-metrics.csv`: `pattern_latency_p95_ms=0.317`, N=1965 | covered, non-claimable |
+| Public p99 latency `<=15 ms`, stretch `<=5 ms` | `docs/public-screening-metrics.csv`: `pattern_latency_p99_ms=1.034`, N=1965 | covered, non-claimable |
 | Owner-private-context protection recall `>=0.99` | `docs/screening-metrics.csv`: `owner_private_context_protection_recall=1`, N=2003 | covered, non-claimable |
 | Owner-approval precision `>=0.98` | `docs/screening-metrics.csv`: `owner_approval_precision=1`, N=1002 | covered, non-claimable |
 | Owner-approval recall `>=0.98` | `docs/screening-metrics.csv`: `owner_approval_recall=1`, N=1002 | covered, non-claimable |
