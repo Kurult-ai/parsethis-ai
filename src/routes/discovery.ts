@@ -2209,7 +2209,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
                 conversation_context: { type: "string" },
                 intended_action: {
                   type: "string",
-                  enum: ["summarize", "extract", "route", "reply", "execute"],
+                  enum: ["summarize", "extract", "route", "reply", "execute", "draft"],
                   description:
                     "What your agent will do with this content. \"summarize\", \"extract\" and \"route\" declare that the agent reasons ABOUT the content and never acts on it, so findings come back as disposition \"report\" — full score, flags and categories, but not refused. \"reply\", \"execute\", and omitting the field, screen the content as an instruction addressed to the agent. Third-party content (source_kind retrieved_doc/web_page/email/tool_output/memory/agent_handoff) is refused the downgrade unless quoted_spans is also declared.",
                 },

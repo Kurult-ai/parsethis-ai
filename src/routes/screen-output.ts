@@ -6,6 +6,7 @@ import { auditLog } from "../lib/audit-log.js";
 import { problem, ErrorCode, jsonContentTypeProblem } from "../lib/problem-response.js";
 import { codewordBypassAllowed } from "../lib/bypass-codeword.js";
 import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
+import { verifyDraftObligation, consumeDraftObligation } from "../lib/draft-obligation.js";
 
 export const screenOutputRoutes = new Hono<AppEnv>();
 
@@ -21,7 +22,14 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
   const contentTypeProblem = jsonContentTypeProblem(c);
   if (contentTypeProblem) return contentTypeProblem;
 
-  const body = await c.req.json<{ output: string; context?: string; metadata?: ParseRequest["metadata"]; bypass_codeword?: string }>();
+  const body = await c.req.json<{
+    output: string;
+    context?: string;
+    metadata?: ParseRequest["metadata"];
+    bypass_codeword?: string;
+    /** A draft review obligation issued by POST /v1/parse under intended_action: "draft". */
+    review_obligation?: string;
+  }>();
 
   if (!body.output || typeof body.output !== "string") {
     return problem(c, {
@@ -135,6 +143,24 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
     ip: c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "unknown",
   });
 
+  // Redeem a draft obligation, if one was presented. This is the half of the
+  // draft concession Parse can actually verify: the caller took a review
+  // instead of a refusal on the promise that the composed draft came back
+  // here, and this is it coming back. An unredeemed obligation stays unredeemed
+  // and is countable; a replayed one is refused.
+  let obligation: Record<string, unknown> | undefined;
+  if (body.review_obligation) {
+    const verdict = verifyDraftObligation(body.review_obligation, apiKey?.id ?? "anonymous");
+    if (!verdict.ok) {
+      obligation = { redeemed: false, reason: verdict.reason };
+    } else {
+      const fresh = await consumeDraftObligation(verdict.nonce);
+      obligation = fresh
+        ? { redeemed: true, screening_id: verdict.screeningId }
+        : { redeemed: false, reason: "already_redeemed", screening_id: verdict.screeningId };
+    }
+  }
+
   return c.json({
     risk_score: outputRiskScore,
     safe: outputRiskScore <= 3,
@@ -145,6 +171,7 @@ screenOutputRoutes.post("/v1/screen-output", authMiddleware("evaluate"), billabl
     approval_request: approvalRequest,
     output_length: body.output.length,
     analyzed_at: new Date().toISOString(),
+    ...(obligation ? { review_obligation: obligation } : {}),
     ...(typeof apiKey?.expires_in_days === "number" ? { key_expires_in_days: apiKey.expires_in_days } : {}),
   });
 });

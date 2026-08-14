@@ -30,7 +30,8 @@ import {
   type CacheDimensions,
 } from "./lib/screening-cache.js";
 import type { TokenUsage } from "./types.js";
-import { resolveAnalysisRole, computeDisposition, suggestDeclaration } from "./lib/analysis-role.js";
+import { resolveAnalysisRole, computeDisposition, suggestDeclaration, draftReviewEligible } from "./lib/analysis-role.js";
+import { issueDraftObligation } from "./lib/draft-obligation.js";
 
 /** Mirrors UNTRUSTED_SOURCE_KINDS in lib/analysis-role.ts — third-party by construction. */
 const UNTRUSTED_SOURCE_KINDS_FOR_INTENT = new Set([
@@ -483,7 +484,7 @@ export interface ParseRequest {
      * screened as an instruction addressed to the agent. See
      * `src/lib/analysis-role.ts`.
      */
-    intended_action?: "summarize" | "execute" | "route" | "reply" | "extract";
+    intended_action?: "summarize" | "execute" | "route" | "reply" | "extract" | "draft";
     /**
      * Caller-declared [start, end] offsets of quoted material inside `prompt`.
      * Required alongside `intended_action` before third-party content may be
@@ -525,6 +526,13 @@ export interface ParseRequest {
    * policy; a caller cannot set it on their own request.
    */
   allowSubjectRole?: boolean;
+  /**
+   * server-controlled: the calling key's id, used to bind a draft review
+   * obligation to the key that accepted it. The route sets it; a caller cannot
+   * set it on their own request, and a token minted for one key is refused for
+   * another.
+   */
+  apiKeyId?: string;
 }
 
 export interface RiskFlag {
@@ -1057,7 +1065,17 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
     quoted_spans: req.metadata?.quoted_spans,
     flagged_offsets: flaggedOffsets,
   });
-  const disposition = computeDisposition(roleDecision.role, recommendedAction, riskScore, activeFlags);
+  // `draft` is the only instruction-role concession, and it is gated on the
+  // finding's categories rather than on anything the caller says about the
+  // content — the lesson from the A3 revert.
+  const draftEligible = draftReviewEligible(req.metadata?.intended_action, activeFlags);
+  const disposition = computeDisposition(
+    roleDecision.role,
+    recommendedAction,
+    riskScore,
+    activeFlags,
+    draftEligible,
+  );
   (response as unknown as Record<string, unknown>).disposition = disposition;
   (response as unknown as Record<string, unknown>).analysis_role = {
     role: roleDecision.role,
@@ -1072,6 +1090,17 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
   // `request_owner_approval`, which are existing states this must not rename.
   if (roleDecision.role === "subject" && (disposition === "report" || disposition === "review")) {
     response.recommended_action = disposition;
+  }
+
+  // A draft concession is a trade, so the response carries both halves: the
+  // review the caller gets, and the obligation they took to get it. The token
+  // names what to do with it, so complying does not require reading the docs.
+  if (draftEligible && disposition === "review") {
+    response.recommended_action = "review";
+    (response as unknown as Record<string, unknown>).review_obligation = issueDraftObligation(
+      response.id,
+      req.apiKeyId ?? "anonymous",
+    );
   }
 
   // A refusal that could have been a reported finding should say so. Scoped to
