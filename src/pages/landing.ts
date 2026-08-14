@@ -619,6 +619,13 @@ curl -s ${baseUrl}/v1/parse \\
     <div class="frow mono" style="font-size:12.5px">
       <a href="/llms.txt">/llms.txt</a><a href="/openapi.json">/openapi.json</a><a href="/mcp">/mcp</a><a href="/trust">/trust</a><a href="/status">/status</a>
     </div>
+    <!-- The legal row. It is on every other page via the shared footer in
+         html-template.ts, and was missing only here — so a vendor-security
+         reviewer landing on the homepage saw no privacy policy, no terms and
+         no DPA at all. -->
+    <div class="frow mono" style="font-size:12.5px">
+      <a href="/privacy">/privacy</a><a href="/terms">/terms</a><a href="/dpa">/dpa</a><a href="/security">/security</a><a href="/acceptable-use">/acceptable-use</a>
+    </div>
     <p class="limits">Detection reduces risk; it does not replace least-privilege tools or output validation. © 2026 Parse · agent governance &amp; compliance.</p>
   </div>
 </footer>
