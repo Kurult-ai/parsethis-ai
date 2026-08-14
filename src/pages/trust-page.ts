@@ -1,6 +1,6 @@
 import { renderPage } from "../lib/html-template.js";
 import { TIER_RATE_LIMITS } from "../lib/rate-limiter.js";
-import { DETECTION_FACTS, PRODUCT, SECURITY_FACTS } from "../lib/product-facts.js";
+import { DETECTION_FACTS, PRODUCT, SECURITY_FACTS, entityDisclosureHtml } from "../lib/product-facts.js";
 import { CONTACT_EMAIL } from "../lib/constants.js";
 // The subprocessor table is generated for the same reason the roles below are:
 // it existed as three hand-typed copies, and the one in docs/trust-package.md
@@ -133,6 +133,13 @@ export function renderTrustPage(baseUrl: string): string {
 </div>
 
 <p class="answer-capsule">This page is ${PRODUCT.name}'s whole security posture: architecture, controls, sub-processors, retention, and a pre-answered vendor questionnaire. It states the gaps as plainly as the controls — there is <strong>no SOC 2 report yet</strong> (in progress, Q1 2027), <strong>no independent penetration test</strong>, and Parse runs on a <strong>single node</strong> with no failover. Everything here is written to be checked rather than believed. Detection reduces risk; it does not replace least-privilege tools or output validation.</p>
+
+<div class="trust-section">
+<h2 id="entity">Who you are contracting with</h2>
+<p>The first thing a third-party risk assessment needs, and the thing most vendor
+pages leave to an email thread.</p>
+${entityDisclosureHtml()}
+</div>
 
 <div class="trust-contact-box">
   <h3>Need this for your vendor risk assessment?</h3>

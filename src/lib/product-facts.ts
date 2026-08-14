@@ -113,23 +113,60 @@ export const LATENCY_FACTS = {
  * two unrelated active entities are named "Parse", one of them a Swedish AB, so
  * the obvious lookup returns a plausible wrong answer.
  *
- * `governingLaw` is null until a jurisdiction is chosen. While it is null the
- * terms page keeps its existing wording rather than inventing one — naming the
- * wrong country would be worse than naming none. Set it to e.g. "the State of
- * Delaware, United States" and the clause below becomes specific everywhere it
- * is quoted.
+ * Resolved 2026-08-14: Parse trades through Kurultai Labs LLC, a North Carolina
+ * limited liability company, and the governing law is North Carolina. The one
+ * field still open is the Secretary of State entity ID — see
+ * `registeredEntity.registrationNumber`. Publishing a wrong number would be
+ * worse than publishing none, so the copy degrades to naming the public
+ * registry until it is filled.
  */
 export const LEGAL_ENTITY = {
   /** Trading name as published. */
   tradingName: "Parse",
   /** The natural person or company that contracts with customers. */
   operator: "Daniel Finn",
+  /** Named jurisdiction for the governing-law clause. */
+  governingLaw: "the State of North Carolina, United States",
+  /** Short form for tables and one-line answers. */
+  jurisdictionShort: "North Carolina, United States",
   /**
-   * Named jurisdiction for the governing-law clause. Null = not yet decided;
-   * do not guess. See docs/plans/2026-08-14-fourth-party-evidence-remediation.md
-   * Part C for the options and what each one closes.
+   * The registered company, if the service is provided through one.
+   *
+   * Null means the contracting party is the named operator as an individual,
+   * which is what the DPA has always said ("Parse, operated by Daniel Finn" —
+   * no company form, no registration). That is a real answer and it closes the
+   * "who am I contracting with" row; what it cannot do is produce an LEI or a
+   * company registration number, because an unregistered natural person does
+   * not have one.
+   *
+   * If Parse is or becomes a registered entity, set this to
+   * `{ name, form, registrationNumber, lei }` and the entity block below states
+   * it everywhere at once. That is the change that closes the register row for
+   * customers in regulated sectors — see
+   * docs/plans/2026-08-14-fourth-party-evidence-remediation.md Part C.
    */
-  governingLaw: null as string | null,
+  registeredEntity: {
+    name: "Kurultai Labs LLC",
+    form: "limited liability company",
+    /**
+     * NC Secretary of State SOSID. Null until filled — publishing the wrong
+     * number is worse than publishing none, and the copy below degrades to
+     * naming the public registry where the exact legal name resolves it.
+     * Look it up at sosnc.gov and paste it here.
+     */
+    registrationNumber: null as string | null,
+    /**
+     * A registered US entity *can* obtain an LEI (any accredited LOU, ~$50-100
+     * a year). This is the field that closes the register row for customers in
+     * regulated sectors; an unincorporated operator could never have filled it.
+     */
+    lei: null as string | null,
+  } as null | {
+    name: string;
+    form: string;
+    registrationNumber: string | null;
+    lei: string | null;
+  },
 } as const;
 
 /**
@@ -140,6 +177,55 @@ export function governingLawClause(): string {
   return LEGAL_ENTITY.governingLaw
     ? `These Terms are governed by the laws of ${LEGAL_ENTITY.governingLaw}, without regard to conflict of law principles.`
     : "These Terms shall be governed by the laws of the jurisdiction in which Parse operates, without regard to conflict of law principles.";
+}
+
+/**
+ * Who a customer is contracting with, stated so a third-party risk reviewer can
+ * fill in a form without emailing anyone.
+ *
+ * A fourth-party reviewer (prospect run 13) failed five questionnaire rows here
+ * and could not enter Parse in a register of ICT providers at all. Worse than
+ * blank: the public LEI index holds two unrelated active entities named "Parse",
+ * one a Swedish AB, so the obvious lookup returns a plausible wrong answer. The
+ * point of this block is that the correct answer — including "there is no
+ * registered entity" — is easier to find than the wrong one.
+ */
+export function entityDisclosureHtml(): string {
+  const e = LEGAL_ENTITY.registeredEntity;
+  const rows = e
+    ? [
+        ["Contracting party", `${e.name}, a ${LEGAL_ENTITY.jurisdictionShort.split(",")[0]} ${e.form}, trading as ${LEGAL_ENTITY.tradingName}`],
+        ["State of formation", LEGAL_ENTITY.jurisdictionShort],
+        [
+          "Registration",
+          e.registrationNumber
+            ? `${e.registrationNumber} (North Carolina Secretary of State)`
+            : `Registered with the North Carolina Secretary of State. The entity ID is not published on this page yet; the exact legal name above resolves it in the public registry at <a href="https://www.sosnc.gov">sosnc.gov</a>, or ask security@parsethis.ai and it will be sent in writing.`,
+        ],
+        [
+          "LEI",
+          e.lei ?? `None issued. If your register of ICT providers requires an LEI, say so before contracting — ${e.name} is a registered entity and can obtain one, which an unincorporated operator could not.`,
+        ],
+        ["Governing law", LEGAL_ENTITY.governingLaw],
+      ]
+    : [
+        ["Contracting party", `${LEGAL_ENTITY.operator}, an individual trading as ${LEGAL_ENTITY.tradingName}`],
+        ["Registration", `None. Parse is not incorporated, so there is no company registration number to quote.`],
+        ["LEI", `None. A Legal Entity Identifier is issued to legal entities; an unregistered individual cannot obtain one. If your register of ICT providers requires an identification code, say so — this is the constraint to raise before contracting, not after.`],
+        ["Governing law", LEGAL_ENTITY.governingLaw],
+        ["Principal place of business", LEGAL_ENTITY.jurisdictionShort],
+      ];
+  return `<div class="table-wrapper">
+  <table>
+    <tbody>
+${rows.map(([k, v]) => `      <tr><td><strong>${k}</strong></td><td>${v}</td></tr>`).join("\n")}
+    </tbody>
+  </table>
+</div>
+<p style="font-size:14px;color:var(--text-dim)">Two entities named "Parse" hold active
+records in the public LEI index and neither is this one. If you are completing a register
+of ICT providers or a sub-processor questionnaire, use the row above rather than a name
+match, and contact security@parsethis.ai if you need it confirmed in writing.</p>`;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { renderPage } from "../lib/html-template.js";
-import { PRODUCT, SECURITY_FACTS } from "../lib/product-facts.js";
+import { LEGAL_ENTITY, PRODUCT, SECURITY_FACTS } from "../lib/product-facts.js";
 import { SUBPROCESSOR_CONTROL_NOTE, modelRoutingNote, subprocessorTableHtml } from "../lib/subprocessor-facts.js";
 
 /**
@@ -15,7 +15,7 @@ export function renderDpaPage(baseUrl: string): string {
 <p class="answer-capsule"><strong>Last updated:</strong> August 12, 2026. This Data Processing Agreement ("<strong>DPA</strong>") is incorporated into and forms part of the Parse for Agents Terms of Service. It applies when Parse processes personal data on behalf of a Customer under Article 28 of the EU General Data Protection Regulation (GDPR) and the UK Data Protection Act 2018.</p>
 
 <h2 id="parties">1. Parties</h2>
-<p class="answer-capsule">This DPA is between <strong>${PRODUCT.name}</strong>, operated by Daniel Finn ("<strong>Processor</strong>" or "<strong>Parse</strong>") and the entity that has subscribed to the Parse service ("<strong>Customer</strong>" or "<strong>Controller</strong>").</p>
+<p class="answer-capsule">This DPA is between <strong>Kurultai Labs LLC</strong>, a North Carolina limited liability company trading as <strong>${PRODUCT.name}</strong> ("<strong>Processor</strong>" or "<strong>Parse</strong>"), and the entity that has subscribed to the Parse service ("<strong>Customer</strong>" or "<strong>Controller</strong>"). Parse is governed by the laws of ${LEGAL_ENTITY.governingLaw}. Entity details for your vendor register are published on the <a href="/trust#entity">trust page</a>.</p>
 
 <h2 id="processing-activities">2. Processing Activities</h2>
 <p class="answer-capsule">Parse processes the following categories of personal data on behalf of the Customer:</p>
