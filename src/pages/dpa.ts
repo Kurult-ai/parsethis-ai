@@ -1,5 +1,6 @@
 import { renderPage } from "../lib/html-template.js";
-import { PRODUCT } from "../lib/product-facts.js";
+import { PRODUCT, SECURITY_FACTS } from "../lib/product-facts.js";
+import { SUBPROCESSOR_CONTROL_NOTE, subprocessorTableHtml } from "../lib/subprocessor-facts.js";
 
 /**
  * Data Processing Agreement page — SSR HTML at /dpa
@@ -26,60 +27,19 @@ export function renderDpaPage(baseUrl: string): string {
 </ul>
 <p class="answer-capsule">The purpose of processing is limited to: (a) screening prompts for prompt injection, jailbreak, and adversarial threats; (b) returning risk assessments; (c) logging for security audit; and (d) aggregate analytics for detection improvement.</p>
 
+<h3>Model training</h3>
+<p class="answer-capsule"><strong>Parse does not use Customer content to train, fine-tune or evaluate any model.</strong> This is a property of the storage design rather than a promise: the screening endpoints (<code>/v1/parse</code>, <code>/v1/screen-output</code>, <code>/v1/agent/trust/verify</code>) do not retain prompt text or a hash of it, so no corpus of Customer content exists to train on. "Aggregate analytics for detection improvement" in (d) above means verdict counts, category distributions and rule hit rates — numbers, not text.</p>
+<p class="answer-capsule">Two limits on that statement, both stated so the Customer does not have to discover them:</p>
+<ul>
+  <li><code>POST /v1/evaluate</code> is the exception to the no-retention rule. It holds the prompt while the run is in flight, then overwrites its copy with the first 100 characters plus a SHA-256 of the whole prompt, kept in server memory for the 500 most recent runs. Those records are not used for training either, but they are the one place Customer text persists at all. See the <a href="/trust#storage">per-endpoint storage table</a>.</li>
+  <li>What <strong>OpenRouter and the model providers behind it</strong> do with text sent for semantic analysis is governed by their policies, not this DPA. A Customer who needs that transfer not to happen can pass <code>mode: "pattern-only"</code> per request, or set <code>defaultMode: "pattern-only"</code> for the whole organization, and the text is never sent.</li>
+</ul>
+
 <h2 id="sub-processors">3. Sub-processors</h2>
 <p class="answer-capsule">Parse uses the following sub-processors to deliver the service. Only OpenRouter receives prompt text, and only in <code>full</code> mode:</p>
 
-<div class="table-wrapper">
-  <table>
-    <thead>
-      <tr>
-        <th>Sub-processor</th>
-        <th>Purpose</th>
-        <th>Location</th>
-        <th>Sees prompt text?</th>
-        <th>GDPR adequacy</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>OpenRouter</td>
-        <td>Semantic analysis (LLM routing)</td>
-        <td>US</td>
-        <td>Only in full mode</td>
-        <td>SCCs</td>
-      </tr>
-      <tr>
-        <td>Cloudflare</td>
-        <td>CDN, tunnel, DDoS protection</td>
-        <td>Global edge</td>
-        <td>No</td>
-        <td>SCCs + CISPE</td>
-      </tr>
-      <tr>
-        <td>PostgreSQL (self-hosted)</td>
-        <td>Screening event storage</td>
-        <td>US (Mac Mini M4)</td>
-        <td>Metadata only</td>
-        <td>N/A (self-hosted)</td>
-      </tr>
-      <tr>
-        <td>Redis (self-hosted)</td>
-        <td>Rate limiting, caching, queues</td>
-        <td>US (Mac Mini M4)</td>
-        <td>No</td>
-        <td>N/A (self-hosted)</td>
-      </tr>
-      <tr>
-        <td>Stripe</td>
-        <td>Subscription billing</td>
-        <td>US / Ireland</td>
-        <td>No</td>
-        <td>SCCs + PCI-DSS</td>
-      </tr>
-    </tbody>
-  </table>
-</div>
-<p class="answer-capsule" style="font-size: 14px;">Customers can prevent prompt text from reaching OpenRouter by using <code>mode: "pattern-only"</code> at the request level or by setting an org-level <code>defaultMode: "pattern-only"</code> policy.</p>
+${subprocessorTableHtml("Sub-processor")}
+<p class="answer-capsule" style="font-size: 14px;">${SUBPROCESSOR_CONTROL_NOTE}</p>
 
 <h2 id="data-transfers">4. International Data Transfers</h2>
 <p class="answer-capsule">Personal data may be transferred from the EEA, UK, or Switzerland to the United States under the <strong>European Commission's Standard Contractual Clauses (SCCs)</strong> adopted under Commission Implementing Decision (EU) 2021/914. Parse executes the SCCs as the data importer.</p>
@@ -88,7 +48,7 @@ export function renderDpaPage(baseUrl: string): string {
 <p class="answer-capsule">A TIA is available to Customers under NDA. Summary findings:</p>
 <ul>
   <li><strong>Surveillance risk:</strong> Parse operates on self-hosted infrastructure (Mac Mini), not AWS/GCP/Azure. No government access beyond what is legally compelled.</li>
-  <li><strong>Encryption:</strong> All data in transit uses TLS 1.3. Prompt text is processed ephemerally and not persisted for the screening endpoints.</li>
+  <li><strong>Encryption:</strong> Data in transit uses ${SECURITY_FACTS.transitTls}. Prompt text is processed ephemerally and not persisted for the screening endpoints.</li>
   <li><strong>Access controls:</strong> Single-tenant infrastructure with no third-party administrative access.</li>
   <li><strong>Supplementary measures:</strong> Pattern-only mode prevents onward transfer of prompt text to the semantic-analysis subprocessor (OpenRouter, US) when used. Prompt text is still transferred to Parse for processing in the United States.</li>
 </ul>
@@ -103,8 +63,8 @@ export function renderDpaPage(baseUrl: string): string {
 <h2 id="security">6. Security Measures</h2>
 <p class="answer-capsule">Parse implements the following technical and organizational security measures:</p>
 <ul>
-  <li><strong>Encryption in transit:</strong> TLS 1.3 for all connections</li>
-  <li><strong>API keys:</strong> Stored as SHA-256 hashes; plaintext shown once at generation</li>
+  <li><strong>Encryption in transit:</strong> ${SECURITY_FACTS.transitTls}</li>
+  <li><strong>API keys:</strong> ${SECURITY_FACTS.apiKeyStorage}</li>
   <li><strong>Sandbox isolation:</strong> Execution environments containerized with no network access</li>
   <li><strong>Access controls:</strong> Single-operator infrastructure, no shared credentials</li>
   <li><strong>Audit logging:</strong> All screening events and admin actions logged</li>

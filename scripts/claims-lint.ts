@@ -281,6 +281,16 @@ function checkFile(
         continue;
       }
 
+      // Skip import and export-from statements. A module or symbol named after
+      // a framework — `soc2-mapping.js`, `soc2TableHtml` — is not a claim, and
+      // no part of an import line is ever rendered to a customer. Without this,
+      // naming a file after the standard it maps to fails the lint, which
+      // pushes code toward vaguer names for no benefit to the reader.
+      if (/^\s*(import|export)\b[^;]*\bfrom\s+["']/.test(lineText) || /^\s*import\s+["']/.test(lineText)) {
+        searchStart = idx + termLower.length;
+        continue;
+      }
+
       // Skip HTML <option>/<select> data entries — these are data values
       // (e.g., a framework filter dropdown), not marketing claims
       if (/<option\s|<select\s/i.test(trimmedLine) || /value\s*=\s*["']/.test(trimmedLine)) {

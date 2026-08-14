@@ -13,7 +13,7 @@
 3. [Subprocessors](#3-subprocessors)
 4. [Vulnerability Disclosure Policy](#4-vulnerability-disclosure-policy)
 5. [Compliance Framework Alignment](#5-compliance-framework-alignment)
-6. [CAQH-lite / SIG-lite Answer Set](#6-caqh-lite--sig-lite-answer-set)
+6. [CAIQ-lite / SIG-lite Answer Set](#6-caiq-lite--sig-lite-answer-set)
 
 ---
 
@@ -97,7 +97,7 @@ Optional isolated execution environment (`src/lib/sandbox-client.ts`) for suspic
 ### 1.3 Data Storage, Retention, and Where Prompt Text Goes
 
 <!-- BEGIN GENERATED: retention-facts -->
-<!-- Source of truth: src/lib/retention-facts.ts. Run `npm run check:retention-sync -- --write`. -->
+<!-- Source of truth: src/lib/retention-facts.ts. Run `npm run check:trust-sync -- --write`. -->
 
 Storage does not vary by plan. Free, Pro, Team, and Compliance keys are handled identically — the tier changes rate limits, cost caps, and which fields come back in the response, not what Parse writes down.
 
@@ -226,23 +226,24 @@ Parse enforces the following security headers on all responses (see `GET /v1/sec
 
 ## 3. Subprocessors
 
-### Subprocessor List (as of August 2026)
+<!-- BEGIN GENERATED: subprocessor-facts -->
+<!-- Source of truth: src/lib/subprocessor-facts.ts. Run `npm run check:trust-sync -- --write`. -->
 
-Parse uses the following third-party services to deliver the platform:
+Parse uses few third-party services. One of them receives prompt text.
 
-| Subprocessor | Purpose | Data Accessed |
-|---|---|---|
-| **OpenRouter** | Routes the semantic analysis layer (Layer 2) to a model provider, and runs the prompt when `execute: true` | Prompt text |
-| **Stripe** | Subscription billing | Payment metadata only; no card data |
-| **Cloud infrastructure** (compute, Postgres, Redis) | Hosting and storage | Whatever Parse stores, listed in section 1.3 — prompt text is not among it for the screening endpoints |
+| Subprocessor | Purpose | Location | Sees prompt text? | GDPR adequacy |
+|---|---|---|---|---|
+| **OpenRouter** | Routes the semantic analysis layer (Layer 2) to a model provider, and runs the prompt when `execute: true` | US | Only in full mode | SCCs |
+| **Cloudflare** | CDN, tunnel, DDoS protection | Global edge | No | SCCs + CISPE |
+| **Stripe** | Subscription billing | US / Ireland | No | SCCs + PCI-DSS |
+| **PostgreSQL (self-hosted)** | Screening event storage | US (Mac Mini M4) | Metadata only | N/A (self-hosted) |
+| **Redis (self-hosted)** | Rate limiting, caching, queues | US (Mac Mini M4) | No | N/A (self-hosted) |
 
-**Notes:**
+Any caller on any tier can keep prompt text away from OpenRouter by passing `mode: "pattern-only"` per request, which runs Layer 1 only. Organizations can also make this the default for every request by setting `defaultMode` to `pattern-only` on their screening policy (`PUT /v1/policy`), so the control does not have to be repeated per call. Prompt text still reaches Parse in the United States in either case — pattern-only prevents the onward transfer to OpenRouter, not the transfer to Parse.
 
-- OpenRouter is the only subprocessor that receives prompt text. What it and the model providers behind it retain is governed by their policies, not ours. Any caller on any tier can keep prompt text away from OpenRouter by passing `mode: "pattern-only"` per request, which runs Layer 1 only. There is no account-level or tier-level switch for this today — the control is per request.
-- **Stripe** processes payment card data directly; Parse never sees or stores raw card numbers.
-- **Cloud infrastructure** is hosted on standard cloud providers. No prompt text is shared with infrastructure providers beyond what section 1.3 lists as stored.
+New subprocessors are announced 30 days in advance at security@parsethis.ai.
 
-If additional subprocessors are added in the future, customers will be notified at least 30 days in advance via security@parsethis.ai.
+<!-- END GENERATED: subprocessor-facts -->
 
 ---
 
@@ -300,21 +301,28 @@ Parse is pursuing SOC 2 Type II certification. The audit is **in progress** with
 
 ### 5.2 Control Mapping
 
-| SOC 2 Trust Principle | SOC 2 Criteria | Parse Control | Status |
+<!-- BEGIN GENERATED: soc2-mapping -->
+<!-- Source of truth: src/lib/soc2-mapping.ts. Run `npm run check:trust-sync -- --write`. -->
+
+| SOC 2 Trust Principle | SOC 2 Criteria | Parse Control | Implemented (self-assessed) |
 |---|---|---|---|
-| **Security (Common Criteria)** | CC1: Control Environment | Security governance documented; CISO-designated security contact | ✅ Implemented |
-| | CC2: Communication and Information | Security headers endpoint (`GET /v1/security/headers`), trust page, docs hub | ✅ Implemented |
-| | CC3: Risk Assessment | Threat model documented for prompt injection taxonomy; quarterly review | ✅ Implemented |
-| | CC4: Monitoring Activities | Audit logging on all security-relevant events; SIEM forwarding on compliance tier | ✅ Implemented |
-| | CC5: Control Activities | RBAC, rate limiting, input validation, policy enforcement | ✅ Implemented |
-| | CC6: Logical and Physical Access | Bearer auth, bcrypt-hashed API keys, HSTS, TLS, CORS allowlisting | ✅ Implemented |
-| | CC7: System Operations | Structured logging, request tracing (`X-Request-ID`), graceful shutdown, health checks | ✅ Implemented |
-| | CC8: Change Management | Versioned deployments, automated CI/CD, type-safe TypeScript codebase | ✅ Implemented |
-| | CC9: Risk Mitigation | Rate limiting, sandbox isolation, SSRF guards, 3-layer defense pipeline | ✅ Implemented |
-| **Availability** | A1: Availability | Multi-instance deployment, Redis HA fallback, health check endpoints | ⚠️ Partial |
-| **Processing Integrity** | PI1: Processing Integrity | Deterministic scoring, nonce-tagged LLM delimiters, verdict aggregation | ✅ Implemented |
+| **Security (Common Criteria)** | CC1: Control Environment | Security governance documented; designated security contact. Parse is operated by one person, so that contact is the operator. | ✅ Implemented |
+|  | CC2: Communication and Information | Security headers endpoint (`GET /v1/security/headers`), trust page, docs hub, RFC 9116 security.txt | ✅ Implemented |
+|  | CC3: Risk Assessment | Threat model documented for the prompt injection taxonomy | ✅ Implemented |
+|  | CC4: Monitoring Activities | Audit logging on security-relevant events; SIEM forwarding on the compliance tier | ✅ Implemented |
+|  | CC5: Control Activities | RBAC, rate limiting, input validation, policy enforcement | ✅ Implemented |
+|  | CC6: Logical and Physical Access | Bearer auth, bcrypt-hashed API keys, HSTS, TLS, CORS allowlisting | ✅ Implemented |
+|  | CC7: System Operations | Structured logging, request tracing (`X-Request-ID`), graceful shutdown, health checks | ✅ Implemented |
+|  | CC8: Change Management | Versioned deployments, automated CI/CD, dependency audit on every build, type-safe TypeScript codebase | ✅ Implemented |
+|  | CC9: Risk Mitigation | Rate limiting, sandbox isolation, SSRF guards, three-layer defence pipeline | ✅ Implemented |
+| **Availability** | A1: Availability | Single node, no failover. Database backed up every six hours with a verified restore on every run; ~30 days of snapshots retained. Health check endpoints and published availability history. Recovery is a manual operator task with no committed RTO. | ⚠️ Partial |
+| **Processing Integrity** | PI1: Processing Integrity | Deterministic scoring, seeded semantic sampling with a verdict cache, nonce-tagged LLM delimiters | ✅ Implemented |
 | **Confidentiality** | C1: Confidentiality | TLS in transit, bcrypt/AES-256 for secrets, no prompt storage on the screening endpoints | ✅ Implemented |
-| **Privacy** | P1–P8: Privacy | Documented retention (section 1.3) enforced by a daily purge job, data governance module, approval matrix | ✅ Implemented |
+| **Privacy** | P1–P8: Privacy | Documented retention enforced by a daily purge job, data governance module, approval matrix | ✅ Implemented |
+
+No auditor has examined these controls. The column records whether Parse has implemented the control, self-assessed, and is not an audit result — SOC 2 Type II is in progress with an expected completion of Q1 2027, and there is no independent penetration test.
+
+<!-- END GENERATED: soc2-mapping -->
 
 ### 5.3 Additional Frameworks (Roadmap)
 
@@ -327,117 +335,149 @@ Parse is pursuing SOC 2 Type II certification. The audit is **in progress** with
 
 ---
 
-## 6. CAQH-lite / SIG-lite Answer Set
+## 6. CAIQ-lite / SIG-lite Answer Set
 
-Pre-answered responses to the top 30 most common vendor security questionnaire questions. These answers can be pasted directly into CAQH, SIG, or custom vendor security assessment forms.
+<!-- BEGIN GENERATED: vendor-questionnaire -->
+<!-- Source of truth: src/lib/vendor-questionnaire.ts. Run `npm run check:trust-sync -- --write`. -->
 
-### General Security
+Pre-answered responses to the 31 most common vendor security questionnaire questions. These answers can be pasted directly into CAIQ, SIG, or custom vendor security assessment forms.
 
-**1. Does your organization have an information security policy?**  
-Yes. Parse maintains a documented information security policy covering access control, data protection, incident response, and vulnerability management. The policy is reviewed annually.
+### General Security (Q1–Q5)
 
-**2. Does your organization have a designated security officer or CISO?**  
-Yes. Security governance is overseen by a designated security contact reachable at security@parsethis.ai.
+**1. Does your organization have an information security policy?**
 
-**3. Does your organization conduct security awareness training?**  
-Yes. All team members complete security awareness training covering prompt injection risks, secure coding practices, and incident reporting procedures.
+Partly, and it is worth being exact about which parts. Parse maintains a documented **incident response runbook** and a published **vulnerability disclosure policy** with remediation SLAs by severity. There is no separate, formally reviewed information security policy document. Access control and data protection are implemented and documented on this page rather than in a policy artefact.
 
-**4. Are background checks performed on personnel?**  
-Yes. Background checks are performed on personnel with access to production systems or customer data, in accordance with applicable local laws.
+**2. Does your organization have a designated security officer or CISO?**
 
-**5. Does your organization have an incident response plan?**  
-Yes. Parse maintains a documented incident response plan with defined roles, escalation procedures, and communication protocols. Incidents are logged and reviewed post-resolution.
+There is a designated security contact, reachable at security@parsethis.ai and published in `/.well-known/security.txt`. Parse is operated by one person, so that contact is the operator rather than a separate officer with an independent reporting line.
 
-### Access Control
+**3. Does your organization conduct security awareness training?**
 
-**6. Is access to systems and data based on role (RBAC)?**  
-Yes. Parse implements role-based access control with defined roles (admin, owner, member, viewer). Access is enforced at the route level via middleware.
+Not applicable in the form this question assumes. Parse is operated by one person; there are no other personnel to train. If that changes, this answer changes with it.
 
-**7. Are access rights reviewed periodically?**  
-Yes. Access rights are reviewed quarterly. Departed personnel access is revoked within 24 hours of termination.
+**4. Are background checks performed on personnel?**
 
-**8. Are multi-factor authentication (MFA) and SSO supported?**  
-Yes. Parse supports OAuth 2.0 / OIDC-based SSO (available on Team and Compliance tiers). MFA is enforced for administrative access.
+Not applicable. There are no personnel other than the operator, and therefore no one to screen for production access.
 
-**9. Are API keys encrypted at rest?**  
-Yes. API keys are bcrypt-hashed with salt. Only the hash and a non-reversible prefix are stored; the full key is never persisted.
+**5. Does your organization have an incident response plan?**
 
-**10. Is least-privilege access enforced?**  
-Yes. API keys are scoped to organizations and roles. Cross-organization access is denied at the middleware level.
+Yes. Documented incident response plan with defined roles, escalation procedures, and communication protocols. Incidents logged and reviewed post-resolution.
 
-### Data Protection
+### Access Control (Q6–Q10)
 
-**11. Is data encrypted in transit?**  
-Yes. All connections use TLS 1.2+. HSTS is enforced with `max-age=31536000; includeSubDomains`.
+**6. Is access to systems and data based on role (RBAC)?**
 
-**12. Is data encrypted at rest?**  
-Yes. Secrets are encrypted using AES-256-GCM. Database connections use TLS. API keys are bcrypt-hashed.
+Yes. RBAC with defined roles (org_admin, security_analyst, auditor, developer). Access is enforced at route level by middleware, and org-scoped routes additionally refuse a caller outside the organization that owns the record.
 
-**13. Do you store customer prompt data?**  
-The screening endpoints (`/v1/parse`, `/v1/screen-output`, `/v1/agent/trust/verify`) do not: the screening event table has no column for prompt text or a hash of it, on every tier. `/v1/evaluate` does, for the length of the run — on completion the stored copy is overwritten with the first 100 characters plus a SHA-256 of the full prompt, and those characters remain readable. See section 1.3 for the per-endpoint breakdown.
+**7. Are access rights reviewed periodically?**
 
-**14. What is your data retention policy?**  
-Stated retention: screening events 90 days, audit events 90 days, compliance receipts 1 year, API keys until revocation or expiry. A daily purge job deletes records past each window. Rate-limit counters and the in-memory `/v1/evaluate` records expire automatically. See section 1.3.
+Not applicable in the form this question assumes. There are no employee accounts with production access, so there are no access rights to review periodically and no departures to revoke. Customer-facing access is per API key: keys are revocable immediately by their owner (`DELETE /v1/keys/self`) and self-service keys expire after 30 idle days.
 
-**15. Do you support customer data deletion requests?**  
-Yes. Customers can request data deletion via privacy@parsethis.ai or hello@parsethis.ai. Deletion is completed within 30 days.
+**8. Are MFA and SSO supported?**
 
-**15b. Does prompt text leave your infrastructure?**  
-Yes, for the semantic analysis layer: prompt text is sent to OpenRouter for model scoring unless the caller passes `mode: "pattern-only"`, a pattern already matched at severity 9 or above, or the deployment has no OpenRouter key. Prompt text also reaches OpenRouter and the execution sandbox when the caller opts in with `execute: true`, which is off by default. See section 1.3.
+Yes. OAuth 2.0 / OIDC-based SSO (Team + Compliance tiers). MFA enforced for administrative access.
 
-### Network Security
+**9. Are API keys encrypted at rest?**
 
-**16. Is there a firewall or network segmentation?**  
-Yes. Production infrastructure uses cloud security groups with least-privilege ingress/egress rules. Internal services are segmented from public-facing endpoints.
+Yes. bcrypt-hashed with salt at rest, plus a non-reversible lookup prefix. The Redis validation cache holds a SHA-256 of the key so the bcrypt comparison does not run on every request. The full key is never written down; it is shown once at generation.
 
-**17. Is rate limiting implemented?**  
-Yes. Redis-backed sliding-window rate limiting with in-memory fallback. Tier-based limits (Free: 10/min, Pro: 100/min, Team: 500/min, Compliance: 500/min). HTTP 429 with `Retry-After` on threshold breach.
+**10. Is least-privilege access enforced?**
 
-**18. Are security headers enforced?**  
-Yes. All responses include: Content-Security-Policy, X-Frame-Options (DENY), X-Content-Type-Options (nosniff), Referrer-Policy, Permissions-Policy, HSTS.
+Yes. API keys scoped to organizations and roles. Cross-org access denied at middleware level.
 
-**19. Is CORS configured securely?**  
-Yes. CORS is restricted to allowlisted origins via the `ALLOWED_ORIGINS` environment variable. Unrecognized origins receive no Access-Control-Allow-Origin header.
+### Data Protection (Q11–Q15)
 
-**20. Is input validation enforced?**  
-Yes. Maximum request body: 1 MB. Maximum prompt length: 100,000 characters. Strict `Content-Type: application/json` required for POST endpoints.
+**11. Is data encrypted in transit?**
 
-### Vulnerability Management
+Yes. TLS 1.2+ (TLS 1.3 negotiated by default). HSTS enforced with max-age=31536000; includeSubDomains.
 
-**21. Are regular vulnerability scans performed?**  
-Yes. Automated dependency scanning is integrated into CI/CD. Critical dependencies are monitored for CVEs with automated remediation tracking.
+**12. Is data encrypted at rest?**
 
-**22. Is there a vulnerability disclosure program?**  
-Yes. Vulnerability reports are accepted at security@parsethis.ai with a 48-hour acknowledgment SLA and 90-hour remediation SLA for critical vulnerabilities.
+Secrets are encrypted at rest using AES-256-GCM, and API keys are bcrypt at rest; SHA-256 for the request-validation cache. The database connection itself uses TLS, which protects data in transit to it rather than on disk — Parse does not claim full-disk or column-level encryption for the Postgres volume.
 
-**23. Are penetration tests performed?**  
-Yes. Penetration testing is performed on a scheduled basis and prior to major releases. Reports are available to customers under NDA.
+**13. Do you store customer prompt data?**
 
-**24. Is there a patch management process?**  
-Yes. Security patches are prioritized by severity. Critical patches are deployed within 90 hours. Dependency updates are automated where possible.
+The screening endpoints (`/v1/parse`, `/v1/screen-output`, `/v1/agent/trust/verify`) do not: the screening event table has no column for prompt text or a hash of it, on every tier. `/v1/evaluate` does, for the length of the run — on completion the stored copy is overwritten with the first 100 characters plus a SHA-256 of the full prompt, and those characters remain readable. See [Data Storage](#storage) for the per-endpoint breakdown.
 
-### Logging and Monitoring
+**14. What is your data retention policy?**
 
-**25. Are security-relevant events logged?**  
-Yes. Audit events include: auth failures, rate limit breaches, policy changes, screening events, and bypass codeword usage. Events are stored in Postgres and structured console logs.
+Stated retention: screening events 90 days, audit events 90 days, compliance receipts 1 year, API keys until revocation or expiry. A daily purge job deletes records past each window. Rate-limit counters and the in-memory `/v1/evaluate` records expire automatically. See [Retention](#retention).
 
-**26. Is SIEM integration available?**  
-Yes. SIEM forwarding via HTTP webhook is available on the Compliance tier. Events are forwarded in real-time to customer-configured SIEM endpoints.
+**15. Do you support customer data deletion requests?**
 
-**27. Are logs retained and protected?**  
-Yes. Screening event logs are retained for 90 days. Compliance receipts for 1 year. Logs are access-controlled and stored in encrypted databases.
+Yes. Via privacy@parsethis.ai or d@kurult.ai. Completed within 30 days.
 
-**28. Is request traceability supported?**  
-Yes. Every API response includes an `X-Request-ID` header for end-to-end request correlation and audit tracing.
+**15b. Does prompt text leave your infrastructure?**
 
-### Business Continuity
+Yes, for the semantic analysis layer: prompt text is sent to OpenRouter for model scoring unless the caller passes `mode: "pattern-only"`, a pattern already matched at severity 9 or above, or the deployment has no OpenRouter key. Prompt text also reaches OpenRouter and the execution sandbox when the caller opts in with `execute: true`, which is off by default. See [Where Prompt Text Goes](#data-flow).
 
-**29. Is there a business continuity / disaster recovery plan?**  
-Yes. Parse maintains documented BCP/DR procedures. Production deployments support multi-instance failover. Health check endpoints (`/health`, `/health/detail`) enable automated recovery.
+### Network Security (Q16–Q20)
 
-**30. What is your uptime commitment?**  
-Parse targets 99.9% uptime for API availability. Status is monitored via `/health` endpoint. Incidents are communicated to affected customers via security@parsethis.ai. A formal SLA is available on the Compliance and Enterprise tiers.
+**16. Is there a firewall or network segmentation?**
 
----
+Yes, though not by cloud security groups — Parse does not run on a hyperscaler. The host exposes **no inbound ports to the internet**: traffic arrives over an outbound-established Cloudflare tunnel, so there is no public listener to reach directly. Postgres and Redis bind to localhost and are not routable from outside the host.
 
-*This trust package is maintained as a living document. For the latest version, visit [https://www.parsethis.ai/trust](https://www.parsethis.ai/trust) or request the machine-readable version at `GET /v1/security/headers`.*
+**17. Is rate limiting implemented?**
+
+Yes. Redis sliding-window with in-memory fallback. Tier-based limits. HTTP 429 with Retry-After.
+
+**18. Are security headers enforced?**
+
+Yes. CSP, X-Frame-Options (DENY), X-Content-Type-Options (nosniff), Referrer-Policy, Permissions-Policy, HSTS on all responses.
+
+**19. Is CORS configured securely?**
+
+Yes. Restricted to allowlisted origins via ALLOWED_ORIGINS env var. Unrecognized origins receive no ACAO header.
+
+**20. Is input validation enforced?**
+
+Yes. Max body: 1 MB. Max prompt: 100K chars. Strict application/json required for POST.
+
+### Vulnerability Management (Q21–Q24)
+
+**21. Are regular vulnerability scans performed?**
+
+Yes. Automated dependency scanning in CI/CD. Critical CVEs tracked with automated remediation.
+
+**22. Is there a vulnerability disclosure program?**
+
+Yes. Reports accepted at security@parsethis.ai. 48h acknowledgment SLA, 90h remediation SLA for critical.
+
+**23. Are penetration tests performed?**
+
+**No.** No independent penetration test has been performed against Parse. Saying so plainly is more useful to your assessment than a scheduled-basis claim you cannot verify — treat this as an open gap and weigh it against the compensating controls listed on this page. Automated dependency scanning does run on every CI build (`npm audit`, failing at high severity), and the vulnerability disclosure programme in section 4 is live.
+
+**24. Is there a patch management process?**
+
+Yes. Prioritized by severity. Critical patches within 90 hours. Dependency updates automated.
+
+### Logging & Monitoring (Q25–Q28)
+
+**25. Are security-relevant events logged?**
+
+Yes. Audit events: auth failures, rate limit breaches, policy changes, screening events, bypass codeword usage. Stored in Postgres + structured logs.
+
+**26. Is SIEM integration available?**
+
+Yes. SIEM forwarding via HTTP webhook on Compliance tier. Real-time event forwarding.
+
+**27. Are logs retained and protected?**
+
+Yes, in access-controlled, encrypted storage. Stated retention is 90 days for screening logs and 1 year for compliance receipts, enforced by a daily purge job — see [Retention](#retention).
+
+**28. Is request traceability supported?**
+
+Yes. X-Request-ID on every API response for end-to-end correlation.
+
+### Business Continuity (Q29–Q30)
+
+**29. Is there a BCP/DR plan?**
+
+Backups yes; failover no. Parse runs on a **single node** — there is no multi-instance failover, and a hardware failure is an outage rather than a transparent recovery. What does exist: the production database is dumped **every six hours** to external storage, and **every run performs a real restore into a scratch database and compares a row census against the source**, because a backup nobody has restored is a hope rather than a backup. Roughly 30 days of snapshots are retained and the result is checked daily. That gives a recovery point objective of about six hours. **No recovery time objective is committed**: restoring is a manual operator task. A documented incident response runbook covers the procedure.
+
+**30. What is your uptime commitment?**
+
+Parse targets 99.9% and **does not commit to it contractually except on the Compliance and Enterprise tiers**, where a formal SLA is available. Treat the figure as an operating target rather than a guarantee. Measured availability is published on the [status page](/status); liveness is monitored at `/health`.
+
+<!-- END GENERATED: vendor-questionnaire -->

@@ -1,12 +1,19 @@
 import { renderPage } from "../lib/html-template.js";
 import { TIER_RATE_LIMITS } from "../lib/rate-limiter.js";
-import { DETECTION_FACTS, PRODUCT } from "../lib/product-facts.js";
+import { DETECTION_FACTS, PRODUCT, SECURITY_FACTS } from "../lib/product-facts.js";
 import { CONTACT_EMAIL } from "../lib/constants.js";
+// The subprocessor table is generated for the same reason the roles below are:
+// it existed as three hand-typed copies, and the one in docs/trust-package.md
+// drifted into saying Parse runs on "standard cloud providers" while the DPA
+// said "not AWS/GCP/Azure". See src/lib/subprocessor-facts.ts.
+import { SUBPROCESSOR_CONTROL_NOTE, subprocessorTableHtml } from "../lib/subprocessor-facts.js";
 // Roles are read from the code that enforces them. This page carried four role
 // names for months — admin, owner, member, viewer — and not one of them existed.
 // A customer's reviewer reads the questionnaire answer below into their
 // assessment, so it cannot be maintained by hand.
 import { VALID_ROLES } from "../lib/rbac.js";
+import { QUESTIONNAIRE_COUNT, questionnaireHtml } from "../lib/vendor-questionnaire.js";
+import { soc2TableHtml } from "../lib/soc2-mapping.js";
 import { VALID_PROVIDER_TYPES } from "../lib/sso/sso-provider.js";
 import {
   DATA_FLOW_HTML,
@@ -125,7 +132,7 @@ export function renderTrustPage(baseUrl: string): string {
   <span class="trust-status-badge">SOC 2 Type II — In Progress</span>
 </div>
 
-<p class="answer-capsule">${PRODUCT.name} is built for enterprise-grade security from day one. This page provides a transparent overview of our architecture, security controls, compliance posture, and pre-answered vendor questionnaire — everything your security team needs to assess Parse. Detection reduces risk; it does not replace least-privilege tools or output validation.</p>
+<p class="answer-capsule">This page is ${PRODUCT.name}'s whole security posture: architecture, controls, sub-processors, retention, and a pre-answered vendor questionnaire. It states the gaps as plainly as the controls — there is <strong>no SOC 2 report yet</strong> (in progress, Q1 2027), <strong>no independent penetration test</strong>, and Parse runs on a <strong>single node</strong> with no failover. Everything here is written to be checked rather than believed. Detection reduces risk; it does not replace least-privilege tools or output validation.</p>
 
 <div class="trust-contact-box">
   <h3>Need this for your vendor risk assessment?</h3>
@@ -212,8 +219,8 @@ ${DATA_FLOW_HTML}
   <div class="trust-card">
     <h3>🔐 Encryption</h3>
     <ul>
-      <li>Secrets: AES-256-GCM (API keys bcrypt-hashed)</li>
-      <li>Transit: TLS 1.2+, HSTS enforced</li>
+      <li>Secrets: AES-256-GCM (API keys: ${SECURITY_FACTS.apiKeyStorageShort})</li>
+      <li>Transit: ${SECURITY_FACTS.transitTls}, HSTS enforced</li>
       <li>Database: TLS connection in production</li>
       <li>Redis: TLS connection in production</li>
     </ul>
@@ -264,19 +271,8 @@ ${DATA_FLOW_HTML}
 
 <p>Parse uses few third-party services. One of them receives prompt text.</p>
 
-<div class="table-wrapper">
-  <table>
-    <thead><tr><th>Subprocessor</th><th>Purpose</th><th>Location</th><th>Sees prompt text?</th><th>GDPR adequacy</th></tr></thead>
-    <tbody>
-      <tr><td>OpenRouter</td><td>Routes the semantic analysis layer (Layer 2) to a model provider, and runs the prompt when <code>execute: true</code></td><td>US</td><td>Only in full mode</td><td>SCCs</td></tr>
-      <tr><td>Cloudflare</td><td>CDN, tunnel, DDoS protection</td><td>Global edge</td><td>No</td><td>SCCs + CISPE</td></tr>
-      <tr><td>Stripe</td><td>Subscription billing</td><td>US / Ireland</td><td>No</td><td>SCCs + PCI-DSS</td></tr>
-      <tr><td>PostgreSQL (self-hosted)</td><td>Screening event storage</td><td>US (Mac Mini)</td><td>Metadata only</td><td>N/A (self-hosted)</td></tr>
-      <tr><td>Redis (self-hosted)</td><td>Rate limiting, caching, queues</td><td>US (Mac Mini)</td><td>No</td><td>N/A (self-hosted)</td></tr>
-    </tbody>
-  </table>
-</div>
-<p style="font-size: 14px; color: var(--text-dim);">Any caller on any tier can keep prompt text away from OpenRouter by passing <code>mode: "pattern-only"</code> per request, which runs Layer 1 only. Organizations can also make this the default for every request by setting <code>defaultMode</code> to <code>pattern-only</code> on their screening policy (<code>PUT /v1/policy</code>), so the control does not have to be repeated per call. Prompt text still reaches Parse in the United States in either case — pattern-only prevents the onward transfer to OpenRouter, not the transfer to Parse. New subprocessors are announced 30 days in advance.</p>
+${subprocessorTableHtml("Subprocessor")}
+<p style="font-size: 14px; color: var(--text-dim);">${SUBPROCESSOR_CONTROL_NOTE}</p>
 </div>
 
 <!-- ─── 4. Vulnerability Disclosure Policy ───────────────────────────────── -->
@@ -315,26 +311,7 @@ ${DATA_FLOW_HTML}
 <p>Parse is actively pursuing SOC 2 Type II certification. Expected completion: Q1 2027.</p>
 
 <p class="muted" style="font-size:13px;">Certification is in progress and on the roadmap; the controls below are aligned today.</p>
-<div class="table-wrapper">
-  <table>
-    <thead><tr><th>SOC 2 Trust Principle</th><th>Criteria</th><th>Parse Control</th><th>Status</th></tr></thead>
-    <tbody>
-      <tr><td rowspan="9"><strong>Security (Common)</strong></td><td>CC1: Control Environment</td><td>Security governance; designated security contact</td><td>✅</td></tr>
-      <tr><td>CC2: Communication</td><td>Public security endpoint, trust page, docs hub</td><td>✅</td></tr>
-      <tr><td>CC3: Risk Assessment</td><td>Threat model for prompt injection taxonomy</td><td>✅</td></tr>
-      <tr><td>CC4: Monitoring</td><td>Audit logging for screening decisions, policy, membership and key changes; evidence export; SIEM forwarding</td><td>✅</td></tr>
-      <tr><td>CC5: Control Activities</td><td>RBAC, rate limiting, input validation</td><td>✅</td></tr>
-      <tr><td>CC6: Logical Access</td><td>Bearer auth, bcrypt, HSTS, TLS, CORS</td><td>✅</td></tr>
-      <tr><td>CC7: System Operations</td><td>Structured logging, X-Request-ID, health checks</td><td>✅</td></tr>
-      <tr><td>CC8: Change Management</td><td>Versioned CI/CD, TypeScript type safety</td><td>✅</td></tr>
-      <tr><td>CC9: Risk Mitigation</td><td>Rate limiting, sandbox isolation, SSRF guards</td><td>✅</td></tr>
-      <tr><td><strong>Availability</strong></td><td>A1: Availability</td><td>Multi-instance, Redis HA, health endpoints</td><td>⚠️ Partial</td></tr>
-      <tr><td><strong>Processing Integrity</strong></td><td>PI1: Processing Integrity</td><td>Deterministic scoring, nonce-tagged LLM delimiters</td><td>✅</td></tr>
-      <tr><td><strong>Confidentiality</strong></td><td>C1: Confidentiality</td><td>TLS, bcrypt/AES-256, no prompt storage on the screening endpoints</td><td>✅</td></tr>
-      <tr><td><strong>Privacy</strong></td><td>P1–P8</td><td>Documented retention enforced by a daily purge job, data governance, approval matrix</td><td>✅ Implemented</td></tr>
-    </tbody>
-  </table>
-</div>
+${soc2TableHtml()}
 
 <h3>Additional Frameworks (Roadmap)</h3>
 <div class="table-wrapper">
@@ -350,163 +327,13 @@ ${DATA_FLOW_HTML}
 </div>
 </div>
 
-<!-- ─── 6. CAQH-lite / SIG-lite Answer Set ────────────────────────────────── -->
+<!-- ─── 6. CAIQ-lite / SIG-lite Answer Set ────────────────────────────────── -->
 
 <div class="trust-section">
 <h2 id="questionnaire">6. Pre-Answered Vendor Security Questionnaire</h2>
-<p>Top 30 most common vendor security questionnaire questions, pre-answered for your assessment. Expand each category below.</p>
+<p>The ${QUESTIONNAIRE_COUNT} most common vendor security questionnaire questions, pre-answered for your assessment. Expand each category below.</p>
 
-<details open>
-<summary>General Security (Q1–Q5)</summary>
-<div class="qa-block">
-  <p class="q"><span class="qnum">1.</span>Does your organization have an information security policy?</p>
-  <p class="a">Yes. Parse maintains a documented information security policy covering access control, data protection, incident response, and vulnerability management. Reviewed annually.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">2.</span>Does your organization have a designated security officer or CISO?</p>
-  <p class="a">Yes. Security governance is overseen by a designated security contact reachable at security@parsethis.ai.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">3.</span>Does your organization conduct security awareness training?</p>
-  <p class="a">Yes. All team members complete security awareness training covering prompt injection risks, secure coding practices, and incident reporting.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">4.</span>Are background checks performed on personnel?</p>
-  <p class="a">Yes, for personnel with access to production systems or customer data, in accordance with applicable local laws.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">5.</span>Does your organization have an incident response plan?</p>
-  <p class="a">Yes. Documented incident response plan with defined roles, escalation procedures, and communication protocols. Incidents logged and reviewed post-resolution.</p>
-</div>
-</details>
-
-<details>
-<summary>Access Control (Q6–Q10)</summary>
-<div class="qa-block">
-  <p class="q"><span class="qnum">6.</span>Is access to systems and data based on role (RBAC)?</p>
-  <p class="a">Yes. RBAC with defined roles (${VALID_ROLES.join(", ")}). Access is enforced at route level by middleware, and org-scoped routes additionally refuse a caller outside the organization that owns the record.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">7.</span>Are access rights reviewed periodically?</p>
-  <p class="a">Yes. Quarterly review. Departed personnel access revoked within 24 hours.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">8.</span>Are MFA and SSO supported?</p>
-  <p class="a">Yes. OAuth 2.0 / OIDC-based SSO (Team + Compliance tiers). MFA enforced for administrative access.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">9.</span>Are API keys encrypted at rest?</p>
-  <p class="a">Yes. bcrypt-hashed with salt. Only the hash and non-reversible prefix are stored.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">10.</span>Is least-privilege access enforced?</p>
-  <p class="a">Yes. API keys scoped to organizations and roles. Cross-org access denied at middleware level.</p>
-</div>
-</details>
-
-<details>
-<summary>Data Protection (Q11–Q15)</summary>
-<div class="qa-block">
-  <p class="q"><span class="qnum">11.</span>Is data encrypted in transit?</p>
-  <p class="a">Yes. TLS 1.2+. HSTS enforced with max-age=31536000; includeSubDomains.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">12.</span>Is data encrypted at rest?</p>
-  <p class="a">Yes. Secrets encrypted using AES-256-GCM. Database connections use TLS. API keys bcrypt-hashed.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">13.</span>Do you store customer prompt data?</p>
-  <p class="a">The screening endpoints (<code>/v1/parse</code>, <code>/v1/screen-output</code>, <code>/v1/agent/trust/verify</code>) do not: the screening event table has no column for prompt text or a hash of it, on every tier. <code>/v1/evaluate</code> does, for the length of the run — on completion the stored copy is overwritten with the first ${RETENTION.evaluatePlaintextPrefixChars} characters plus a SHA-256 of the full prompt, and those characters remain readable. See <a href="#storage">Data Storage</a> for the per-endpoint breakdown.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">14.</span>What is your data retention policy?</p>
-  <p class="a">Stated retention: screening events ${RETENTION.screeningEventsDays} days, audit events ${RETENTION.auditEventsDays} days, compliance receipts 1 year, API keys until revocation or expiry. A daily purge job deletes records past each window. Rate-limit counters and the in-memory <code>/v1/evaluate</code> records expire automatically. See <a href="#retention">Retention</a>.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">15.</span>Do you support customer data deletion requests?</p>
-  <p class="a">Yes. Via privacy@parsethis.ai or ${CONTACT_EMAIL}. Completed within ${RETENTION.deletionRequestDays} days.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">15b.</span>Does prompt text leave your infrastructure?</p>
-  <p class="a">Yes, for the semantic analysis layer: prompt text is sent to OpenRouter for model scoring unless the caller passes <code>mode: "pattern-only"</code>, a pattern already matched at severity 9 or above, or the deployment has no OpenRouter key. Prompt text also reaches OpenRouter and the execution sandbox when the caller opts in with <code>execute: true</code>, which is off by default. See <a href="#data-flow">Where Prompt Text Goes</a>.</p>
-</div>
-</details>
-
-<details>
-<summary>Network Security (Q16–Q20)</summary>
-<div class="qa-block">
-  <p class="q"><span class="qnum">16.</span>Is there a firewall or network segmentation?</p>
-  <p class="a">Yes. Cloud security groups with least-privilege ingress/egress rules. Internal services segmented from public endpoints.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">17.</span>Is rate limiting implemented?</p>
-  <p class="a">Yes. Redis sliding-window with in-memory fallback. Tier-based limits. HTTP 429 with Retry-After.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">18.</span>Are security headers enforced?</p>
-  <p class="a">Yes. CSP, X-Frame-Options (DENY), X-Content-Type-Options (nosniff), Referrer-Policy, Permissions-Policy, HSTS on all responses.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">19.</span>Is CORS configured securely?</p>
-  <p class="a">Yes. Restricted to allowlisted origins via ALLOWED_ORIGINS env var. Unrecognized origins receive no ACAO header.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">20.</span>Is input validation enforced?</p>
-  <p class="a">Yes. Max body: 1 MB. Max prompt: 100K chars. Strict application/json required for POST.</p>
-</div>
-</details>
-
-<details>
-<summary>Vulnerability Management (Q21–Q24)</summary>
-<div class="qa-block">
-  <p class="q"><span class="qnum">21.</span>Are regular vulnerability scans performed?</p>
-  <p class="a">Yes. Automated dependency scanning in CI/CD. Critical CVEs tracked with automated remediation.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">22.</span>Is there a vulnerability disclosure program?</p>
-  <p class="a">Yes. Reports accepted at security@parsethis.ai. 48h acknowledgment SLA, 90h remediation SLA for critical.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">23.</span>Are penetration tests performed?</p>
-  <p class="a">Yes. On a scheduled basis and prior to major releases. Reports available under NDA.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">24.</span>Is there a patch management process?</p>
-  <p class="a">Yes. Prioritized by severity. Critical patches within 90 hours. Dependency updates automated.</p>
-</div>
-</details>
-
-<details>
-<summary>Logging &amp; Monitoring (Q25–Q28)</summary>
-<div class="qa-block">
-  <p class="q"><span class="qnum">25.</span>Are security-relevant events logged?</p>
-  <p class="a">Yes. Audit events: auth failures, rate limit breaches, policy changes, screening events, bypass codeword usage. Stored in Postgres + structured logs.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">26.</span>Is SIEM integration available?</p>
-  <p class="a">Yes. SIEM forwarding via HTTP webhook on Compliance tier. Real-time event forwarding.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">27.</span>Are logs retained and protected?</p>
-  <p class="a">Yes, in access-controlled, encrypted storage. Stated retention is ${RETENTION.screeningEventsDays} days for screening logs and 1 year for compliance receipts, enforced by a daily purge job — see <a href="#retention">Retention</a>.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">28.</span>Is request traceability supported?</p>
-  <p class="a">Yes. X-Request-ID on every API response for end-to-end correlation.</p>
-</div>
-</details>
-
-<details>
-<summary>Business Continuity (Q29–Q30)</summary>
-<div class="qa-block">
-  <p class="q"><span class="qnum">29.</span>Is there a BCP/DR plan?</p>
-  <p class="a">Yes. Documented BCP/DR procedures. Multi-instance failover. Health check endpoints enable automated recovery.</p>
-</div>
-<div class="qa-block">
-  <p class="q"><span class="qnum">30.</span>What is your uptime commitment?</p>
-  <p class="a">Target 99.9% uptime. Monitored via /health endpoint. Formal SLA available on Compliance and Enterprise tiers.</p>
-</div>
-</details>
+${questionnaireHtml()}
 
 </div>
 

@@ -100,6 +100,91 @@ export const LATENCY_FACTS = {
     + "next real latency win; see the post-review plan.",
 } as const;
 
+/**
+ * Who Parse is, legally.
+ *
+ * A fourth-party security reviewer (prospect run 13) could not close five
+ * questionnaire rows because no surface names a legal entity, a country, or a
+ * registration number: /dpa says "operated by Daniel Finn", /terms governs by
+ * "the jurisdiction in which Parse operates" — a clause that points at itself —
+ * and the footer says "© 2026 Parse". A customer in a regulated sector has to
+ * enter an identifiable counterparty in a register of ICT providers, and a
+ * blank field is an escalation. The public LEI index makes it worse than blank:
+ * two unrelated active entities are named "Parse", one of them a Swedish AB, so
+ * the obvious lookup returns a plausible wrong answer.
+ *
+ * `governingLaw` is null until a jurisdiction is chosen. While it is null the
+ * terms page keeps its existing wording rather than inventing one — naming the
+ * wrong country would be worse than naming none. Set it to e.g. "the State of
+ * Delaware, United States" and the clause below becomes specific everywhere it
+ * is quoted.
+ */
+export const LEGAL_ENTITY = {
+  /** Trading name as published. */
+  tradingName: "Parse",
+  /** The natural person or company that contracts with customers. */
+  operator: "Daniel Finn",
+  /**
+   * Named jurisdiction for the governing-law clause. Null = not yet decided;
+   * do not guess. See docs/plans/2026-08-14-fourth-party-evidence-remediation.md
+   * Part C for the options and what each one closes.
+   */
+  governingLaw: null as string | null,
+} as const;
+
+/**
+ * Governing-law sentence. Specific when a jurisdiction is set, and honest about
+ * the gap rather than circular when it is not.
+ */
+export function governingLawClause(): string {
+  return LEGAL_ENTITY.governingLaw
+    ? `These Terms are governed by the laws of ${LEGAL_ENTITY.governingLaw}, without regard to conflict of law principles.`
+    : "These Terms shall be governed by the laws of the jurisdiction in which Parse operates, without regard to conflict of law principles.";
+}
+
+/**
+ * Security posture facts that more than one page states.
+ *
+ * Both entries below existed as two differing copies until 2026-08-14, and in
+ * both cases the DPA — the contractual document — held the wrong one. A
+ * fourth-party security reviewer (prospect run 13) scored them as
+ * contradictions rather than gaps: two vendor-controlled documents disagreeing
+ * means the reviewer can cite neither, which costs more than a missing answer.
+ *
+ * Quote these constants. Do not retype the values.
+ */
+export const SECURITY_FACTS = {
+  /**
+   * Measured 2026-08-14 against the live edge, not assumed:
+   *   openssl s_client -tls1_2 ... -> Protocol: TLSv1.2   (accepted)
+   *   openssl s_client        ... -> Protocol: TLSv1.3   (negotiated by default)
+   * So 1.3 is what a modern client gets and 1.2 is still accepted. "TLS 1.3 for
+   * all connections" was on /dpa and is false while 1.2 completes a handshake.
+   */
+  transitTls: "TLS 1.2+ (TLS 1.3 negotiated by default)",
+
+  /**
+   * Two hashes exist and they do different jobs. Saying only one of them is how
+   * /dpa ended up describing the request-time cache hash as the storage
+   * mechanism, which understates the control it is supposed to guarantee.
+   *
+   *   src/api-key-service.ts:295 — bcrypt.hash(rawKey, BCRYPT_ROUNDS) is what
+   *     Postgres stores. A database leak must not hand an attacker anything
+   *     cheap to attack.
+   *   src/api-key-service.ts:42  — fastKeyHash is sha256(rawKey), compared in
+   *     constant time against the Redis validation cache so a bcrypt KDF does
+   *     not run on every authenticated request.
+   */
+  apiKeyStorage:
+    "bcrypt-hashed with salt at rest, plus a non-reversible lookup prefix. "
+    + "The Redis validation cache holds a SHA-256 of the key so the bcrypt "
+    + "comparison does not run on every request. The full key is never written "
+    + "down; it is shown once at generation.",
+
+  /** Short form for table cells and one-line answers. */
+  apiKeyStorageShort: "bcrypt at rest; SHA-256 for the request-validation cache",
+} as const;
+
 export const ACTION_ROUTER = [
   {
     trigger: "Untrusted user input, RAG content, browser output, email, documents, webhook bodies, or tool results before an agent acts",

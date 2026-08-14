@@ -68,7 +68,7 @@ jobs:
       - run: npm run eval:screening
       - run: npm run check:walkthrough
       - run: npm run check:evasion
-      - run: npm run check:retention-sync
+      - run: npm run check:trust-sync
 
   security-audit:
     runs-on: ubuntu-latest
