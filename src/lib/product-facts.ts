@@ -146,13 +146,32 @@ export const LEGAL_ENTITY = {
    * docs/plans/2026-08-14-fourth-party-evidence-remediation.md Part C.
    */
   registeredEntity: {
-    name: "Kurultai Labs LLC",
+    /**
+     * The registered name is deliberately NOT rendered on any public page.
+     *
+     * Two reasons, and the second is the binding one. The operator confirmed on
+     * 2026-08-14 that the entity is accepted, but the internal record still
+     * shows the 2026-05-02 filing sitting in the NC SOS examination queue with
+     * no entity ID captured — so no surface here can cite an acceptance it does
+     * not hold. And a prior decision already settled the question: the
+     * 2026-08-11 kurult.ai launch audit checked, on purpose, that neither "LLC"
+     * nor the registered name appeared in public content.
+     *
+     * What IS published is the part a vendor reviewer actually needs and that
+     * can be stated without qualification: Parse is operated by a North
+     * Carolina limited liability company, governed by North Carolina law, and
+     * the registered name and entity ID are available on request. That is a
+     * weaker answer than naming it — a reviewer has to send one email — and it
+     * is the honest one until the record is complete.
+     */
+    publiclyNamed: false,
     form: "limited liability company",
     /**
-     * NC Secretary of State SOSID. Null until filled — publishing the wrong
-     * number is worse than publishing none, and the copy below degrades to
-     * naming the public registry where the exact legal name resolves it.
-     * Look it up at sosnc.gov and paste it here.
+     * NC Secretary of State entity ID. Still not captured anywhere. When it is,
+     * set it here and flip `publiclyNamed` if the naming decision changes;
+     * publishing a wrong registration number on a page built for vendor
+     * registers would be the worst version of the defect this file exists to
+     * prevent.
      */
     registrationNumber: null as string | null,
     /**
@@ -162,7 +181,7 @@ export const LEGAL_ENTITY = {
      */
     lei: null as string | null,
   } as null | {
-    name: string;
+    publiclyNamed: boolean;
     form: string;
     registrationNumber: string | null;
     lei: string | null;
@@ -194,17 +213,22 @@ export function entityDisclosureHtml(): string {
   const e = LEGAL_ENTITY.registeredEntity;
   const rows = e
     ? [
-        ["Contracting party", `${e.name}, a ${LEGAL_ENTITY.jurisdictionShort.split(",")[0]} ${e.form}, trading as ${LEGAL_ENTITY.tradingName}`],
+        [
+          "Contracting party",
+          `A ${LEGAL_ENTITY.jurisdictionShort.split(",")[0]} ${e.form}, trading as ${LEGAL_ENTITY.tradingName}. `
+            + `The registered name is not published here; it is sent in writing on request to `
+            + `<a href="mailto:security@parsethis.ai">security@parsethis.ai</a>, normally the same day.`,
+        ],
         ["State of formation", LEGAL_ENTITY.jurisdictionShort],
         [
           "Registration",
           e.registrationNumber
             ? `${e.registrationNumber} (North Carolina Secretary of State)`
-            : `Registered with the North Carolina Secretary of State. The entity ID is not published on this page yet; the exact legal name above resolves it in the public registry at <a href="https://www.sosnc.gov">sosnc.gov</a>, or ask security@parsethis.ai and it will be sent in writing.`,
+            : `Registered with the North Carolina Secretary of State. The entity ID is supplied with the registered name on request — ask if your vendor register needs it, and say which fields you have to fill.`,
         ],
         [
           "LEI",
-          e.lei ?? `None issued. If your register of ICT providers requires an LEI, say so before contracting — ${e.name} is a registered entity and can obtain one, which an unincorporated operator could not.`,
+          e.lei ?? `None issued. If your register of ICT providers requires an LEI, raise it before contracting — the operating entity is a registered company and can obtain one, which an unincorporated operator could not.`,
         ],
         ["Governing law", LEGAL_ENTITY.governingLaw],
       ]
