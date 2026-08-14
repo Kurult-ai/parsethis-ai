@@ -735,6 +735,12 @@ curl -s ${baseUrl}/v1/parse \\
   var TS = 13.0;         // coordinate-time units per wall second
   var KEP = TS * Math.sqrt(M);   // wall-clock Keplerian Ω scale for the speck field
   var CAM_Y = 0.34;              // low camera height: edge-on disc + lensed arch
+  var ZOOM = 0.8;                // scene scale about the canvas centre. Widens the
+                                 // field instead of moving the camera, so the
+                                 // lensing geometry and particle world positions
+                                 // are untouched — only the framing changes. The
+                                 // alpha edge mask stays on unscaled screen uv so
+                                 // the glow still dissolves before the canvas rim.
   var K_VISC = 0.0016;   // α-disc toy: dL/dτ = −K_VISC·L during inspiral
   var C_DAMP = 0.11;     // ≈ critical damping 2√κ of the radial epicyclic mode:
                          // lets r adiabatically track r_circ(L) down the
@@ -819,8 +825,9 @@ curl -s ${baseUrl}/v1/parse \\
   '}',
   'void main(){',
   '  vec2 uv = (gl_FragCoord.xy - .5 * R) / R.y;',
+  '  vec2 zuv = uv / __ZOOM__;',             // <1 widens the field: the scene shrinks toward centre
   '  vec3 ro = vec3(0., __CAMY__, -7.2);',   // low camera: edge-on disc, lensed over-arch
-  '  vec3 rd = normalize(vec3(uv.x, uv.y - .02, 1.05));',
+  '  vec3 rd = normalize(vec3(zuv.x, zuv.y - .02, 1.05));',
   '  float ca = -.10;',
   '  mat3 tilt = mat3(1.,0.,0., 0.,cos(ca),-sin(ca), 0.,sin(ca),cos(ca));',
   '  ro = tilt * ro; rd = tilt * rd;',
@@ -934,7 +941,8 @@ curl -s ${baseUrl}/v1/parse \\
   '  col *= edge;',
   '  float aa = clamp(max(col.r, max(col.g, col.b)) * 2.4 + captured, 0., 1.) * edge;',
   '  gl_FragColor = vec4(col, aa);',
-  '}'].join('\\n').split('__KEP__').join(KEP.toFixed(4)).split('__CAMY__').join(CAM_Y.toFixed(3));
+  '}'].join('\\n').split('__KEP__').join(KEP.toFixed(4)).split('__CAMY__').join(CAM_Y.toFixed(3))
+     .split('__ZOOM__').join(ZOOM.toFixed(3));
 
   function shader(type, src){ var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
     if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s)); return s; }
