@@ -99,6 +99,46 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
 export const SUBPROCESSOR_NOTICE_DAYS = 30;
 
 /**
+ * Which model actually receives prompt text.
+ *
+ * "OpenRouter routes the semantic analysis layer to a model provider" was true
+ * and useless: OpenRouter is a router, so naming it tells a customer who to
+ * invoice, not whose infrastructure their text reaches. A fourth-party reviewer
+ * (prospect run 13) could not enumerate her own fifth parties from it, and that
+ * was one of the blockers that stopped the review.
+ *
+ * Resolution order mirrors the code that picks the model — `ANALYSIS_MODEL`
+ * first (`src/routes/../parse.ts` reads its first comma-separated entry), then
+ * the client default in `src/model-client.ts:9`. Read at render time, so the
+ * page states what this deployment actually routes to rather than what someone
+ * typed into a page once.
+ */
+export function semanticModelId(): string {
+  const analysis = (process.env.ANALYSIS_MODEL || "").split(",")[0]?.trim();
+  return analysis || process.env.DEFAULT_MODEL || "deepseek/deepseek-chat";
+}
+
+/**
+ * The disclosure paragraph. Deliberately states the limit as well as the name:
+ * OpenRouter can serve one model id from more than one upstream host, and Parse
+ * does not pin the upstream provider today, so naming the model is honest and
+ * naming a single company would not be.
+ */
+export function modelRoutingNote(): string {
+  const model = semanticModelId();
+  return (
+    `<strong>Which model receives prompt text.</strong> When the semantic layer runs, OpenRouter ` +
+    `routes the request to <code>${model.replace(/</g, "&lt;")}</code>. OpenRouter can serve a given ` +
+    `model from more than one upstream host and Parse does not pin the upstream provider, so the ` +
+    `company operating the hardware for a particular request is not fixed — the model is named here ` +
+    `because it is the part Parse controls and can state truthfully. What that provider retains or ` +
+    `trains on is governed by their policy and OpenRouter's, not by Parse's DPA. Passing ` +
+    `<code>mode: "pattern-only"</code>, per request or as an organization default, means the ` +
+    `semantic layer does not run and no model receives the text at all.`
+  );
+}
+
+/**
  * The paragraph that has to travel with the table, because the table on its own
  * invites the wrong conclusion: pattern-only stops the onward transfer to
  * OpenRouter, and does *not* stop the transfer to Parse in the United States.
@@ -165,4 +205,6 @@ ${SUBPROCESSORS.map(
 Any caller on any tier can keep prompt text away from OpenRouter by passing \`mode: "pattern-only"\` per request, which runs Layer 1 only. Organizations can also make this the default for every request by setting \`defaultMode\` to \`pattern-only\` on their screening policy (\`PUT /v1/policy\`), so the control does not have to be repeated per call. Prompt text still reaches Parse in the United States in either case — pattern-only prevents the onward transfer to OpenRouter, not the transfer to Parse.
 
 New subprocessors are announced ${SUBPROCESSOR_NOTICE_DAYS} days in advance at security@parsethis.ai.
+
+${modelRoutingNote().replace(/<strong>/g, "**").replace(/<\/strong>/g, "**").replace(/<code>/g, "`").replace(/<\/code>/g, "`").replace(/&lt;/g, "<")}
 `;

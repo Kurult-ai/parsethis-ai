@@ -1,6 +1,6 @@
 import { renderPage } from "../lib/html-template.js";
 import { PRODUCT, SECURITY_FACTS } from "../lib/product-facts.js";
-import { SUBPROCESSOR_CONTROL_NOTE, subprocessorTableHtml } from "../lib/subprocessor-facts.js";
+import { SUBPROCESSOR_CONTROL_NOTE, modelRoutingNote, subprocessorTableHtml } from "../lib/subprocessor-facts.js";
 
 /**
  * Data Processing Agreement page — SSR HTML at /dpa
@@ -40,6 +40,7 @@ export function renderDpaPage(baseUrl: string): string {
 
 ${subprocessorTableHtml("Sub-processor")}
 <p class="answer-capsule" style="font-size: 14px;">${SUBPROCESSOR_CONTROL_NOTE}</p>
+<p class="answer-capsule" style="font-size: 14px;">${modelRoutingNote()}</p>
 
 <h2 id="data-transfers">4. International Data Transfers</h2>
 <p class="answer-capsule">Personal data may be transferred from the EEA, UK, or Switzerland to the United States under the <strong>European Commission's Standard Contractual Clauses (SCCs)</strong> adopted under Commission Implementing Decision (EU) 2021/914. Parse executes the SCCs as the data importer.</p>

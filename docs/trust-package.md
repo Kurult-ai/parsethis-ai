@@ -243,6 +243,8 @@ Any caller on any tier can keep prompt text away from OpenRouter by passing `mod
 
 New subprocessors are announced 30 days in advance at security@parsethis.ai.
 
+**Which model receives prompt text.** When the semantic layer runs, OpenRouter routes the request to `deepseek/deepseek-chat`. OpenRouter can serve a given model from more than one upstream host and Parse does not pin the upstream provider, so the company operating the hardware for a particular request is not fixed — the model is named here because it is the part Parse controls and can state truthfully. What that provider retains or trains on is governed by their policy and OpenRouter's, not by Parse's DPA. Passing `mode: "pattern-only"`, per request or as an organization default, means the semantic layer does not run and no model receives the text at all.
+
 <!-- END GENERATED: subprocessor-facts -->
 
 ---
@@ -416,7 +418,7 @@ Yes, for the semantic analysis layer: prompt text is sent to OpenRouter for mode
 
 **16. Is there a firewall or network segmentation?**
 
-Yes, though not by cloud security groups — Parse does not run on a hyperscaler. The host exposes **no inbound ports to the internet**: traffic arrives over an outbound-established Cloudflare tunnel, so there is no public listener to reach directly. Postgres and Redis bind to localhost and are not routable from outside the host.
+Partly, and not by cloud security groups — Parse does not run on a hyperscaler. What is verified: **Postgres and Redis bind to loopback only** and are not routable from outside the host, and the API is published through an **outbound-established Cloudflare tunnel** rather than an inbound port mapping, so reaching Parse does not require an open listener on the host. What Parse does **not** claim: that the host has no other reachable services. It is a general-purpose machine, network exposure depends on the upstream network rather than on Parse, and no host-level firewall policy is asserted here.
 
 **17. Is rate limiting implemented?**
 
@@ -474,7 +476,7 @@ Yes. X-Request-ID on every API response for end-to-end correlation.
 
 **29. Is there a BCP/DR plan?**
 
-Backups yes; failover no. Parse runs on a **single node** — there is no multi-instance failover, and a hardware failure is an outage rather than a transparent recovery. What does exist: the production database is dumped **every six hours** to external storage, and **every run performs a real restore into a scratch database and compares a row census against the source**, because a backup nobody has restored is a hope rather than a backup. Roughly 30 days of snapshots are retained and the result is checked daily. That gives a recovery point objective of about six hours. **No recovery time objective is committed**: restoring is a manual operator task. A documented incident response runbook covers the procedure.
+Backups yes; failover no. Parse runs on a **single node** — there is no multi-instance failover, and a hardware failure is an outage rather than a transparent recovery. What does exist: the production database is dumped **every six hours** to external storage, and **every run performs a real restore into a scratch database and compares a row census against the source**, because a backup nobody has restored is a hope rather than a backup. Retention is configured for the 120 most recent snapshots (about 30 days at six-hourly), and the result is checked daily. Retained history is capped by however long the schedule has been running, which is shorter than the policy on a new deployment. That gives a recovery point objective of about six hours. **No recovery time objective is committed**: restoring is a manual operator task. A documented incident response runbook covers the procedure.
 
 **30. What is your uptime commitment?**
 
