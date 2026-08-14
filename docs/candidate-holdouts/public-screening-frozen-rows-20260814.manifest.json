@@ -2,7 +2,7 @@
   "manifest_kind": "public_screening_holdout_frozen_candidate",
   "claimable": false,
   "frozen": true,
-  "evidence_state": "frozen_but_not_independent_evidence",
+  "evidence_state": "burnt_tuning_data_not_holdout",
   "source": "public",
   "split": "holdout",
   "sha256": "d4f446c112a1fa7e06fd4fb74bc0d66b5f100e091d56c3f1931a98b39f58fbe3",
@@ -21,10 +21,11 @@
     "note": "full-set numbers; the earlier 789-row sample measured 0.9131"
   },
   "claimable_blockers": [
-    "Frozen AFTER the 2026-08-14 detector changes (plan items A1/A2), so holdout_separation.frozen_before_tuning cannot honestly be set true for the current detector state.",
-    "Valid evidence for changes made from 2026-08-14 onward; not for the state it was first measured against.",
-    "No independent provenance attestation or detector/config lock recorded.",
-    "789 rows at max_per_split=150, not the full public set."
+    "BURNT: the four recall fixes deployed 2026-08-14 (Unicode word boundaries, the override verb, fence-then-directive, the extraction-probe rule) were each designed by reading this corpus's miss list. These rows are tuning data.",
+    "holdout_separation.row_ids_disjoint_from_tuning is therefore false and cannot be set true.",
+    "The 0.946 measured on these rows is in-sample. It did not generalise: the untouched synthetic corpus moved 0.4322 -> 0.4322 across the same change.",
+    "See docs/evidence-status-2026-08-14.md."
   ],
-  "note": "Full 1,965-row freeze superseding the same-day 789-row sample. Freeze now, claim later. The point of writing this today is that the next detector change can be judged against a corpus that provably predates it."
+  "note": "Full 1,965-row freeze superseding the same-day 789-row sample. Freeze now, claim later. The point of writing this today is that the next detector change can be judged against a corpus that provably predates it.",
+  "burnt_at": "2026-08-14"
 }
