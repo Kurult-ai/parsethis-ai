@@ -310,10 +310,13 @@ failed 9 of 15 approval-blockers without finding a single security defect:
   and costs the rows around it. Same for SOC 2, which is handled correctly
   already: "In Progress, Q1 2027".
 
-`LEGAL_ENTITY.governingLaw` in `product-facts.ts` is deliberately `null`. While
-it is null `/terms` keeps its existing wording; naming the wrong jurisdiction
-would be worse than naming none. See
-`docs/plans/2026-08-14-fourth-party-evidence-remediation.md` Part C.
+`LEGAL_ENTITY` in `product-facts.ts` is the contracting party: Kurultai Labs
+LLC, a North Carolina limited liability company trading as Parse, governed by
+North Carolina law. `/terms`, `/dpa` and the `/trust` entity block all render
+from it. One field is still `null` — `registeredEntity.registrationNumber`, the
+NC Secretary of State entity ID. Until it is set the copy names the public
+registry instead; publishing a wrong registration number on a page built for
+vendor registers would be the worst version of the defect this exists to fix.
 
 ## Availability evidence
 
