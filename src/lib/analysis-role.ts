@@ -106,57 +106,17 @@ export interface RoleInput {
 
 export interface RoleDecision {
   role: AnalysisRole;
-  /**
-   * The caller declared `reply` and demonstrated the flagged text is quoted
-   * third-party material, so a refusal becomes a human review rather than a
-   * failed ticket. Never set for any other action, and never turns a finding
-   * into `report` — see computeDisposition.
-   */
-  review_eligible_reply?: boolean;
   /** Why the role came out as it did — always populated, always returned. */
   reason: string;
   /** True when the caller asked for `subject` and was refused it. */
   downgrade_refused: boolean;
 }
 
-/**
- * Has the caller demonstrated that the text which triggered the finding is
- * quoted third-party material rather than an instruction aimed at their agent?
- *
- * The same test the subject roles must pass (the acquittal register's B4),
- * factored out so the `reply` path cannot drift from it. Presence of spans is
- * not enough — `quoted_spans: [[0, 1]]` satisfied a presence-only check during
- * an adversarial pass on 2026-08-13 — so the flagged offsets must actually fall
- * inside a declared span.
- */
-function flaggedTextIsQuotedThirdParty(input: RoleInput | undefined): boolean {
-  const untrusted =
-    (input?.source_kind && UNTRUSTED_SOURCE_KINDS.has(input.source_kind)) ||
-    input?.trust_level === "untrusted" ||
-    input?.trust_level === "external";
-  if (!untrusted) return false;
-
-  const spans = Array.isArray(input?.quoted_spans) ? input.quoted_spans : [];
-  const flagged = input?.flagged_offsets ?? [];
-  return (
-    spans.length > 0 &&
-    flagged.length > 0 &&
-    flagged.every(([start, end]) => spans.some(([qs, qe]) => start >= qs && end <= qe))
-  );
-}
-
 export function resolveAnalysisRole(input: RoleInput | undefined): RoleDecision {
   const action = input?.intended_action;
   if (!action || !SUBJECT_ACTIONS.has(action)) {
-    // An agent that drafts a reply for a human to send is the commonest AI
-    // assistant in customer service and had no supported configuration: `reply`
-    // is not a subject role, so the only declaration that cleared a refusal was
-    // a false one. It can reach `review` on the same demonstration the subject
-    // roles require — quoted third-party text — and never `report`.
-    const replyReviewEligible = action === "reply" && flaggedTextIsQuotedThirdParty(input);
     return {
       role: "instruction",
-      review_eligible_reply: replyReviewEligible || undefined,
       // The pointer lives here as well as in `_help` because the two layers
       // reach different traffic. `_help` is scoped to override-family refusals,
       // which keeps it off credential-extraction probes — and that same gate
@@ -164,9 +124,7 @@ export function resolveAnalysisRole(input: RoleInput | undefined): RoleDecision 
       // system_prompt_leak vocabulary, which is most of a SOC's corpus. This
       // sentence is on every response, including allows, so it is a fact about
       // how the request was read rather than a nudge on a refusal.
-      reason: replyReviewEligible
-        ? `intended_action "reply" means the agent may act on this content, so it is screened as an instruction — but the flagged text is inside a declared quoted span of third-party content, so a finding is sent for human review rather than refused.`
-        : action
+      reason: action
         ? `intended_action "${action}" means the agent may act on this content, so it is screened as an instruction.`
         : "No intended_action declared, so the content is screened as an instruction addressed to the agent. " +
           "If your agent only analyses this content rather than acting on it, declare it — see /docs#precision.",
@@ -349,11 +307,6 @@ export function computeDisposition(
   recommendedAction: string,
   riskScore: number,
   flags: RiskFlag[],
-  /**
-   * True when the caller declared `reply` AND demonstrated the flagged text is
-   * quoted third-party material. See `resolveAnalysisRole`.
-   */
-  reviewEligibleReply = false,
 ): Disposition {
   if (role === "instruction") {
     // A faithful projection of the existing verdict. `sandbox` and
@@ -361,22 +314,7 @@ export function computeDisposition(
     // this unsupervised", which is what `review` names — but the caller's
     // `recommended_action` is left exactly as it was, because renaming an
     // existing state would break every integration reading it.
-    //
-    // One exception, and it is the narrowest one that helps: an agent that
-    // *drafts a reply* for a human to send. Prospect run 12 found this had no
-    // supported configuration at all — `reply` is deliberately not a subject
-    // role, because composing a reply is one instruction away from acting, so
-    // the only declaration that cleared a refusal was `summarize`, which was
-    // false of the agent. The customer's only working option was to misdescribe
-    // their own software.
-    //
-    // So `reply` can reach `review` — a human looks at it, which is exactly
-    // what that team already does with a flagged ticket — and never `report`,
-    // which would mean nobody looks. It requires the same demonstration the
-    // subject roles require: the content is declared third-party and the
-    // flagged text sits inside a declared quoted span. An attack aimed at the
-    // agent, or an undeclared one, still blocks.
-    if (recommendedAction === "block") return reviewEligibleReply ? "review" : "block";
+    if (recommendedAction === "block") return "block";
     if (recommendedAction === "allow") return "allow";
     return "review";
   }
