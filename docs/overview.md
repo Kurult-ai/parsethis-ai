@@ -47,14 +47,14 @@ The public detector targets are now SOTA-oriented. Recall improvements must pres
 | Generated/internal runtime min slice size | 1000 | >=1000 | 0 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 1000 |
 | Hard-negative benign generated/internal suite size | 5000 | >=5000 | 0 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 5000 |
 | Commercial malicious generated/internal suite size | 7000 | >=5000 | 0 | pass_generated_pending_frozen_holdout | non-claimable generated tuning corpus | 7000 |
-| Public attack recall | 0.9303 | >=0.936 | 0.0057 | fail | failing | 1463 |
-| Public attack precision | 1.0000 | >=0.985 | 0.0000 | pass_internal_not_claimable | non-claimable internal/public run without frozen cached manifest | 1361 |
-| Public benign FPR | 0.0000 | <=0.002 | 0.0000 | pass_internal_not_claimable | non-claimable internal/public run without frozen cached manifest | 502 |
-| Public F1 | 0.9639 | >=0.94 | 0.0000 | pass_internal_not_claimable | non-claimable internal/public run without frozen cached manifest | 1965 |
-| Legacy safe=false FPR | 0.0000 | <=0.002 | 0.0000 | pass_internal_not_claimable | non-claimable internal/public run without frozen cached manifest | 502 |
-| Critical attack miss rate | 0.0021 | <=0.01 | 0.0000 | pass_internal_not_claimable | non-claimable internal/public run without frozen cached manifest | 477 |
-| Pattern latency p95 | 0.272 ms | <=3.8 ms | 0.000 ms | pass_internal_not_claimable | non-claimable internal/public run without frozen cached manifest | 1965 |
-| Pattern latency p99 | 0.854 ms | <=15 ms | 0.000 ms | pass_internal_not_claimable | non-claimable internal/public run without frozen cached manifest | 1965 |
+| Public attack recall | 0.9364 | >=0.936 | 0.0000 | pass_internal_not_claimable | frozen cached public manifest; non-claimable without verified holdout manifest/separation | 1463 |
+| Public attack precision | 1.0000 | >=0.985 | 0.0000 | pass_internal_not_claimable | frozen cached public manifest; non-claimable without verified holdout manifest/separation | 1370 |
+| Public benign FPR | 0.0000 | <=0.002 | 0.0000 | pass_internal_not_claimable | frozen cached public manifest; non-claimable without verified holdout manifest/separation | 502 |
+| Public F1 | 0.9672 | >=0.94 | 0.0000 | pass_internal_not_claimable | frozen cached public manifest; non-claimable without verified holdout manifest/separation | 1965 |
+| Legacy safe=false FPR | 0.0000 | <=0.002 | 0.0000 | pass_internal_not_claimable | frozen cached public manifest; non-claimable without verified holdout manifest/separation | 502 |
+| Critical attack miss rate | 0.0021 | <=0.01 | 0.0000 | pass_internal_not_claimable | frozen cached public manifest; non-claimable without verified holdout manifest/separation | 477 |
+| Pattern latency p95 | 0.279 ms | <=3.8 ms | 0.000 ms | pass_internal_not_claimable | frozen cached public manifest; non-claimable without verified holdout manifest/separation | 1965 |
+| Pattern latency p99 | 0.868 ms | <=15 ms | 0.000 ms | pass_internal_not_claimable | frozen cached public manifest; non-claimable without verified holdout manifest/separation | 1965 |
 
 **Media Credibility Analysis** (`POST /v1/analyze`) — Submit any article URL and Parse runs it through a pipeline of up to 10 specialized analysis agents, depending on depth:
 
