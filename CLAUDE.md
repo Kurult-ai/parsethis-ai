@@ -270,6 +270,68 @@ careful 403 `POST /v1/orgs/bootstrap` gives the same key. Both auto-provision
 sites are gone; `scripts/cleanup-orphan-orgs.sql` clears the rows already
 written.
 
+## Trust Surfaces — one fact, one source
+
+Anything a customer's security reviewer can quote exists **once**, in a module,
+and is rendered into every surface that states it. Four sections have now
+drifted into contradiction from being hand-typed in two or three places, and the
+copy that drifted was always the one in `docs/trust-package.md` — the document
+Parse tells reviewers to download for their assessment.
+
+| Module | Renders into |
+|---|---|
+| `src/lib/retention-facts.ts` | /trust, /privacy, trust package |
+| `src/lib/subprocessor-facts.ts` | /trust §3, /dpa §3, trust package §3 |
+| `src/lib/soc2-mapping.ts` | /trust §5, trust package §5.2 |
+| `src/lib/vendor-questionnaire.ts` | /trust §6, trust package §6 |
+| `SECURITY_FACTS` in `src/lib/product-facts.ts` | TLS version and API-key storage, wherever stated |
+
+```bash
+npm run check:trust-sync              # CI gate: package must match the modules
+npm run check:trust-sync -- --write   # regenerate every generated block
+```
+
+Adding a generated section means one entry in the registry in
+`scripts/check-trust-sync.mts` and a pair of `<!-- BEGIN/END GENERATED: id -->`
+markers in the document — not another script someone forgets to run.
+
+**Two rules that are about honesty rather than mechanism**, both from prospect
+run 13, where a fourth-party reviewer closed 15 of 30 questionnaire rows and
+failed 9 of 15 approval-blockers without finding a single security defect:
+
+- **Write answers in the voice of the company that exists.** The pre-answered
+  questionnaire described team members, departed personnel, quarterly access
+  reviews and cloud security groups, while the DPA on the same estate said
+  "Single-operator infrastructure". A reviewer who catches one invented answer
+  re-reads every answer they had already believed, and the candour elsewhere is
+  what that spends.
+- **A dated absence beats an unverifiable claim.** "No independent penetration
+  test has been performed" closes a row. "Yes, on a scheduled basis" does not,
+  and costs the rows around it. Same for SOC 2, which is handled correctly
+  already: "In Progress, Q1 2027".
+
+`LEGAL_ENTITY.governingLaw` in `product-facts.ts` is deliberately `null`. While
+it is null `/terms` keeps its existing wording; naming the wrong jurisdiction
+would be worse than naming none. See
+`docs/plans/2026-08-14-fourth-party-evidence-remediation.md` Part C.
+
+## Availability evidence
+
+`/status` publishes measured availability, not `process.uptime()`. One row a
+minute in `service_heartbeats` while the process is alive, and **the gaps are
+the outage record** — a crashed process cannot report its own crash, so missing
+minutes are the evidence and the measurement survives the failure it measures.
+
+`summariseBeats()` in `src/lib/availability.ts` is pure and unit-tested; keep it
+that way. The denominator is capped at the age of the oldest beat, so a fresh
+deploy reports a short window rather than a tiny percentage. The reader returns
+an empty window rather than throwing when the table is missing or the database
+is unreachable, so `/status` renders either way.
+
+It cannot see an outage where Parse is healthy but the tunnel or DNS in front of
+it is not. That limit is stated on the page; if an external prober is ever
+added, `/status` should read from it instead.
+
 ## Brand & Claims Enforcement
 
 `docs/brand-guidelines.md` is the binding brand document and `docs/style-guide.md` is the visual-system source of truth (Event Horizon theme: tokens, typography, atmosphere tiers) (positioning: agent
