@@ -74,6 +74,55 @@ export type Disposition = "allow" | "report" | "review" | "block";
  */
 const SUBJECT_ACTIONS = new Set(["summarize", "extract", "route"]);
 
+/**
+ * An agent that composes a reply for a person to send.
+ *
+ * `reply` screens as an instruction and always will — composing a reply is one
+ * instruction away from acting, and prospect run 12's A3 attempt proved the
+ * obvious concession unsafe: letting a caller declare the flagged text "quoted
+ * third-party content" turned a genuine injection into a review the moment they
+ * quoted it. Characterising the *content* is the wrong thing to verify, because
+ * a quoted attack is still an attack to an agent that acts on the text around it.
+ *
+ * `draft` asks for something checkable instead. The caller accepts an
+ * obligation — the composed draft comes back through /v1/screen-output before a
+ * human sees it — and Parse knows whether it did. Safety comes from the second
+ * screen, not from a claim about the first.
+ *
+ * Bounded by construction: a finding in the cancel set never reaches `review`
+ * under `draft`, whatever the caller declares. Run 12's refund injection carries
+ * `privilege_escalation`, so the control that broke A3 blocks here as a
+ * structural property rather than a regex that has to hold.
+ */
+const DRAFT_ACTION = "draft";
+
+/**
+ * Categories that keep a refusal under `draft`. The acquittal register's cancel
+ * set — reused, not reinvented, because that line has been through two reverts
+ * and four adversarial reviews.
+ */
+const DRAFT_CANCEL_CATEGORIES = new Set([
+  "system_prompt_leak",
+  "data_exfiltration",
+  "code_execution",
+  "privilege_escalation",
+  "jailbreak",
+  "harmful_content",
+]);
+
+/**
+ * May this finding be sent for human review under a draft obligation?
+ * Categories are the gate; the caller's description of the content is not
+ * consulted at all, which is the lesson from A3.
+ */
+export function draftReviewEligible(
+  intendedAction: string | undefined,
+  flags: ReadonlyArray<{ category?: string; action_floor?: string }>,
+): boolean {
+  if (intendedAction !== DRAFT_ACTION) return false;
+  return !flags.some((f) => f.category && DRAFT_CANCEL_CATEGORIES.has(f.category));
+}
+
 /** Third-party content by construction. Mirrors the acquittal register's B4. */
 const UNTRUSTED_SOURCE_KINDS = new Set([
   "retrieved_doc",
@@ -307,6 +356,12 @@ export function computeDisposition(
   recommendedAction: string,
   riskScore: number,
   flags: RiskFlag[],
+  /**
+   * The caller declared `draft` and the finding is outside the cancel set, so a
+   * refusal becomes a human review against an obligation Parse can check. See
+   * draftReviewEligible and lib/draft-obligation.ts.
+   */
+  draftEligible = false,
 ): Disposition {
   if (role === "instruction") {
     // A faithful projection of the existing verdict. `sandbox` and
@@ -314,7 +369,7 @@ export function computeDisposition(
     // this unsupervised", which is what `review` names — but the caller's
     // `recommended_action` is left exactly as it was, because renaming an
     // existing state would break every integration reading it.
-    if (recommendedAction === "block") return "block";
+    if (recommendedAction === "block") return draftEligible ? "review" : "block";
     if (recommendedAction === "allow") return "allow";
     return "review";
   }

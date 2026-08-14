@@ -748,6 +748,106 @@ complianceRoutes.get("/v1/compliance/policy-history", authMiddleware("evaluate")
   }
 });
 
+// ─── GET /v1/screening/base-rate — the number nobody could give Rachel ──
+//
+// Prospect run 12: a support-operations manager could price a false refusal to
+// the cent ($2.40, four minutes of agent time) and could not price a breach at
+// all. Her words: "If Parse could tell me 'teams like you see this twice a
+// month', the whole conversation changes, because right now I'm weighing a cost
+// I can measure against a risk I can't."
+//
+// Nothing on the site answers that, and the honest reason is that we do not
+// know yet. So this endpoint computes it from real screening traffic and
+// **refuses to produce a point estimate it cannot support** — below a minimum n
+// it returns insufficient_data with the current count and the n it needs.
+//
+// Do not publish a number from this on a marketing page until the interval is
+// narrow enough to mean something, and state n when you do. Deriving a customer
+// base rate from our own test calls would be the exact failure the prospect
+// instrument exists to catch.
+
+/** Below this, no point estimate. A rate on 40 screens is not a rate. */
+const BASE_RATE_MIN_N = 1000;
+
+/** Wilson score interval, the method the holdout manifest declares for proportions. */
+function wilson95(successes: number, n: number): [number, number] {
+  if (n === 0) return [0, 0];
+  const z = 1.959963985;
+  const p = successes / n;
+  const d = 1 + (z * z) / n;
+  const centre = p + (z * z) / (2 * n);
+  const spread = z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n));
+  return [Math.max(0, (centre - spread) / d), Math.min(1, (centre + spread) / d)];
+}
+
+complianceRoutes.get(
+  "/v1/screening/base-rate",
+  authMiddleware("evaluate"),
+  async (c) => {
+    const days = Math.min(Math.max(Number(c.req.query("days") ?? "30"), 1), 365);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const apiKey = c.get("apiKey");
+    const orgId = await resolveOrgId(apiKey.id);
+    const scope = orgScopedWhere(orgId, apiKey.id);
+
+    try {
+      const [total, refused, categoryRows] = await Promise.all([
+        prisma.screeningEvent.count({ where: { ...scope, createdAt: { gte: since } } }),
+        // A genuine injection is one Parse refused — not one it merely flagged,
+        // and not one a caller declared as subject matter.
+        prisma.screeningEvent.count({
+          where: { ...scope, createdAt: { gte: since }, disposition: "block" },
+        }),
+        prisma.$queryRaw<Array<{ category: string; count: bigint }>>`
+          SELECT unnest(e.categories) as category, count(*) as count
+          FROM screening_events e
+          JOIN api_keys k ON k.id = e.api_key_id
+          WHERE ${orgId ? Prisma.sql`k.org_id = ${orgId}` : Prisma.sql`e.api_key_id = ${apiKey.id}`}
+            AND e.created_at >= ${since}
+            AND e.disposition = 'block'
+          GROUP BY category
+          ORDER BY count DESC
+          LIMIT 10
+        `,
+      ]);
+
+      if (total < BASE_RATE_MIN_N) {
+        return c.json({
+          status: "insufficient_data",
+          period_days: days,
+          screenings_observed: total,
+          screenings_required: BASE_RATE_MIN_N,
+          detail:
+            `A base rate needs enough traffic to mean something. Parse has screened ${total} call(s) ` +
+            `for you in this period and will report a rate with a 95% confidence interval once there are ` +
+            `${BASE_RATE_MIN_N}. Until then there is no number here, deliberately — an estimate on this ` +
+            `much data would be noise wearing a decimal point.`,
+        });
+      }
+
+      const rate = refused / total;
+      const [lo, hi] = wilson95(refused, total);
+      return c.json({
+        status: "ok",
+        period_days: days,
+        screenings_observed: total,
+        refused,
+        base_rate: Math.round(rate * 1e6) / 1e6,
+        per_10k_screenings: Math.round(rate * 10000 * 10) / 10,
+        confidence_interval_95: [Math.round(lo * 1e6) / 1e6, Math.round(hi * 1e6) / 1e6],
+        method: "wilson_95",
+        top_categories: categoryRows.map((r) => ({ category: r.category, count: Number(r.count) })),
+        note:
+          "The share of screened traffic Parse refused, over your own traffic. Quote it with its n and " +
+          "its interval, or not at all.",
+      });
+    } catch (err) {
+      console.error("[compliance] base-rate error:", (err as Error).message);
+      return serviceDependencyProblem(c, err);
+    }
+  },
+);
+
 // ─── GET /v1/compliance/declarations — guard 3 ─────────────────────────
 //
 // The share of an org's traffic declaring a non-execute intended_action, over

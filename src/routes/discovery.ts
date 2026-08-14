@@ -1192,6 +1192,19 @@ discoveryRoutes.get("/openapi.json", (c) => {
           },
         },
       },
+      "/v1/screening/base-rate": {
+        get: {
+          operationId: "getInjectionBaseRate",
+          summary: "How often a genuine injection actually arrives in your traffic",
+          description:
+            "The share of your screened traffic Parse refused, over a window, with n and a Wilson 95% confidence interval. Below 1,000 screenings it returns status insufficient_data and no estimate — a rate on less traffic than that is noise, and this endpoint would rather say nothing than say something unsupportable.",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "days", in: "query", schema: { type: "integer", minimum: 1, maximum: 365, default: 30 } },
+          ],
+          responses: { "200": { description: "A rate with its interval, or insufficient_data with the counts" } },
+        },
+      },
       "/v1/compliance/declarations": {
         get: {
           operationId: "getDeclarationRate",
@@ -2209,7 +2222,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
                 conversation_context: { type: "string" },
                 intended_action: {
                   type: "string",
-                  enum: ["summarize", "extract", "route", "reply", "execute"],
+                  enum: ["summarize", "extract", "route", "reply", "execute", "draft"],
                   description:
                     "What your agent will do with this content. \"summarize\", \"extract\" and \"route\" declare that the agent reasons ABOUT the content and never acts on it, so findings come back as disposition \"report\" — full score, flags and categories, but not refused. \"reply\", \"execute\", and omitting the field, screen the content as an instruction addressed to the agent. Third-party content (source_kind retrieved_doc/web_page/email/tool_output/memory/agent_handoff) is refused the downgrade unless quoted_spans is also declared.",
                 },

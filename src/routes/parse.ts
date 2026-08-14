@@ -297,11 +297,11 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
         retryable: false,
       });
     }
-    if (body.metadata.intended_action !== undefined && !["summarize", "execute", "route", "reply", "extract"].includes(body.metadata.intended_action)) {
+    if (body.metadata.intended_action !== undefined && !["summarize", "execute", "route", "reply", "extract", "draft"].includes(body.metadata.intended_action)) {
       return problem(c, {
         status: 400,
         title: "Validation failure",
-        detail: "metadata.intended_action must be summarize, execute, route, reply, or extract",
+        detail: "metadata.intended_action must be summarize, execute, route, reply, extract, or draft",
         code: ErrorCode.VALIDATION_INVALID_TYPE,
         retryable: false,
       });
@@ -518,6 +518,9 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   // and it is resolved here from the clamped policy so a member key cannot
   // grant itself the downgrade. Undefined means allowed.
   body.allowSubjectRole = screeningPolicy?.allowSubjectRole !== false;
+  // Binds a draft review obligation to the key that accepted it, so a leaked
+  // token cannot be redeemed by anyone else.
+  body.apiKeyId = apiKey?.id;
 
   const result = await parsePrompt(body);
   const parseLatencyMs = Date.now() - parseStart;

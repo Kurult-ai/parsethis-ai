@@ -24,7 +24,7 @@ import { app } from "../app.js";
  * narrower one that holds. Widening the spec to the rest of the API is real
  * work and its own change; this stops the specific regression that cost a sale.
  */
-const GOVERNANCE_PREFIXES = ["/v1/orgs", "/v1/org/", "/v1/gateway", "/v1/compliance/", "/v1/coverage"];
+const GOVERNANCE_PREFIXES = ["/v1/orgs", "/v1/org/", "/v1/gateway", "/v1/compliance/", "/v1/coverage", "/v1/screening/base-rate"];
 
 /** Governance routes that are deliberately undocumented, each with the reason. */
 const UNDOCUMENTED = new Set<string>([

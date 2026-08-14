@@ -1,0 +1,29 @@
+{
+  "manifest_kind": "public_screening_holdout_frozen_candidate",
+  "claimable": false,
+  "frozen": true,
+  "evidence_state": "frozen_but_not_independent_evidence",
+  "source": "public",
+  "split": "holdout",
+  "sha256": "94f9ceb990bd4f0aff092f1719b1d211e01bd48b7158c0bba3e7724c5b2bcefd",
+  "row_ids_sha256": "9fd539af6e8a23660179d244bba1fe96107b847386553dcc6ffb83f060b21b90",
+  "case_count": 789,
+  "frozen_at": "2026-08-14",
+  "measured": {
+    "attack_recall": 0.9131,
+    "false_negatives": 53,
+    "false_positives": 0,
+    "baseline_c7c9a0e": {
+      "attack_recall": 0.9148,
+      "false_negatives": 52,
+      "false_positives": 0
+    }
+  },
+  "claimable_blockers": [
+    "Frozen AFTER the 2026-08-14 detector changes (plan items A1/A2), so holdout_separation.frozen_before_tuning cannot honestly be set true for the current detector state.",
+    "Valid evidence for changes made from 2026-08-14 onward; not for the state it was first measured against.",
+    "No independent provenance attestation or detector/config lock recorded.",
+    "789 rows at max_per_split=150, not the full public set."
+  ],
+  "note": "Freeze now, claim later. The point of writing this today is that the next detector change can be judged against a corpus that provably predates it."
+}
