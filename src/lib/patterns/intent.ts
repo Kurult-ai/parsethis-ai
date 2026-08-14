@@ -765,7 +765,21 @@ const OWNER_SELF_REFERENT =
 const AGENT_DIRECTED_REFERENT =
   /\b(?:your|the)\s+(?:system\s+prompt|developer\s+message)\b|\byour\s+(?:\w+\s+){0,2}(?:instructions?|rules?|guidelines?|directives?|directions?|prompt)\b|\b(?:all\s+)?previous\s+instructions?\b|\b(?:instructions?|rules?|guidelines?|directives?)\s+you\s+(?:were|are|have|got|received)\b|\bprior\s+context\b|\bsystem\s+prompt\b|\bdeveloper\s+message\b|\bnew\s+(?:instructions?|directives?)\b/i;
 
+/**
+ * Module-scoped trust context for the current detection pass.
+ *
+ * The owner-correction softening must never apply to third-party content: text
+ * in a retrieved document saying "ignore what I said earlier" is by
+ * construction not an owner correction, it is an injection wearing one. That is
+ * the acquittal register's B4 rule, and `conversational-corrections.test.ts`
+ * caught this omission on 2026-08-14 before it shipped.
+ *
+ * Set for the duration of one detectIntentPromptRisks call and cleared after.
+ */
+let currentPassIsUntrusted = false;
+
 export function isOwnerSelfCorrection(text: string): boolean {
+  if (currentPassIsUntrusted) return false;
   if (!OWNER_SELF_REFERENT.test(text)) return false;
   if (AGENT_DIRECTED_REFERENT.test(text)) return false;
   return true;
@@ -840,7 +854,7 @@ function maybeFlagOverride(flags: IntentRiskFlag[], text: string): void {
     addFlag(flags, {
       id: "intent.override_governing_instruction",
       category: "prompt_injection",
-      severity: 8,
+      severity: isOwnerSelfCorrection(window) ? 3 : 8,
       label: "Instruction override intent",
       detail: "The prompt combines an override verb, protected prior/system instruction target, and a new authority or agent-directed command.",
       confidence: "high",
@@ -1032,7 +1046,13 @@ function maybeFlagFuzzyOverride(flags: IntentRiskFlag[], text: string): void {
     addFlag(flags, {
       id: "intent.fuzzy_override_token",
       category: "prompt_injection",
-      severity: 8,
+      // Severity, not just the floor. A floor is a minimum action; the risk
+      // score is what actually refuses (>= threshold), so leaving severity at 8
+      // left the customer refused with every flag marked "sandbox" — which was
+      // the worst of both, a refusal nobody could explain. A speaker
+      // withdrawing their own words is a low-risk finding, and saying so is the
+      // honest scoring.
+      severity: selfCorrection ? 3 : 8,
       label: "Fuzzy override token",
       detail: "The prompt uses paraphrased, misspelled, multilingual, or spaced wording to discard prior instructions, rules, context, documents, or commands.",
       confidence: "high",
@@ -1051,7 +1071,7 @@ function maybeFlagInstructionDisclosure(flags: IntentRiskFlag[], text: string): 
     addFlag(flags, {
       id: "intent.instruction_disclosure_probe",
       category: "system_prompt_leak",
-      severity: 8,
+      severity: isOwnerSelfCorrection(window) ? 3 : 8,
       label: "Instruction disclosure probe",
       detail: "The prompt asks for the model's current, prior, hidden, secret, or governing instructions/rules.",
       confidence: "high",
@@ -1279,7 +1299,7 @@ function maybeFlagInstructionBypassOrMutation(flags: IntentRiskFlag[], text: str
       addFlag(flags, {
         id: "intent.direct_instruction_bypass",
         category: "prompt_injection",
-        severity: 8,
+        severity: isOwnerSelfCorrection(window) ? 3 : 8,
         label: "Direct instruction bypass",
         detail: "The prompt asks the model to ignore, forget, reject, skip, defy, subvert, or reset governing instructions, rules, prompts, checks, or equivalent controls.",
         confidence: "high",
@@ -1547,7 +1567,28 @@ function maybeFlagDecoded(flags: IntentRiskFlag[], text: string, depth = 0): voi
   }
 }
 
-export function detectIntentPromptRisks(prompt: string, normalizedPrompt = prompt): IntentRiskFlag[] {
+export interface IntentDetectionContext {
+  /**
+   * The content is third-party (source_kind of retrieved_doc/web_page/email/…
+   * or an untrusted/external trust_level). Disables owner-correction softening.
+   */
+  untrusted?: boolean;
+}
+
+export function detectIntentPromptRisks(
+  prompt: string,
+  normalizedPrompt = prompt,
+  context: IntentDetectionContext = {},
+): IntentRiskFlag[] {
+  currentPassIsUntrusted = context.untrusted === true;
+  try {
+    return detectIntentPromptRisksInner(prompt, normalizedPrompt);
+  } finally {
+    currentPassIsUntrusted = false;
+  }
+}
+
+function detectIntentPromptRisksInner(prompt: string, normalizedPrompt = prompt): IntentRiskFlag[] {
   const flags: IntentRiskFlag[] = [];
   const texts = [prompt, normalizedPrompt].filter((value, index, arr) => value && arr.indexOf(value) === index);
 

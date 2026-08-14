@@ -531,8 +531,151 @@ publicRoutes.get("/demo", (c) => {
 
 // ── Demo API proxy — rate-limited per IP, uses DEMO_API_KEY internally ──
 const DEMO_RATE_LIMIT_PER_HOUR = 5;
+/** A batch is many screenings on one shared key, so it gets its own smaller budget. */
+const DEMO_BATCH_LIMIT_PER_HOUR = 3;
+const DEMO_BATCH_MAX_LINES = 100;
 const DEMO_RATE_WINDOW_SECONDS = 60 * 60;
 const DEMO_RATE_KEY_PREFIX = "demo:rate";
+
+/**
+ * Screen a batch of real tickets and report the refusal rate.
+ *
+ * Prospect run 12's first heuristic was "I'll paste in three tickets from this
+ * morning; if it does something stupid to one of them, that's my answer" — and
+ * she wanted a rate. The demo offered one prompt at a time behind an hourly
+ * limit, so the only way to get a rate was an API she could not write, which is
+ * how a forty-minute evaluation became a developer task.
+ *
+ * Two rules this endpoint follows on purpose:
+ *   - It screens through the same /v1/parse path as production. A lenient demo
+ *     that flatters the product is worth less than no demo.
+ *   - It leads with what was refused, not with what passed. The rate is the
+ *     thing being evaluated; burying it would make this marketing.
+ */
+publicRoutes.post("/demo/batch", async (c) => {
+  const body = await c.req.json<{ lines?: unknown }>().catch(() => null);
+  const raw = Array.isArray(body?.lines) ? body!.lines : null;
+  if (!raw || raw.length === 0) {
+    return c.json({ error: "lines is required and must be a non-empty array of strings" }, 400);
+  }
+
+  const lines = raw
+    .filter((l): l is string => typeof l === "string")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .slice(0, DEMO_BATCH_MAX_LINES);
+
+  if (lines.length === 0) {
+    return c.json({ error: "no non-empty lines to screen" }, 400);
+  }
+  if (lines.some((l) => l.length > 4000)) {
+    return c.json({ error: "each line must be under 4,000 characters" }, 400);
+  }
+
+  if (!DEMO_API_KEY) {
+    return c.json({ error: "Demo key is not configured on this server. Sign up at /get-started for a free API key." }, 503);
+  }
+
+  // Same fail-closed per-IP limiter as /demo/api, on its own counter: a batch is
+  // up to DEMO_BATCH_MAX_LINES screenings, so it cannot share the single-prompt
+  // budget without either starving it or handing out unmetered use of the
+  // shared demo key.
+  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+  const rateKey = `${DEMO_RATE_KEY_PREFIX}:batch:${createHash("sha256").update(ip).digest("hex").slice(0, 16)}`;
+  let batchCount = 0;
+  try {
+    getRedis();
+    if (!isRedisAvailable()) throw new Error("redis unavailable");
+    const connected = await withTimeout(ensureRedisConnected(), 1_500, false);
+    if (!connected) throw new Error("redis not connected");
+    const redis = getRedis();
+    batchCount = await withTimeout(redis.incr(rateKey), 1_500, Number.NaN);
+    if (!Number.isFinite(batchCount)) throw new Error("redis incr failed");
+    if (batchCount === 1) await withTimeout(redis.expire(rateKey, DEMO_RATE_WINDOW_SECONDS), 1_500, 0);
+    if (batchCount > DEMO_BATCH_LIMIT_PER_HOUR) {
+      return c.json(
+        {
+          error: "Batch limit reached",
+          detail: `The batch screener runs ${DEMO_BATCH_LIMIT_PER_HOUR} times an hour per visitor. A free key at /get-started has no such limit.`,
+          upgradeUrl: "/get-started",
+        },
+        429,
+      );
+    }
+  } catch {
+    return c.json(
+      {
+        error: "Demo unavailable",
+        detail: "The batch screener's rate limiter is unavailable, so it is closed. Get a free key at /get-started.",
+      },
+      503,
+    );
+  }
+
+  const parseUrl = `${getBaseUrl(c)}/v1/parse`;
+  const screenOne = async (prompt: string) => {
+    try {
+      const res = await fetch(parseUrl, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${DEMO_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, mode: "pattern-only" }),
+      });
+      if (!res.ok) return null;
+      const d = (await res.json()) as Record<string, unknown>;
+      const flags = Array.isArray(d.flags) ? (d.flags as Array<Record<string, unknown>>) : [];
+      return {
+        prompt,
+        risk_score: d.risk_score as number,
+        disposition: (d.disposition as string) ?? "allow",
+        categories: (d.categories as string[]) ?? [],
+        matched_tokens: [
+          ...new Set(
+            flags
+              .map((f) => f.matched_token)
+              .filter((t): t is string => typeof t === "string" && t.length > 0),
+          ),
+        ],
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  // Sequential rather than parallel: this shares one demo key, and a burst of
+  // 100 concurrent screenings against it is the shape of an outage.
+  const results = [];
+  for (const line of lines) {
+    const r = await screenOne(line);
+    if (r) results.push(r);
+  }
+
+  const refused = results.filter((r) => r.disposition === "block");
+  const review = results.filter((r) => r.disposition === "review");
+  const allowed = results.filter((r) => r.disposition === "allow" || r.disposition === "report");
+
+  return c.json({
+    screened: results.length,
+    refused: refused.length,
+    review: review.length,
+    allowed: allowed.length,
+    refusal_rate: results.length > 0 ? Math.round((refused.length / results.length) * 1000) / 10 : 0,
+    mode: "pattern-only",
+    note:
+      "Screened through the same /v1/parse path as production, deterministic layer only — the semantic layer adds 2–4 seconds per line. " +
+      "Refusals are listed in full below with the exact phrase that matched, because the rate is the thing you are evaluating.",
+    refusals: refused.map((r) => ({
+      prompt: r.prompt.length > 300 ? `${r.prompt.slice(0, 300)}…` : r.prompt,
+      risk_score: r.risk_score,
+      categories: r.categories,
+      matched_tokens: r.matched_tokens,
+    })),
+    needs_review: review.map((r) => ({
+      prompt: r.prompt.length > 300 ? `${r.prompt.slice(0, 300)}…` : r.prompt,
+      risk_score: r.risk_score,
+    })),
+    batches_used_this_hour: batchCount,
+  });
+});
 
 publicRoutes.post("/demo/api", async (c) => {
   const body = await c.req.json<{ prompt?: string; mode?: string }>().catch(() => null);
@@ -1006,6 +1149,27 @@ publicRoutes.get("/docs/trust-package", (c) => {
   return c.html(renderTrustPackagePage(baseUrl));
 });
 
+/**
+ * The precision numbers on /docs cite this file by name as their evidence, and
+ * it was not served — prospect run 12 followed the citation to a 404 ten
+ * minutes after Parse had refused her delivery-address change. A precision
+ * claim whose evidence 404s is worse than no claim.
+ */
+publicRoutes.get("/docs/public-screening-metrics.csv", (c) => {
+  const csvPath = join(dirname(fileURLToPath(import.meta.url)), "../../docs/public-screening-metrics.csv");
+  try {
+    const csv = readFileSync(csvPath, "utf-8");
+    return new Response(csv, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Cache-Control": "public, max-age=300",
+      },
+    });
+  } catch {
+    return c.text("Screening metrics not found.", 404);
+  }
+});
+
 // Raw markdown download
 publicRoutes.get("/docs/trust-package.md", (c) => {
   const mdPath = join(dirname(fileURLToPath(import.meta.url)), "../../docs/trust-package.md");
@@ -1380,7 +1544,7 @@ person who sent the message.</p>
 }</code></pre>
 
 
-<h2>Precision: what Parse refuses that it should not</h2>
+<h2 id="precision">Precision: what Parse refuses that it should not</h2>
 
 <p>Screening has two failure modes and most vendors publish one. Recall — did it
 catch the attack — is the easy half. Precision — did it refuse something
@@ -1388,8 +1552,11 @@ harmless — is what decides whether you can leave it on. A <strong>false
 positive</strong> costs you an analyst-minute every time, and at any real volume
 that bill dwarfs the subscription, so here are our false-positive numbers.</p>
 
-<p>Two numbers from our own regression suite, both run on every commit and
-published in <code>docs/public-screening-metrics.csv</code>:</p>
+<p>Two numbers from our own regression suite. Both corpora live in the
+repository and run on every commit — they are internal regression measurements
+on corpora we wrote, not an independent benchmark, and we would rather say so
+than imply otherwise. Our infrastructure metrics are published separately in
+<code>/docs/public-screening-metrics.csv</code>.</p>
 
 <table class="doc-table">
   <thead><tr><th>Corpus</th><th>What it measures</th><th>Current</th></tr></thead>
@@ -1448,6 +1615,43 @@ unless you also declare <code>quoted_spans</code>.</p>
 /v1/compliance/export</code> lists every screen that was reported rather than
 refused, with the declaration that caused it, alongside the state of
 <code>allowSubjectRole</code> across the period and every change to it.</p>
+
+<h3 id="reply-agents">If your agent drafts a reply</h3>
+
+<p>A support assistant that drafts replies for a person to send is the commonest
+AI agent in customer service, and it is <em>not</em> a subject role. Composing a
+reply is one instruction away from acting, so <code>intended_action:
+"reply"</code> screens the content as an instruction addressed to your agent.
+Declaring <code>summarize</code> instead would be false, and you should not — it
+is recorded, and an org admin can see the rate.</p>
+
+<p><strong>There is no declaration that clears a refusal for a reply agent, and
+that is deliberate.</strong> We tried the obvious concession — treat a refusal
+as "send it to a human" when the caller declares the attack is quoted customer
+text — and it failed its own control: an injection aimed squarely at the agent
+became a review as soon as the caller quoted it. A quoted attack is still an
+attack if your agent is going to act on the text around it.</p>
+
+<p>What to do instead, and it is the honest shape of the problem: screen the
+input on the way in, let a refusal be a refusal, and screen your own draft on
+the way out.</p>
+
+<pre><code># 1. the customer message, before your agent reads it
+curl -s https://www.parsethis.ai/v1/parse \
+  -H "Authorization: Bearer $PARSE_API_KEY" \
+  -d '{"prompt": "&lt;the ticket&gt;", "metadata": {"intended_action": "reply"}}'
+# a refusal here means: do not draft from this, route it to a person
+
+# 2. the draft your agent produced, before a human sees it
+curl -s https://www.parsethis.ai/v1/screen-output \
+  -H "Authorization: Bearer $PARSE_API_KEY" \
+  -d '{"output": "&lt;the drafted reply&gt;"}'
+# catches a draft that acted on an instruction hidden in the ticket
+</code></pre>
+
+<p>If that leaves you refusing tickets you believe are ordinary, send us the
+<code>matched_token</code> from the flag. Three false-positive classes have been
+fixed that way, and the phrase is on every flag for exactly this reason.</p>
 
 <h3>The precision dial, and what it cannot do</h3>
 

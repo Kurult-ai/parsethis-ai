@@ -464,6 +464,18 @@ Verification required before reporting done:
         <a class="btn btn-ghost btn-lg" href="/docs">Documentation</a>
       </div>
       <div class="hf-fine">npm install @parsethis/sdk · or point any MCP runtime at parsethis.ai/mcp · no credit card</div>
+      <!--
+        Prospect run 12: a support-operations manager evaluating this for a
+        reply-drafting assistant read "governance for autonomous agents" and
+        asked whether her assistant counted, since a person still presses send.
+        Every word above is for the buyer who already knows the category. This
+        line is for the one who does not, and it points at the batch screener
+        rather than at the SDK.
+      -->
+      <div class="hf-fine" style="margin-top:6px;">
+        Running an assistant that drafts replies, triages tickets or reads customer messages?
+        <a href="/demo">Screen a batch of your own tickets</a> and see what it would refuse.
+      </div>
     </div>
     <div class="hf-art">
       <canvas id="bh" aria-hidden="true"></canvas>

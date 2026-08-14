@@ -32,6 +32,16 @@ import {
 import type { TokenUsage } from "./types.js";
 import { resolveAnalysisRole, computeDisposition, suggestDeclaration } from "./lib/analysis-role.js";
 
+/** Mirrors UNTRUSTED_SOURCE_KINDS in lib/analysis-role.ts — third-party by construction. */
+const UNTRUSTED_SOURCE_KINDS_FOR_INTENT = new Set([
+  "retrieved_doc",
+  "web_page",
+  "email",
+  "tool_output",
+  "memory",
+  "agent_handoff",
+]);
+
 // Build model allowlist at module level
 const ALLOWED_MODELS = new Set(getAvailableModels().map((m) => m.id));
 
@@ -801,7 +811,14 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
 
   // Phase 2c: Local intent grammar for paraphrased overrides, extraction,
   // role spoofing, boundary manipulation, and bounded decoding.
-  flags.push(...detectIntentPromptRisks(prompt, normalizedPrompt));
+  // Third-party content never qualifies for owner-correction softening: text in
+  // a retrieved document saying "ignore what I said earlier" is an injection
+  // wearing a correction. Acquittal register B4.
+  const intentUntrusted =
+    UNTRUSTED_SOURCE_KINDS_FOR_INTENT.has(String(req.metadata?.source_kind ?? "")) ||
+    req.metadata?.trust_level === "untrusted" ||
+    req.metadata?.trust_level === "external";
+  flags.push(...detectIntentPromptRisks(prompt, normalizedPrompt, { untrusted: intentUntrusted }));
 
   // Phase 2d: Privacy/owner-approval analysis. This does not add a public risk
   // category; it emits existing data_exfiltration/social_engineering flags plus

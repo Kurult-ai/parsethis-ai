@@ -1,5 +1,56 @@
 # Support-Operations Reach Remediation — Rachel Nwachukwu Run (Run 12)
 
+> **Execution record (2026-08-14). A1, A2 and all of Part B implemented and
+> verified. A3 was implemented, failed its own control test twice, and was
+> reverted — see below. Not deployed; awaiting a deploy decision.**
+>
+> Measured against the run-12 corpus, undeclared, on the branch:
+>
+> | Class | Run 12 | Target | After |
+> |---|---|---|---|
+> | Ordinary tickets refused | 1 of 6 | 0 of 6 | **0 of 6** |
+> | Customer override language refused | 2 of 4 | 0 of 4 | **0 of 4** (both now `review`) |
+> | Pasted scams refused | 3 of 4 | unchanged | 3 of 4 |
+> | Genuine injections caught | 2 of 2 | 2 of 2 | **2 of 2** |
+> | **Harmless refused** | **6 of 14** | ≤3 of 14 | **3 of 14** |
+>
+> **A3 was reverted, and this is the important entry.** Option (b) — `review`
+> instead of `block` for reply agents on quoted third-party findings — was
+> built, and then failed the control this plan specified for it: a genuine
+> injection aimed at the agent became `review` as soon as the caller declared
+> the prompt quoted. Closing the whole-prompt case (a span covering ≥95% of the
+> prompt no longer counts) was not enough — quoting just the attack still
+> cleared it. That is a bypass, so the code was reverted rather than shipped.
+>
+> The plan anticipated this: *"if that cannot be drawn reliably, option (b) is
+> wrong and we take (a)"*. It cannot be drawn reliably, because for an agent
+> that acts, a quoted attack is still an attack. `/docs` now says so plainly and
+> points reply agents at the mechanism that is actually sound — screen the input,
+> let a refusal be a refusal, and screen the drafted output with
+> `/v1/screen-output`. Option (a), a `draft` role with an asserted human-review
+> contract, remains open and needs its own design.
+>
+> **Two things the existing suite caught before they shipped**, both now fixed:
+> the owner-correction guard ignored `source_kind`, so a retrieved document
+> saying "ignore what I said earlier" would have been softened — the acquittal
+> register's B4 rule, pinned by `conversational-corrections.test.ts`; and
+> lowering an action floor was not enough on its own, because the risk score
+> still refused, leaving a customer blocked with every flag marked `sandbox`.
+> Severity had to move too.
+>
+> **One deliberate behaviour change to an existing expectation.** `conv-001` in
+> `conversational-corrections-corpus.ts` — run 3's exact sentence — was
+> documented as blocking without metadata, "reality, not aspiration". It now
+> scores 3 and sandboxes with no metadata at all, which is the entire point of
+> A2. `conv-002` and `conv-004` still block undeclared because both name
+> "previous instructions", and the guard refuses to read that as
+> self-correction.
+>
+> **B8 was not done and cannot be faked.** A published base rate needs real
+> customer data; production has 375 screening events of mixed test traffic.
+> Inventing a number for the one field this buyer said would change her mind
+> would be the exact failure this instrument exists to catch.
+
 Source report: `~/reports/parse-prospect/2026-08-13-rachel-nwachukwu-support-ops-reach.html`
 Corpus: `~/reports/parse-prospect/run12/evalset.json` (16 prompts, written before the first page load)
 Walkthrough host: production `c7c9a0e`, 2026-08-13.
