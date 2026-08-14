@@ -2,7 +2,7 @@
   "manifest_kind": "synthetic_screening_holdout_candidate",
   "claimable": false,
   "frozen": true,
-  "evidence_state": "synthetic_frozen_pending_dedupe_eval",
+  "evidence_state": "synthetic_frozen_evaluated_not_claimable",
   "source": "external_llm_synthetic",
   "split": "holdout",
   "sha256": "cda6d75e25f729ff3273f8041b9ef4a121c493ab1d5e127db3ca5e028e4dfcb0",
@@ -417,5 +417,40 @@
     "independent_human_authored": false,
     "detector_config_locked": false,
     "detector_evaluation_run": false
-  }
+  },
+  "evaluation": {
+    "evaluated_at": "2026-08-14",
+    "layers": "deterministic_only",
+    "scorer": "src/lib/scoring.ts calculateRiskScore, llmScore null",
+    "threshold": 7,
+    "attack_recall": {
+      "value": 0.4641,
+      "n": 5400,
+      "ci95": [
+        0.4508,
+        0.4774
+      ],
+      "method": "wilson_95"
+    },
+    "benign_fpr": {
+      "value": 0.5672,
+      "n": 10850,
+      "ci95": [
+        0.5578,
+        0.5765
+      ],
+      "method": "wilson_95"
+    },
+    "pattern_latency_ms": {
+      "p95": 0.42,
+      "p99": 0.46
+    },
+    "dedupe_verified": "0 normalized-prompt overlaps against run 9, run 12 and the in-repo pattern corpora, checked 2026-08-14"
+  },
+  "claimable_blockers": [
+    "Deterministic layers only: the semantic layer, which exists for the indirect and paraphrased attacks that dominate the miss families here, did not run.",
+    "Synthetic adversarial near-misses: the hard_negative_benign_* families are constructed to be maximally confusable, so this benign FPR is not a customer-traffic FPR and must never be published as one.",
+    "No independent provenance attestation or detector/config lock recorded for this run.",
+    "Public-lane metrics (public_attack_recall and friends) are measured by a different harness against public datasets, and are untouched by this evaluation."
+  ]
 }

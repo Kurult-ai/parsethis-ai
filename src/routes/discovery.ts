@@ -1192,6 +1192,19 @@ discoveryRoutes.get("/openapi.json", (c) => {
           },
         },
       },
+      "/v1/screening/base-rate": {
+        get: {
+          operationId: "getInjectionBaseRate",
+          summary: "How often a genuine injection actually arrives in your traffic",
+          description:
+            "The share of your screened traffic Parse refused, over a window, with n and a Wilson 95% confidence interval. Below 1,000 screenings it returns status insufficient_data and no estimate — a rate on less traffic than that is noise, and this endpoint would rather say nothing than say something unsupportable.",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "days", in: "query", schema: { type: "integer", minimum: 1, maximum: 365, default: 30 } },
+          ],
+          responses: { "200": { description: "A rate with its interval, or insufficient_data with the counts" } },
+        },
+      },
       "/v1/compliance/declarations": {
         get: {
           operationId: "getDeclarationRate",
