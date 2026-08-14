@@ -94,3 +94,57 @@ The published 0.946 stays on the board because it is what the shipped detector
 scores and the CSV says `pass_internal_not_claimable`. It should not appear in a
 security questionnaire, a datasheet, or a sales deck without the sentence "this
 is an in-sample regression number" next to it.
+
+---
+
+## The control, built the same day (2026-08-14)
+
+`scripts/sealed-holdout-eval.mts`. The lesson above is not that anyone was
+careless — it is that measuring a corpus and reading its miss list were one
+command apart, and nothing sat between them.
+
+```bash
+npx tsx scripts/sealed-holdout-eval.mts --corpus docs/candidate-holdouts/sota-synthetic-12000/source
+```
+
+Sealed by default. It prints n, recall, false-positive rate, Wilson 95%
+intervals, and the delta since the last run. It withholds the miss list, and it
+withholds the per-family breakdown too — "your worst miss family is
+callback_receipt_exfiltration" is enough to write a rule from, which is the
+thing being prevented.
+
+Seeing the rows takes `--reveal --reason "…"`, and doing so stamps the corpus
+manifest `burnt` with a date and that reason. Every later run prints the burn.
+**You can still burn a corpus. You cannot burn one quietly**, and you cannot burn
+one by accident.
+
+It also refuses to run at all if the corpus contents no longer match the hash in
+its manifest. A holdout that can be edited between runs measures nothing.
+
+A corpus may be one file or a directory of JSONL slices, read where it lies —
+the first version of this tool wrote a 9.8 MB duplicate of data git already
+tracked, which the directory mode removes.
+
+First sealed reading, on the synthetic corpus:
+
+```
+attack recall 43.22%   (2334/5400)    95% CI [41.91, 44.55]
+benign FPR    54.99%   (5966/10850)   95% CI [54.05, 55.92]
+Sealed: 3066 misses withheld.
+```
+
+Read that as a tripwire, not a score: it is the deterministic layer alone
+against an adversarial synthetic distribution the pattern layer is not built
+for. Its value is the **delta**. Today's four recall fixes moved the public
+corpus 1.6 points and moved this one by 0.00, which is how we know they did not
+generalise — and that comparison is now a single command instead of an
+afternoon.
+
+### What it is not
+
+It does not confer claimability, and the tool says so in its own header. The
+corpus is curated by the same operator on the same machine; an enterprise
+security reviewer would discount it, correctly. A claimable number needs rows
+selected by someone with no stake in the result, frozen before the detector saw
+them, with provenance recorded. That remains outstanding and is a process step,
+not an engineering one.
