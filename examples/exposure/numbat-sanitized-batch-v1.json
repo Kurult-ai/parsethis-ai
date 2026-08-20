@@ -1,0 +1,25 @@
+{
+  "adapter_schema_version": "v1",
+  "producer": "numbat",
+  "numbat_version": "0.1.1",
+  "numbat_record_schema_version": "0.2.0",
+  "batch_id": "batch_demo_001",
+  "endpoint_pseudonym": "install_A7b9C2d4",
+  "findings": [
+    {
+      "rule_id": "exfil.secret_read_then_egress",
+      "rule_version": "1.2.0",
+      "severity": "high",
+      "confidence": "high",
+      "source_agent": "claude-code",
+      "source_type": "hook",
+      "observed_event_type": "command.exec",
+      "local_minimization_confirmation": true
+    }
+  ],
+  "preflight_context": {
+    "intended_action_class": "command_execution",
+    "impact_level": "medium",
+    "requested_agent_privilege_mode": "standard"
+  }
+}

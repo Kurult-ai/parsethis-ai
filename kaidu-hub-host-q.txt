@@ -1,0 +1,5 @@
+Tolui dropped monthly draft dollars from the hub. Hub review is done. Quotes hold. Host the hub.
+
+First step on the page is /demo plus a key. Do not print the key, tokens, or .env. Do not invent dollars or DNS. Do not touch MX.
+
+Short fact when it is live (host only).

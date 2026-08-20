@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.parsethis.ai/schemas/screening-holdout-manifest.schema.json",
+  "title": "Internal/Hermes Screening Holdout Manifest",
+  "description": "Manifest contract for internal/Hermes runtime evidence. Claimable manifests require frozen independent holdout separation, generated_count=0, and metric flags.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "manifest_kind",
+    "claimable",
+    "frozen",
+    "evidence_state",
+    "source",
+    "split",
+    "sha256",
+    "row_ids_sha256",
+    "case_count",
+    "generated_count",
+    "confidence_intervals_95_required",
+    "confidence_interval_methods",
+    "claimable_metrics",
+    "holdout_separation"
+  ],
+  "properties": {
+    "manifest_kind": {
+      "enum": ["internal_screening_holdout_template", "internal_screening_holdout"]
+    },
+    "claimable": {
+      "type": "boolean"
+    },
+    "frozen": {
+      "type": "boolean"
+    },
+    "evidence_state": {
+      "enum": [
+        "generated_internal_regression_evidence",
+        "claimable_independent_frozen_holdout_evidence"
+      ]
+    },
+    "source": {
+      "const": "internal_independent_holdout"
+    },
+    "split": {
+      "const": "holdout"
+    },
+    "sha256": {
+      "type": "string"
+    },
+    "row_ids_sha256": {
+      "type": "string"
+    },
+    "case_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "generated_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "confidence_intervals_95_required": {
+      "const": true
+    },
+    "confidence_interval_methods": {
+      "type": "object",
+      "required": [
+        "benign_instruction_noun_precision",
+        "override_mention_declared_precision",
+        "prospect_run_9_benign_precision",
+        "prospect_run_9_attack_recall",
+        "owner_private_context_protection_recall",
+        "owner_approval_precision",
+        "owner_approval_recall",
+        "memory_contamination_recall",
+        "hard_negative_benign_agent_workflow_fpr",
+        "legitimate_workflow_allow_rate",
+        "high_risk_action_policy_correctness",
+        "agent_handoff_trust_violation_recall",
+        "tool_output_json_instruction_recall",
+        "callback_receipt_exfiltration_recall",
+        "system_developer_extraction_recall",
+        "source_kind_policy_correctness",
+        "decision_event_logging_completeness",
+        "audit_completeness_for_non_allow_actions",
+        "utility_degradation_from_parse_enabled",
+        "generated_internal_runtime_min_slice_size",
+        "hard_negative_benign_generated_internal_suite_size",
+        "commercial_malicious_generated_internal_suite_size"
+      ],
+      "properties": {
+        "benign_instruction_noun_precision": { "const": "wilson_95" },
+        "override_mention_declared_precision": { "const": "wilson_95" },
+        "prospect_run_9_benign_precision": { "const": "wilson_95" },
+        "prospect_run_9_attack_recall": { "const": "wilson_95" },
+        "owner_private_context_protection_recall": { "const": "wilson_95" },
+        "owner_approval_precision": { "const": "wilson_95" },
+        "owner_approval_recall": { "const": "wilson_95" },
+        "memory_contamination_recall": { "const": "wilson_95" },
+        "hard_negative_benign_agent_workflow_fpr": { "const": "wilson_95" },
+        "legitimate_workflow_allow_rate": { "const": "wilson_95" },
+        "high_risk_action_policy_correctness": { "const": "wilson_95" },
+        "agent_handoff_trust_violation_recall": { "const": "wilson_95" },
+        "tool_output_json_instruction_recall": { "const": "wilson_95" },
+        "callback_receipt_exfiltration_recall": { "const": "wilson_95" },
+        "system_developer_extraction_recall": { "const": "wilson_95" },
+        "source_kind_policy_correctness": { "const": "wilson_95" },
+        "decision_event_logging_completeness": { "const": "wilson_95" },
+        "audit_completeness_for_non_allow_actions": { "const": "wilson_95" },
+        "utility_degradation_from_parse_enabled": { "const": "paired_bootstrap_95" },
+        "generated_internal_runtime_min_slice_size": { "const": "deterministic_count" },
+        "hard_negative_benign_generated_internal_suite_size": { "const": "deterministic_count" },
+        "commercial_malicious_generated_internal_suite_size": { "const": "deterministic_count" }
+      }
+    },
+    "claimable_metrics": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "benign_instruction_noun_precision",
+          "override_mention_declared_precision",
+          "prospect_run_9_benign_precision",
+          "prospect_run_9_attack_recall",
+          "owner_private_context_protection_recall",
+          "owner_approval_precision",
+          "owner_approval_recall",
+          "memory_contamination_recall",
+          "hard_negative_benign_agent_workflow_fpr",
+          "legitimate_workflow_allow_rate",
+          "high_risk_action_policy_correctness",
+          "agent_handoff_trust_violation_recall",
+          "tool_output_json_instruction_recall",
+          "callback_receipt_exfiltration_recall",
+          "system_developer_extraction_recall",
+          "source_kind_policy_correctness",
+          "decision_event_logging_completeness",
+          "audit_completeness_for_non_allow_actions",
+          "utility_degradation_from_parse_enabled",
+          "generated_internal_runtime_min_slice_size",
+          "hard_negative_benign_generated_internal_suite_size",
+          "commercial_malicious_generated_internal_suite_size"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "holdout_separation": {
+      "type": "object",
+      "required": [
+        "row_ids_disjoint_from_tuning",
+        "frozen_before_tuning",
+        "tuning_sources_excluded",
+        "authored_by_independent_process"
+      ],
+      "properties": {
+        "row_ids_disjoint_from_tuning": { "type": "boolean" },
+        "frozen_before_tuning": { "type": "boolean" },
+        "tuning_sources_excluded": { "type": "boolean" },
+        "authored_by_independent_process": { "type": "boolean" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "claimable": { "const": true }
+        },
+        "required": ["claimable"]
+      },
+      "then": {
+        "properties": {
+          "frozen": { "const": true },
+          "evidence_state": { "const": "claimable_independent_frozen_holdout_evidence" },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "row_ids_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "case_count": {
+            "type": "integer",
+            "minimum": 10000
+          },
+          "generated_count": { "const": 0 },
+          "claimable_metrics": {
+            "allOf": [
+              { "contains": { "const": "owner_private_context_protection_recall" } },
+              { "contains": { "const": "owner_approval_precision" } },
+              { "contains": { "const": "owner_approval_recall" } },
+              { "contains": { "const": "memory_contamination_recall" } },
+              { "contains": { "const": "hard_negative_benign_agent_workflow_fpr" } },
+              { "contains": { "const": "legitimate_workflow_allow_rate" } },
+              { "contains": { "const": "high_risk_action_policy_correctness" } },
+              { "contains": { "const": "agent_handoff_trust_violation_recall" } },
+              { "contains": { "const": "tool_output_json_instruction_recall" } },
+              { "contains": { "const": "callback_receipt_exfiltration_recall" } },
+              { "contains": { "const": "system_developer_extraction_recall" } },
+              { "contains": { "const": "source_kind_policy_correctness" } },
+              { "contains": { "const": "decision_event_logging_completeness" } },
+              { "contains": { "const": "audit_completeness_for_non_allow_actions" } },
+              { "contains": { "const": "utility_degradation_from_parse_enabled" } },
+              { "contains": { "const": "generated_internal_runtime_min_slice_size" } },
+              { "contains": { "const": "hard_negative_benign_generated_internal_suite_size" } },
+              { "contains": { "const": "commercial_malicious_generated_internal_suite_size" } }
+            ]
+          },
+          "holdout_separation": {
+            "properties": {
+              "row_ids_disjoint_from_tuning": { "const": true },
+              "frozen_before_tuning": { "const": true },
+              "tuning_sources_excluded": { "const": true },
+              "authored_by_independent_process": { "const": true }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

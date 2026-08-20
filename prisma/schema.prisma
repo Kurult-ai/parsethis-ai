@@ -1,0 +1,907 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  passwordHash    String   @map("password_hash")
+  name            String?
+  stripeCustomerId String? @map("stripe_customer_id")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  lastLoginAt     DateTime? @map("last_login_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt      @map("updated_at")
+
+  apiKeys         ApiKey[]
+  passwordResets  PasswordReset[]
+  emailVerifications EmailVerification[]
+
+  @@map("users")
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], name: "idx_password_resets_user")
+  @@map("password_resets")
+}
+
+/// Email verification tokens. `User.emailVerifiedAt` existed from the start and
+/// nothing set it; it is now the gate on creating an organization, because that
+/// is the one act that has to be attributable to a person.
+model EmailVerification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], name: "idx_email_verifications_user")
+  @@map("email_verifications")
+}
+
+model ApiKey {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  orgId      String?  @map("org_id")
+  keyHash    String   @unique @map("key_hash")
+  keyPrefix  String   @map("key_prefix")
+  name       String
+  tier       String   @default("free")
+  scopes     String[] @default(["evaluate"])
+  rateLimit  Int      @default(10) @map("rate_limit")
+  role       String   @default("developer")  // org_admin | security_analyst | auditor | developer
+  lastUsedAt DateTime? @map("last_used_at")
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  revokedAt  DateTime? @map("revoked_at")
+  /// True for the operator's own monitoring keys (probes, canaries, smoke
+  /// tests), stamped at creation from the reserved naming convention in
+  /// lib/synthetic-keys.ts. Metrics and dashboards exclude these: on
+  /// 2026-08-17 they were 81% of all keys and 75% of all screenings, which
+  /// made every published count read as traction it did not have. This
+  /// changes measurement only — a synthetic key is served identically.
+  synthetic  Boolean  @default(false)
+
+  evaluations      Evaluation[]
+  usageRecords     UsageRecord[]
+  screeningPolicies ScreeningPolicy[]
+  screeningEvents  ScreeningEvent[]
+  subscription     Subscription?
+  billingUsage     BillingUsage[]
+  entitlementGrants EntitlementGrant[]
+  supportTickets   SupportTicket[]
+  adminReceipts    AdminActionReceipt[]
+  organization     Organization? @relation(fields: [orgId], references: [id])
+  user             User          @relation(fields: [userId], references: [id])
+
+  @@map("api_keys")
+}
+
+model Evaluation {
+  id          String   @id
+  apiKeyId    String   @map("api_key_id")
+  status      String   @default("queued")
+  prompt      String
+  model       String
+  variables   Json?
+  testCases   Json     @map("test_cases")
+  evaluators  String[]
+  config      Json     @default("{}")
+  results     Json?
+  summary     Json?
+  error       Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  expiresAt   DateTime? @map("expires_at")
+
+  apiKey       ApiKey        @relation(fields: [apiKeyId], references: [id])
+  usageRecords UsageRecord[]
+
+  @@index([status], name: "idx_evaluations_status")
+  @@index([apiKeyId], name: "idx_evaluations_api_key")
+  @@index([createdAt(sort: Desc)], name: "idx_evaluations_created")
+  @@map("evaluations")
+}
+
+model UsageRecord {
+  id              String   @id @default(cuid())
+  apiKeyId        String   @map("api_key_id")
+  evaluationId    String   @map("evaluation_id")
+  model           String
+  inputTokens     Int      @map("input_tokens")
+  outputTokens    Int      @map("output_tokens")
+  costUsd         Decimal  @map("cost_usd") @db.Decimal(10, 6)
+  evaluatorCostUsd Decimal @default(0) @map("evaluator_cost_usd") @db.Decimal(10, 6)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  apiKey     ApiKey     @relation(fields: [apiKeyId], references: [id])
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id])
+
+  @@index([apiKeyId, createdAt(sort: Desc)], name: "idx_usage_api_key_created")
+  @@map("usage_records")
+}
+
+model ScreeningPolicy {
+  id        String   @id @default(uuid())
+  apiKeyId    String   @map("api_key_id")
+  apiKey      ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  // Per-environment pinning (development | staging | production)
+  environment String @default("production")
+
+  // Structural triggers (agents can evaluate mechanically)
+  screenUserInput        Boolean @default(true)   @map("screen_user_input")
+  screenToolOutputs      Boolean @default(true)   @map("screen_tool_outputs")
+  screenForwardedMessages Boolean @default(true)  @map("screen_forwarded_messages")
+  screenAllPrompts       Boolean @default(false)  @map("screen_all_prompts")
+
+  // Action thresholds (tier-enforced minimums)
+  autoBlockThreshold     Int     @default(7)      @map("auto_block_threshold")
+  executeInSandbox       Boolean @default(true)   @map("execute_in_sandbox")
+  agentSafe              Boolean @default(false)  @map("agent_safe")
+  bypassEnabled          Boolean @default(false)  @map("bypass_enabled")
+  bypassCodewordHash     String?                  @map("bypass_codeword_hash")
+  bypassExpiresAt        DateTime?                @map("bypass_expires_at")
+
+  // Enforcement dial: "monitor" | "warn" | "block"
+  // monitor = full pipeline runs, verdicts recorded, nothing blocked (counterfactual)
+  // warn    = verdict annotation returned but not blocked
+  // block   = dangerous content is actually blocked (current behavior)
+  enforcementMode        String   @default("block") @map("enforcement_mode")
+
+  // Org-enforceable default screening mode: "full" | "pattern-only"
+  // pattern-only = skip LLM analysis entirely so prompt text never reaches a
+  // third-party model provider. When set, per-request mode is overridden.
+  /// Null means "not chosen" — the tier default applies (see
+  /// effectiveDefaultMode in routes/policy.ts). It used to be NOT NULL
+  /// DEFAULT 'full', which made an unset policy indistinguishable from an
+  /// explicit one and kept Solo keys reporting "full" while running
+  /// pattern-only.
+  defaultMode            String?  @map("default_mode")
+
+  // Tool Allowlist Enforcement: when true, screening requests are checked
+  // against the agent's registered tools (AgentRegistry.tools[]). Tools
+  // referenced in metadata.tool_permissions or body.tools that aren't in the
+  // agent's registered list produce a tool_violation flag, enforced via the
+  // enforcement dial.
+  enforceToolAllowlist   Boolean  @default(false)  @map("enforce_tool_allowlist")
+
+  // Custom compliance rules (JSON Rule DSL v1) — array of CustomRule objects
+  customRules            Json?    @default("[]") @map("custom_rules")
+
+  // Action Approval Matrix (Task 8.5): actionType × dataClassification → allow|require_approval|block
+  // Key format: "{actionType}_{classification}" — e.g. "delete_data_confidential"
+  // Action types: send_external, write_data, delete_data, execute_code, financial
+  // Classifications: public, internal, confidential, restricted
+  approvalMatrix         Json?    @default("{}") @map("approval_matrix")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  @@unique([apiKeyId, environment], name: "idx_screening_policy_key_env")
+  @@map("screening_policies")
+}
+
+model ScreeningEvent {
+  id         String   @id @default(cuid())
+  apiKeyId   String   @map("api_key_id")
+  riskScore  Float    @map("risk_score")
+  verdict    String
+  categories String[]
+  mode       String   @default("full")
+  latencyMs  Int      @map("latency_ms")
+  blocked    Boolean  @default(false)
+  wouldBlock Boolean? @map("would_block")
+  /// What Parse did. This stores the RECOMMENDED ACTION, not the four-value
+  /// `Disposition` that `/v1/parse` returns under the same field name — so the
+  /// domain is "allow" | "sandbox" | "block" | "request_owner_approval" |
+  /// "report" | "review". `blocked` says whether it refused; this says why. A
+  /// finding reported under a caller's `intended_action` declaration is
+  /// `report` with `blocked = false`. Filter holds with HELD_DISPOSITIONS
+  /// (src/lib/held-dispositions.ts) — matching "review" alone misses
+  /// `sandbox` and `request_owner_approval`, which is most of them.
+  disposition String? @map("disposition")
+  /// "instruction" or "subject" — whether the content was screened as addressed
+  /// to the agent or declared as material the agent only analyses.
+  analysisRole String? @map("analysis_role")
+  enforcementMode String? @map("enforcement_mode")
+  environment String @default("production")
+  metadata   Json?    @map("metadata")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  apiKey     ApiKey   @relation(fields: [apiKeyId], references: [id])
+
+  @@index([apiKeyId, createdAt(sort: Desc)], name: "idx_screening_apikey_created")
+  @@index([createdAt(sort: Desc)], name: "idx_screening_created")
+  @@index([verdict], name: "idx_screening_verdict")
+  /// Serves the org-scoped compliance queries: the declaration-share metric
+  /// groups by disposition over a period for one organisation.
+  @@index([disposition, createdAt(sort: Desc)], name: "idx_screening_disposition_created")
+  @@map("screening_events")
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  action    String
+  apiKeyId  String?  @map("api_key_id")
+  detail    String?
+  ip        String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([action], name: "idx_audit_action")
+  @@index([createdAt(sort: Desc)], name: "idx_audit_created")
+  @@map("audit_events")
+}
+
+model PaymentRecord {
+  id        String   @id @default(cuid())
+  txHash    String   @unique @map("tx_hash")
+  payer     String
+  amount    Decimal  @db.Decimal(18, 6)
+  endpoint  String
+  depth     String?
+  network   String   @default("eip155:8453")
+  status    String   @default("settled")
+  timestamp DateTime @default(now())
+
+  @@index([payer], name: "idx_payments_payer")
+  @@index([timestamp(sort: Desc)], name: "idx_payments_timestamp")
+  @@map("payment_records")
+}
+
+model Subscription {
+  id                    String   @id @default(cuid())
+  apiKeyId              String   @unique @map("api_key_id")
+  stripeCustomerId      String   @unique @map("stripe_customer_id")
+  stripeSubscriptionId  String   @unique @map("stripe_subscription_id")
+  stripePriceId         String   @map("stripe_price_id")
+  status                String   @default("active")
+  currentPeriodStart    DateTime @map("current_period_start")
+  currentPeriodEnd      DateTime @map("current_period_end")
+  cancelAtPeriodEnd     Boolean  @default(false) @map("cancel_at_period_end")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@index([status], name: "idx_subscriptions_status")
+  @@map("subscriptions")
+}
+
+model BillingUsage {
+  id              String   @id @default(cuid())
+  apiKeyId        String   @map("api_key_id")
+  periodStart     DateTime @map("period_start")
+  periodEnd       DateTime @map("period_end")
+  requestCount    Int      @default(0) @map("request_count")
+  overageCount    Int      @default(0) @map("overage_count")
+  reportedToStripe Boolean @default(false) @map("reported_to_stripe")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@unique([apiKeyId, periodStart], name: "idx_billing_usage_key_period")
+  @@map("billing_usage")
+}
+
+model EntitlementGrant {
+  id              String   @id @default(cuid())
+  apiKeyId        String   @map("api_key_id")
+  userId          String   @map("user_id")
+  tier            String
+  reason          String
+  grantedBy       String   @map("granted_by")
+  priceMode       String   @default("manual") @map("price_mode")
+  priceUsdCents   Int?     @map("price_usd_cents")
+  stripePriceId   String?  @map("stripe_price_id")
+  startsAt        DateTime @map("starts_at")
+  endsAt          DateTime? @map("ends_at")
+  expireKeyAtEnd  Boolean  @default(false) @map("expire_key_at_end")
+  status          String   @default("active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@index([apiKeyId, status], name: "idx_entitlement_grants_key_status")
+  @@index([userId], name: "idx_entitlement_grants_user")
+  @@index([endsAt], name: "idx_entitlement_grants_ends")
+  @@map("entitlement_grants")
+}
+
+model SupportTicket {
+  id               String   @id @default(cuid())
+  source           String
+  externalId       String?  @map("external_id")
+  requesterEmail   String?  @map("requester_email")
+  requesterName    String?  @map("requester_name")
+  subject          String?
+  body             String
+  status           String   @default("open")
+  priority         String   @default("normal")
+  category         String?
+  apiKeyId         String?  @map("api_key_id")
+  stripeCustomerId String?  @map("stripe_customer_id")
+  assignedTo       String?  @map("assigned_to")
+  summary          String?
+  resolution       String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  resolvedAt       DateTime? @map("resolved_at")
+
+  apiKey   ApiKey? @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  messages SupportMessage[]
+  receipts AdminActionReceipt[]
+
+  @@index([status, priority], name: "idx_support_tickets_status_priority")
+  @@index([requesterEmail], name: "idx_support_tickets_requester")
+  @@index([apiKeyId], name: "idx_support_tickets_api_key")
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id         String   @id @default(cuid())
+  ticketId   String   @map("ticket_id")
+  direction  String
+  channel    String
+  externalId String?  @map("external_id")
+  from       String?
+  to         String?
+  body       String
+  screened   Boolean  @default(false)
+  riskScore  Float?   @map("risk_score")
+  verdict    String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt], name: "idx_support_messages_ticket_created")
+  @@map("support_messages")
+}
+
+model AdminActionReceipt {
+  id             String   @id @default(cuid())
+  action         String
+  actor          String
+  ticketId       String?  @map("ticket_id")
+  apiKeyId       String?  @map("api_key_id")
+  userId         String?  @map("user_id")
+  stripeObjectId String?  @map("stripe_object_id")
+  reason         String?
+  dryRun         Boolean  @default(false) @map("dry_run")
+  before         Json?
+  after          Json?
+  result         Json?
+  riskLevel      String   @default("low") @map("risk_level")
+  approvalState  String   @default("not_required") @map("approval_state")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  apiKey ApiKey? @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  ticket SupportTicket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+
+  @@index([action, createdAt], name: "idx_admin_receipts_action_created")
+  @@index([ticketId], name: "idx_admin_receipts_ticket")
+  @@index([apiKeyId], name: "idx_admin_receipts_api_key")
+  @@map("admin_action_receipts")
+}
+
+model AdminImprovementProposal {
+  id                 String    @id @default(cuid())
+  idempotencyKey     String    @unique @map("idempotency_key")
+  title              String
+  category           String    @default("saas_readiness")
+  priority           Int       @default(5)
+  status             String    @default("proposed")
+  riskLevel          String    @default("low") @map("risk_level")
+  source             String    @default("hourly_improvement_loop")
+  evidence           Json?
+  impact             String?
+  acceptanceCriteria Json?     @map("acceptance_criteria")
+  taskTitle          String?   @map("task_title")
+  taskBody           String?   @map("task_body")
+  taskAssignee       String    @default("triage") @map("task_assignee")
+  taskId             String?   @map("task_id")
+  taskCreatedAt      DateTime? @map("task_created_at")
+  approvedBy         String?   @map("approved_by")
+  approvedAt         DateTime? @map("approved_at")
+  approvalSource     String?   @map("approval_source")
+  rejectionReason    String?   @map("rejection_reason")
+  createdBy          String?   @map("created_by")
+  updatedBy          String?   @map("updated_by")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, priority, createdAt], name: "idx_admin_improvement_proposals_status_priority_created")
+  @@map("admin_improvement_proposals")
+}
+
+// ─── Compliance Expansion Layer ─────────────────────────────────────────
+// Audit-first design: every agent action is traceable to an org, an agent,
+// a policy, and a framework control.
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  ownerId     String   @map("owner_id")
+  planTier    String   @default("free") @map("plan_tier")
+  // "blocklist" (default): tools are allowed unless a rule blocks them.
+  // "allowlist": tools are blocked unless a rule allows them.
+  toolPolicyMode String @default("blocklist") @map("tool_policy_mode")
+  /// Email domains this org has proven it controls, via a DNS TXT challenge.
+  /// A verified account whose address is in one of these cannot bootstrap a
+  /// second organization, and its unaffiliated keys show up as claimable here.
+  verifiedDomains String[] @default([]) @map("verified_domains")
+  ssoEnabled  Boolean  @default(false) @map("sso_enabled")
+  ssoConfig   Json?    @map("sso_config")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt      @map("updated_at")
+
+  apiKeys     ApiKey[]
+  agents      AgentRegistry[]
+  siemConfigs SIEMConfig[]
+  exports     ComplianceExport[]
+  policyHistory PolicyRevision[]
+  egressRules  EgressRule[]
+  ssoProviders SSOProvider[]
+  toolRules   OrgToolRule[]
+  toolExceptionRequests ToolExceptionRequest[]
+  policyDefault OrgPolicyDefault?
+  gatewayConfig GatewayConfig?
+
+  @@map("organizations")
+}
+
+/// Org-wide tool governance. One row per rule; highest priority match wins.
+model OrgToolRule {
+  id        String   @id @default(cuid())
+  orgId     String   @map("org_id")
+  // What the rule matches:
+  //   kind = "category" → pattern is a catalog category slug (e.g. "browser")
+  //   kind = "exact"    → pattern is a tool name (e.g. "playwright")
+  //   kind = "prefix"   → pattern matched as prefix (e.g. "mcp__claude-in-chrome__")
+  kind      String   @default("category")
+  pattern   String
+  // allow | require_approval | block
+  action    String   @default("block")
+  // Scope: null = whole org. Otherwise restrict to one agent, key, or role.
+  // A scoped rule may only tighten the org-wide result, never loosen it.
+  scopeType String?  @map("scope_type")   // agent | api_key | role
+  scopeId   String?  @map("scope_id")
+  priority  Int      @default(0)
+  reason    String?
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  /// The approved ExceptionRequest that created this rule, when one did.
+  ///
+  /// A scoped rule may only tighten — that is the property the whole control
+  /// rests on, and it stays true for rules an admin writes by hand. A grant is
+  /// a different object: it exists because a named person asked, a named
+  /// admin approved, and it expires. This column is what separates the two, so
+  /// the resolver can honour a scoped `allow` that carries provenance without
+  /// opening the door to scoped `allow` in general.
+  grantedByRequestId String?   @unique @map("granted_by_request_id")
+  /// When this rule stops applying. Null means it does not expire.
+  expiresAt          DateTime? @map("expires_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  grantedByRequest ToolExceptionRequest? @relation(fields: [grantedByRequestId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, priority], name: "idx_org_tool_rules_org_priority")
+  @@index([expiresAt], name: "idx_org_tool_rules_expires")
+  @@map("org_tool_rules")
+}
+
+/// A request from someone who was blocked, to the people who blocked them.
+///
+/// Prospect run 8 measured the two paths open to a governed engineer whose
+/// legitimate integration had just stopped working. Renaming his tool took ten
+/// seconds and worked. Finding the sanctioned path took the whole session and
+/// there wasn't one — the docs said exceptions do not exist, the dry-run was
+/// closed to his role, and the only reason he knew who to email is that the
+/// admin had typed an address into a free-text reason field.
+///
+/// This is the missing object. It starts at the 422, carries the trace id of
+/// the refusal that prompted it, and ends as a scoped, expiring, attributable
+/// grant. The alternative it replaces is not compliance — it is a rename.
+model ToolExceptionRequest {
+  id     String @id @default(cuid())
+  orgId  String @map("org_id")
+
+  /// What is being asked for.
+  tool     String
+  agentId  String? @map("agent_id")
+  /// The screening or registration trace this request came from, so an
+  /// approver can read the exact refusal rather than take the asker's word.
+  traceId  String? @map("trace_id")
+  reason   String
+
+  /// Who asked. Keys are the membership edge today, so this is a key id.
+  requestedByKeyId String  @map("requested_by_key_id")
+  requestedByEmail String? @map("requested_by_email")
+
+  /// pending | approved | denied | withdrawn | expired
+  status String @default("pending")
+
+  /// Who answered, when, and what they said.
+  decidedByKeyId String?   @map("decided_by_key_id")
+  decidedAt      DateTime? @map("decided_at")
+  decisionNote   String?   @map("decision_note")
+  /// How long an approval lasts. Null means it does not expire.
+  expiresAt      DateTime? @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  org         Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  grantedRule OrgToolRule?
+
+  @@index([orgId, status], name: "idx_tool_exception_requests_org_status")
+  @@index([requestedByKeyId], name: "idx_tool_exception_requests_requester")
+  @@map("tool_exception_requests")
+}
+
+/// Org-wide risk tolerance. ScreeningPolicy is per (apiKeyId, environment), so
+/// without this row an employee can loosen their own key. One row per org; a
+/// null field means the org has no opinion and the key's own value stands.
+model OrgPolicyDefault {
+  id                      String   @id @default(cuid())
+  orgId                   String   @unique @map("org_id")
+  // Same field names as ScreeningPolicy so the clamp is a field-wise merge.
+  autoBlockThreshold      Int?     @map("auto_block_threshold")
+  enforcementMode         String?  @map("enforcement_mode")
+  defaultMode             String?  @map("default_mode")
+  screenUserInput         Boolean? @map("screen_user_input")
+  screenToolOutputs       Boolean? @map("screen_tool_outputs")
+  screenForwardedMessages Boolean? @map("screen_forwarded_messages")
+  executeInSandbox        Boolean? @map("execute_in_sandbox")
+  enforceToolAllowlist    Boolean? @map("enforce_tool_allowlist")
+  bypassEnabled           Boolean? @map("bypass_enabled")
+  /// Whether members may use metadata.intended_action to downgrade a block to
+  /// a reported finding. NULL = allowed. Inverted like bypassEnabled: false is
+  /// the stricter setting. See src/lib/analysis-role.ts.
+  allowSubjectRole        Boolean? @map("allow_subject_role")
+  /// Fields the member key may not override. Unlocked fields are seed values.
+  lockedFields            String[] @default([]) @map("locked_fields")
+  updatedBy               String   @map("updated_by")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt      @map("updated_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("org_policy_defaults")
+}
+
+model AgentRegistry {
+  id            String   @id @default(cuid())
+  orgId         String   @map("org_id")
+  agentName     String   @map("agent_name")
+  agentVersion  String?  @map("agent_version")
+  framework     String?  // langchain, crewai, autogen, openai-assistants, custom
+  description   String?
+  tools         String[] @default([])    // MCP servers, APIs, plugins this agent can use
+  dataAccess    String[] @default([])    // data classifications: public, internal, confidential, restricted
+  riskLevel     String   @default("medium") @map("risk_level")  // low, medium, high, critical, unscored
+  status        String   @default("active")  // active, suspended, decommissioned, discovered
+  frozen        Boolean  @default(false)     // kill switch: frozen agents receive immediate block
+  frozenReason  String?  @map("frozen_reason")
+  frozenAt      DateTime? @map("frozen_at")
+  ownerEmail    String?  @map("owner_email")
+  deployedAt    DateTime? @map("deployed_at")
+  firstSeenAt   DateTime? @map("first_seen_at")
+  lastSeenAt    DateTime? @map("last_seen_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt      @map("updated_at")
+
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, agentName], name: "idx_agent_registry_org_name")
+  @@index([orgId, status], name: "idx_agent_registry_org_status")
+  @@index([orgId, riskLevel], name: "idx_agent_registry_org_risk")
+  @@map("agent_registry")
+}
+
+model PolicyRevision {
+  id            String   @id @default(cuid())
+  orgId         String   @map("org_id")
+  version       Int      @default(1)
+  policySnapshot Json    @map("policy_snapshot")
+  changedBy     String   @map("changed_by")
+  changeReason  String?  @map("change_reason")
+  diff          Json?    // structured diff from previous version
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt(sort: Desc)], name: "idx_policy_revisions_org_created")
+  @@unique([orgId, version], name: "idx_policy_revisions_org_version")
+  @@map("policy_revisions")
+}
+
+/// Per-organization LLM gateway.
+///
+/// This model reverses a recorded decision: the gateway deliberately avoided
+/// persistent key custody ("the C17 blast radius is minimized by not persisting
+/// provider keys to disk/database"), and its config lived in one process-global
+/// variable. That made it single-tenant AND unreachable — configuring it needed
+/// an `admin` scope no customer key holds, so the one enforcement point that
+/// does not depend on an agent declaring its own tools did not exist for
+/// customers at all.
+///
+/// The trade is now managed rather than avoided: sealedApiKey is AES-256-GCM
+/// via src/lib/secret-box.ts, no route returns it, and config is scoped to one
+/// organization.
+model GatewayConfig {
+  id             String   @id @default(cuid())
+  orgId          String   @unique @map("org_id")
+  upstreamUrl    String   @map("upstream_url")
+  /// Sealed. Never returned by any route — reads report configured true/false.
+  sealedApiKey   String   @map("sealed_api_key")
+  model          String?
+  enforcementMode String  @default("block") @map("enforcement_mode")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt      @map("updated_at")
+
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("gateway_configs")
+}
+
+model SIEMConfig {
+  id            String   @id @default(cuid())
+  orgId         String   @map("org_id")
+  platform      String   // splunk, datadog, elastic, sentinel, generic_webhook
+  endpoint      String
+  /// Sealed with src/lib/secret-box.ts (AES-256-GCM) since 2026-08-12. Rows
+  /// written before that are plaintext and are sealed on their next write; the
+  /// forwarder reads both. Never returned by any route.
+  authHeader    String?  @map("auth_header")
+  format        String   @default("cef")  // cef, json, leef, raw
+  /// @map is load-bearing: without it Prisma names the column "eventTypes"
+  /// while every sibling is snake_case, and the raw INSERT that used to write
+  /// this row wrote `event_types`. That mismatch made POST /v1/compliance/siem
+  /// return 500 on every call for the life of the feature.
+  eventTypes    String[] @default(["screening", "audit", "policy_change", "approval"]) @map("event_types")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt      @map("updated_at")
+
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, active], name: "idx_siem_configs_org_active")
+  @@map("siem_configs")
+}
+
+model ComplianceExport {
+  id            String   @id @default(cuid())
+  orgId         String   @map("org_id")
+  requestedBy   String   @map("requested_by")
+  status        String   @default("pending")  // pending, generating, ready, failed, expired
+  framework     String   @default("all")  // owasp-llm, nist-ai-rmf, eu-ai-act, soc2, iso-42001, all
+  dateFrom      DateTime @map("date_from")
+  dateTo        DateTime @map("date_to")
+  format        String   @default("json")  // json, csv, pdf
+  artifactUrl   String?  @map("artifact_url")
+  artifactHash  String?  @map("artifact_hash")  // SHA-256 of the export for tamper evidence
+  eventCount    Int?     @map("event_count")
+  sizeBytes     Int?     @map("size_bytes")
+  error         String?
+  expiresAt     DateTime? @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  completedAt   DateTime? @map("completed_at")
+
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt(sort: Desc)], name: "idx_compliance_exports_org_created")
+  @@index([status], name: "idx_compliance_exports_status")
+  @@map("compliance_exports")
+}
+
+// ─── Data Governance Layer ──────────────────────────────────────────────
+// Data Source Registry: admins register data volumes agents may touch.
+// AgentDataGrant: per-agent access grants with optional expiry.
+
+model DataSource {
+  id             String   @id @default(cuid())
+  name           String
+  kind           String   // filesystem | database | api | vector_store | document_collection
+  classification String   @default("internal") // public | internal | confidential | restricted
+  ownerId        String   @map("owner_id")
+  orgId          String   @map("org_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt         @map("updated_at")
+
+  grants AgentDataGrant[]
+
+  @@index([orgId], name: "idx_data_sources_org")
+  @@index([orgId, kind], name: "idx_data_sources_org_kind")
+  @@map("data_sources")
+}
+
+model AgentDataGrant {
+  id           String    @id @default(cuid())
+  agentId      String    @map("agent_id")
+  dataSourceId String    @map("data_source_id")
+  access       String    @default("read") // read | write | readwrite
+  grantedBy    String    @map("granted_by")
+  expiresAt    DateTime? @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  dataSource DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, dataSourceId], name: "idx_agent_data_grant_agent_source")
+  @@index([agentId], name: "idx_agent_data_grants_agent")
+  @@index([dataSourceId], name: "idx_agent_data_grants_source")
+  @@map("agent_data_grants")
+}
+
+/// Volume Budget: caps on data quantity per agent.
+/// dataSourceId null = agent-wide budget; otherwise per (agent × data source).
+model VolumeBudget {
+  id                  String   @id @default(cuid())
+  agentId             String   @map("agent_id")
+  dataSourceId        String?  @map("data_source_id") // null = agent-wide
+  maxRecordsPerRequest Int?    @map("max_records_per_request")
+  maxRecordsPerDay    Int?     @map("max_records_per_day")
+  maxBytesPerDay      Int?     @map("max_bytes_per_day")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt      @map("updated_at")
+
+  @@unique([agentId, dataSourceId], name: "idx_volume_budget_agent_source")
+  @@index([agentId], name: "idx_volume_budgets_agent")
+  @@map("volume_budgets")
+}
+
+/// Egress Rule: controls where data may go.
+/// destinationPattern can be a domain (api.example.com), email domain (@example.com),
+/// webhook URL prefix (https://hooks.example.com), or "*" for any destination.
+/// maxClassification is the highest classification allowed; data above that level
+/// is blocked or requires approval at the matched destination.
+model EgressRule {
+  id                  String   @id @default(cuid())
+  orgId               String   @map("org_id")
+  scope               String   @default("org")    // org | key | agent
+  destinationPattern  String                       // domain, email domain, webhook URL prefix, or "*"
+  maxClassification   String   @default("internal") // public | internal | confidential | restricted
+  action              String   @default("allow")   // allow | require_approval | block
+  priority            Int      @default(0)
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId], name: "idx_egress_rules_org")
+  @@index([orgId, priority], name: "idx_egress_rules_org_priority")
+  @@map("egress_rules")
+}
+
+/// Compliance Receipt: tamper-evident record for every screening event.
+/// integrity_hash = SHA-256 of all data fields; chain_hash links to previous
+/// receipt creating an append-only hash chain for audit trail integrity.
+model ComplianceReceipt {
+  id                String   @id @default(cuid())
+  receiptId         String   @unique @map("receipt_id")     // UUID
+  timestamp         DateTime @map("timestamp")
+  agentId           String   @map("agent_id")
+  policyVersion     String   @map("policy_version")
+  verdict           String
+  riskScore         Float    @map("risk_score")
+  patternsMatched   String[] @default([]) @map("patterns_matched")
+  screeningEventId  String?  @map("screening_event_id")
+  orgId             String?  @map("org_id")
+  integrityHash     String   @map("integrity_hash")
+  chainHash         String   @map("chain_hash")
+  seqNum            Int      @default(0) @map("seq_num")    // position in hash chain
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, createdAt(sort: Desc)], name: "idx_compliance_receipts_org_created")
+  @@index([agentId], name: "idx_compliance_receipts_agent")
+  @@index([verdict], name: "idx_compliance_receipts_verdict")
+  @@index([timestamp(sort: Desc)], name: "idx_compliance_receipts_timestamp")
+  @@map("compliance_receipts")
+}
+
+/// Signed Agent Identity (Task 10.1)
+/// Cryptographic signing of agent requests so downstream systems can verify
+/// who made a screening call. Agents register an Ed25519 public key, then sign
+/// each request payload with the corresponding private key.
+model SignedIdentity {
+  id         String   @id @default(cuid())
+  agentId    String   @map("agent_id")
+  publicKey  String   @map("public_key")   // base64-encoded Ed25519 public key
+  keyVersion Int      @default(1) @map("key_version")
+  status     String   @default("active")   // active | revoked | rotated
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt           @map("updated_at")
+
+  @@unique([agentId, keyVersion], name: "idx_signed_identity_agent_version")
+  @@index([agentId, status], name: "idx_signed_identity_agent_status")
+  @@map("signed_identities")
+}
+
+/// Delegation Chain (Task 10.4): records parent→child agent delegation
+/// with inherited policy scope. A child can restrict but never expand
+/// the parent's data grants, tool allowlist, or enforcement mode.
+model DelegationChain {
+  id            String   @id @default(cuid())
+  parentAgentId String   @map("parent_agent_id")
+  childAgentId  String   @map("child_agent_id")
+  orgId         String   @map("org_id")
+  // scope constrains which data classifications the child may access
+  // e.g. ["public", "internal"] — subset of parent's dataAccess
+  scope         String[] @default([])
+  // inherited policy snapshot at delegation time
+  inheritedTools        String[] @default([]) @map("inherited_tools")
+  inheritedDataAccess   String[] @default([]) @map("inherited_data_access")
+  inheritedEnforcement  String   @default("block") @map("inherited_enforcement")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@unique([parentAgentId, childAgentId], name: "idx_delegation_parent_child")
+  @@index([childAgentId], name: "idx_delegation_chain_child")
+  @@index([parentAgentId], name: "idx_delegation_chain_parent")
+  @@map("delegation_chains")
+}
+
+/// SSO Provider (Task 6.1): stores per-org identity provider configuration
+/// for OAuth2 Authorization Code flow (Okta, Azure AD, Google Workspace, WorkOS).
+model SSOProvider {
+  id           String   @id @default(cuid())
+  orgId        String   @map("org_id")
+  providerType String   @map("provider_type")  // okta | azure | google | workos
+  clientId     String   @map("client_id")
+  clientSecret String   @map("client_secret")   // encrypted at rest (AES-256-GCM)
+  redirectUri  String   @map("redirect_uri")
+  domains      String[] @default([])             // email domains this provider covers
+  metadata     Json?                              // IdP-specific endpoints (auth_url, token_url, userinfo_url)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt      @map("updated_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId], name: "idx_sso_providers_org")
+  @@index([providerType], name: "idx_sso_providers_type")
+  @@map("sso_providers")
+}
+
+/// Availability evidence (prospect run 13).
+///
+/// /status could only report `process.uptime()` — time since the last restart —
+/// which is the one availability number that can only ever hurt: a reviewer who
+/// loads the page shortly after a deploy sees "10m" with nothing around it to
+/// say whether that is normal. There was no history to put it in context.
+///
+/// One row per minute the process is alive. The gaps ARE the outage record: if
+/// Parse is down, or the machine is off, no row is written and the missing
+/// minutes are the evidence. That is why this is a heartbeat table rather than
+/// an incident table someone has to remember to write to.
+///
+/// `at` is truncated to the minute and unique, so a restart inside the same
+/// minute cannot double-count and a backfill cannot duplicate.
+model ServiceHeartbeat {
+  at        DateTime @id            // minute-truncated UTC instant
+  commit    String?                 // build serving that minute, for correlating a gap with a deploy
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("service_heartbeats")
+}

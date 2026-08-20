@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+node_modules
+dist/
+
+# Environment (ALL variants)
+.env
+.env.*
+.env*.local
+.env.production
+.env.bak
+
+# Secrets
+*.pem
+*.key
+credentials.json
+
+# IDE / OS
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# Build artifacts
+*.tsbuildinfo
+__pycache__/
+*.pyc
+
+# Prisma generated
+/src/generated/prisma
+
+# Platform
+.vercel
+.railway
+
+# Worktrees (Claude Code agent worktrees)
+.claude/worktrees/
+
+# Debug
+npm-debug.log*
+screening-fixture-results.json
+public-screening-results.json
+
+# Workspace (agent output)
+workspace/
+
+# Local scratch and DB dumps — never part of a deploy
+backups/
+
+# macOS AppleDouble artifacts, created when files are copied over the SSHFS mount
+._*
+
+# Hourly probe scripts and one-off scratch, written at the repo root by
+# operator automation. They are not source, nothing under src/ or scripts/
+# imports them, and two of them carry synthetic Slack-token fixtures that
+# trip GitHub push protection on every push.
+/tmp_*

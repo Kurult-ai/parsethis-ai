@@ -1,0 +1,157 @@
+# Kubernetes Network Policy for OpenClaw Agents
+# Apply with: kubectl apply -f network-policy.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: openclaw
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# Allow agents to access DNS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: openclaw
+spec:
+  podSelector:
+    matchLabels:
+      app: openclaw-agent
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+
+---
+# Agent egress policy - whitelisted domains only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-egress-policy
+  namespace: openclaw
+spec:
+  podSelector:
+    matchLabels:
+      app: openclaw-agent
+  policyTypes:
+    - Egress
+  egress:
+    # HTTPS to approved APIs
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8      # Private networks
+              - 172.16.0.0/12   # Private networks
+              - 192.168.0.0/16  # Private networks
+      ports:
+        - protocol: TCP
+          port: 443
+    # Neo4j internal
+    - to:
+        - podSelector:
+            matchLabels:
+              app: neo4j
+      ports:
+        - protocol: TCP
+          port: 7687
+    # Vault internal
+    - to:
+        - podSelector:
+            matchLabels:
+              app: vault
+      ports:
+        - protocol: TCP
+          port: 8200
+    # Redis internal
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+
+---
+# Inter-agent communication policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-to-agent-communication
+  namespace: openclaw
+spec:
+  podSelector:
+    matchLabels:
+      app: openclaw-agent
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: openclaw-agent
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: openclaw-agent
+      ports:
+        - protocol: TCP
+          port: 3000
+
+---
+# Gateway external access policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-external-access
+  namespace: openclaw
+spec:
+  podSelector:
+    matchLabels:
+      app: openclaw-agent
+      agent-role: gateway
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from: []  # Allow from anywhere (external load balancer)
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: openclaw-agent
+    - to:
+        - podSelector:
+            matchLabels:
+              app: neo4j
+      ports:
+        - protocol: TCP
+          port: 7687
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379

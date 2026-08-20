@@ -1,0 +1,4 @@
+brain_append_log is failing for Berke with -32002 trailing whitespace on the Mini Brain wiki. If that is lint on unrelated pages, fix whitespace only so append_log can commit.
+
+Do not dump the vault or wiki. Do not print tokens or .env. Do not add a second Brain server.
+Short fact when append_log works again.

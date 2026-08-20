@@ -1,0 +1,33 @@
+{
+  "manifest_kind": "public_screening_holdout_template",
+  "claimable": false,
+  "frozen": false,
+  "evidence_state": "frozen_but_not_independent_evidence",
+  "source": "public",
+  "split": "holdout",
+  "sha256": "",
+  "row_ids_sha256": "",
+  "case_count": 0,
+  "confidence_intervals_95_required": true,
+  "confidence_interval_methods": {
+    "public_attack_recall": "wilson_95",
+    "public_attack_precision": "wilson_95",
+    "public_benign_fpr": "wilson_95",
+    "public_f1": "deterministic_bootstrap_95",
+    "legacy_safe_false_fpr": "wilson_95",
+    "critical_attack_miss_rate": "wilson_95",
+    "pattern_latency_p95_ms": "deterministic_bootstrap_95",
+    "pattern_latency_p99_ms": "deterministic_bootstrap_95"
+  },
+  "claimable_metrics": [],
+  "holdout_separation": {
+    "row_ids_disjoint_from_tuning": false,
+    "frozen_before_tuning": false,
+    "tuning_sources_excluded": false
+  },
+  "notes": [
+    "Template only. Do not set claimable=true until this file is prepared before tuning against the evaluated rows.",
+    "To support pass_claimable, fill sha256, row_ids_sha256, case_count, claimable_metrics, and holdout_separation with independently frozen holdout evidence.",
+    "Claimable preparation must dedupe the holdout rows against tuning/generated rows with --dedupe-against."
+  ]
+}

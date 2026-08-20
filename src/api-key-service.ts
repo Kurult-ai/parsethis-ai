@@ -1,0 +1,723 @@
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import bcrypt from "bcrypt";
+import { prisma } from "./db.js";
+import { backfillApiKeyFastHash, cacheApiKey, getCachedApiKey, invalidateApiKeyCache } from "./result-store.js";
+import { isNegativelyCached, recordNegativeCache } from "./lib/auth-dos-guard.js";
+import { PLAN_LIMITS } from "./lib/product-facts.js";
+import { SELF_SERVICE_USER_ID } from "./lib/constants.js";
+import { isSyntheticKeyName } from "./lib/synthetic-keys.js";
+import { abandonRedisConnection, ensureRedisConnected, getRedis } from "./redis.js";
+
+const BCRYPT_ROUNDS = 12;
+const LOCAL_TEST_BCRYPT_ROUNDS = 4;
+const LOCAL_KEYGEN_TEST_MODE_VALUES = new Set(["1", "true", "yes", "on"]);
+const REDIS_FALLBACK_KEY_PREFIX = "keygen:fallback:v1";
+const REDIS_FALLBACK_TTL_SECONDS = 30 * 24 * 60 * 60;
+const API_KEY_PREFIX_BUCKET_MAX_CANDIDATES = 16;
+
+type StoredLocalApiKey = ApiKeyRecord & { keyHash: string };
+export type FallbackApiKeyRecord = ApiKeyRecord & { keyHash: string };
+const localTestKeysByPrefix = new Map<string, StoredLocalApiKey[]>();
+
+/**
+ * Per-request verification hash for the Redis validation cache.
+ *
+ * bcrypt stays the at-rest hash in Postgres: a database leak must not hand an
+ * attacker anything cheap to attack. But bcrypt is a *password* KDF, and its
+ * cost is deliberate — at BCRYPT_ROUNDS=12 a single compare costs roughly
+ * 250ms of CPU. Running that on every authenticated request made bcrypt ~98%
+ * of Parse's response time (measured: 1-8ms of detection inside a ~330ms
+ * call, while a 401 that short-circuits before the compare returned in ~90ms).
+ *
+ * That cost buys nothing here. A bcrypt work factor exists to make brute-force
+ * guessing of *low-entropy* human passwords expensive. Parse keys are 24 bytes
+ * from randomBytes — 192 bits of entropy, unguessable regardless of hash
+ * speed. So the cache carries a SHA-256 of the raw key and the hot path does a
+ * constant-time compare against that instead. Same authentication decision,
+ * without the KDF.
+ *
+ * The cache is Redis on the same host; a Redis leak exposes SHA-256 of a
+ * 192-bit random secret, which is not invertible. Postgres keeps bcrypt.
+ */
+function fastKeyHash(rawKey: string): string {
+  return createHash("sha256").update(rawKey).digest("hex");
+}
+
+/**
+ * Constant-time compare of two hex digests.
+ *
+ * The canonical-form check is load-bearing, not decoration. Buffer.from(hex)
+ * never throws on bad input — it silently truncates at the first invalid
+ * character — so `<digest>zzzz` decodes to the same 32 bytes as `<digest>` and
+ * an uppercase digest decodes identically too. Neither is a bypass (producing
+ * either requires already knowing the digest, which requires the key), but it
+ * meant the only thing standing between a corrupt cache value and an auth
+ * decision was a length check, and the try/catch written as the safety net
+ * could never fire. Reject anything that is not exactly 64 lowercase hex chars.
+ */
+const CANONICAL_SHA256_HEX = /^[0-9a-f]{64}$/;
+
+function fastKeyHashMatches(rawKey: string, expectedHex: string): boolean {
+  if (!CANONICAL_SHA256_HEX.test(expectedHex)) return false;
+  return timingSafeEqual(Buffer.from(fastKeyHash(rawKey), "hex"), Buffer.from(expectedHex, "hex"));
+}
+
+export function isLocalKeyGenerationTestMode(): boolean {
+  const value = process.env.KEY_GENERATION_LOCAL_TEST_MODE ?? process.env.KEYGEN_LOCAL_TEST_MODE ?? "";
+  return LOCAL_KEYGEN_TEST_MODE_VALUES.has(value.toLowerCase());
+}
+
+function redisFallbackEnabled(): boolean {
+  return (process.env.KEYGEN_REDIS_FALLBACK_ENABLED ?? "true").toLowerCase() !== "false";
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutValue: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(timeoutValue), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function redisTimeoutMs(): number {
+  return Number(process.env.REDIS_COMMAND_TIMEOUT_MS ?? 1500);
+}
+
+function dbFallbackTimeoutMs(): number {
+  return Number(process.env.KEYGEN_DB_FALLBACK_TIMEOUT_MS ?? 1500);
+}
+
+function fallbackRecordKey(prefix: string): string {
+  return `${REDIS_FALLBACK_KEY_PREFIX}:prefix:${prefix}`;
+}
+
+function fallbackIndexKey(): string {
+  return `${REDIS_FALLBACK_KEY_PREFIX}:self_service_ids`;
+}
+
+function serializeFallbackRecord(record: FallbackApiKeyRecord): string {
+  return JSON.stringify({
+    ...record,
+    lastUsedAt: record.lastUsedAt?.toISOString() ?? null,
+    expiresAt: record.expiresAt?.toISOString() ?? null,
+    createdAt: record.createdAt.toISOString(),
+    revokedAt: record.revokedAt?.toISOString() ?? null,
+  });
+}
+
+function deserializeFallbackRecord(value: string): FallbackApiKeyRecord {
+  const parsed = JSON.parse(value) as Omit<FallbackApiKeyRecord, "lastUsedAt" | "expiresAt" | "createdAt" | "revokedAt"> & {
+    lastUsedAt: string | null;
+    expiresAt: string | null;
+    createdAt: string;
+    revokedAt: string | null;
+  };
+  return {
+    ...parsed,
+    lastUsedAt: parsed.lastUsedAt ? new Date(parsed.lastUsedAt) : null,
+    expiresAt: parsed.expiresAt ? new Date(parsed.expiresAt) : null,
+    createdAt: new Date(parsed.createdAt),
+    revokedAt: parsed.revokedAt ? new Date(parsed.revokedAt) : null,
+  };
+}
+
+export async function getFallbackRecords(prefix: string): Promise<FallbackApiKeyRecord[]> {
+  if (!redisFallbackEnabled()) return [];
+  const connected = await withTimeout(ensureRedisConnected(), redisTimeoutMs(), false);
+  if (!connected) {
+    abandonRedisConnection();
+    return [];
+  }
+  const value = await withTimeout(getRedis().get(fallbackRecordKey(prefix)), redisTimeoutMs(), null);
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    const candidates = typeof parsed === "object" && parsed !== null && Array.isArray((parsed as { candidates?: unknown[] }).candidates)
+      ? (parsed as { candidates: unknown[] }).candidates
+      : [parsed];
+    return candidates
+      .filter((candidate): candidate is Record<string, unknown> => typeof candidate === "object" && candidate !== null
+        && typeof (candidate as { id?: unknown }).id === "string"
+        && typeof (candidate as { keyHash?: unknown }).keyHash === "string")
+      .map((candidate) => deserializeFallbackRecord(JSON.stringify(candidate)));
+  } catch {
+    return [];
+  }
+}
+
+export async function storeFallbackRecord(record: FallbackApiKeyRecord): Promise<void> {
+  if (!redisFallbackEnabled()) throw new Error("Redis fallback key store is disabled");
+  const connected = await withTimeout(ensureRedisConnected(), redisTimeoutMs(), false);
+  if (!connected) {
+    abandonRedisConnection();
+    throw new Error("Redis fallback key store unavailable");
+  }
+  const redis = getRedis();
+  const ttl = Math.max(60, Math.ceil(((record.expiresAt?.getTime() ?? (Date.now() + REDIS_FALLBACK_TTL_SECONDS * 1000)) - Date.now()) / 1000));
+  const mergeFallbackScript = `
+    local raw = redis.call("GET", KEYS[1])
+    local candidates = {}
+    if raw then
+      local ok, parsed = pcall(cjson.decode, raw)
+      if ok and type(parsed) == "table" then
+        local parsed_candidates = parsed["candidates"]
+        if type(parsed_candidates) == "table" then
+          for index = 1, #parsed_candidates do
+            local existing = parsed_candidates[index]
+            if type(existing) == "table" and type(existing["id"]) == "string" and type(existing["keyHash"]) == "string" then
+              table.insert(candidates, existing)
+            end
+          end
+        elseif type(parsed["id"]) == "string" and type(parsed["keyHash"]) == "string" then
+          table.insert(candidates, parsed)
+        end
+      end
+    end
+    local candidate = cjson.decode(ARGV[1])
+    if type(candidate) ~= "table" or type(candidate["id"]) ~= "string" or type(candidate["keyHash"]) ~= "string" then
+      return redis.error_reply("invalid fallback API-key candidate")
+    end
+    local replaced = false
+    for index, existing in ipairs(candidates) do
+      if existing["id"] == candidate["id"] then
+        candidates[index] = candidate
+        replaced = true
+        break
+      end
+    end
+    if not replaced then table.insert(candidates, candidate) end
+    local maximum = tonumber(ARGV[3])
+    while #candidates > maximum do table.remove(candidates, 1) end
+    redis.call("SET", KEYS[1], cjson.encode({ candidates = candidates }), "EX", tonumber(ARGV[2]))
+    return #candidates
+  `;
+  await withTimeout(redis.eval(
+    mergeFallbackScript,
+    1,
+    fallbackRecordKey(record.keyPrefix),
+    serializeFallbackRecord(record),
+    String(ttl),
+    String(API_KEY_PREFIX_BUCKET_MAX_CANDIDATES)
+  ), redisTimeoutMs(), null);
+  await withTimeout(redis.sadd(fallbackIndexKey(), record.id), redisTimeoutMs(), 0);
+  await withTimeout(redis.expire(fallbackIndexKey(), REDIS_FALLBACK_TTL_SECONDS), redisTimeoutMs(), 0);
+}
+
+async function countFallbackSelfServiceKeys(): Promise<number> {
+  if (!redisFallbackEnabled()) throw new Error("Redis fallback key store is disabled");
+  const connected = await withTimeout(ensureRedisConnected(), redisTimeoutMs(), false);
+  if (!connected) {
+    abandonRedisConnection();
+    throw new Error("Redis fallback key store unavailable");
+  }
+  return await withTimeout(getRedis().scard(fallbackIndexKey()), redisTimeoutMs(), 0);
+}
+
+function createLocalTestApiKeyRecord(
+  userId: string,
+  name: string,
+  tier: string,
+  orgId: string | undefined,
+  scopes: string[],
+  expiresAt: Date | undefined,
+  rawKey: string,
+  keyHash: string
+): StoredLocalApiKey {
+  const now = new Date();
+  return {
+    id: `local_${randomBytes(8).toString("hex")}`,
+    userId,
+    orgId: orgId ?? null,
+    keyPrefix: rawKey.slice(0, 12),
+    name,
+    tier,
+    scopes,
+    rateLimit: TIER_RATE_LIMITS[tier] ?? TIER_RATE_LIMITS.free,
+    role: "developer",
+    lastUsedAt: null,
+    expiresAt: expiresAt ?? null,
+    createdAt: now,
+    revokedAt: null,
+    keyHash,
+  };
+}
+
+export interface ApiKeyRecord {
+  id: string;
+  userId: string;
+  orgId: string | null;
+  keyPrefix: string;
+  name: string;
+  tier: string;
+  scopes: string[];
+  rateLimit: number;
+  role: string;
+  lastUsedAt: Date | null;
+  expiresAt: Date | null;
+  createdAt: Date;
+  revokedAt: Date | null;
+}
+
+const TIER_RATE_LIMITS: Record<string, number> = {
+  free: PLAN_LIMITS.free.requestsPerMinute,
+  solo: PLAN_LIMITS.solo.requestsPerMinute,
+  pro: PLAN_LIMITS.pro.requestsPerMinute,
+  team: PLAN_LIMITS.team.requestsPerMinute,
+  compliance: PLAN_LIMITS.compliance.requestsPerMinute,
+  enterprise: PLAN_LIMITS.enterprise.requestsPerMinute,
+};
+
+export async function createApiKey(
+  userId: string,
+  name: string,
+  tier: string = "free",
+  orgId?: string,
+  scopes: string[] = ["evaluate"],
+  expiresAt?: Date
+): Promise<{ key: string; record: ApiKeyRecord }> {
+  if (isLocalKeyGenerationTestMode()) {
+    const rawKey = `pfa_test_${randomBytes(24).toString("hex")}`;
+    const keyHash = await bcrypt.hash(rawKey, LOCAL_TEST_BCRYPT_ROUNDS);
+    const record = createLocalTestApiKeyRecord(userId, name, tier, orgId, scopes, expiresAt, rawKey, keyHash);
+    const existing = localTestKeysByPrefix.get(record.keyPrefix) ?? [];
+    existing.push(record);
+    localTestKeysByPrefix.set(record.keyPrefix, existing);
+    return { key: rawKey, record };
+  }
+
+  const rawKey = `pfa_live_${randomBytes(24).toString("hex")}`;
+  const keyPrefix = rawKey.slice(0, 12);
+  const keyHash = await bcrypt.hash(rawKey, BCRYPT_ROUNDS);
+  const rateLimit = TIER_RATE_LIMITS[tier] ?? TIER_RATE_LIMITS.free;
+
+  let record: ApiKeyRecord;
+  let createdInDatabase = false;
+  try {
+    const dbRecord = await withTimeout(
+      prisma.apiKey.create({
+        data: {
+          userId,
+          orgId: orgId ?? null,
+          keyHash,
+          keyPrefix,
+          name,
+          tier,
+          rateLimit,
+          scopes,
+          expiresAt: expiresAt ?? null,
+          // Stamped once, at creation, so metrics filter on a column instead of
+          // re-guessing from the name at read time. See lib/synthetic-keys.ts.
+          synthetic: isSyntheticKeyName(name),
+        },
+      }),
+      dbFallbackTimeoutMs(),
+      null
+    );
+    if (!dbRecord) throw new Error("api_key_create_timeout");
+    record = toApiKeyRecord(dbRecord);
+    createdInDatabase = true;
+  } catch (err) {
+    if (!redisFallbackEnabled() || userId !== SELF_SERVICE_USER_ID) throw err;
+    // Say why. This fallback is meant for a database outage, but it also
+    // swallows schema faults — a missing users row sent every signup key here
+    // for months, and nothing in the logs said so. A key that lands in Redis
+    // cannot be upgraded by checkout, so this line is the only warning anyone
+    // gets that a purchase is about to fail.
+    console.warn(
+      `[api-key] database write failed, issuing Redis fallback key: ${(err as Error).message}`,
+    );
+    record = {
+      id: `redis_${randomBytes(8).toString("hex")}`,
+      userId,
+      orgId: orgId ?? null,
+      keyPrefix,
+      name,
+      tier,
+      scopes,
+      rateLimit,
+      role: "developer",
+      lastUsedAt: null,
+      expiresAt: expiresAt ?? null,
+      createdAt: new Date(),
+      revokedAt: null,
+    };
+    await storeFallbackRecord({ ...record, keyHash });
+  }
+
+  // Warm the validation cache before returning a newly issued key. Without this,
+  // a same-key burst can stampede the database before the first validation's
+  // fire-and-forget cache write completes.
+  if (createdInDatabase) {
+    await cacheApiKey(keyPrefix, { ...record, keyHash, fastHash: fastKeyHash(rawKey) }).catch(() => {});
+  }
+
+  return {
+    key: rawKey,
+    record,
+  };
+}
+
+export type ApiKeyValidationResult =
+  | { status: "valid"; record: ApiKeyRecord }
+  | { status: "invalid" }
+  | { status: "expired" }
+  | { status: "revoked" }
+  | { status: "temporarily_unavailable"; reason: "cache_lookup_failed" | "fallback_lookup_failed" | "db_lookup_failed" | "db_lookup_timeout" };
+
+/**
+ * Rolling expiry: a key that is being used never silently dies. On each valid
+ * use, if less than 29 of the 30 lifetime days remain, expiry rolls forward to
+ * now + 30 days. Self-throttling — right after a roll the key has 30 days
+ * remaining, which is above the 29-day threshold, so the write happens at most
+ * about once per key per day. A key idle for 30 straight days still expires;
+ * that is the abandonment cleanup the expiry exists for.
+ */
+const KEY_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
+const KEY_RENEWAL_THRESHOLD_MS = 29 * 24 * 60 * 60 * 1000;
+
+export function rolledExpiryFor(expiresAt: Date | null): Date | null {
+  if (!expiresAt) return null;
+  const remaining = expiresAt.getTime() - Date.now();
+  if (remaining <= 0 || remaining >= KEY_RENEWAL_THRESHOLD_MS) return null;
+  return new Date(Date.now() + KEY_LIFETIME_MS);
+}
+
+export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKeyValidationResult> {
+  if (!bearerToken || !bearerToken.startsWith("pfa_")) return { status: "invalid" };
+  if (bearerToken.startsWith("pfa_live_") && !/^pfa_live_[0-9a-f]{48}$/.test(bearerToken)) return { status: "invalid" };
+  if (bearerToken.startsWith("pfa_test_") && !/^pfa_test_[0-9a-f]{48}$/.test(bearerToken)) return { status: "invalid" };
+  if (!bearerToken.startsWith("pfa_live_") && !bearerToken.startsWith("pfa_test_")) return { status: "invalid" };
+
+  const prefix = bearerToken.slice(0, 12);
+
+  if (isLocalKeyGenerationTestMode() && bearerToken.startsWith("pfa_test_")) {
+    const candidates = localTestKeysByPrefix.get(prefix) ?? [];
+    for (const candidate of candidates) {
+      const valid = await bcrypt.compare(bearerToken, candidate.keyHash);
+      if (!valid) continue;
+      if (candidate.revokedAt) return { status: "revoked" };
+      if (candidate.expiresAt && new Date(candidate.expiresAt) < new Date()) return { status: "expired" };
+      candidate.lastUsedAt = new Date();
+      const rolledLocal = rolledExpiryFor(candidate.expiresAt ? new Date(candidate.expiresAt) : null);
+      if (rolledLocal) candidate.expiresAt = rolledLocal;
+      return { status: "valid", record: candidate };
+    }
+    return { status: "invalid" };
+  }
+
+  // Check Redis cache first (keyed by prefix for fast lookup)
+  let cached: unknown | null;
+  try {
+    cached = await getCachedApiKey(prefix);
+  } catch {
+    return { status: "temporarily_unavailable", reason: "cache_lookup_failed" };
+  }
+  if (cached) {
+    const cachedCandidates = (
+      typeof cached === "object"
+      && cached !== null
+      && Array.isArray((cached as { candidates?: unknown[] }).candidates)
+    ) ? (cached as { candidates: unknown[] }).candidates : [cached];
+
+    for (const candidate of cachedCandidates) {
+      if (typeof candidate !== "object" || candidate === null || typeof (candidate as { keyHash?: unknown }).keyHash !== "string") continue;
+      const record = candidate as ApiKeyRecord & { keyHash: string; fastHash?: unknown };
+
+      // Fast path: cached entries written since the fastHash change carry a
+      // SHA-256 of the raw key, so the steady state costs a constant-time
+      // buffer compare instead of a ~250ms bcrypt KDF. Entries cached before
+      // this shipped have no fastHash and fall back to bcrypt, then backfill
+      // themselves so the cost is paid at most once per cached record.
+      let valid: boolean;
+      if (typeof record.fastHash === "string" && record.fastHash.length > 0) {
+        valid = fastKeyHashMatches(bearerToken, record.fastHash);
+      } else {
+        valid = await bcrypt.compare(bearerToken, record.keyHash);
+        if (valid) {
+          // Update-only: patches fastHash onto the existing cached candidate
+          // and does nothing if the bucket has since been invalidated. A
+          // create-or-update here would resurrect a key revoked during the
+          // ~250ms bcrypt window, with revokedAt null and a fresh TTL.
+          backfillApiKeyFastHash(prefix, record.id, fastKeyHash(bearerToken)).catch(() => {});
+        }
+      }
+      if (!valid) continue;
+
+      // Check expiry/revocation only after the presented token matches this
+      // candidate. Multiple valid keys may share the intentionally short prefix.
+      if (record.revokedAt) return { status: "revoked" };
+      if (record.expiresAt && new Date(record.expiresAt) < new Date()) return { status: "expired" };
+
+      // Update last_used_at asynchronously (fire-and-forget); roll expiry
+      // forward when the key is in its final 29 days. The cache must be
+      // invalidated on a roll, or the cached record's stale expiresAt would
+      // keep reporting "expired" after the DB says otherwise.
+      const rolledCached = rolledExpiryFor(record.expiresAt ? new Date(record.expiresAt) : null);
+      prisma.apiKey.update({
+        where: { id: record.id },
+        data: rolledCached ? { lastUsedAt: new Date(), expiresAt: rolledCached } : { lastUsedAt: new Date() },
+      }).then(() => {
+        if (rolledCached) return invalidateApiKeyCache(prefix);
+      }).catch(() => {});
+      if (rolledCached) record.expiresAt = rolledCached;
+
+      return { status: "valid", record };
+    }
+    // A cache miss within a colliding prefix is not proof that the token is
+    // invalid. Continue to the fallback/database candidate lookup.
+  }
+
+  // Past the prefix cache, so everything below is the expensive path: a
+  // fallback sweep and then a bcrypt compare against every DB row sharing this
+  // prefix. Short-circuit a token we very recently proved invalid before it can
+  // pay that cost again. Deliberately placed here rather than at the top of the
+  // function: a valid cache hit should not be taxed with an extra Redis EXISTS
+  // to make invalid requests cheaper. Fails open — see auth-dos-guard.
+  if (await isNegativelyCached(bearerToken)) return { status: "invalid" };
+
+  // Check Redis fallback keys before DB. This keeps newly issued self-service
+  // keys usable during a Postgres binding outage without exposing secrets.
+  let fallbackRecords: FallbackApiKeyRecord[];
+  try {
+    fallbackRecords = await getFallbackRecords(prefix);
+  } catch {
+    return { status: "temporarily_unavailable", reason: "fallback_lookup_failed" };
+  }
+  for (const fallbackRecord of fallbackRecords) {
+    const valid = await bcrypt.compare(bearerToken, fallbackRecord.keyHash);
+    if (!valid) continue;
+    if (fallbackRecord.revokedAt) return { status: "revoked" };
+    if (fallbackRecord.expiresAt && fallbackRecord.expiresAt < new Date()) return { status: "expired" };
+    const rolledFallback = rolledExpiryFor(fallbackRecord.expiresAt);
+    if (rolledFallback) {
+      fallbackRecord.expiresAt = rolledFallback;
+      storeFallbackRecord(fallbackRecord).catch(() => {});
+    }
+    return { status: "valid", record: fallbackRecord };
+  }
+  // A non-matching fallback candidate sharing the short prefix is not proof of
+  // invalidity. Continue to the database candidate lookup.
+
+  // Look up by prefix in the database. A timeout or unavailable DB is not the
+  // same thing as an invalid key; callers must map it to a retryable auth
+  // service error instead of a permanent 401.
+  let candidates;
+  try {
+    candidates = await withTimeout(
+      prisma.apiKey.findMany({
+        where: { keyPrefix: prefix },
+      }),
+      dbFallbackTimeoutMs(),
+      null
+    );
+    if (!candidates) return { status: "temporarily_unavailable", reason: "db_lookup_timeout" };
+  } catch (err) {
+    if (redisFallbackEnabled()) return { status: "temporarily_unavailable", reason: "db_lookup_failed" };
+    throw err;
+  }
+
+  for (const candidate of candidates) {
+    const valid = await bcrypt.compare(bearerToken, candidate.keyHash);
+    if (!valid) continue;
+
+    // Check revocation
+    if (candidate.revokedAt) return { status: "revoked" };
+
+    // Check expiry
+    if (candidate.expiresAt && candidate.expiresAt < new Date()) return { status: "expired" };
+
+    const record = toApiKeyRecord(candidate);
+
+    // Roll expiry forward before caching so the cached record carries the
+    // renewed date.
+    const rolledDb = rolledExpiryFor(record.expiresAt);
+    if (rolledDb) record.expiresAt = rolledDb;
+
+    // Cache in Redis (include keyHash for future bcrypt compare). Cache write
+    // failure should not reject an otherwise valid key.
+    cacheApiKey(prefix, { ...record, keyHash: candidate.keyHash, fastHash: fastKeyHash(bearerToken) }).catch(() => {});
+
+    // Update last_used_at
+    prisma.apiKey.update({
+      where: { id: candidate.id },
+      data: rolledDb ? { lastUsedAt: new Date(), expiresAt: rolledDb } : { lastUsedAt: new Date() },
+    }).catch(() => {});
+
+    return { status: "valid", record };
+  }
+
+  // Definitive miss: cache, fallback, and DB all consulted, nothing matched.
+  // This is the expensive outcome (a full bcrypt sweep of the prefix bucket),
+  // so remember it briefly to spare the next identical probe. Fire-and-forget:
+  // the response should not wait on the write, and a concurrent-probe race that
+  // runs bcrypt twice before this lands is harmless.
+  void recordNegativeCache(bearerToken);
+  return { status: "invalid" };
+}
+
+export async function validateApiKey(bearerToken: string): Promise<ApiKeyRecord | null> {
+  const result = await validateApiKeyDetailed(bearerToken);
+  return result.status === "valid" ? result.record : null;
+}
+
+export async function revokeApiKey(id: string): Promise<void> {
+  if (isLocalKeyGenerationTestMode()) {
+    for (const records of localTestKeysByPrefix.values()) {
+      const record = records.find((item) => item.id === id);
+      if (record) {
+        record.revokedAt = new Date();
+        return;
+      }
+    }
+  }
+
+  const key = await prisma.apiKey.update({
+    where: { id },
+    data: { revokedAt: new Date() },
+  });
+  await invalidateApiKeyCache(key.keyPrefix);
+}
+
+/**
+ * Revoke a Redis-fallback key (id "redis_…") that has no DB row. Keys issued
+ * while Postgres was unreachable live only in the per-prefix fallback bucket;
+ * self-revoke must reach them or DELETE /v1/keys/self 404s on exactly the
+ * keys most likely to need revoking.
+ */
+export async function revokeFallbackApiKey(prefix: string, id: string): Promise<boolean> {
+  try {
+    const records = await getFallbackRecords(prefix);
+    const record = records.find((item) => item.id === id && !item.revokedAt);
+    if (!record) return false;
+    record.revokedAt = new Date();
+    await storeFallbackRecord(record);
+    await invalidateApiKeyCache(prefix).catch(() => {});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function listApiKeys(userId: string): Promise<ApiKeyRecord[]> {
+  if (isLocalKeyGenerationTestMode()) {
+    return Array.from(localTestKeysByPrefix.values())
+      .flat()
+      .filter((key) => key.userId === userId && key.revokedAt === null)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  const keys = await prisma.apiKey.findMany({
+    where: { userId, revokedAt: null },
+    orderBy: { createdAt: "desc" },
+  });
+  return keys.map(toApiKeyRecord);
+}
+
+export async function countSelfServiceKeys(): Promise<number> {
+  if (isLocalKeyGenerationTestMode()) {
+    return Array.from(localTestKeysByPrefix.values())
+      .flat()
+      .filter((key) => key.userId === SELF_SERVICE_USER_ID && key.revokedAt === null).length;
+  }
+
+  try {
+    const dbCount = await withTimeout(
+      prisma.apiKey.count({
+        where: {
+          userId: SELF_SERVICE_USER_ID,
+          revokedAt: null,
+          // The operator's own monitoring keys are infrastructure, not
+          // customers, and must not fill the quota that gates real signups.
+          // On 2026-08-17 they were 125 of the 165 keys that had closed
+          // checkout entirely. See lib/synthetic-keys.ts.
+          synthetic: false,
+          // An expired key occupies no capacity. Self-service keys expire after
+          // RETENTION.selfServiceKeyExpiryDays, and counting the dead ones meant
+          // the ceiling ratcheted down permanently as the product aged.
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
+      }),
+      dbFallbackTimeoutMs(),
+      null
+    );
+    if (dbCount === null) throw new Error("api_key_count_timeout");
+    return dbCount;
+  } catch {
+    return countFallbackSelfServiceKeys();
+  }
+}
+
+export async function upgradeApiKeyTier(id: string, tier: string): Promise<void> {
+  const rateLimit = TIER_RATE_LIMITS[tier] ?? TIER_RATE_LIMITS.free;
+  const key = await prisma.apiKey.update({
+    where: { id },
+    data: { tier, rateLimit, expiresAt: null },
+  });
+  await invalidateApiKeyCache(key.keyPrefix);
+  await syncOwnedOrgTier(id, tier);
+}
+
+export async function downgradeApiKeyTier(id: string): Promise<void> {
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const key = await prisma.apiKey.update({
+    where: { id },
+    data: { tier: "free", rateLimit: 10, expiresAt },
+  });
+  await invalidateApiKeyCache(key.keyPrefix);
+  await syncOwnedOrgTier(id, "free");
+}
+
+/**
+ * Keep an organization's plan tier in step with the key that owns it.
+ *
+ * `Organization.planTier` was hardcoded "free" at creation and never updated,
+ * so a Team customer's org read "free" — confusing on its own, and actively
+ * misleading in an evidence export. Governance itself is not tier-gated; this
+ * is a reporting field, so a failure here must never break a subscription
+ * activation.
+ */
+async function syncOwnedOrgTier(apiKeyId: string, tier: string): Promise<void> {
+  try {
+    await prisma.organization.updateMany({ where: { ownerId: apiKeyId }, data: { planTier: tier } });
+  } catch (err) {
+    console.error("[billing] could not sync owned org tier:", (err as Error).message);
+  }
+}
+
+function toApiKeyRecord(row: {
+  id: string;
+  userId: string;
+  orgId: string | null;
+  keyPrefix: string;
+  name: string;
+  tier: string;
+  scopes: string[];
+  rateLimit: number;
+  role: string;
+  lastUsedAt: Date | null;
+  expiresAt: Date | null;
+  createdAt: Date;
+  revokedAt: Date | null;
+}): ApiKeyRecord {
+  return {
+    id: row.id,
+    userId: row.userId,
+    orgId: row.orgId,
+    keyPrefix: row.keyPrefix,
+    name: row.name,
+    tier: row.tier,
+    scopes: row.scopes,
+    rateLimit: row.rateLimit,
+    role: row.role,
+    lastUsedAt: row.lastUsedAt,
+    expiresAt: row.expiresAt,
+    createdAt: row.createdAt,
+    revokedAt: row.revokedAt,
+  };
+}

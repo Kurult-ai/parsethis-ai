@@ -1,0 +1,61 @@
+# Fleet Provisioning Example Config
+# 
+# Usage:
+#   npm run fleet-provision -- --config examples/fleet.yaml --api-key sk_live_xxx
+#   npm run fleet-provision -- --config examples/fleet.yaml --base-url http://localhost:3000 --api-key sk_live_xxx
+
+agents:
+  - agent_id: research-agent-1
+    name: "Research Agent"
+    description: "Web research and summarization agent"
+    framework: langchain
+    risk_level: medium
+    owner: research@company.com
+    environment: production
+    tools:
+      - web_search
+      - web_fetch
+      - file_read
+    data_access:
+      - public
+      - internal
+    policy_pack: enterprise-standard
+    data_sources:
+      - ds_public_web
+      - ds_internal_kb
+
+  - agent_id: data-analyst-1
+    name: "Data Analyst Agent"
+    description: "Analyzes structured data and generates reports"
+    framework: crewai
+    risk_level: high
+    owner: analytics@company.com
+    environment: production
+    tools:
+      - sql_query
+      - chart_generator
+      - file_write
+    data_access:
+      - public
+      - internal
+      - confidential
+    policy_pack: regulated-industry
+    data_grants:
+      - data_source_id: ds_analytics_db
+        access: read
+      - data_source_id: ds_reporting_db
+        access: readwrite
+
+  - agent_id: customer-support-1
+    name: "Customer Support Agent"
+    description: "Handles customer inquiries and ticket routing"
+    framework: openai-assistants
+    risk_level: medium
+    owner: support@company.com
+    environment: production
+    tools:
+      - web_search
+      - ticket_manager
+    data_access:
+      - public
+    policy_pack: startup-basic

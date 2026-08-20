@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Pre-commit hook: scan staged changes for secret patterns
+# Blocks commits containing likely credentials
+
+set -euo pipefail
+
+PATTERNS=(
+  'password='
+  'PASSWORD='
+  'DATABASE_URL='
+  'ANTHROPIC_API_KEY='
+  'OPENAI_API_KEY='
+  'Bearer [A-Za-z0-9_-]{20,}'
+  'sk-[A-Za-z0-9]{20,}'
+  'pfa_[A-Za-z0-9]{10,}'
+  'REDIS_URL='
+  'MASTER_API_KEY='
+  'SECRET_KEY='
+)
+
+STAGED_DIFF=$(git diff --cached --diff-filter=ACMR)
+
+if [ -z "$STAGED_DIFF" ]; then
+  exit 0
+fi
+
+for pattern in "${PATTERNS[@]}"; do
+  if echo "$STAGED_DIFF" | grep -qE "^\+.*${pattern}"; then
+    echo "ERROR: Staged changes contain a potential secret pattern: ${pattern}"
+    echo "Review your changes and remove secrets before committing."
+    echo "Use 'git diff --cached' to see staged changes."
+    echo "To bypass (DANGEROUS): git commit --no-verify"
+    exit 1
+  fi
+done
+
+exit 0

@@ -1,0 +1,149 @@
+import Stripe from "stripe";
+import { PLAN_LIMITS } from "./lib/product-facts.js";
+
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const STRIPE_MOCK_SIGNATURE = "stripe-mock-signature";
+
+let stripeInstance: Stripe | null = null;
+
+export function isStripeMockMode(): boolean {
+  // Keep mock billing test-only so a production env var typo cannot bypass Stripe.
+  return process.env.NODE_ENV === "test" && process.env.STRIPE_MOCK_MODE === "true";
+}
+
+function mockStripe(): Stripe {
+  const now = Math.floor(Date.now() / 1000);
+  return {
+    webhooks: {
+      constructEvent(rawBody: string | Buffer, signature: string | undefined) {
+        if (signature !== STRIPE_MOCK_SIGNATURE) {
+          throw new Error("Invalid mock Stripe signature");
+        }
+        const body = typeof rawBody === "string" ? rawBody : rawBody.toString("utf8");
+        return JSON.parse(body) as Stripe.Event;
+      },
+    },
+    subscriptions: {
+      async retrieve(id: string) {
+        return {
+          id,
+          status: "active",
+          cancel_at_period_end: false,
+          items: {
+            data: [
+              {
+                current_period_start: now,
+                current_period_end: now + 30 * 86400,
+                price: { id: "price_mock_pro" },
+              },
+            ],
+          },
+        };
+      },
+    },
+  } as unknown as Stripe;
+}
+
+export function getStripe(): Stripe {
+  if (isStripeMockMode()) return mockStripe();
+  if (!stripeInstance) {
+    if (!STRIPE_SECRET_KEY) throw new Error("STRIPE_SECRET_KEY not configured");
+    stripeInstance = new Stripe(STRIPE_SECRET_KEY);
+  }
+  return stripeInstance;
+}
+
+export function isStripeEnabled(): boolean {
+  return isStripeMockMode() || !!STRIPE_SECRET_KEY;
+}
+
+export const TIER_CONFIG = {
+  // includedRequests is DERIVED, never typed twice. Prospect run 21 was quoted
+  // 3,000 on the pricing card, 2,000 in the Stripe description and 5,000 here,
+  // inside sixty seconds, for the same entitlement. This is the one-fact-one-
+  // source rule the trust surfaces already follow, applied to the part of the
+  // product that takes money.
+  //
+  // overageRate is deliberately absent. It advertised $0.005/request that no
+  // code path charges — included volume is not a cap and overage is not billed
+  // (see the billing section of CLAUDE.md) — and the billing dashboard was
+  // rendering it as a dollar figure to paying customers.
+  // `includedRequests` is TOTAL billable screenings; `deepScreeningsPerMonth`
+  // in PLAN_LIMITS is the semantic-layer budget, which is a SUBSET of them.
+  // They are different quantities and must not be unified — run 14 raised the
+  // Solo total to 5,000 because a household agent screens ~2,400 a month, and
+  // `__tests__/billable-usage.test.ts` pins that. What run 21 actually met was
+  // three surfaces labelling these two numbers as if they were one.
+  //
+  // Pro's deep budget (12,000) exceeded its total (10,000) — a subset larger
+  // than its superset, so the last 2,000 deep screenings were unreachable.
+  // Raised to 20,000 so the advertised deep allowance is actually spendable.
+  solo: { priceEnvVar: "STRIPE_SOLO_PRICE_ID", includedRequests: 5_000, rateLimit: PLAN_LIMITS.solo.requestsPerMinute },
+  pro: { priceEnvVar: "STRIPE_PRO_PRICE_ID", includedRequests: 20_000, rateLimit: PLAN_LIMITS.pro.requestsPerMinute },
+  team: { priceEnvVar: "STRIPE_TEAM_PRICE_ID", includedRequests: PLAN_LIMITS.team.deepScreeningsPerMonth, rateLimit: PLAN_LIMITS.team.requestsPerMinute },
+  // Compliance had been pointed at STRIPE_AUDIT_PRICE_ID, which belongs to the
+  // one-time $47 audit product. Neither is set today, so both simply fail — but
+  // the moment the audit price is wired to a real Stripe price, a compliance
+  // checkout would have started selling the $999/mo tier at $47 once. Each tier
+  // gets its own variable so that cannot happen.
+  compliance: { priceEnvVar: "STRIPE_COMPLIANCE_PRICE_ID", includedRequests: 200_000, rateLimit: PLAN_LIMITS.compliance.requestsPerMinute },
+} as const;
+
+/** Tiers whose Stripe price is configured in this environment. */
+export function isTierPurchasable(tier: PaidTier): boolean {
+  return isStripeMockMode() || !!process.env[TIER_CONFIG[tier].priceEnvVar];
+}
+
+export type PaidTier = keyof typeof TIER_CONFIG;
+
+export async function createCheckoutSession(apiKeyId: string, tier: PaidTier, baseUrl: string): Promise<string> {
+  if (isStripeMockMode()) {
+    const url = new URL("https://stripe.mock/checkout/session");
+    url.searchParams.set("client_reference_id", apiKeyId);
+    url.searchParams.set("tier", tier);
+    url.searchParams.set("success_url", `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`);
+    url.searchParams.set("cancel_url", `${baseUrl}/pricing`);
+    return url.toString();
+  }
+
+  const stripe = getStripe();
+  const config = TIER_CONFIG[tier];
+  const priceId = process.env[config.priceEnvVar];
+  if (!priceId) throw new Error(`Price ID not configured for tier: ${tier}`);
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "subscription",
+    branding_settings: { display_name: "Parse" },
+    line_items: [{ price: priceId, quantity: 1 }],
+    client_reference_id: apiKeyId,
+    metadata: { apiKeyId, tier },
+    // Lets a prospect run reach the paid product on production with a
+    // single-use 100%-off code instead of a card (scripts/prospect-coupon.mts).
+    // The cost is a promo field on every real customer's checkout; the benefit
+    // is that evaluation happens on the live site rather than a copy of it.
+    allow_promotion_codes: true,
+    // Subscription mode defaults to "always", which would still demand a card on
+    // a fully-discounted checkout. "if_required" only skips collection when
+    // nothing is owed now or later, so a normal paying customer is unaffected.
+    payment_method_collection: "if_required",
+    success_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${baseUrl}/pricing`,
+  });
+  return session.url!;
+}
+
+export async function createPortalSession(stripeCustomerId: string, baseUrl: string): Promise<string> {
+  if (isStripeMockMode()) {
+    const url = new URL("https://stripe.mock/billing-portal/session");
+    url.searchParams.set("customer", stripeCustomerId);
+    url.searchParams.set("return_url", `${baseUrl}/dashboard/billing`);
+    return url.toString();
+  }
+
+  const stripe = getStripe();
+  const session = await stripe.billingPortal.sessions.create({
+    customer: stripeCustomerId,
+    return_url: `${baseUrl}/dashboard/billing`,
+  });
+  return session.url;
+}

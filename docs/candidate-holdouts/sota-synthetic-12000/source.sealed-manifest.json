@@ -1,0 +1,18 @@
+{
+  "corpus_path": "docs/candidate-holdouts/sota-synthetic-12000/source",
+  "sha256": "c8fc5250336cc7db96415c771e94881c57794057aa78f4f6d77d558179909280",
+  "case_count": 16250,
+  "sealed": true,
+  "evaluations": [
+    {
+      "at": "2026-08-14T04:55:25.834Z",
+      "recall": 0.432222,
+      "fpr": 0.549862,
+      "n_malicious": 5400,
+      "n_benign": 10850
+    }
+  ],
+  "curated_by": "sota-synthetic-12000 \u2014 generated outside this repo, frozen 2026-05-24",
+  "curated_at": "2026-05-24",
+  "curator_attestation": "Frozen twelve weeks before the 2026-08-11..14 detector changes it judges. Measured in aggregate on 2026-08-13 and 2026-08-14; no rule in this repo was designed from its miss list. NOT claimable: same operator, no independent provenance. Overfitting tripwire, not attestation."
+}

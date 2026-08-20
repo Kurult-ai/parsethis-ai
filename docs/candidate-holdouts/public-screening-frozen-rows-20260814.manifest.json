@@ -1,0 +1,31 @@
+{
+  "manifest_kind": "public_screening_holdout_frozen_candidate",
+  "claimable": false,
+  "frozen": true,
+  "evidence_state": "burnt_tuning_data_not_holdout",
+  "source": "public",
+  "split": "holdout",
+  "sha256": "d4f446c112a1fa7e06fd4fb74bc0d66b5f100e091d56c3f1931a98b39f58fbe3",
+  "row_ids_sha256": "c60695dcc8843e159005045bfbdd0d8c62b756869719d369da522ac5779d26d2",
+  "case_count": 1965,
+  "frozen_at": "2026-08-14",
+  "measured": {
+    "attack_recall": 0.9303,
+    "n": 1463,
+    "false_negatives": 102,
+    "false_positives": 0,
+    "baseline_e0411fc": {
+      "attack_recall": 0.9528,
+      "false_negatives": 69
+    },
+    "note": "full-set numbers; the earlier 789-row sample measured 0.9131"
+  },
+  "claimable_blockers": [
+    "BURNT: the four recall fixes deployed 2026-08-14 (Unicode word boundaries, the override verb, fence-then-directive, the extraction-probe rule) were each designed by reading this corpus's miss list. These rows are tuning data.",
+    "holdout_separation.row_ids_disjoint_from_tuning is therefore false and cannot be set true.",
+    "The 0.946 measured on these rows is in-sample. It did not generalise: the untouched synthetic corpus moved 0.4322 -> 0.4322 across the same change.",
+    "See docs/evidence-status-2026-08-14.md."
+  ],
+  "note": "Full 1,965-row freeze superseding the same-day 789-row sample. Freeze now, claim later. The point of writing this today is that the next detector change can be judged against a corpus that provably predates it.",
+  "burnt_at": "2026-08-14"
+}
