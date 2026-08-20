@@ -2034,10 +2034,25 @@ publicRoutes.get("/docs/:slug", (c) => {
 });
 
 // Guides pages (markdown content, supports Accept: text/markdown)
+//
+// Short-slug aliases (run 33/39): prospects and SDK docs guess short URLs
+// like /guides/email-support — a 404 at the exact boundary a buyer is
+// evaluating. 301 them to the canonical slug instead of dropping them.
+const GUIDE_SLUG_ALIASES: Record<string, string> = {
+  "email-support": "email-support-agent-screening",
+  "rag": "rag-prompt-injection-screening",
+  "browser": "browser-agent-screening",
+  "mcp": "mcp-agent-handoff-screening",
+  "tool-results": "screen-tool-results",
+  "code": "code-tool-agent-screening",
+};
 publicRoutes.get("/guides/:slug", (c) => {
+  const rawSlug = c.req.param("slug");
+  const alias = GUIDE_SLUG_ALIASES[rawSlug];
+  if (alias) return c.redirect(`/guides/${alias}`, 301);
   const wantsMarkdown = (c.req.header("Accept") || "").includes("text/markdown");
-  recordGeoSurfaceHit(c, `guides.${c.req.param("slug")}`);
-  const result = renderGuidePage(c.req.param("slug"), getBaseUrl(c), wantsMarkdown);
+  recordGeoSurfaceHit(c, `guides.${rawSlug}`);
+  const result = renderGuidePage(rawSlug, getBaseUrl(c), wantsMarkdown);
   if (!result) return c.json({ error: "Not found" }, 404);
   if ("markdown" in result) {
     c.header("Content-Type", "text/markdown; charset=utf-8");

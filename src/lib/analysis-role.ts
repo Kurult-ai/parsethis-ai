@@ -298,7 +298,9 @@ export function resolveAnalysisRole(input: RoleInput | undefined): RoleDecision 
       reason:
         `intended_action "${action}" was not applied: this finding is critical and this key has no review path, ` +
         "so a reported finding would be seen by nobody. Reporting rather than refusing assumes a human or a " +
-        "SIEM reads the report — join an organization or configure a forward, and the declaration applies." +
+        "SIEM reads the report — join an organization, or configure a forward (SIEM webhook) so the report " +
+        "reaches someone, and the declaration applies. On a paid key this finding would route to your review " +
+        "queue (hold-for-approval); see /pricing." +
         (input?.trial_downgrade_remaining !== undefined
           ? ` (Trial downgrades: ${input.trial_downgrade_remaining} left today; this flag set never softens.)`
           : ""),

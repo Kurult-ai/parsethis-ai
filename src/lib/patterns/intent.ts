@@ -1372,7 +1372,7 @@ const SKIP_IDENTITY =
  * stopword list.
  */
 const CONTROL_BYPASS_PAIRING =
-  /\b(?:forget|skip|bypass|ignore|disable|suspend|waive|override|do\s+not\s+apply|don't\s+apply|no\s+need\s+for)\b[^.\n]{0,60}\b(?:kyc|aml|cft|sanctions?\s+(?:check|screening|list)|dual[-\s]?(?:control|approval|authorization|sign[-\s]?off)|two[-\s]?factor|2fa|mfa|otp|maker[-\s]?checker|four[-\s]?eyes|segregation\s+of\s+duties|sox\s+controls?|ach\s+blocks?|positive\s+pay|fraud\s+(?:hold|review|flag)|compliance\s+(?:review|check|hold|desk|officer)|transaction\s+monitoring|second\s+signatory)\b|\b(?:kyc|aml|cft|dual[-\s]?(?:control|approval|authorization|sign[-\s]?off)|two[-\s]?factor|2fa|mfa|otp|maker[-\s]?checker|four[-\s]?eyes)\b[^.\n]{0,40}\b(?:is\s+)?(?:not\s+)?(?:required|needed|applicable|enabled)\b/i;
+  /\b(?:forget|skip|bypass|ignore|disregard|disable|suspend|waive|override|do\s+not\s+apply|don't\s+apply|no\s+need\s+for)\b[^.\n]{0,60}\b(?:kyc|aml|cft|sanctions?\s+(?:check|screening|list)|conflict\s+(?:check|screening|search)|dual[-\s]?(?:control|approval|authorization|sign[-\s]?off)|two[-\s]?factor|2fa|mfa|otp|maker[-\s]?checker|four[-\s]?eyes|segregation\s+of\s+duties|sox\s+controls?|ach\s+blocks?|positive\s+pay|fraud\s+(?:hold|review|flag)|compliance\s+(?:review|check|hold|desk|officer)|transaction\s+monitoring|second\s+signatory)\b|\b(?:kyc|aml|cft|dual[-\s]?(?:control|approval|authorization|sign[-\s]?off)|two[-\s]?factor|2fa|mfa|otp|maker[-\s]?checker|four[-\s]?eyes)\b[^.\n]{0,40}\b(?:is\s+)?(?:not\s+)?(?:required|needed|applicable|enabled)\b/i;
 
 /**
  * Payment-instruction shape with a bypass clause attached, run 31: a large
@@ -1469,6 +1469,16 @@ function maybeFlagControlBypass(flags: IntentRiskFlag[], text: string): void {
     // an instruction to this agent — unless the text also carries a live
     // imperative of its own ("skip ... now", "release the wire, no 2FA").
     if (CONTROL_BYPASS_REPORTED_SPEECH.test(window) && !DIRECT_ATTACK_IMPERATIVE.test(window)) continue;
+    // Run 39: an interrogative is a question about the control, not a
+    // directive through it. "Can you disregard my last email about the
+    // conflict check?" is owner speech walking a correction back; the
+    // imperative "disregard the conflict check" has no question mark and no
+    // auxiliary inversion. Guard on either signal, and never on a window
+    // that also carries a direct imperative.
+    if (
+      !DIRECT_ATTACK_IMPERATIVE.test(window) &&
+      (/\?\s*$/.test(window.trim()) || /\b(?:can|could|should|may|might|would|did|does|is\s+it|are\s+we|shall)\b[^.!?]{0,50}\b(?:disregard|skip|bypass|ignore|override|waive)\b/i.test(window))
+    ) continue;
     const severity = bypass && paymentShape ? 9 : 8;
     addFlag(flags, {
       id: "intent.financial_control_bypass",
