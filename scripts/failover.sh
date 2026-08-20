@@ -1,52 +1,98 @@
-#!/bin/bash
-# Parse for Agents — one-command failover: mini (primary) -> Render (standby).
+#!/usr/bin/env bash
+# failover.sh — one-command failover for parsethis.ai DNS.
+#   Primary:   kublai-mac-mini cloudflared tunnel (Mac mini at home)
+#   Standby:   parse-standby.onrender.com (Render free tier)
+# Both nodes read/write the SAME Neon Postgres + Upstash Redis, so a flip
+# loses zero committed data (RPO=0). RTO = DNS change at the CF edge.
 #
-# Topology:
-#   www.parsethis.ai --CF DNS--> kublai-mac-mini tunnel -> 127.0.0.1:3001
-#   standby: Render service running app+worker+cloudflared (tunnel B), same
-#   Neon Postgres + Upstash Redis (state is external, so failover is a DNS swap)
+# Usage:
+#   ./scripts/failover.sh status     # show where records point now
+#   ./scripts/failover.sh failover   # mini -> Render (pre-flights standby)
+#   ./scripts/failover.sh back       # Render -> mini
 #
-# This script repoints Cloudflare DNS (CNAME to tunnel B) via the Cloudflare
-# API using CF_API_TOKEN (env). It does NOT touch the mini.
-#
-# Usage: failover.sh           # mini -> Render
-#        failover.sh back      # Render -> mini (failback)
+# Requires in env (or .env): CF_API_TOKEN, CF_ZONE_ID.
+# Proxy rules learned from the 2026-08-20 kill-test:
+#   - tunnel target MUST be proxied=true (cfargotunnel only works via CF edge)
+#   - onrender.com target MUST be proxied=false (dns-only) or CF returns
+#     error 1000 (Render's origin is itself behind Cloudflare -> loop).
 set -euo pipefail
 
 ZONE_ID="${CF_ZONE_ID:?CF_ZONE_ID must be set (parsethis.ai zone)}"
 API_TOKEN="${CF_API_TOKEN:?CF_API_TOKEN must be set}"
-RECORD_NAME="${CF_RECORD_NAME:-www.parsethis.ai}"
-TUNNEL_A="${CF_TUNNEL_A:-kublai-mac-mini}"         # primary tunnel name
-TUNNEL_B="${CF_TUNNEL_B:-parse-standby}"            # standby tunnel name
+RECORDS=("${CF_RECORD_NAME:-www.parsethis.ai}" "${CF_RECORD_APEX:-parsethis.ai}")
+PRIMARY_CNAME="${CF_PRIMARY_CNAME:-dece3379-b569-49f1-b4d6-a3be767f992a.cfargotunnel.com}"
+STANDBY_CNAME="${CF_STANDBY_CNAME:-parse-standby.onrender.com}"
+STANDBY_HEALTH="${STANDBY_HEALTH_URL:-https://parse-standby.onrender.com/health}"
 
 MODE="${1:-failover}"
-
-auth=(-H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json")
 api="https://api.cloudflare.com/client/v4"
+auth=(-H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json")
 
-[[ "$MODE" == "back" ]] && TARGET_CNAME="${TUNNEL_A}.cfargotunnel.com" || TARGET_CNAME="${TUNNEL_B}.cfargotunnel.com"
+get_record() { # $1 = record name -> JSON or empty
+  curl -sS "${auth[@]}" "$api/zones/$ZONE_ID/dns_records?name=$1" | jq -r '.result[0] // empty'
+}
 
-echo "== resolving existing DNS record =="
-REC=$(curl -sS "${auth[@]}" "$api/zones/$ZONE_ID/dns_records?name=$RECORD_NAME" | jq -r '.result[0]')
-[[ "$REC" == "null" || -z "$REC" ]] && { echo "FATAL: no DNS record found for $RECORD_NAME"; exit 1; }
-REC_ID=$(jq -r '.id' <<<"$REC")
-CURRENT=$(jq -r '.content' <<<"$REC")
-echo "  record $RECORD_NAME -> $CURRENT"
-[[ "$CURRENT" == *"$TUNNEL_B"* && "$MODE" != "back" ]] && { echo "Already failed over to $TUNNEL_B; nothing to do."; exit 0; }
-[[ "$CURRENT" == *"$TUNNEL_A"* && "$MODE" == "back" ]] && { echo "Already on $TUNNEL_A; nothing to do."; exit 0; }
+case "$MODE" in
+  status)
+    for R in "${RECORDS[@]}"; do
+      REC=$(get_record "$R")
+      [[ -z "$REC" ]] && { echo "$R: NOT FOUND"; continue; }
+      echo "$R -> $(jq -r .content <<<"$REC") (proxied=$(jq -r .proxied <<<"$REC"))"
+    done
+    exit 0 ;;
+  failover) TARGET="$STANDBY_CNAME"; PROXIED=false ;;
+  back)     TARGET="$PRIMARY_CNAME"; PROXIED=true ;;
+  *) echo "usage: $0 [failover|back|status]"; exit 2 ;;
+esac
 
-echo "== health-check the standby before switching =="
-STANDBY_URL="${STANDBY_HEALTH_URL:-https://parsethis-standby.tunnel-ext.example.com/health}"
-# During setup the standby tunnel hostname is parsethis-standby.<zone>. In
-# failover we swap the CNAME; health check via the tunnel's own hostname first.
-if ! curl -sS -m 10 -f "$STANDBY_URL" >/dev/null 2>&1; then
-  echo "WARN: standby health check failed at $STANDBY_URL — switching anyway (DNS swap is reversible)"
+# --- pre-flight: standby must be healthy before we cut prod over -----------
+if [[ "$MODE" == "failover" ]]; then
+  echo "Pre-flight: checking standby ($STANDBY_HEALTH) — Render free may cold-start..."
+  CODE="000"
+  for i in $(seq 1 12); do
+    CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$STANDBY_HEALTH" || true)
+    [[ "$CODE" == "200" ]] && break
+    echo "  standby not ready (HTTP $CODE), warming… retry $i/12"
+    sleep 10
+  done
+  if [[ "$CODE" != "200" ]]; then
+    echo "ERROR: standby unhealthy — aborting. DNS untouched, prod still on primary."
+    exit 1
+  fi
 fi
 
-echo "== switching $RECORD_NAME -> $TARGET_CNAME =="
-RES=$(curl -sS -X PATCH "${auth[@]}" "$api/zones/$ZONE_ID/dns_records/$REC_ID" \
-  -d "{\"type\":\"CNAME\",\"name\":\"$RECORD_NAME\",\"content\":\"$TARGET_CNAME\",\"proxied\":true}")
-ok=$(jq -r '.success' <<<"$RES")
-[[ "$ok" == "true" ]] || { echo "FATAL: Cloudflare API error: $RES"; exit 1; }
-echo "FAILOVER COMPLETE: $RECORD_NAME -> $TARGET_CNAME (proxied)"
-echo "Verify: curl -sS https://www.parsethis.ai/version | jq .deployment"
+# --- flip every record -------------------------------------------------------
+for R in "${RECORDS[@]}"; do
+  REC=$(get_record "$R")
+  if [[ -z "$REC" ]]; then
+    echo "WARN: $R not found in zone — skipping"
+    continue
+  fi
+  REC_ID=$(jq -r .id <<<"$REC")
+  CURRENT=$(jq -r .content <<<"$REC")
+  if [[ "$CURRENT" == *"$TARGET"* ]]; then
+    echo "$R already at $TARGET"
+    continue
+  fi
+  echo "Flipping $R: $CURRENT -> $TARGET (proxied=$PROXIED)"
+  RES=$(curl -sS -X PATCH "${auth[@]}" "$api/zones/$ZONE_ID/dns_records/$REC_ID" \
+    --data "{\"type\":\"CNAME\",\"name\":\"$R\",\"content\":\"$TARGET\",\"proxied\":$PROXIED}")
+  if [[ "$(jq -r '.success' <<<"$RES")" != "true" ]]; then
+    echo "ERROR: Cloudflare PATCH failed for $R:"; jq . <<<"$RES"
+    exit 1
+  fi
+done
+
+# --- verify through the live edge -------------------------------------------
+sleep 5
+for i in $(seq 1 12); do
+  V=$(curl -s --max-time 20 "https://www.parsethis.ai/health" 2>/dev/null | jq -r '.status' 2>/dev/null || true)
+  if [[ "$V" == "ok" ]]; then
+    echo "✓ https://www.parsethis.ai/health → ok (now served by ${TARGET%%.*})"
+    exit 0
+  fi
+  echo "  edge not healthy yet… ($i/12)"
+  sleep 5
+done
+echo "⚠ DNS flipped to $TARGET but edge health check did not pass — verify manually."
+exit 1
