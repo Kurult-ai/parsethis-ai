@@ -38,6 +38,7 @@ export function renderFounderPage(baseUrl: string): string {
   <h2>The short version</h2>
   <p>I ran a fleet of autonomous agents with real authority — they could send mail and spend. The hard part was never making them act; it was proving, after the fact, that every action stayed inside the boundary I set. So I built the quorum they ran under: every decision screened, every action receipted, nothing escaping its gates.</p>
   <p>Parse is that quorum, productized. Not a governance narrative — a gate you can install this afternoon.</p>
+  <p>Full background — roles, systems, and dates: <a href="https://danielfinn.kurult.ai">danielfinn.kurult.ai</a>.</p>
 </section>
 
 <section class="founder-section">

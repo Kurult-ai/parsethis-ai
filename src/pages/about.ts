@@ -203,7 +203,7 @@ export function renderAboutPage(baseUrl: string): string {
 
 <section class="about-section">
   <h2>Who builds this</h2>
-  <p><strong>Daniel Finn</strong> — founder and operator, Raleigh, North Carolina.</p>
+  <p><strong>Daniel Finn</strong> — founder and operator, Raleigh, North Carolina. <a href="https://danielfinn.kurult.ai">Background and résumé</a>.</p>
   <p>Before Parse, Daniel ran a fleet of autonomous agents with real authority — agents that could send email and spend money — on governed, self-hosted infrastructure in regulated industries. The problem was never getting agents to act; it was proving, after the fact, that every action stayed inside the boundary its owner set. He built the quorum those agents ran under, then built Parse so every agent could have one.</p>
   <p>Parse is a product of <strong>Kurultai Labs LLC</strong> (North Carolina). It runs on infrastructure Daniel operates himself — which is why the <a href="/trust">trust page</a> documents exactly what that means, including the parts most vendors hide. A human reads every email: <a href="mailto:d@kurult.ai">d@kurult.ai</a>, answered within a day.</p>
 </section>
