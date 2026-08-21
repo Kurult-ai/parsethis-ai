@@ -204,8 +204,6 @@ Required verification:
     <span style="color:var(--text-dim);">→</span>
     <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Solo $12/mo</span>
     <span style="color:var(--text-dim);">→</span>
-    <span style="background:rgba(47,111,237,0.10);border:1px solid rgba(47,111,237,0.30);border-radius:20px;padding:4px 14px;font-weight:600;">Audit $47</span>
-    <span style="color:var(--text-dim);">→</span>
     <span style="background:var(--surface);border:1px solid var(--accent);border-radius:20px;padding:4px 14px;font-weight:600;">Pro $49/mo</span>
     <span style="color:var(--text-dim);">→</span>
     <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Team $199/mo</span>
@@ -216,6 +214,15 @@ Required verification:
     <span style="color:var(--text-dim);">→</span>
     <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Implementation $3K–$15K</span>
   </div>
+  <!--
+    Run 40 / A2: the $47 one-time Security Audit no longer occupies a rung on
+    the ladder. Three prospect runs (32, 39, 40) watched buyers parse the
+    ladder and stall on it — $47-one-time wedged between $12/mo and $49/mo
+    reads as a fourth subscription to evaluate, and the ladder's job is to
+    say what an agent costs to run. The product itself stays purchasable at
+    /audit, linked once below the grid where it reads as what it is: an
+    optional artifact for a human, not a plan.
+  -->
 
   <div class="card-grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));">
 
@@ -278,23 +285,9 @@ latency: 21 ms</pre>
       <a href="/v1/billing/checkout" class="btn btn-outline" style="width:100%;text-align:center;" onclick="event.preventDefault();(async()=>{try{const k=localStorage.getItem('pfa_key');if(k){const r=await fetch('/v1/billing/checkout',{method:'POST',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'},body:JSON.stringify({tier:'solo'})});if(r.ok){const d=await r.json();if(d.url){window.location=d.url;return;}}}const r2=await fetch('/v1/billing/signup-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier:'solo'})});if(!r2.ok){const err=await r2.json().catch(()=>({}));alert(err.error||'Signup failed');return;}const d2=await r2.json();if(d2.key)localStorage.setItem('pfa_key',d2.key);if(d2.checkout_url){window.location=d2.checkout_url;}else{window.location='mailto:${PRODUCT.contactEmail}?subject=Solo%20Plan';}}catch{window.location='mailto:${PRODUCT.contactEmail}?subject=Solo%20Plan';}})();">Start Solo</a>
     </div>
 
-    <!-- $47 Security Audit (one-time) -->
-    <div class="card" style="display:flex;flex-direction:column;gap:12px;border-color:rgba(47,111,237,0.40);position:relative;background:linear-gradient(145deg,rgba(47,111,237,0.06),rgba(25,182,175,0.04));">
-      <span class="badge badge-accent" style="position:absolute;top:-10px;right:16px;">One-Time</span>
-      <div>
-        <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Security Audit</div>
-        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$47</div>
-        <div style="font-size:13px;color:var(--text-dim);">one-time report</div>
-      </div>
-      <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Risk score (0&ndash;100)</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Vulnerability breakdown</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Remediation checklist</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">OWASP/NIST/SOC&nbsp;2 mapping</li>
-        <li style="padding:6px 0;">Up to 25 prompts</li>
-      </ul>
-      <a href="/audit" class="btn btn-primary" style="width:100%;text-align:center;">Get Audit Report</a>
-    </div>
+    <!-- Run 40 / A2: $47 Security Audit card removed from the plan grid (see
+         ladder note above). The offer lives at /audit and is linked in the
+         audit line below the grid. -->
 
     <!-- Pro -->
     <div class="card" id="pro" style="display:flex;flex-direction:column;gap:12px;border-color:var(--accent);position:relative;scroll-margin-top:90px;">
@@ -555,6 +548,12 @@ latency: 21 ms</pre>
   </script>
 </div>
 
+<p style="font-size:14px;color:var(--text-dim);margin:18px 0 0;">
+  Need a one-time artifact for a human rather than a plan? A <strong>Security Audit</strong>
+  (risk score, vulnerability breakdown, remediation checklist, OWASP/NIST/SOC&nbsp;2 mapping,
+  up to 25 prompts) is available as a one-time $47 report at <a href="/audit" style="color:var(--accent2);">/audit</a>.
+</p>
+
 <!-- Chunk 4b: x402 pay-per-call (an alternative to a monthly key, so it
      follows the plans rather than opening the page) -->
 <div class="section-chunk">
@@ -804,9 +803,9 @@ Content-Type: application/json
 `;
 
   return renderPage({
-    title: "Pricing — Free → $12 Solo → $47 Audit → $49 Pro → $199 Team → +$199 Compliance add-on",
+    title: "Pricing — Free → $12 Solo → $49 Pro → $199 Team → +$199 Compliance add-on",
     description:
-      `${PRODUCT.name} value ladder: Free tier (unlimited instant screening, ${PLAN_LIMITS.free.deepScreeningsPerDay} deep screenings a day), Solo $12/mo (one agent, ${PLAN_LIMITS.solo.deepScreeningsPerMonth.toLocaleString("en-US")} deep screenings, no idle expiry), $47 one-time Security Audit, Pro $49/mo (${PLAN_LIMITS.pro.agents} agents, ${PLAN_LIMITS.pro.environments} environments, ${PLAN_LIMITS.pro.deepScreeningsPerMonth.toLocaleString("en-US")} deep screenings), Team $199/mo, a $199/mo Compliance add-on, and custom Implementation ($3K–$15K). ${PRODUCT.name} also offers x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}.`,
+      `${PRODUCT.name} value ladder: Free tier (unlimited instant screening, ${PLAN_LIMITS.free.deepScreeningsPerDay} deep screenings a day), Solo $12/mo (one agent, ${PLAN_LIMITS.solo.deepScreeningsPerMonth.toLocaleString("en-US")} deep screenings, no idle expiry), Pro $49/mo (${PLAN_LIMITS.pro.agents} agents, ${PLAN_LIMITS.pro.environments} environments, ${PLAN_LIMITS.pro.deepScreeningsPerMonth.toLocaleString("en-US")} deep screenings), Team $199/mo, a $199/mo Compliance add-on, and custom Implementation ($3K–$15K). A one-time $47 Security Audit report is available at /audit. ${PRODUCT.name} also offers x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}.`,
     path: "/pricing",
     content,
     baseUrl,

@@ -3092,7 +3092,11 @@ publicRoutes.get("/status", async (c) => {
     ["Build time", `<code>${deployment.build_time}</code>`],
     ["Running from", `<code>${deployment.runtime}</code>`],
     ["Node", `<code>${process.version}</code>`],
-    ["Uptime", `${formatUptime(uptimeSeconds)}`],
+    // Run 40 / A3: this is the uptime of *this process*, not of the service.
+    // A compliance-adjacent buyer reading "Uptime 24m" took it as the service
+    // record. The 30-day measured availability above is the number that
+    // answers their question; this row is labelled as what it actually is.
+    ["This build running for", `${formatUptime(uptimeSeconds)}`],
     ["Checked at", `<code>${new Date().toISOString()}</code>`],
   ]
     .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`)
@@ -3150,6 +3154,9 @@ by restoring it.</p>`;
 the page. Nothing here is cached. This page is for people; <code>/health</code> is the
 liveness probe for machines, and returns the same build identity as JSON.</p>
 
+<h2>Availability</h2>
+${availabilityHtml}
+
 <h2>Build</h2>
 <div class="table-wrapper">
   <table>
@@ -3162,9 +3169,6 @@ liveness probe for machines, and returns the same build identity as JSON.</p>
 <p style="font-size:14px;color:var(--text-dim)">This deploy runs from source rather
 than a compiled artifact, so the build time is the time the process started. The commit
 is read from the checkout at boot.</p>
-
-<h2>Availability</h2>
-${availabilityHtml}
 
 <h2>Dependencies</h2>
 <div class="table-wrapper">
@@ -3196,7 +3200,7 @@ which analysis layers actually ran.</p>
   return c.html(
     renderPage({
       title: "Status",
-      description: "Live status of the Parse API: running build, uptime, and per-dependency state.",
+      description: "Live status of the Parse API: 30-day measured availability, running build, and per-dependency state.",
       path: "/status",
       content,
       baseUrl: getBaseUrl(c),

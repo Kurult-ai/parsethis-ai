@@ -213,6 +213,18 @@ export interface RoleInput {
   trial_downgrade_available?: boolean;
   /** Remaining trial downgrades today — used to make the refusal informative. */
   trial_downgrade_remaining?: number;
+  /**
+   * Run 40 / A1 — the critical trial. True when the route has verified the
+   * quote boundary (untrusted source + quoted_spans covering every flagged
+   * offset) and the separate 1/day critical meter has its redemption
+   * available. When the critical-finding guard fires AND this is true, the
+   * downgrade applies as `trial` even though the flag set includes
+   * block-floor flags — the quote boundary, not the declaration alone, is
+   * what makes the content subject matter rather than instruction.
+   */
+  trial_critical_available?: boolean;
+  /** Remaining critical trials today (0 or 1) — used to make the refusal informative. */
+  trial_critical_remaining?: number;
   /** The active flags, for the no-soften floor check. */
   flags?: Array<{ id: string; severity?: number; source?: string; action_floor?: string }>;
   /** Highest severity among deterministic (non-llm) flags. */
@@ -226,10 +238,11 @@ export interface RoleDecision {
   /** True when the caller asked for `subject` and was refused it. */
   downgrade_refused: boolean;
   /**
-   * `"trial"` when the downgrade went through the metered free-tier path
-   * rather than a full review path (run 32/33 P1-2). Absent otherwise.
+   * `"trial"` when the downgrade went through a metered free-tier path —
+   * run 32/33 P1-2 for the ordinary trial, run 40 / A1 for the critical
+   * trial — rather than a full review path. Absent otherwise.
    */
-  downgrade_applied?: "trial";
+  downgrade_applied?: "trial" | "trial_critical";
 }
 
 /**
@@ -293,6 +306,30 @@ export function resolveAnalysisRole(input: RoleInput | undefined): RoleDecision 
         downgrade_applied: "trial" as const,
       };
     }
+    // Run 40 / A1 — the critical trial. One notch stricter than the trial
+    // above, and it may carry block-floor flags, because it is earned rather
+    // than declared: the caller marked the content third-party (untrusted
+    // source_kind / trust_level) and declared quoted_spans that cover every
+    // offset the blocking flags actually matched. That is precisely the
+    // boundary the acquittal register's B4 check (below, for the sub-critical
+    // band) already trusts — an attacker cannot point at a span containing
+    // text they did not know would be flagged, and the offsets are computed
+    // server-side, never taken from the request. The finding stays labelled,
+    // metered at 1/day, and visible in /v1/activity.
+    if (input?.trial_critical_available === true) {
+      return {
+        role: "subject",
+        reason:
+          `intended_action "${action}" declares the agent is analysing this content, the source is ` +
+          "declared third-party, and the flagged text sits inside the quoted block you declared — " +
+          "so this is quoted subject matter, not an instruction to the agent. Applied as the DAILY " +
+          "CRITICAL TRIAL (1/day on a free key): the finding, score and flags are unchanged and only " +
+          "this action moved. On a paid key this finding would route to your review queue " +
+          "(hold-for-approval); see /pricing.",
+        downgrade_refused: false,
+        downgrade_applied: "trial_critical" as const,
+      };
+    }
     return {
       role: "instruction",
       reason:
@@ -303,7 +340,10 @@ export function resolveAnalysisRole(input: RoleInput | undefined): RoleDecision 
         "queue (hold-for-approval); see /pricing." +
         (input?.trial_downgrade_remaining !== undefined
           ? ` (Trial downgrades: ${input.trial_downgrade_remaining} left today; this flag set never softens.)`
-          : ""),
+          : "") +
+        (input?.trial_critical_remaining === 0
+          ? " (Today's daily critical trial was already used; it resets at UTC midnight.)"
+          : " (Free keys get one critical trial a day when the flagged text sits inside a declared quoted block — declare source_kind and quoted_spans.)"),
       downgrade_refused: true,
     };
   }

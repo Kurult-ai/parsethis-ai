@@ -34,7 +34,7 @@ import {
 } from "./lib/screening-cache.js";
 import type { TokenUsage } from "./types.js";
 import { resolveAnalysisRole, computeDisposition, suggestDeclaration, draftReviewEligible } from "./lib/analysis-role.js";
-import { peekTrialDowngrades, consumeTrialDowngrade, isTrialEligible } from "./lib/trial-downgrade.js";
+import { peekTrialDowngrades, consumeTrialDowngrade, peekTrialCritical, consumeTrialCritical, isTrialEligible } from "./lib/trial-downgrade.js";
 import { issueDraftObligation, hashDraftPrompt } from "./lib/draft-obligation.js";
 import { buildSemanticEvidence } from "./lib/semantic-evidence.js";
 
@@ -1313,6 +1313,12 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
   let trialAvailable = false;
   let trialRemaining: number | undefined;
   let trialConsumed = false;
+  // Run 40 / A1 — the critical trial's route half. The doctrine requires the
+  // quote boundary before the 1/day redemption is even offered; the boundary
+  // is computed here because the offsets already exist in this scope. The
+  // spans-coverage test mirrors the B4 check in analysis-role.ts exactly.
+  let trialCriticalAvailable = false;
+  let trialCriticalRemaining: number | undefined;
   const keyWantsSubject = req.metadata?.intended_action !== undefined;
   // A real key id is load-bearing: it is the meter's identity. The
   // "anonymous" placeholder (direct parsePrompt callers, tests, internal
@@ -1325,6 +1331,32 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
     trialAvailable = peek !== null
       && peek.remaining > 0
       && isTrialEligible(activeFlags.map((f) => ({ id: f.id ?? "" })));
+
+    // The critical trial: 1/day, separate Redis bucket, and only when the
+    // caller demonstrated the quote boundary — untrusted source AND every
+    // flagged offset inside a declared quoted span. The ordinary trial above
+    // is checked first and remains the path for softenable flag sets; this
+    // branch is what makes the Daniel/Maya demo possible on block-floor
+    // criticals without softening the floor for anyone who cannot point at
+    // the quote.
+    const metadata = req.metadata as { source_kind?: string; trust_level?: string; quoted_spans?: Array<[number, number]> } | undefined;
+    const untrusted =
+      (metadata?.source_kind !== undefined && UNTRUSTED_SOURCE_KINDS.has(metadata.source_kind))
+      || metadata?.trust_level === "untrusted"
+      || metadata?.trust_level === "external";
+    const spans = Array.isArray(metadata?.quoted_spans) ? metadata.quoted_spans : [];
+    const covered =
+      untrusted
+      && spans.length > 0
+      && flaggedOffsets.length > 0
+      && flaggedOffsets.every(([start, end]) =>
+        spans.some(([qs, qe]) => start >= qs && end <= qe),
+      );
+    if (covered && (activeFlags.some((f) => (f.severity ?? 0) >= 8) || (activeFlags.filter((f) => f.source !== "llm").reduce((m, f) => Math.max(m, f.severity ?? 0), 0)) >= 8)) {
+      const cPeek = await peekTrialCritical(req.apiKeyId ?? "anonymous").catch(() => null);
+      trialCriticalRemaining = cPeek?.remaining ?? 0;
+      trialCriticalAvailable = cPeek !== null && cPeek.remaining > 0;
+    }
   }
 
   const roleDecision = resolveAnalysisRole({
@@ -1336,6 +1368,8 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
     flagged_offsets: flaggedOffsets,
     trial_downgrade_available: trialAvailable,
     trial_downgrade_remaining: trialRemaining,
+    trial_critical_available: trialCriticalAvailable,
+    trial_critical_remaining: trialCriticalRemaining,
     flags: activeFlags.map((f) => ({ id: f.id ?? "", severity: f.severity, source: f.source, action_floor: f.action_floor })),
     // Server-resolved, never caller-supplied: an org means somebody owns a
     // review queue. A self-service key has no admin, no ceiling and nobody
@@ -1367,6 +1401,21 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
       roleDecision.reason =
         `intended_action "${req.metadata?.intended_action}" was not applied: the trial meter is ` +
         "unavailable right now, so the critical-finding guard stands. Try again shortly.";
+    }
+  }
+  // Run 40 / A1 — same discipline for the 1/day critical redemption: spend
+  // only on a doctrine-granted downgrade, and a meter that vanishes between
+  // peek and consume re-refuses rather than granting an unmetered critical.
+  if (roleDecision.downgrade_applied === "trial_critical") {
+    const criticalConsumed = await consumeTrialCritical(req.apiKeyId ?? "anonymous").catch(() => false);
+    if (!criticalConsumed) {
+      roleDecision.role = "instruction";
+      roleDecision.downgrade_refused = true;
+      roleDecision.downgrade_applied = undefined;
+      roleDecision.reason =
+        `intended_action "${req.metadata?.intended_action}" was not applied: the daily critical trial ` +
+        "was already redeemed today (or its meter is momentarily unavailable), so the critical-finding " +
+        "guard stands. It resets at UTC midnight.";
     }
   }
 

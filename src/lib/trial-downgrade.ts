@@ -30,6 +30,20 @@ import { getRedis, ensureRedisConnected } from "../redis.js";
 export const TRIAL_DOWNGRADE_LIMIT_PER_DAY = 10;
 
 /**
+ * Run 40 / A1 — the critical trial. One per key per rolling day, and only
+ * when the caller demonstrated the quote boundary: untrusted source_kind
+ * plus quoted_spans covering every flagged offset (checked in
+ * analysis-role.ts before this meter is offered). The 10/day trial above
+ * never touches block-floor flags by doctrine; this path is the one place
+ * a critical finding on a self-service key can become a report, because
+ * the caller proved the attack is quoted third-party content they are
+ * analysing rather than an instruction aimed at the agent. The finding,
+ * the score and the flags are byte-identical; only the action moves, once
+ * a day, labelled, visible in /v1/activity.
+ */
+export const TRIAL_CRITICAL_LIMIT_PER_DAY = 1;
+
+/**
  * The trial never softens a deterministic block floor. Any non-llm flag with
  * action_floor "block" means the pattern layer found a complete attack shape
  * (override+destination, concealment, control bypass, exfiltration) — a
@@ -53,6 +67,12 @@ function dayKey(apiKeyId: string): string {
   const now = new Date();
   const day = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
   return `trial:downgrade:${apiKeyId}:${day}`;
+}
+
+function criticalDayKey(apiKeyId: string): string {
+  // Separate bucket from the 10/day trial so a critical redemption can never
+  // be funded by (or debit) the ordinary allowance, and vice versa.
+  return dayKey(apiKeyId).replace("trial:downgrade:", "trial:critical:");
 }
 
 /** Seconds until UTC midnight — when the daily window rolls. */
@@ -96,6 +116,45 @@ export async function consumeTrialDowngrade(apiKeyId: string): Promise<boolean> 
       await redis.expire(key, secondsUntilUtcMidnight() + 300);
     }
     return count <= TRIAL_DOWNGRADE_LIMIT_PER_DAY;
+  } catch {
+    return false;
+  }
+}
+
+/** Peek the critical-trial allowance (1/day, separate bucket). */
+export async function peekTrialCritical(apiKeyId: string): Promise<{ used: number; limit: number; remaining: number; resets_in_hours: number }> {
+  const fallback = { used: 0, limit: TRIAL_CRITICAL_LIMIT_PER_DAY, remaining: TRIAL_CRITICAL_LIMIT_PER_DAY, resets_in_hours: 24 };
+  if (!(await ensureRedisConnected())) return fallback;
+  try {
+    const redis = getRedis();
+    const val = await redis.get(criticalDayKey(apiKeyId));
+    const used = val ? parseInt(val, 10) : 0;
+    return {
+      used,
+      limit: TRIAL_CRITICAL_LIMIT_PER_DAY,
+      remaining: Math.max(0, TRIAL_CRITICAL_LIMIT_PER_DAY - used),
+      resets_in_hours: Math.round((secondsUntilUtcMidnight() / 3600) * 10) / 10,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Consume the critical-trial allowance. Returns false when today's single
+ * redemption is spent (or the meter is unavailable) — the caller must then
+ * keep the refusal, exactly like the 10/day trial's own failure mode.
+ */
+export async function consumeTrialCritical(apiKeyId: string): Promise<boolean> {
+  if (!(await ensureRedisConnected())) return false;
+  try {
+    const redis = getRedis();
+    const key = criticalDayKey(apiKeyId);
+    const count = await redis.incr(key);
+    if (count === 1) {
+      await redis.expire(key, secondsUntilUtcMidnight() + 300);
+    }
+    return count <= TRIAL_CRITICAL_LIMIT_PER_DAY;
   } catch {
     return false;
   }
