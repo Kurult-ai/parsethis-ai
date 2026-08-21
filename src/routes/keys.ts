@@ -67,7 +67,20 @@ keysRoutes.post("/v1/keys", authMiddleware("admin"), async (c) => {
     });
   }
 
-  return c.json(key, 201);
+  // Aggregate-use notice (plan v2 A6): stated at key creation, same line as the
+  // key itself, so a free-tier user sees the use + opt-out before first call.
+  return c.json(
+    {
+      ...key,
+      privacy_notice: {
+        metadata_use:
+          "Parse retains structured, numbers-only metadata (verdict counts, category distributions, rule-hit rates, latency percentiles — never prompt or output text) to improve detection and prevent abuse.",
+        opt_out: "Email privacy@parsethis.ai with your key name to be excluded from detection-improvement aggregates within 7 days. Exclusion does not change how your requests are served, rate-limited, or protected.",
+        deletion: "Email privacy@parsethis.ai to request deletion of your records (completed within 30 days).",
+      },
+    },
+    201,
+  );
 });
 
 keysRoutes.delete("/v1/keys/self", authMiddleware(), async (c) => {

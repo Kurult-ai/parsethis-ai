@@ -232,12 +232,25 @@ worker.on("ready", () => {
 // The retention figures published on /privacy and /trust are only true if
 // something enforces them. Runs daily; set RETENTION_PURGE_ENABLED=false to
 // disable, or RETENTION_PURGE_DRY_RUN=true to report without deleting.
+// Rollups materialize FIRST (plan v2 A8c): the numbers-only daily aggregates
+// must exist before the raw events they summarize are deleted.
 
 const RETENTION_PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 async function retentionPurgeTick(): Promise<void> {
   if (process.env.RETENTION_PURGE_ENABLED === "false") return;
   try {
+    if (process.env.ROLLUP_MATERIALIZATION_ENABLED !== "false") {
+      const { materializeRollupsBeforePurge } = await import("./lib/rollup-materialize.js");
+      const { RETENTION } = await import("./lib/retention-facts.js");
+      const { prisma } = await import("./db.js");
+      const r = await materializeRollupsBeforePurge(prisma as never, {
+        retentionDays: RETENTION.screeningEventsDays,
+      });
+      if (r.rows > 0) {
+        console.log(`[worker] rollups materialized: ${r.rows} rows across ${r.days} day(s)`);
+      }
+    }
     await runRetentionPurge({ dryRun: process.env.RETENTION_PURGE_DRY_RUN === "true" });
   } catch (err) {
     // Never let bookkeeping take the worker down.

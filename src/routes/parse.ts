@@ -662,6 +662,9 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   // ── Write ScreeningEvent (fire-and-forget — metadata only, no prompt content) ──
   const apiKeyForEvent = c.get("apiKey");
   const effectiveEnforcementMode = effectivePolicy?.enforcementMode ?? "block";
+  // Caller-asserted join keys (plan v2 A7): labels the caller attaches so their
+  // own governance views can group by agent/org/policy. NOT verified identity.
+  const joinMeta = (body.metadata ?? {}) as Record<string, unknown>;
   persistScreeningEventForApiKey({
     apiKeyId: apiKeyForEvent?.id,
     request: body,
@@ -669,6 +672,9 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     latencyMs: parseLatencyMs,
     autoBlockThreshold: c.get("policy")?.autoBlockThreshold ?? 7,
     enforcementMode: effectiveEnforcementMode,
+    agentId: typeof joinMeta.agent_id === "string" ? joinMeta.agent_id : undefined,
+    orgId: typeof joinMeta.org_id === "string" ? joinMeta.org_id : undefined,
+    policyVersion: typeof joinMeta.policy_version === "string" ? joinMeta.policy_version : undefined,
   }).catch((err: Error) => console.error("[screening-event] write failed:", err.message));
 
   // ── Audit log the screening result ──

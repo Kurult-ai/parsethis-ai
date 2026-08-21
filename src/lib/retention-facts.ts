@@ -24,7 +24,10 @@
  *   - src/parse.ts — the semantic layer calls OpenRouter unless
  *     `mode: "pattern-only"`, a pattern hit at severity >= 9 already settles the
  *     verdict, or no OpenRouter key is configured.
- *   - No scheduled deletion job exists anywhere in src/ or scripts/.
+ *   - src/worker.ts — the retention purge tick runs runRetentionPurge daily
+ *     (guarded by RETENTION_PURGE_ENABLED; numbers-only daily rollups are
+ *     materialized in the same tick BEFORE deletion, so aggregate history
+ *     survives the purge while raw events do not).
  */
 
 /** Retention figures quoted in prose elsewhere. Keep in sync with the tables. */
@@ -100,6 +103,7 @@ export const RETENTION_TABLE_HTML = `
     </thead>
     <tbody>
       <tr><td>Screening events</td><td>${RETENTION.screeningEventsDays} days</td><td>Automatic. A daily job deletes records past the window.</td></tr>
+      <tr><td>Numbers-only daily rollups</td><td>Kept indefinitely</td><td>Counts and latency percentiles only, no prompt-derived content. Written by the daily job before the raw events they summarize are deleted, so detection-improvement history survives the purge.</td></tr>
       <tr><td>Audit events, including the caller IP</td><td>${RETENTION.auditEventsDays} days</td><td>Automatic, as above.</td></tr>
       <tr><td>Compliance receipts</td><td>1 year, fixed so the hash chain stays verifiable</td><td>Automatic, as above.</td></tr>
       <tr><td>Redacted <code>/v1/evaluate</code> records</td><td>The ${RETENTION.evaluateInMemoryRecords} most recent, then dropped</td><td>Automatic. They are held in the server's memory, so a restart clears them.</td></tr>
@@ -113,6 +117,15 @@ export const RETENTION_TABLE_HTML = `
 events, audit events, and compliance receipts past their stated windows. To request
 early removal, email <a href="mailto:privacy@parsethis.ai">privacy@parsethis.ai</a>
 — we complete deletion requests within ${RETENTION.deletionRequestDays} days.</p>
+
+<p><strong>How screening metadata is used, and how to opt out.</strong> We retain
+structured, numbers-only metadata (verdict counts, category distributions, rule-hit
+rates, latency percentiles — never prompt or output text) to improve detection and
+prevent abuse. If you prefer your traffic be excluded from detection-improvement
+aggregates, email <a href="mailto:privacy@parsethis.ai">privacy@parsethis.ai</a>
+with your key name and we will exclude it within 7 days. Exclusion changes nothing
+about how your requests are served, rate-limited, or protected — it only removes
+your traffic from the aggregate improvement statistics.</p>
 `;
 
 /**

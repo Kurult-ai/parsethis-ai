@@ -30,6 +30,10 @@ export interface ScreeningEventData {
   latencyMs: number;
   blocked: boolean;
   wouldBlock?: boolean;
+  /// Caller-asserted join keys (plan v2 A7) — labels, not verified identity.
+  agentId?: string;
+  orgId?: string;
+  policyVersion?: string;
   /**
    * What Parse decided to do: "block" | "report" | "review" | "allow". Also in
    * `metadata.recommended_action`, but a column is what the compliance surfaces
@@ -107,6 +111,9 @@ export function buildScreeningEventData(input: {
   latencyMs: number;
   autoBlockThreshold?: number;
   enforcementMode?: string;
+  agentId?: string;
+  orgId?: string;
+  policyVersion?: string;
 }): ScreeningEventData {
   const ruleIds = screeningRuleIds(input.result);
   const recommendedAction = screeningDecisionAction(input.result);
@@ -158,6 +165,9 @@ export function buildScreeningEventData(input: {
       approval_matrix_decision: getMatrixDecisionFromResult(input.result),
       approval_matrix_cell: getMatrixCellFromResult(input.result),
     }),
+    agentId: input.agentId,
+    orgId: input.orgId,
+    policyVersion: input.policyVersion,
   };
 }
 
@@ -201,6 +211,9 @@ export async function persistScreeningEventForApiKey(input: {
   latencyMs: number;
   autoBlockThreshold?: number;
   enforcementMode?: string;
+  agentId?: string;
+  orgId?: string;
+  policyVersion?: string;
   writer?: ScreeningEventWriter;
 }): Promise<void> {
   if (!shouldPersistScreeningEventForApiKey(input.apiKeyId)) return;
@@ -213,6 +226,9 @@ export async function persistScreeningEventForApiKey(input: {
       latencyMs: input.latencyMs,
       autoBlockThreshold: input.autoBlockThreshold,
       enforcementMode: input.enforcementMode,
+      agentId: input.agentId,
+      orgId: input.orgId,
+      policyVersion: input.policyVersion,
     }),
     input.writer,
   );
