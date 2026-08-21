@@ -694,7 +694,7 @@ curl -s ${baseUrl}/v1/parse \\
 <footer>
   <div class="wrap">
     <div class="frow mono" style="font-size:12.5px">
-      <a href="/llms.txt">/llms.txt</a><a href="/openapi.json">/openapi.json</a><a href="/mcp">/mcp</a><a href="/trust">/trust</a><a href="/status">/status</a>
+      <a href="/llms.txt">/llms.txt</a><a href="/openapi.json">/openapi.json</a><a href="/mcp">/mcp</a><a href="/trust">/trust</a><a href="/status">/status</a><a href="/founder">Founder</a><a href="/personal">Personal</a>
     </div>
     <!-- The legal row. It is on every other page via the shared footer in
          html-template.ts, and was missing only here — so a vendor-security
