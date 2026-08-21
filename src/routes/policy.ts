@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { authMiddleware, resolveEnvironment } from "../auth.js";
 import { prisma } from "../db.js";
-import { cachePolicyData, getCachedPolicyData, invalidatePolicyCache } from "../result-store.js";
+import { cachePolicyData, getCachedPolicyData, invalidatePolicyCache, invalidateLocalMemoForPolicy } from "../result-store.js";
 import type { AppEnv, ScreeningPolicy } from "../types.js";
 import { auditLog } from "../lib/audit-log.js";
 import { formatBypassPolicy, hashBypassCodeword } from "../lib/bypass-codeword.js";
@@ -464,6 +464,7 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
     const policy: ScreeningPolicy = dbPolicyToScreeningPolicy(upserted, tier);
 
     // Invalidate old cache, set new
+    invalidateLocalMemoForPolicy(apiKey.id);
     await invalidatePolicyCache(apiKey.id, environment);
     cachePolicyData(apiKey.id, policy, environment).catch(() => {});
 
@@ -645,7 +646,8 @@ policyRoutes.delete("/v1/policy", authMiddleware("evaluate"), async (c) => {
       await prisma.screeningPolicy.deleteMany({
         where: { apiKeyId: apiKey.id, environment },
       });
-      await invalidatePolicyCache(apiKey.id, environment);
+      invalidateLocalMemoForPolicy(apiKey.id);
+    await invalidatePolicyCache(apiKey.id, environment);
     } else {
       // Delete all environments for this key
       await prisma.screeningPolicy.deleteMany({
@@ -737,6 +739,7 @@ policyRoutes.post("/v1/policy/rules", authMiddleware("evaluate"), async (c) => {
       },
     });
 
+    invalidateLocalMemoForPolicy(apiKey.id);
     await invalidatePolicyCache(apiKey.id, environment);
 
     auditLog({
@@ -809,6 +812,7 @@ policyRoutes.delete("/v1/policy/rules/:id", authMiddleware("evaluate"), async (c
       data: { customRules: updatedRules as any },
     });
 
+    invalidateLocalMemoForPolicy(apiKey.id);
     await invalidatePolicyCache(apiKey.id, environment);
 
     auditLog({ action: "custom_rule_deleted",
@@ -915,6 +919,7 @@ policyRoutes.put("/v1/policy/approval-matrix", authMiddleware("evaluate"), async
       },
     });
 
+    invalidateLocalMemoForPolicy(apiKey.id);
     await invalidatePolicyCache(apiKey.id, environment);
 
     auditLog({

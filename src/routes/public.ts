@@ -78,6 +78,7 @@ import { renderTrustPage } from "../pages/trust-page.js";
 import { renderTrustPackagePage } from "../pages/trust-package.js";
 import { renderDpaPage } from "../pages/dpa.js";
 import { renderAboutPage } from "../pages/about.js";
+import { renderFounderPage } from "../pages/founder.js";
 import { renderPromptGuardLandingPage } from "../pages/prompt-guard-landing.js";
 import { renderPromptGuardPlaygroundPage } from "../pages/prompt-guard-playground.js";
 import { problem, ErrorCode, serviceDependencyProblem, type ErrorCodeValue } from "../lib/problem-response.js";
@@ -794,13 +795,22 @@ publicRoutes.post("/demo/api", async (c) => {
         rateLimiterDown = true;
       } else {
         const redis = getRedis();
-        useCount = await withTimeout(redis.incr(rateKey), 1_500, Number.NaN);
+        // Atomic INCR-with-TTL-on-first-hit in one Upstash round-trip (EVAL).
+        // The old shape paid two sequential RTs on the first request of each
+        // window (INCR then EXPIRE) and one on the rest; EVAL is one always,
+        // and keeps the fixed-window semantics exactly (TTL set only when the
+        // counter is new).
+        const rateScript = `local n = redis.call('INCR', KEYS[1])
+if n == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+return n`;
+        useCount = await withTimeout(
+          redis.eval(rateScript, 1, rateKey, String(DEMO_RATE_WINDOW_SECONDS)) as Promise<number>,
+          1_500,
+          Number.NaN,
+        );
         if (!Number.isFinite(useCount)) {
           rateLimiterDown = true;
         } else {
-          if (useCount === 1) {
-            await withTimeout(redis.expire(rateKey, DEMO_RATE_WINDOW_SECONDS), 1_500, 0);
-          }
           if (demoLimitExceeded(useCount)) {
             rateLimited = true;
           }
@@ -1295,6 +1305,11 @@ publicRoutes.get("/.well-known/security.txt", (c) => {
 // About page
 publicRoutes.get("/about", (c) => {
   return c.html(renderAboutPage(getBaseUrl(c)));
+});
+
+// Founder page (2026-08-21): the person behind the product — see page comment.
+publicRoutes.get("/founder", (c) => {
+  return c.html(renderFounderPage(getBaseUrl(c)));
 });
 
 // Docs hub page (HTML index to all documentation)

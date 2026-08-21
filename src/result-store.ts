@@ -249,3 +249,63 @@ export async function invalidatePolicyCache(apiKeyId: string, environment?: stri
     } while (cursor !== "0");
   }
 }
+
+// --- In-process micro-memo (hot-path latency, 2026-08-21) ---
+//
+// Upstash sits ~50ms away. The authenticated happy path made three sequential
+// Redis round-trips (DOS-guard — now moved to the bcrypt boundary — key prefix
+// cache, policy cache), which is why an authenticated pattern-only parse cost
+// ~296ms while the engine itself runs in 13ms. This memo holds, per process,
+// the last few seconds of decoded cache reads so hot keys skip the network
+// entirely. Correctness rules:
+//
+//   - TTL 5s: a revoke or policy PUT lands in Redis and invalidates the
+//     server-side entry; this memo simply expires. Five seconds of
+//     post-revoke grace on a process-local read is the same window the
+//     Redis cache (300s TTL) already grants, just shorter.
+//   - Writes invalidate locally too (same process); other processes rely
+//     on TTL.
+//   - `null` results are NOT memoized — a cache miss must still reach Redis
+//     and the DB.
+//   - Bounded: ~65k entries would be needed to matter; the map is pruned on
+//     write when it exceeds a few hundred keys.
+//
+// Deliberately policy-only. A key memo held the pre-revoke candidate record
+// and served "valid" for up to 5s after revokeApiKey had invalidated Redis —
+// caught by api-key-fast-hash tests (run 41). Key material/status must always
+// round-trip to Redis, where invalidation is authoritative and immediate.
+
+const MEMO_TTL_MS = 5_000;
+const MEMO_MAX = 512;
+const memo = new Map<string, { at: number; value: unknown }>();
+
+function memoGet<T>(key: string): T | null {
+  const hit = memo.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > MEMO_TTL_MS) {
+    memo.delete(key);
+    return null;
+  }
+  return hit.value as T;
+}
+
+function memoSet(key: string, value: unknown): void {
+  if (value === null || value === undefined) return;
+  if (memo.size > MEMO_MAX) memo.clear();
+  memo.set(key, { at: Date.now(), value });
+}
+
+export async function getCachedPolicyDataMemoized(apiKeyId: string, environment?: string): Promise<unknown | null> {
+  const memoKey = `policy:${apiKeyId}:${environment ?? ""}`;
+  const hit = memoGet<unknown>(memoKey);
+  if (hit !== null) return hit;
+  const data = await getCachedPolicyData(apiKeyId, environment);
+  memoSet(memoKey, data);
+  return data;
+}
+
+export function invalidateLocalMemoForPolicy(apiKeyId: string): void {
+  for (const k of memo.keys()) {
+    if (k.startsWith(`policy:${apiKeyId}:`)) memo.delete(k);
+  }
+}

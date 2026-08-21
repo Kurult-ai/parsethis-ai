@@ -36,11 +36,16 @@ export const EXPERIMENTS: Record<string, Experiment> = {
     name: "hero-copy",
     description: "Test different hero headline and CTA copy on the landing page.",
     variants: [
-      { key: "a", label: "Control — current hero copy", weight: 2 },
-      { key: "b", label: "Variant B — shorter, action-oriented headline", weight: 1 },
-      // Run 32/33 P2-4: ICP-beamed hero. Ticket/inbox sentence moves into the
-      // headline (both Maya runs: message-fit 5/10 on governance-first).
-      { key: "c", label: "Variant C — support-inbox hero (Maya ICP)", weight: 1 },
+      // 2026-08-21: the experiment concluded. Variant C (support-inbox hero)
+      // won on every signal that mattered — run 33's external Maya bought Pro
+      // $49 *despite* the governance hero (message-fit 5/10, demo 9/10), and
+      // the advisor review ("detection is the demo, governance is the company")
+      // settled the altitude question: lead the pitch with the poisoned ticket,
+      // close it with the control plane. C is now the default at weight 4;
+      // A/B retained at trace weight for regression comparison.
+      { key: "c", label: "Variant C — support-inbox hero (Maya ICP) — WINNER, default", weight: 4 },
+      { key: "a", label: "Control — governance hero (retained for comparison)", weight: 0 },
+      { key: "b", label: "Variant B — shorter, action-oriented headline (retained)", weight: 0 },
     ],
   },
 };

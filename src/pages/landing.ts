@@ -147,7 +147,7 @@ Verification required before reporting done:
     c: {
       l1: "Screen what your inbox",
       l2: "feeds your agent.",
-      lede: "Running an assistant that drafts replies, triages tickets or reads customer messages? Parse screens every one for injection, exfiltration and fraud — before your agent acts — and writes a receipt for every decision.",
+      lede: "One poisoned ticket can turn a helpful support agent into the attacker's hands. Parse screens every message for injection, exfiltration and fraud before your agent acts — deterministic verdicts in milliseconds, a receipt for every decision. Start in monitor for $0; production keys from $49/mo.",
     },
   };
   // The variant experiment map must know the new arm exists, or admin
@@ -155,8 +155,8 @@ Verification required before reporting done:
   const hero = heroVariants[variantKey] ?? heroVariants.a;
 
   const canonicalUrl = `${baseUrl}/`;
-  const title = "Agent Governance & Compliance for AI Agents";
-  const description = `Parse governs agent fleets: registry, runtime policy, boundary screening, and an audit receipt for every decision. ${DETECTION_FACTS.riskCategoryCount} risk categories, ${DETECTION_FACTS.pipelineLayers.length} detection layers, machine-readable by design.`;
+  const title = "Screen untrusted text before your AI agent can act";
+  const description = `Parse is the gate in front of agents that read tickets, email or customer messages and then use tools. Deterministic injection/exfiltration/fraud screening on every message, a receipt on every verdict, monitor mode from $0 — production from $49/mo.`;
   const jsonLd = [organizationSchema(baseUrl), webApplicationSchema(baseUrl)]
     .map((obj) => `<script type="application/ld+json">${JSON.stringify(obj).replace(/<\//g, "<\\/")}</script>`)
     .join("\n  ");
@@ -477,7 +477,7 @@ Verification required before reporting done:
   <div class="wrap nav">
     <a class="logo" href="/">${getLogoMarkSvg()}Parse</a>
     <nav class="nav-links">
-      <a href="/demo">Try it</a><a href="/personal">Personal</a><a href="/docs">Docs</a><a href="/technology">Technology</a><a href="/pricing">Pricing</a><a href="/blog">Blog</a><a href="/about">About</a>
+      <a href="/demo">Try it</a><a href="/docs">Docs</a><a href="/technology">Technology</a><a href="/pricing">Pricing</a><a href="/blog">Blog</a><a href="/about">About</a>
     </nav>
     <div class="nav-right">
       <a class="btn btn-ghost" href="/admin/login">Sign in</a>

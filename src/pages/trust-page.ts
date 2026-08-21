@@ -141,6 +141,32 @@ pages leave to an email thread.</p>
 ${entityDisclosureHtml()}
 </div>
 
+<div class="trust-section">
+<h2 id="infrastructure-plan">Infrastructure: where we are, dated</h2>
+<p>We do not take the single node down from this page — taking it down is how a
+vendor starts lying. Instead, here is the plan, with dates we will be held to.</p>
+<div class="table-wrapper">
+  <table>
+    <thead><tr><th>When</th><th>Infrastructure posture</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Now</strong> (as of 2026-08-21)</td>
+        <td>Single node (US), owner-operated. Backups every 6 hours. Cloudflare in front. Fails <strong>closed</strong>: if the screening service is unreachable, integrations block rather than pass traffic unscreened. No uptime SLA is sold — see the <a href="/dpa">DPA</a> for the contractual commitments that do exist.</td>
+      </tr>
+      <tr>
+        <td><strong>Next 60 days</strong> (target 2026-10-20)</td>
+        <td>Two-region deployment with managed Postgres/Redis, an availability SLO we can actually keep published on <a href="/status">/status</a>, and no third-party model provider on the default path for paid tiers (or a pinned model + DPA). No SLA product is sold until this ships.</td>
+      </tr>
+      <tr>
+        <td><strong>SOC 2</strong></td>
+        <td>Type II fieldwork started — not "on the roadmap" as a vibe. Target report: Q1 2027. First independent penetration test: Q2 2027, after fieldwork.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+<p class="muted" style="font-size:13px;">Judgment call, stated plainly: an SLA we cannot keep is a lawsuit, not a SKU. The DPA, the receipts, and the fail-closed posture are what we can stand behind today.</p>
+</div>
+
 <div class="trust-contact-box">
   <h3>Need this for your vendor risk assessment?</h3>
   <p>The full trust package is available as a <a href="/trust-package">downloadable document</a>. You can also <a href="/docs/trust-package.md" download>download the Markdown source</a>.</p>

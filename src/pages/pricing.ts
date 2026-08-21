@@ -338,11 +338,11 @@ latency: 21 ms</pre>
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Compliance</div>
         <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">+$199<span style="font-size:14px;font-weight:400;color:var(--text-dim);">/mo on Pro or Team</span></div>
-        <div style="font-size:13px;color:var(--text-dim);">Dedicated support, SLA and DPA handling — evidence packs and SIEM are already on Pro</div>
+        <div style="font-size:13px;color:var(--text-dim);">Dedicated support, DPA handling and named-contact review cycles — evidence packs and SIEM are already on Pro. We do not sell an uptime SLA until high-availability infrastructure ships; the DPA is the contract that exists today.</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Evidence packs, SIEM forwarding, data governance and the framework crosswalk are included from Pro — this add-on is not the only route to them</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Dedicated support and a named SLA</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Dedicated support, DPA review and vendor-questionnaire turnaround</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><a href="/dpa">DPA + SCCs</a> handled with you, not self-serve</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Forbid per-request downgrades org-wide, with the change on the audit trail</li>
         <li style="padding:6px 0;">Talk to sales — checkout for this SKU is not self-serve</li>
@@ -731,7 +731,7 @@ res = session.post("https://www.parsethis.ai/v1/parse", json={"prompt": "..."})<
         <tr>
           <td>Enterprise</td>
           <td><strong>Enterprise key</strong></td>
-          <td>SLAs, custom limits</td>
+          <td>Custom limits, DPA review, deployment support</td>
         </tr>
       </tbody>
     </table>

@@ -2,7 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcrypt";
 import { prisma } from "./db.js";
 import { backfillApiKeyFastHash, cacheApiKey, getCachedApiKey, invalidateApiKeyCache } from "./result-store.js";
-import { isNegativelyCached, recordNegativeCache } from "./lib/auth-dos-guard.js";
+import { isNegativelyCached, recordNegativeCache, isAuthFailureLimited } from "./lib/auth-dos-guard.js";
 import { PLAN_LIMITS } from "./lib/product-facts.js";
 import { SELF_SERVICE_USER_ID } from "./lib/constants.js";
 import { isSyntheticKeyName } from "./lib/synthetic-keys.js";
@@ -368,6 +368,7 @@ export type ApiKeyValidationResult =
   | { status: "invalid" }
   | { status: "expired" }
   | { status: "revoked" }
+  | { status: "auth_failure_limited" }
   | { status: "temporarily_unavailable"; reason: "cache_lookup_failed" | "fallback_lookup_failed" | "db_lookup_failed" | "db_lookup_timeout" };
 
 /**
@@ -388,7 +389,7 @@ export function rolledExpiryFor(expiresAt: Date | null): Date | null {
   return new Date(Date.now() + KEY_LIFETIME_MS);
 }
 
-export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKeyValidationResult> {
+export async function validateApiKeyDetailed(bearerToken: string, opts?: { authIp?: string }): Promise<ApiKeyValidationResult> {
   if (!bearerToken || !bearerToken.startsWith("pfa_")) return { status: "invalid" };
   if (bearerToken.startsWith("pfa_live_") && !/^pfa_live_[0-9a-f]{48}$/.test(bearerToken)) return { status: "invalid" };
   if (bearerToken.startsWith("pfa_test_") && !/^pfa_test_[0-9a-f]{48}$/.test(bearerToken)) return { status: "invalid" };
@@ -480,6 +481,15 @@ export async function validateApiKeyDetailed(bearerToken: string): Promise<ApiKe
   // function: a valid cache hit should not be taxed with an extra Redis EXISTS
   // to make invalid requests cheaper. Fails open — see auth-dos-guard.
   if (await isNegativelyCached(bearerToken)) return { status: "invalid" };
+
+  // Same boundary, same reason: an IP that has already burned its auth-failure
+  // budget must not force another bcrypt sweep. The check used to live in
+  // authMiddleware and taxed every request — including valid cache hits — with
+  // a sequential Redis round-trip. Here it runs only on the path it guards,
+  // before the first bcrypt compare. Fails open like the rest of the guard.
+  if (opts?.authIp && (await isAuthFailureLimited(opts.authIp))) {
+    return { status: "auth_failure_limited" as const };
+  }
 
   // Check Redis fallback keys before DB. This keeps newly issued self-service
   // keys usable during a Postgres binding outage without exposing secrets.

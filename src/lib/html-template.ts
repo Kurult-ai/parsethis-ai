@@ -109,10 +109,6 @@ export function renderPage(options: PageOptions): string {
   // Build nav links with aria-current for active page
   const navLinks = [
     { href: "/demo", label: "Try it" },
-    // /personal had zero inbound links from all ten main pages (run 18). Its own
-    // copy is the best on the site for a one-agent-one-person buyer, and it was
-    // reachable only by guessing the URL.
-    { href: "/personal", label: "Personal" },
     { href: "/docs", label: "Docs" },
     { href: "/technology", label: "Technology" },
     { href: "/pricing", label: "Pricing" },
@@ -692,6 +688,8 @@ export function renderPage(options: PageOptions): string {
           <a href="/security">Security</a>
           <a href="/status">Status</a>
           <a href="/changelog">Changelog</a>
+          <a href="/personal">Personal</a>
+          <a href="/founder">Founder</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
           <a href="/dpa">DPA</a>

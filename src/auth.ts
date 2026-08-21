@@ -10,7 +10,7 @@ import {
 } from "./api-key-service.js";
 import { prisma } from "./db.js";
 import { getRedis, isRedisAvailable, ensureRedisConnected } from "./redis.js";
-import { getCachedPolicyData, cachePolicyData } from "./result-store.js";
+import { getCachedPolicyDataMemoized, cachePolicyData } from "./result-store.js";
 import type { AppEnv, ScreeningPolicy } from "./types.js";
 import { auditLog } from "./lib/audit-log.js";
 import { problem, ErrorCode } from "./lib/problem-response.js";
@@ -356,28 +356,34 @@ export function authMiddleware(requiredScope?: string) {
       return;
     }
 
-    // Before the expensive path — cache miss then a bcrypt sweep of the prefix
-    // bucket — throttle a source that is only ever failing. Valid keys never
-    // reach recordAuthFailure below, so this cannot limit legitimate traffic;
-    // it only bounds the bcrypt work an unauthenticated flood can force.
-    const authIp = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
-    if (await isAuthFailureLimited(authIp)) {
-      auditLog({ action: "auth_failure", detail: "IP auth-failure rate limit exceeded", ip: authIp });
-      c.header("Retry-After", "60");
-      return problem(c, {
-        status: 429,
-        title: "Too many authentication failures",
-        detail: "Too many failed authentication attempts from this source. Retry after 60 seconds with a valid key.",
-        code: ErrorCode.RATE_LIMIT,
-        retryable: true,
-        retry_after_seconds: 60,
-      });
-    }
-
-    // Postgres-backed key validation via api-key-service (bcrypt + Redis cache)
+    // Postgres-backed key validation via api-key-service (bcrypt + Redis cache).
+    //
+    // The DOS-guard used to run before this on every authenticated request — a
+    // sequential Upstash round-trip (~50ms) paid by every valid key on every
+    // call, though its only purpose is to bound the bcrypt work a flood of
+    // FAILING requests can force. Valid keys never reach recordAuthFailure, so
+    // the guard can never limit legitimate traffic wherever it sits. It now
+    // runs only where the cost it guards actually is:
+    //   - validateApiKeyDetailed's expensive path (cache miss → prefix sweep →
+    //     bcrypt per candidate) consults the same IP budget before sweeping;
+    //   - the definitive-failure branch below still records the miss.
+    // Cache-hit requests (the common case) skip the check entirely.
     let apiKeyRecord: ApiKeyRecord;
     try {
-      const validation = await validateApiKeyFromService(keyStr);
+      const validation = await validateApiKeyFromService(keyStr, { authIp: c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown" });
+      if (validation.status === "auth_failure_limited") {
+        const authIp = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
+        auditLog({ action: "auth_failure", detail: "IP auth-failure rate limit exceeded", ip: authIp });
+        c.header("Retry-After", "60");
+        return problem(c, {
+          status: 429,
+          title: "Too many authentication failures",
+          detail: "Too many failed authentication attempts from this source. Retry after 60 seconds with a valid key.",
+          code: ErrorCode.RATE_LIMIT,
+          retryable: true,
+          retry_after_seconds: 60,
+        });
+      }
       if (validation.status === "temporarily_unavailable") {
         const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "unknown";
         auditLog({ action: "auth_failure", detail: `API key validation temporarily unavailable: ${validation.reason}`, ip });
@@ -525,7 +531,7 @@ export function authMiddleware(requiredScope?: string) {
     // governance failure leaves authentication as it was.
     const orgCeiling = apiKeyRecord.orgId ? await getOrgPolicyCeiling(apiKeyRecord.orgId) : null;
 
-    const cachedPolicy = await getCachedPolicyData(apiKeyRecord.id, environment);
+    const cachedPolicy = await getCachedPolicyDataMemoized(apiKeyRecord.id, environment);
     if (cachedPolicy) {
       c.set("policy", applyOrgPolicyCeiling(cachedPolicy as ScreeningPolicy, orgCeiling));
     } else {
