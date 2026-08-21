@@ -69,6 +69,15 @@ const DAILY_COST_CAPS: Record<string, number> = {
 // ─── POST /v1/parse ────────────────────────────────────────────────────────
 
 parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddleware(), async (c) => {
+  // Server-Timing (run 41): one header, four phases — transport overhead is
+  // what the client measures minus these. auth is measured by the middleware
+  // wrapper below; entry starts at handler top.
+  const tEntry = performance.now();
+  const timing: string[] = [];
+  const markTiming = (n: string) => {
+    timing.push(`${n};dur=${(performance.now() - tEntry).toFixed(0)}`);
+    c.header("Server-Timing", timing.join(", "));
+  };
   const contentTypeProblem = jsonContentTypeProblem(c);
   if (contentTypeProblem) return contentTypeProblem;
 
@@ -557,7 +566,9 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
   // Selects the deep-screening budget. Server-set: a caller cannot pick their own tier.
   body.tier = apiKey?.tier ?? "free";
 
+  markTiming("pre-engine");
   const result = await parsePrompt(body);
+  markTiming("engine");
   const parseLatencyMs = Date.now() - parseStart;
 
   // Say what was ignored. A misplaced field still screens fine and still
