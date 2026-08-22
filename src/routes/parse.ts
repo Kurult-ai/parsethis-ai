@@ -677,6 +677,36 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
     policyVersion: typeof joinMeta.policy_version === "string" ? joinMeta.policy_version : undefined,
   }).catch((err: Error) => console.error("[screening-event] write failed:", err.message));
 
+  // ── Shadow observations (plan v2 A8b): rules registered as shadow count
+  // would-have-hits without enforcing. Fire-and-forget; a shadow bookkeeping
+  // failure must never affect the response. — only when rules are in shadow
+  // (the helper no-ops on an empty registry, which is the normal case).
+  if (apiKeyForEvent?.id) {
+    void (async () => {
+      try {
+        const { recordShadowObservations } = await import("../lib/shadow-rollout.js");
+        const { prisma } = await import("../db.js");
+        const key = await prisma.apiKey.findUnique({
+          where: { id: apiKeyForEvent.id },
+          select: { synthetic: true, excludedFromAggregates: true },
+        });
+        await recordShadowObservations(prisma as never, {
+          traceId: result.id,
+          apiKeyId: apiKeyForEvent.id,
+          synthetic: key?.synthetic ?? false,
+          excludedFromAggregates: key?.excludedFromAggregates ?? false,
+          firedRuleIds: ruleIds,
+          wouldBlockRuleIds: result.flags
+            .filter((f) => f.action_floor === "block" || f.severity >= 7)
+            .map((f) => f.id)
+            .filter((id): id is string => typeof id === "string"),
+        });
+      } catch (err) {
+        console.error("[shadow-observe] failed:", (err as Error).message);
+      }
+    })();
+  }
+
   // ── Audit log the screening result ──
   auditLog({
     action: "prompt_screened",

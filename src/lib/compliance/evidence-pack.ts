@@ -69,6 +69,13 @@ export interface EvidencePackDecision {
   /** The declaration itself, when one was made: summarize | extract | route | reply | execute. */
   intendedAction?: string;
   ruleIds: string[];
+  /** Linked decision chain (plan v2 Phase 2 item 3): receipt + outcome labels
+   * for this trace, when they exist. Trace-ID threaded so an auditor can walk
+   * screen → receipt → human decision without leaving the pack. */
+  traceId?: string;
+  receiptId?: string;
+  outcome?: string;
+  outcomeSource?: string;
 }
 
 export interface EvidencePack {
@@ -197,6 +204,48 @@ export async function generateEvidencePack(
 
   const blockedCount = screenings.filter((s) => s.blocked).length;
 
+  // Linked decision-chain lookups (plan v2 Phase 2 item 3): receipts by trace
+  // and by screening-event id, outcome labels by trace. Both degrade to
+  // absent fields — a pack with no receipts/outcomes is still complete.
+  interface ReceiptLite {
+    receiptId: string;
+    screeningEventId: string | null;
+    agentId: string;
+  }
+  interface OutcomeLite {
+    traceId: string;
+    outcome: string;
+    source: string;
+  }
+  const noReceipts: ReceiptLite[] = [];
+  const noOutcomes: OutcomeLite[] = [];
+  const receiptRows: ReceiptLite[] = await prisma.complianceReceipt
+    .findMany({
+      where: { timestamp: { gte: dateFrom, lte: dateTo } },
+      select: { receiptId: true, screeningEventId: true, agentId: true },
+    })
+    .catch(() => noReceipts);
+  const outcomeRows: OutcomeLite[] = await prisma.screeningOutcome
+    .findMany({
+      where: { createdAt: { gte: dateFrom, lte: dateTo } },
+      select: { traceId: true, outcome: true, source: true },
+    })
+    .catch(() => noOutcomes);
+  const receiptByEvent = new Map(
+    receiptRows.filter((r) => r.screeningEventId).map((r) => [r.screeningEventId as string, r]),
+  );
+  // Receipts do not store the trace id, but ComplianceReceipt.agentId is the
+  // caller-asserted agent label and receipts link 1:1 by screeningEventId;
+  // the trace join runs through the screening rows we already hold.
+  const receiptByTrace = new Map<string, { receiptId: string }>();
+  for (const s of screenings) {
+    const meta = (s.metadata ?? {}) as Record<string, unknown>;
+    const traceId = typeof meta.request_id === "string" ? meta.request_id : undefined;
+    const rec = s.id ? receiptByEvent.get(s.id) : undefined;
+    if (traceId && rec) receiptByTrace.set(traceId, rec);
+  }
+  const outcomeByTrace = new Map(outcomeRows.map((o) => [o.traceId, o]));
+
   // Counted from the disposition column, not from the score. A finding the
   // caller declared as subject matter is reported, not refused, and counting it
   // as a block is what let a customer's dashboard overstate its own enforcement.
@@ -208,6 +257,9 @@ export async function generateEvidencePack(
 
   const toDecision = (s: (typeof screenings)[number]): EvidencePackDecision => {
     const meta = (s.metadata ?? {}) as Record<string, unknown>;
+    const traceId = typeof meta.request_id === "string" ? meta.request_id : undefined;
+    const receipt = traceId ? receiptByTrace.get(traceId) : undefined;
+    const outcome = traceId ? outcomeByTrace.get(traceId) : undefined;
     return {
       at: s.createdAt.toISOString(),
       screeningId: s.id,
@@ -220,6 +272,10 @@ export async function generateEvidencePack(
       analysisRole: (s.analysisRole ?? undefined) as string | undefined,
       intendedAction: typeof meta.intended_action === "string" ? meta.intended_action : undefined,
       ruleIds: Array.isArray(meta.rule_ids) ? (meta.rule_ids as string[]) : [],
+      traceId,
+      receiptId: receipt?.receiptId ?? (s.id ? receiptByEvent.get(s.id)?.receiptId : undefined),
+      outcome: outcome?.outcome,
+      outcomeSource: outcome?.source,
     };
   };
 

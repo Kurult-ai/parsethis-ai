@@ -284,6 +284,68 @@ model ScreeningDailyRollup {
   @@map("screening_daily_rollups")
 }
 
+/// Ground-truth outcome labels for the detection-improvement loop (plan v2
+/// A8). Written by POST /v1/outcome (caller), and by mining passes over
+/// ToolExceptionRequest approvals/denials and approval-request decisions.
+/// Labels/numbers only — the same no-prompt-text discipline as
+/// ScreeningEvent metadata; `note` is a reporter-written short label, never
+/// a quoted span.
+model ScreeningOutcome {
+  id               String   @id @default(cuid())
+  traceId          String   @map("trace_id")
+  screeningEventId String?  @map("screening_event_id")
+  apiKeyId         String?  @map("api_key_id")
+  /// false_positive | true_positive | benign_override | confirmed_attack | other
+  outcome          String
+  /// caller | owner | mining
+  source           String   @default("caller")
+  note             String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([traceId, source])
+  @@index([createdAt(sort: Desc)])
+  @@index([apiKeyId])
+  @@map("screening_outcomes")
+}
+
+/// Observe-only rule rollout ledger (plan v2 A8b). A rule in shadow counts
+/// would-have-hits without enforcing; promotion requires the gate report.
+model ShadowRuleObservation {
+  id                     String   @id @default(cuid())
+  ruleId                 String   @map("rule_id")
+  day                    DateTime
+  wouldBlock             Boolean  @default(false) @map("would_block")
+  outcomeLabel           String?  @map("outcome_label")
+  traceId                String?  @map("trace_id")
+  apiKeyId               String?  @map("api_key_id")
+  synthetic              Boolean  @default(false)
+  excludedFromAggregates Boolean  @default(false) @map("excluded_from_aggregates")
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  @@index([ruleId, day(sort: Desc)])
+  @@index([traceId])
+  @@map("shadow_rule_observations")
+}
+
+/// Registry of shadow rule rollouts and their promotion state (A8b).
+model ShadowRule {
+  id         String    @id @default(cuid())
+  ruleId     String    @unique @map("rule_id")
+  /// shadow | promoted | retired
+  mode       String    @default("shadow")
+  startedAt  DateTime  @default(now()) @map("started_at")
+  promotedAt DateTime? @map("promoted_at")
+  retiredAt  DateTime? @map("retired_at")
+  /// Gate inputs frozen at promotion/retirement: precision, recall, window,
+  /// fixture results — the WHY, auditable later.
+  gateReport Json?     @map("gate_report")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  @@map("shadow_rules")
+}
+
 model AuditEvent {
   id        String   @id @default(cuid())
   action    String

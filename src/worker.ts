@@ -251,6 +251,18 @@ async function retentionPurgeTick(): Promise<void> {
         console.log(`[worker] rollups materialized: ${r.rows} rows across ${r.days} day(s)`);
       }
     }
+    // Outcome mining (plan v2 A8): turn decided ToolExceptionRequests into
+    // ground-truth labels daily. Idempotent upserts; runs after rollups so a
+    // label arriving late still lands before the next purge cycle.
+    if (process.env.OUTCOME_MINING_ENABLED !== "false") {
+      const { mineToolExceptionOutcomes } = await import("./lib/outcome-store.js");
+      const { prisma } = await import("./db.js");
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const mined = await mineToolExceptionOutcomes(prisma as never, { since });
+      if (mined.approved + mined.denied > 0) {
+        console.log(`[worker] outcome mining: ${mined.approved} approved, ${mined.denied} denied, ${mined.skipped} skipped (no trace)`);
+      }
+    }
     await runRetentionPurge({ dryRun: process.env.RETENTION_PURGE_DRY_RUN === "true" });
   } catch (err) {
     // Never let bookkeeping take the worker down.

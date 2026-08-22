@@ -24,6 +24,11 @@ interface PrismaScreeningEvent {
   metadata: unknown;
   createdAt: Date;
   apiKey?: { orgId?: string | null } | null;
+  /** Caller-asserted join keys (plan v2 A7). */
+  agentId?: string | null;
+  orgId?: string | null;
+  policyVersion?: string | null;
+  disposition?: string | null;
 }
 
 interface PrismaAuditEvent {
@@ -90,6 +95,14 @@ export function screeningEventToSIEM(
     rule_ids: meta.rule_ids,
     source_kind: meta.source_kind,
     intended_action: meta.intended_action,
+    // Decision-chain threading (plan v2 Phase 2 item 3): the trace id links
+    // the SIEM event to receipts and outcome labels; the join-key columns
+    // carry the caller-asserted agent/org/policy labels.
+    trace_id: meta.request_id,
+    join_agent_id: event.agentId ?? undefined,
+    join_org_id: event.orgId ?? undefined,
+    join_policy_version: event.policyVersion ?? undefined,
+    disposition: event.disposition ?? undefined,
   };
 }
 
