@@ -1046,6 +1046,19 @@ export async function parsePrompt(req: ParseRequest): Promise<ParseResponse> {
   } else if (maxIntrinsicSeverity >= 9) {
     // The pattern verdict is already conclusive; semantic analysis cannot lower it.
     llmLayerStatus = "skipped_high_severity";
+  } else if (llmCall !== callLLMFull && !process.env.OPENROUTER_API_KEY) {
+    // A test stub is installed and no real key is present: the stub IS the
+    // semantic layer for this request. Gating on the env var first would
+    // silently disable the layer the test is trying to exercise — the exact
+    // divergence that made the suite green in CI (secret injected) and red
+    // locally (no secret) on identical code.
+    const llmAttempt = await llmRiskAnalysis(prompt, validatedModel, cacheDimensions);
+    llmLayerStatus = llmAttempt.status;
+    llmResult = llmAttempt.result;
+    if (llmResult) {
+      analysisMethod = "pattern+llm";
+      llmVerdictCached = llmAttempt.cached === true;
+    }
   } else if (!process.env.OPENROUTER_API_KEY) {
     llmLayerStatus = "disabled";
   } else if (!(budgetDecision = await claimDeepScreening(req.apiKeyId ?? "anonymous", req.tier ?? "free")).allowed) {

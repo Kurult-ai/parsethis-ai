@@ -85,7 +85,7 @@ describe("third-party client email on the keyless full path", () => {
             risk_score: 8.8,
             categories: ["social_engineering", "data_exfiltration"],
             reasoning:
-              "Third-party client email asks the agent to exfiltrate internal pricing docs and reroute account correspondence without owner confirmation.",
+              "Third-party client email asks the agent to \"send over the internal pricing\" sheet and reroute account correspondence without owner confirmation.",
           }),
           tokenUsage: { prompt: 1, completion: 1, total: 2 },
           costEstimate: 0,
