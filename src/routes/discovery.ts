@@ -840,6 +840,64 @@ discoveryRoutes.get("/openapi.json", (c) => {
           responses: { "200": { description: "Mode updated" }, "403": { description: "Requires org_admin" } },
         },
       },
+      "/v1/org/file-acl": {
+        get: {
+          operationId: "listFileAclRules",
+          summary: "List the org's per-file ACL rules",
+          description: "Path-pattern rules enforced by the gateway on tool-call arguments.",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Rules ordered by priority" } },
+        },
+        post: {
+          operationId: "createFileAclRule",
+          summary: "Create a per-file ACL rule",
+          description: "org_admin. Glob path pattern with allow / require_approval / block action and priority (lowest wins).",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["path_pattern"],
+                  properties: {
+                    path_pattern: { type: "string", description: "Glob, comma-separated entries allowed: 'payroll/**, secrets/*'." },
+                    action: { type: "string", enum: ["allow", "require_approval", "block"] },
+                    priority: { type: "integer", description: "Lowest value wins. Defaults to 0." },
+                    comment: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          responses: { "201": { description: "Rule created" }, "403": { description: "Requires org_admin" } },
+        },
+      },
+      "/v1/org/file-acl/test": {
+        post: {
+          operationId: "testFileAclPath",
+          summary: "Dry-run a path against the ruleset",
+          description: "Returns the decision a gateway request touching this path would receive. org_admin, security_analyst or auditor.",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { type: "object", required: ["path"], properties: { path: { type: "string" } } },
+              },
+            },
+          },
+          responses: { "200": { description: "Decision + rules evaluated" } },
+        },
+      },
+      "/v1/org/file-acl/{id}": {
+        delete: {
+          operationId: "deleteFileAclRule",
+          summary: "Delete a per-file ACL rule",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Deleted" }, "404": { description: "No such rule in your org" } },
+        },
+      },
       "/v1/exception-requests": {
         post: {
           operationId: "createToolExceptionRequest",

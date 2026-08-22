@@ -26,6 +26,7 @@ import {
 } from "../screening-event-log.js";
 import { auditLog } from "../audit-log.js";
 import { prisma } from "../../db.js";
+import { extractPathsFromToolArgs, resolveFileAcl } from "../file-acl.js";
 import { getOrgToolPolicy } from "../tool-policy-store.js";
 import { recordAgentCall, recordScreening } from "../compliance/coverage-attestation.js";
 import { resolveToolDecision } from "../tool-policy.js";
@@ -39,6 +40,14 @@ export interface ChatMessage {
   content: string | null;
   name?: string;
   tool_call_id?: string;
+  /// Assistant tool calls in conversation history — the per-file ACL surface
+  /// (plan 2026-08-22 Tier 2). OpenAI shape: [{ id, type, function: { name, arguments } }].
+  tool_calls?: Array<{
+    id?: string;
+    type?: string;
+    function?: { name?: string; arguments?: string };
+    [k: string]: unknown;
+  }>;
 }
 
 /** OpenAI-compatible chat completion request (subset we care about). */
@@ -249,6 +258,86 @@ async function applyOrgToolPolicy(
 }
 
 /**
+ * Per-file ACL (plan 2026-08-22 Tier 2): observe file-like paths in tool-call
+ * arguments from conversation history (and tool definitions' defaults) and
+ * resolve them against the org's FileAclRules. Declaration-free — the gateway
+ * reads the arguments off the wire, the same trust model as the tools filter.
+ * Fails open on any error; no rules configured means everything is allowed.
+ */
+async function applyOrgFileAcl(
+  messages: ChatMessage[],
+  apiKeyId: string,
+): Promise<import("../file-acl.js").FileAclDecision[]> {
+  try {
+    // Collect observed paths first (pure, no DB).
+    const paths = new Set<string>();
+    for (const msg of messages) {
+      if (!Array.isArray(msg?.tool_calls)) continue;
+      for (const tc of msg.tool_calls) {
+        const rawArgs = tc?.function?.arguments;
+        if (typeof rawArgs !== "string") continue;
+        try {
+          const parsed = JSON.parse(rawArgs) as unknown;
+          for (const p of extractPathsFromToolArgs(parsed)) paths.add(p);
+        } catch {
+          // Arguments may be a partial JSON string mid-stream in history; skip.
+        }
+      }
+    }
+    if (paths.size === 0) return [];
+
+    const key = await prisma.apiKey.findUnique({
+      where: { id: apiKeyId },
+      select: { orgId: true },
+    });
+    if (!key?.orgId) return [];
+
+    const rules = await prisma.fileAclRule.findMany({
+      where: { orgId: key.orgId },
+      orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+    });
+    if (rules.length === 0) return [];
+
+    const decisions: import("../file-acl.js").FileAclDecision[] = [];
+    for (const path of paths) {
+      decisions.push(
+        resolveFileAcl(
+          path,
+          rules.map((r) => ({
+            id: r.id,
+            pathPattern: r.pathPattern,
+            action: r.action as import("../file-acl.js").FileAclAction,
+            priority: r.priority,
+            comment: r.comment,
+          })),
+        ),
+      );
+    }
+    return decisions;
+  } catch (err) {
+    console.error("[file-acl] gateway check failed:", (err as Error).message);
+    return [];
+  }
+}
+
+/** Record file-ACL decisions as flags on the screening result (evidence trail). */
+function recordFileAclDecisions(result: ParseResponse, decisions: import("../file-acl.js").FileAclDecision[]): void {
+  for (const d of decisions) {
+    if (d.action === "allow") continue;
+    result.flags.push({
+      category: "file_acl_violation",
+      severity: d.action === "block" ? 7 : 5,
+      label: `File ACL ${d.action === "block" ? "blocks" : "flags"} path: ${d.path}`,
+      detail: `Rule ${d.ruleId ?? "?"} (${d.pattern ?? "?"}) ${d.action} on ${d.path}`,
+      source: "file_acl",
+    });
+  }
+  if (decisions.some((d) => d.action !== "allow") && !result.categories.includes("file_acl_violation")) {
+    result.categories.push("file_acl_violation");
+  }
+}
+
+/**
  * Fold removals into the pre-screen result so the screening event and the audit
  * log carry them — the removal is the evidence an auditor needs.
  */
@@ -386,6 +475,10 @@ export async function handleProxyRequest(
   const toolFilter = await applyOrgToolPolicy(options.request, apiKeyId, enforcementMode);
   if (toolFilter.removed.length > 0) recordToolPolicyRemovals(preScreen, toolFilter.removed);
 
+  // 2b. Per-file ACL (plan 2026-08-22): observe paths in history tool_calls.
+  const fileAclDecisions = await applyOrgFileAcl(options.request.messages, apiKeyId);
+  recordFileAclDecisions(preScreen, fileAclDecisions);
+
   // Log pre-screen
   const promptText = messagesToPromptText(options.request.messages);
   logGatewayScreening(
@@ -432,6 +525,25 @@ export async function handleProxyRequest(
 
     throw new GatewayBlockError(
       `Request blocked by Parse gateway: org tool policy blocks ${names}`,
+      screening,
+    );
+  }
+
+  // 4b. Refuse when a file-ACL rule blocks an observed path and the dial is "block"
+  const fileAclBlocked = fileAclDecisions.filter((d) => d.action === "block");
+  if (enforcementMode === "block" && fileAclBlocked.length > 0) {
+    const paths = fileAclBlocked.map((d) => d.path).join(", ");
+    const screening: ScreeningResult = {
+      screeningId,
+      verdict: preScreen.verdict,
+      riskScore: preScreen.risk_score,
+      blocked: true,
+      flags: preScreen.flags,
+      categories: preScreen.categories,
+      preScreen,
+    };
+    throw new GatewayBlockError(
+      `Request blocked by Parse gateway: file ACL blocks ${paths}`,
       screening,
     );
   }
@@ -513,6 +625,26 @@ export async function handleStreamingProxyRequest(
   // Org tool policy — resolved before logging so removals reach the audit trail
   const toolFilter = await applyOrgToolPolicy(options.request, apiKeyId, enforcementMode);
   if (toolFilter.removed.length > 0) recordToolPolicyRemovals(preScreen, toolFilter.removed);
+
+  // Per-file ACL — definitions + history only in the streaming path (plan v1).
+  const fileAclDecisions = await applyOrgFileAcl(options.request.messages, apiKeyId);
+  recordFileAclDecisions(preScreen, fileAclDecisions);
+  const fileAclBlocked = fileAclDecisions.filter((d) => d.action === "block");
+  if (enforcementMode === "block" && fileAclBlocked.length > 0) {
+    const paths = fileAclBlocked.map((d) => d.path).join(", ");
+    throw new GatewayBlockError(
+      `Request blocked by Parse gateway: file ACL blocks ${paths}`,
+      {
+        screeningId,
+        verdict: preScreen.verdict,
+        riskScore: preScreen.risk_score,
+        blocked: true,
+        flags: preScreen.flags,
+        categories: preScreen.categories,
+        preScreen,
+      },
+    );
+  }
 
   // Log pre-screen
   const promptText = messagesToPromptText(options.request.messages);

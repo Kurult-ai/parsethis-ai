@@ -380,11 +380,22 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
         retryable: false,
       });
     }
-    if (body.metadata.data_sources !== undefined && (!Array.isArray(body.metadata.data_sources) || !body.metadata.data_sources.every((item) => typeof item === "string"))) {
+    if (
+      body.metadata.data_sources !== undefined &&
+      (!Array.isArray(body.metadata.data_sources) ||
+        !body.metadata.data_sources.every(
+          (item) =>
+            typeof item === "string" ||
+            (typeof item === "object" &&
+              item !== null &&
+              typeof (item as { dataSourceId?: unknown }).dataSourceId === "string"),
+        ))
+    ) {
       return problem(c, {
         status: 400,
         title: "Validation failure",
-        detail: "metadata.data_sources must be an array of strings (data source IDs)",
+        detail:
+          "metadata.data_sources must be an array of data source ID strings or {dataSourceId, path} objects (per-file ACL, plan 2026-08-22)",
         code: ErrorCode.VALIDATION_INVALID_TYPE,
         retryable: false,
       });

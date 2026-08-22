@@ -570,6 +570,7 @@ model Organization {
   policyHistory         PolicyRevision[]
   egressRules           EgressRule[]
   ssoProviders          SSOProvider[]
+  fileAclRules          FileAclRule[]
   toolRules             OrgToolRule[]
   toolExceptionRequests ToolExceptionRequest[]
   policyDefault         OrgPolicyDefault?
@@ -835,6 +836,9 @@ model DataSource {
   name           String
   kind           String // filesystem | database | api | vector_store | document_collection
   classification String   @default("internal") // public | internal | confidential | restricted
+  /// Tier-1 per-file ACL (plan 2026-08-22): glob pattern(s), comma-separated,
+  /// scoping this source to matching paths. Null = whole volume (legacy).
+  pathPattern    String?  @map("path_pattern")
   ownerId        String   @map("owner_id")
   orgId          String   @map("org_id")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -886,6 +890,25 @@ model VolumeBudget {
 /// webhook URL prefix (https://hooks.example.com), or "*" for any destination.
 /// maxClassification is the highest classification allowed; data above that level
 /// is blocked or requires approval at the matched destination.
+/// FileAclRule — see plan 2026-08-22-file-acl-plan.md Tier 2.
+model FileAclRule {
+  id          String   @id @default(cuid())
+  orgId       String   @map("org_id")
+  /// Glob pattern, comma-separated entries allowed: "payroll/**, secrets/*".
+  pathPattern String   @map("path_pattern")
+  /// allow | require_approval | block
+  action      String   @default("block")
+  priority    Int      @default(0)
+  comment     String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId], name: "idx_file_acl_rules_org")
+  @@index([orgId, priority], name: "idx_file_acl_rules_org_priority")
+  @@map("file_acl_rules")
+}
+
 model EgressRule {
   id                 String   @id @default(cuid())
   orgId              String   @map("org_id")
