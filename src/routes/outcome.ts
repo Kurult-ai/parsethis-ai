@@ -237,3 +237,65 @@ outcomeRoutes.post("/v1/improvement/mine", authMiddleware("evaluate"), async (c)
     return serviceDependencyProblem(c, err);
   }
 });
+
+/**
+ * GET /v1/benchmarks/peer?window_days=30 — cohort-level peer benchmarks
+ * (plan v2 Phase 4 item 2, A9). Paid feature: the connected layer, not the
+ * control plane. k≥5 with cohort suppression — small cohorts are listed as
+ * suppressed with no numbers, never shown as zero.
+ */
+outcomeRoutes.get("/v1/benchmarks/peer", authMiddleware("evaluate"), async (c) => {
+  const apiKey = c.get("apiKey");
+  const PAID_TIERS = ["solo", "pro", "team", "compliance", "enterprise"];
+  if (!PAID_TIERS.includes(apiKey?.tier ?? "free")) {
+    return problem(c, {
+      status: 402,
+      title: "Peer benchmarks are not included on this plan",
+      detail:
+        "Peer benchmarks (cohort-level, k-anonymized) require a paid plan. Your own screening and compliance reads are unaffected.",
+      code: ErrorCode.PAYMENT_REQUIRED,
+      retryable: false,
+      upgradeUrl: "/pricing#pro",
+      upgrade: { tier: "pro", price_per_month: 49, capability: "Peer benchmarks" },
+    });
+  }
+  const daysQ = Number(c.req.query("window_days") ?? "30");
+  const windowDays = Number.isFinite(daysQ) && daysQ >= 7 && daysQ <= 90 ? Math.floor(daysQ) : 30;
+  try {
+    const { generatePeerBenchmarks } = await import("../lib/peer-benchmarks.js");
+    const report = await generatePeerBenchmarks(prisma as never, windowDays);
+    return c.json(report);
+  } catch (err) {
+    console.error("[benchmarks-peer] failed:", (err as Error).message);
+    return serviceDependencyProblem(c, err);
+  }
+});
+
+/**
+ * GET /v1/reports/aggregate?window_days=30 — the public aggregate report
+ * generator (plan v2 Phase 4 item 3). Operator-scoped UNTIL deliberately
+ * published (A6b claim-gate): watching the numbers first, publishing after
+ * the loop demonstrably consumes them.
+ */
+outcomeRoutes.get("/v1/reports/aggregate", authMiddleware("evaluate"), async (c) => {
+  const apiKey = c.get("apiKey");
+  if (apiKey?.role !== "org_admin" && apiKey?.role !== "security_analyst" && apiKey?.role !== "admin") {
+    return problem(c, {
+      status: 403,
+      title: "Insufficient role",
+      detail: "The aggregate report is operator-scoped until it is deliberately published (claim-gate policy).",
+      code: ErrorCode.AUTH_FORBIDDEN_ROLE,
+      retryable: false,
+    });
+  }
+  const daysQ = Number(c.req.query("window_days") ?? "30");
+  const windowDays = Number.isFinite(daysQ) && daysQ >= 7 && daysQ <= 365 ? Math.floor(daysQ) : 30;
+  try {
+    const { generatePublicAggregateReport } = await import("../lib/public-report.js");
+    const report = await generatePublicAggregateReport(prisma as never, windowDays);
+    return c.json(report);
+  } catch (err) {
+    console.error("[reports-aggregate] failed:", (err as Error).message);
+    return serviceDependencyProblem(c, err);
+  }
+});

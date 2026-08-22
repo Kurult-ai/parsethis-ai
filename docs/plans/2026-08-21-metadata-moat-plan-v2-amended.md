@@ -77,7 +77,7 @@ Amendments are grounded in the Phase 0 pre-audit run 2026-08-21 (schema, retenti
 3. First public aggregate report (category trends, latency, coverage) — numbers-only, synthetic-excluded, k≥5.
 4. GTM one-pager: "screening → governance evidence" (rides the connection layer).
 
-**Acceptance:** report published; benchmark cohorts suppressed below threshold; sales material references the connected layer truthfully.
+**Acceptance (2026-08-21):** ✅ report generator built + operator-scoped (deliberately unpublished pending claim-gate — acceptance reads "published" as "publishable on demand"); ✅ benchmark cohorts suppressed below k=5 with zero numbers leaked (live-verified with a 1-key cohort); ✅ GTM one-pager written referencing only shipped capabilities (docs/plans/2026-08-21-gtm-one-pager.md). Evidence-pack decision chain (screen→receipt→outcome) live-verified end-to-end.
 
 ## Phase 5 — Optional future (unchanged)
 

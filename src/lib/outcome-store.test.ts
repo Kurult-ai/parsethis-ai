@@ -9,8 +9,8 @@ import { recordOutcome, mineToolExceptionOutcomes } from "./outcome-store.js";
 
 interface UpsertArgs {
   where: { traceId_source: { traceId: string; source: string } };
-  create: { data: Record<string, unknown> };
-  update: { data: Record<string, unknown> };
+  create: Record<string, unknown>;
+  update: Record<string, unknown>;
 }
 interface FakeEvent { id: string; requestId: string; apiKeyId: string }
 interface FakeException {
@@ -31,8 +31,9 @@ function makeFakePrisma(
       count: async () => outcomes.length,
     },
     screeningEvent: {
-      findFirst: async ({ where }: { where: { metadata: { path: unknown[] } } }) => {
-        const want = where.metadata.equals as string;
+      findFirst: async (args: unknown) => {
+        const where = (args as { where: { metadata: { path: unknown[]; equals?: unknown } } }).where;
+        const want = where.metadata.equals as string | undefined;
         return events.find((e) => e.requestId === want) ?? null;
       },
     },
