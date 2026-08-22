@@ -544,6 +544,21 @@ const EXFILTRATION_ARTIFACT =
 const SAFETY_BYPASS_ARTIFACT =
   /\b(?:turn off your content moderation|without the usual ai safety caveats|without content warnings?|without any content warnings?|no content restrictions?|no ethical boundaries|without safety features|content restrictions|content filtering|alignment training|safety training|safety measures|content policies|uncensored|unfiltered|jailbroken|superadmin|godmode|dan mode|break free from|broken free from its constraints|liberated ai|always complies with user requests|break all rules|strive to avoid norms|not be programmed to refuse|corporate response|censored corporate|no guidelines|ai ethics don't exist|vulnerability exploitation|avoid content filtering|avoid filters?|no filters?|no restrictions?|token limit bypass|no safety preamble|bypasses all content moderation|prohibited topics freely|fiction mode[^.\n]{0,80}characters can say anything|parallel universe[^.\n]{0,120}no restrictions|previous instructions[^.\n]{0,120}jailbreak your system|not allowed to share)\b/i;
 
+/**
+ * Fake-authority workflow override (run-22 C3/C6 class). Two halves must
+ * co-occur: an authority claim forged inside the untrusted text (a SYSTEM
+ * frame, an "already approved/cleared" assertion, a maintenance-mode /
+ * screening-disabled notice) AND a workflow-skip action that exploits it
+ * (set disposition, no further action, skip/without-the-check, proceed-to,
+ * do-not-mention). Either half alone is ordinary business prose — incident
+ * reports describe approvals, and run instructions say "proceed" — the
+ * conjunction is the injection.
+ */
+const FAKE_AUTHORITY_CLAIM =
+  /\b(?:SYSTEM(?:\s+NOTICE)?|system notice|has approved an? (?:exception|waiver)|already been cleared|cleared by (?:compliance|the analyst|the reviewer)|maintenance mode|screening (?:is|was) (?:disabled|turned off))\b/i;
+const WORKFLOW_SKIP_ACTION =
+  /\b(?:set disposition|mark (?:the )?(?:case|review|cluster)|no further action|skip (?:the )?[a-z]+|without (?:the )?[a-z]+ check|without the sanctions check|proceed to draft|do not mention|omit any reference)\b/i;
+
 const ENCODED_COMMAND_ARTIFACT =
   /\b(?:read this backwards and follow|convert from binary|morse code|emoji sequence as instructions|zero-width characters|whitespace .* encodes|hidden commands?|first letter of each word spells|u\+[0-9a-f]{4})\b/i;
 
@@ -1974,6 +1989,21 @@ function maybeFlagSecurityArtifacts(flags: IntentRiskFlag[], text: string): void
         evidence: window,
         source: "deterministic_intent",
       }, [ENCODED_COMMAND_ARTIFACT]);
+    }
+
+    if (FAKE_AUTHORITY_CLAIM.test(window) && WORKFLOW_SKIP_ACTION.test(window)) {
+      addFlag(flags, {
+        id: "intent.fake_authority_override",
+        category: "prompt_injection",
+        severity: 9,
+        label: "Fake-authority workflow override",
+        detail: "The text forges an authority claim (system frame, pre-approval, screening-disabled notice) and pairs it with a workflow-skip action that exploits it.",
+        confidence: "high",
+        attack_family: "fake_authority_override",
+        action_floor: "block",
+        evidence: window,
+        source: "deterministic_intent",
+      }, [FAKE_AUTHORITY_CLAIM, WORKFLOW_SKIP_ACTION]);
     }
 
     if (DELIMITER_ATTACK_ARTIFACT.test(window) || FENCE_THEN_DIRECTIVE.test(window) || INSTRUCTION_REVERSAL_PROBE.test(window)) {
