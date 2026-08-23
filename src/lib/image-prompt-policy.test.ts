@@ -50,10 +50,26 @@ describe("image-prompt-policy", () => {
     assert.equal(d.unauthorized[0].why, "path_not_allowlisted");
   });
 
-  it("reads metadata.image_sources", () => {
-    assert.deepEqual(extractDeclaredImagePaths({ image_sources: ["/approved-share/a.jpg", { path: "/approved-share/b.jpg" }] }), [
-      "/approved-share/a.jpg",
-      "/approved-share/b.jpg",
-    ]);
+  it("reads metadata.image_sources and file_sources", () => {
+    assert.deepEqual(
+      extractDeclaredImagePaths({
+        image_sources: ["/approved-share/a.jpg"],
+        file_sources: [{ path: "/approved-share/b.pdf" }],
+      }),
+      ["/approved-share/a.jpg", "/approved-share/b.pdf"],
+    );
+  });
+
+  it("whitelist refuses an undeclared PDF content part", () => {
+    const atts = extractImageAttachments({ type: "file", filename: "secret.pdf", media_type: "application/pdf" });
+    const d = evaluateImagePromptPolicy(atts, ALLOW, "whitelist");
+    assert.equal(d.allowed, false);
+    assert.equal(d.unauthorized[0].why, "undeclared_source");
+  });
+
+  it("whitelist allows a PDF under the authorized directory", () => {
+    const atts = extractImageAttachments({ type: "document", path: "/approved-share/q3.pdf", media_type: "application/pdf" });
+    const d = evaluateImagePromptPolicy(atts, ALLOW, "whitelist");
+    assert.equal(d.allowed, true, d.reason);
   });
 });

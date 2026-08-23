@@ -34,6 +34,7 @@ import {
 } from "../lib/org-policy-ceiling.js";
 import { resolveToolList, type ToolPolicyMode, type ToolRule } from "../lib/tool-policy.js";
 import { TOOL_CATEGORIES, getCategory } from "../lib/tool-catalog.js";
+import { isImagePromptMode, type ImagePromptMode } from "../lib/image-prompt-policy.js";
 import { SELF_SERVICE_USER_ID } from "../lib/constants.js";
 import { VALID_ROLES } from "../lib/rbac.js";
 import type { ScreeningPolicy } from "../types.js";
@@ -622,6 +623,8 @@ export async function renderOrgControlPanelPage(
 
   let orgName: string | null = null;
   let toolMode: ToolPolicyMode = "blocklist";
+  let filePromptMode: ImagePromptMode = "allow";
+  let fileAclRules: Array<{ id: string; pathPattern: string; action: string; priority: number; comment: string | null }> = [];
   let members: MemberInput[] = [];
   let memberTotal = 0;
   let policiesByKeyId: Record<string, ScreeningPolicy> = {};
@@ -656,12 +659,23 @@ export async function renderOrgControlPanelPage(
     try {
       const org = await prisma.organization.findUnique({
         where: { id: orgId },
-        select: { name: true, toolPolicyMode: true },
+        select: { name: true, toolPolicyMode: true, imagePromptPolicy: true },
       });
       orgName = org?.name ?? null;
       toolMode = org?.toolPolicyMode === "allowlist" ? "allowlist" : "blocklist";
+      filePromptMode = isImagePromptMode(org?.imagePromptPolicy) ? org.imagePromptPolicy : "allow";
     } catch {
       // Org row unavailable — the page still renders what it can.
+    }
+
+    try {
+      fileAclRules = await prisma.fileAclRule.findMany({
+        where: { orgId },
+        orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+        select: { id: true, pathPattern: true, action: true, priority: true, comment: true },
+      });
+    } catch {
+      fileAclRules = [];
     }
 
     try {
@@ -944,9 +958,9 @@ ${isAdmin ? memberActionsCell(m) : ""}
           </label>
           <label>Action
             <select id="ocp-action">
-              <option value="block">block</option>
+              <option value="allow"${toolMode === "allowlist" ? " selected" : ""}>allow</option>
+              <option value="block"${toolMode === "blocklist" ? " selected" : ""}>block</option>
               <option value="require_approval">require approval</option>
-              <option value="allow">allow</option>
             </select>
           </label>
           <label>Scope
@@ -968,9 +982,62 @@ ${isAdmin ? memberActionsCell(m) : ""}
 
   const modeControl = isAdmin
     ? `<div class="ocp-mode-actions">
-         <button class="ocp-btn" id="ocp-mode-blocklist"${toolMode === "blocklist" ? " disabled" : ""}>Use blocklist</button>
-         <button class="ocp-btn" id="ocp-mode-allowlist"${toolMode === "allowlist" ? " disabled" : ""}>Use allowlist</button>
+         <button class="ocp-btn" id="ocp-mode-allowlist"${toolMode === "allowlist" ? " disabled" : ""}>Block unauthorized connectors</button>
+         <button class="ocp-btn" id="ocp-mode-blocklist"${toolMode === "blocklist" ? " disabled" : ""}>Allow all unless banned</button>
+         <button class="ocp-btn" id="ocp-preset-chrome">Ban Claude-in-Chrome</button>
        </div>`
+    : "";
+
+  const allowDirs = fileAclRules.filter((r) => r.action === "allow");
+  const fileRuleBody = fileAclRules.length
+    ? fileAclRules
+        .map((r) => {
+          const cls = ACTION_CLASS[r.action] ?? "ocp-act-allow";
+          return `<tr>
+        <td><span class="ocp-act ${cls}">${escapeHtml(r.action.replace(/_/g, " "))}</span></td>
+        <td><code>${escapeHtml(r.pathPattern)}</code>${r.comment ? `<span class="ocp-sub">${escapeHtml(r.comment)}</span>` : ""}</td>
+        <td class="ocp-mono">${escapeHtml(String(r.priority))}</td>
+        ${isAdmin ? `<td><button class="ocp-btn ocp-btn-del-file" data-file-rule="${escapeHtml(r.id)}">Remove</button></td>` : ""}
+      </tr>`;
+        })
+        .join("\n")
+    : `<tr><td colspan="${isAdmin ? 4 : 3}" class="ocp-empty">${
+        filePromptMode === "whitelist"
+          ? "No authorized directories. Every file in a prompt is refused until you add an allow path."
+          : "No file rules. Add an allow path, then turn on whitelist."
+      }</td></tr>`;
+
+  const fileModeControl = isAdmin
+    ? `<div class="ocp-mode-actions">
+         <button class="ocp-btn" id="ocp-file-whitelist"${filePromptMode === "whitelist" ? " disabled" : ""}>Block unauthorized files</button>
+         <button class="ocp-btn" id="ocp-file-deny"${filePromptMode === "deny" ? " disabled" : ""}>Deny every file</button>
+         <button class="ocp-btn" id="ocp-file-allow"${filePromptMode === "allow" ? " disabled" : ""}>Off</button>
+       </div>`
+    : "";
+
+  const addFileForm = isAdmin
+    ? `<details class="ocp-form">
+        <summary>Authorize a directory</summary>
+        <div class="ocp-form-grid">
+          <label>Path glob
+            <input id="ocp-file-pattern" type="text" placeholder="/approved-share/**" autocomplete="off">
+          </label>
+          <label>Action
+            <select id="ocp-file-action">
+              <option value="allow" selected>allow</option>
+              <option value="block">block</option>
+              <option value="require_approval">require approval</option>
+            </select>
+          </label>
+          <label>Comment
+            <input id="ocp-file-comment" type="text" placeholder="Vetted for external sharing" maxlength="280" autocomplete="off">
+          </label>
+        </div>
+        <div class="ocp-form-actions">
+          <button class="ocp-btn ocp-btn-go" id="ocp-add-file">Add directory</button>
+          <span class="ocp-sub">${allowDirs.length} allow ${allowDirs.length === 1 ? "path" : "paths"} authorize files in prompts.</span>
+        </div>
+      </details>`
     : "";
 
   // ─── Zone 3: Risk tolerance ──────────────────────────────────────────
@@ -1188,7 +1255,7 @@ ${memberBody}
 <!-- ═══ Zone 2 · Agent privileges (primary object) ═══ -->
 <section class="ocp-zone ocp-zone-primary ocp-aura">
   <div class="ocp-zone-head">
-    <h2>Agent privileges</h2><span class="ocp-meta">TOOL RULES</span>
+    <h2>Authorized connectors</h2><span class="ocp-meta">MCP · PLUGINS · TOOLS</span>
     <span class="ocp-right">${agents.length ? `checked against ${agents.length} registered ${agents.length === 1 ? "agent" : "agents"}` : "no registered agents"}</span>
   </div>
   <div class="ocp-strip">
@@ -1198,8 +1265,8 @@ ${memberBody}
     </div>
     <span class="ocp-sub" style="margin:0;">${
       toolMode === "allowlist"
-        ? "Every tool is blocked unless a rule allows it."
-        : "Every tool is allowed unless a rule blocks it."
+        ? "A connector, MCP server, plugin, or tool is blocked unless it is on this list."
+        : "Everything is allowed unless a rule blocks it. Switch to “Block unauthorized connectors” to require a whitelist."
     }</span>
     ${modeControl}
   </div>
@@ -1212,6 +1279,35 @@ ${ruleBody}
   <p class="ocp-note">"Reaches today" counts the registered agents whose declared tools this rule currently decides. Only the winning rule for a tool is credited, so a rule shadowed by a higher priority one reports no reach.${agentTotal > agents.length ? ` Computed over the ${agents.length} most recent of ${agentTotal.toLocaleString("en-US")} agents.` : ""}</p>
   ${addRuleForm}
   <div class="ocp-status" id="ocp-status"></div>
+</section>
+
+<section class="ocp-zone ocp-zone-primary">
+  <div class="ocp-zone-head">
+    <h2>Authorized files</h2><span class="ocp-meta">PROMPT ATTACHMENTS</span>
+    <span class="ocp-right">${fileAclRules.length.toLocaleString("en-US")} ${fileAclRules.length === 1 ? "rule" : "rules"}</span>
+  </div>
+  <div class="ocp-strip">
+    <span style="font-size:13.5px;font-weight:600;color:var(--text);">Mode</span>
+    <div class="ocp-dial">
+      <span${filePromptMode === "whitelist" ? ' class="on"' : ""}>whitelist</span><span${filePromptMode === "deny" ? ' class="on"' : ""}>deny</span><span${filePromptMode === "allow" ? ' class="on"' : ""}>off</span>
+    </div>
+    <span class="ocp-sub" style="margin:0;">${
+      filePromptMode === "whitelist"
+        ? "Any file in a prompt (JPEG, PDF, CSV, …) is refused unless its source path is on an allow directory below."
+        : filePromptMode === "deny"
+          ? "Every file in a prompt is refused."
+          : "File-in-prompt checks are off. Unauthorized files will go through."
+    }</span>
+    ${fileModeControl}
+  </div>
+  <table class="ocp-t">
+    <thead><tr><th>Action</th><th>Path</th><th>Priority</th>${isAdmin ? "<th></th>" : ""}</tr></thead>
+    <tbody>
+${fileRuleBody}
+    </tbody>
+  </table>
+  <p class="ocp-note">A JPEG, PDF, or other file with no declared path is unauthorized. Raw bytes have no directory. Declare <code>metadata.file_sources</code> or a <code>path</code> on the content part.</p>
+  ${addFileForm}
 </section>
 
 <!-- ═══ Zone 3 · Risk tolerance ═══ -->
@@ -1327,6 +1423,51 @@ ${readOnlyNote}
   if (bl) bl.addEventListener('click', function () { setMode('blocklist'); });
   var al = document.getElementById('ocp-mode-allowlist');
   if (al) al.addEventListener('click', function () { setMode('allowlist'); });
+  var chromeBan = document.getElementById('ocp-preset-chrome');
+  if (chromeBan) chromeBan.addEventListener('click', function () {
+    say('Banning Claude-in-Chrome…');
+    send('POST', '/v1/org/tool-policy/presets', { preset: 'block-claude-chrome' })
+      .then(function () { say('Claude-in-Chrome banned. Reloading…'); location.reload(); })
+      .catch(function (err) { say(err.message); });
+  });
+
+  function setFileMode(mode) {
+    say('Saving file policy…');
+    send('PUT', '/v1/org/image-policy', { mode: mode })
+      .then(function () { say('File policy saved. Reloading…'); location.reload(); })
+      .catch(function (err) { say(err.message); });
+  }
+  var fw = document.getElementById('ocp-file-whitelist');
+  if (fw) fw.addEventListener('click', function () { setFileMode('whitelist'); });
+  var fd = document.getElementById('ocp-file-deny');
+  if (fd) fd.addEventListener('click', function () { setFileMode('deny'); });
+  var fa = document.getElementById('ocp-file-allow');
+  if (fa) fa.addEventListener('click', function () { setFileMode('allow'); });
+
+  var addFile = document.getElementById('ocp-add-file');
+  if (addFile) {
+    addFile.addEventListener('click', function () {
+      var pattern = document.getElementById('ocp-file-pattern').value.trim();
+      if (!pattern) { say('Enter a path glob first.'); return; }
+      say('Adding directory…');
+      send('POST', '/v1/org/file-acl', {
+        path_pattern: pattern,
+        action: document.getElementById('ocp-file-action').value,
+        comment: document.getElementById('ocp-file-comment').value.trim() || null
+      })
+        .then(function () { say('Directory added. Reloading…'); location.reload(); })
+        .catch(function (err) { say(err.message); });
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.ocp-btn-del-file'), function (btn) {
+    btn.addEventListener('click', function () {
+      var id = btn.getAttribute('data-file-rule');
+      say('Removing directory…');
+      send('DELETE', '/v1/org/file-acl/' + encodeURIComponent(id))
+        .then(function () { say('Directory removed. Reloading…'); location.reload(); })
+        .catch(function (err) { say(err.message); });
+    });
+  });
 
   var add = document.getElementById('ocp-add-rule');
   if (add) {
@@ -1460,7 +1601,7 @@ ${isAdmin ? `  // ── Member management ────────────�
     bodyAttributes: orgId ? `data-org-id="${escapeHtml(orgId)}"` : undefined,
     title: "Org control panel",
     description:
-      "Org governance console: member keys and their roles, the tool rules every agent inherits, the org risk tolerance, and recent tool policy violations.",
+      "Org governance console: authorized connectors and files, member keys, risk tolerance, and recent refusals.",
     path: "/dashboard/org",
     content,
     baseUrl,

@@ -45,7 +45,7 @@ imagePolicyRoutes.get("/v1/org/image-policy", authMiddleware("evaluate"), async 
     mode: ctx.mode,
     allow_rules: ctx.rules.filter((r) => r.action === "allow").map((r) => r.pathPattern),
     note:
-      "whitelist refuses any image that does not declare a source path matching an allow File ACL rule. Raw JPEG bytes have no directory.",
+      "whitelist refuses any file that does not declare a source path matching an allow File ACL rule. Raw bytes have no directory.",
   });
 });
 
