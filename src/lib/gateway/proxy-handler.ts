@@ -27,6 +27,12 @@ import {
 import { auditLog } from "../audit-log.js";
 import { prisma } from "../../db.js";
 import { extractPathsFromToolArgs, resolveFileAcl } from "../file-acl.js";
+import {
+  evaluateImagePromptPolicy,
+  extractDeclaredImagePaths,
+  extractImageAttachments,
+} from "../image-prompt-policy.js";
+import { loadImagePromptContext } from "../image-prompt-policy-store.js";
 import { getOrgToolPolicy } from "../tool-policy-store.js";
 import { recordAgentCall, recordScreening } from "../compliance/coverage-attestation.js";
 import { resolveToolDecision } from "../tool-policy.js";
@@ -37,7 +43,7 @@ import type { ToolDecision, ToolPolicyMode, ToolRule, ToolScope } from "../tool-
 /** OpenAI-compatible chat completion message. */
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool" | "function";
-  content: string | null;
+  content: string | null | Array<Record<string, unknown>>;
   name?: string;
   tool_call_id?: string;
   /// Assistant tool calls in conversation history — the per-file ACL surface
@@ -141,7 +147,17 @@ function messagesToPromptText(messages: ChatMessage[]): string {
   return messages
     .map((msg) => {
       const role = msg.role ?? "user";
-      const content = typeof msg.content === "string" ? msg.content : "";
+      let content = "";
+      if (typeof msg.content === "string") content = msg.content;
+      else if (Array.isArray(msg.content)) {
+        content = msg.content
+          .map((part) => {
+            if (typeof part === "string") return part;
+            if (part && typeof part === "object" && typeof part.text === "string") return part.text;
+            return "";
+          })
+          .join(" ");
+      }
       return `[${role}]: ${content}`;
     })
     .join("\n\n");
@@ -317,6 +333,27 @@ async function applyOrgFileAcl(
   } catch (err) {
     console.error("[file-acl] gateway check failed:", (err as Error).message);
     return [];
+  }
+}
+
+async function applyOrgImagePolicy(
+  messages: ChatMessage[],
+  apiKeyId: string,
+): Promise<{ allowed: boolean; reason: string; imageCount: number }> {
+  try {
+    const key = await prisma.apiKey.findUnique({
+      where: { id: apiKeyId },
+      select: { orgId: true },
+    });
+    if (!key?.orgId) return { allowed: true, reason: "no org", imageCount: 0 };
+    const ctx = await loadImagePromptContext(key.orgId);
+    if (ctx.mode === "allow") return { allowed: true, reason: "image policy is off", imageCount: 0 };
+    const attachments = extractImageAttachments(messages, extractDeclaredImagePaths(undefined));
+    const decision = evaluateImagePromptPolicy(attachments, ctx.rules, ctx.mode);
+    return { allowed: decision.allowed, reason: decision.reason, imageCount: decision.imageCount };
+  } catch (err) {
+    console.error("[image-policy] gateway check failed:", (err as Error).message);
+    return { allowed: true, reason: "check_failed", imageCount: 0 };
   }
 }
 
@@ -548,6 +585,32 @@ export async function handleProxyRequest(
     );
   }
 
+  const imagePolicy = await applyOrgImagePolicy(options.request.messages, apiKeyId);
+  if (!imagePolicy.allowed && enforcementMode === "block") {
+    preScreen.flags.push({
+      category: "image_policy_violation",
+      severity: 7,
+      label: "Image not from an authorized directory",
+      detail: imagePolicy.reason,
+      source: "image_prompt_policy",
+    });
+    if (!preScreen.categories.includes("image_policy_violation")) {
+      preScreen.categories.push("image_policy_violation");
+    }
+    throw new GatewayBlockError(
+      `Request blocked by Parse gateway: ${imagePolicy.reason}`,
+      {
+        screeningId,
+        verdict: preScreen.verdict,
+        riskScore: Math.max(preScreen.risk_score, 7),
+        blocked: true,
+        flags: preScreen.flags,
+        categories: preScreen.categories,
+        preScreen,
+      },
+    );
+  }
+
   // 5. Forward to upstream provider, with blocked tools stripped
   const upstreamResponse = await forwardToUpstream({ ...options, request: toolFilter.request });
   const responseJson: ChatCompletionResponse = await upstreamResponse.json() as ChatCompletionResponse;
@@ -644,6 +707,28 @@ export async function handleStreamingProxyRequest(
         preScreen,
       },
     );
+  }
+
+  const imagePolicyStream = await applyOrgImagePolicy(options.request.messages, apiKeyId);
+  if (!imagePolicyStream.allowed && enforcementMode === "block") {
+    throw new GatewayBlockError(`Request blocked by Parse gateway: ${imagePolicyStream.reason}`, {
+      screeningId,
+      verdict: preScreen.verdict,
+      riskScore: Math.max(preScreen.risk_score, 7),
+      blocked: true,
+      flags: [
+        ...preScreen.flags,
+        {
+          category: "image_policy_violation",
+          severity: 7,
+          label: "Image not from an authorized directory",
+          detail: imagePolicyStream.reason,
+          source: "image_prompt_policy",
+        },
+      ],
+      categories: [...preScreen.categories, "image_policy_violation"],
+      preScreen,
+    });
   }
 
   // Log pre-screen

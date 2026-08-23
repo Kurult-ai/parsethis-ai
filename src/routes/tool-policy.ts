@@ -717,6 +717,71 @@ toolPolicyRoutes.delete(
   },
 );
 
+// ─── POST /v1/org/tool-policy/presets — named admin actions ────────────
+
+toolPolicyRoutes.post(
+  "/v1/org/tool-policy/presets",
+  authMiddleware("evaluate"),
+  requireRole("org_admin"),
+  requireCsrf(),
+  async (c) => {
+    const apiKey = c.get("apiKey");
+    const body = (await c.req.json().catch(() => ({}))) as { preset?: unknown };
+    if (body.preset !== "block-claude-chrome") {
+      return c.json({ error: "unknown preset", known: ["block-claude-chrome"] }, 400);
+    }
+    let orgId: string | null;
+    try {
+      orgId = await resolveOrgId(apiKey.id);
+    } catch (err) {
+      return serviceDependencyProblem(c, err);
+    }
+    if (!orgId) return orgRequired(c, "apply a tool-policy preset");
+
+    try {
+      const previous = await getOrgToolPolicy(orgId);
+      const already = previous.rules.find(
+        (r) => r.kind === "prefix" && r.pattern.toLowerCase().includes("claude-in-chrome") && r.action === "block",
+      );
+      if (already) {
+        return c.json({
+          preset: "block-claude-chrome",
+          already: true,
+          rule_id: already.id,
+          note: "Blocks mcp__claude-in-chrome__* when the agent request goes through Parse. Does not uninstall the Chrome extension.",
+        });
+      }
+      const created = await prisma.orgToolRule.create({
+        data: {
+          orgId,
+          kind: "prefix",
+          pattern: "mcp__claude-in-chrome__",
+          action: "block",
+          scopeType: null,
+          scopeId: null,
+          priority: 0,
+          reason: "Block Claude-in-Chrome connector for this organization",
+          createdBy: apiKey.id,
+        },
+      });
+      await invalidateOrgToolPolicy(orgId);
+      auditLog({
+        action: "tool_policy_preset_applied",
+        apiKeyId: apiKey.id,
+        detail: `block-claude-chrome:${created.id}`,
+      });
+      return c.json({
+        preset: "block-claude-chrome",
+        created: true,
+        rule_id: created.id,
+        note: "Blocks mcp__claude-in-chrome__* when the agent request goes through Parse. Does not uninstall the Chrome extension.",
+      }, 201);
+    } catch (err) {
+      return serviceDependencyProblem(c, err);
+    }
+  },
+);
+
 // ─── POST /v1/org/tool-policy/test — Dry run ───────────────────────────
 
 toolPolicyRoutes.post(

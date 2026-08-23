@@ -28,6 +28,12 @@ import { unknownTopLevelFieldWarnings } from "../lib/request-warnings.js";
 import { effectiveDefaultMode } from "./policy.js";
 import { recordToolPolicyCheckFailure } from "../lib/tool-policy-health.js";
 import { recordScreening } from "../lib/compliance/coverage-attestation.js";
+import {
+  evaluateImagePromptPolicy,
+  extractDeclaredImagePaths,
+  extractImageAttachments,
+} from "../lib/image-prompt-policy.js";
+import { loadImagePromptContext } from "../lib/image-prompt-policy-store.js";
 import { isAgentFrozen } from "../lib/freeze-cache.js";
 import { checkDataAccess } from "../lib/data-governance/check-access.js";
 import { checkEgress, type EgressRuleInput } from "../lib/data-governance/check-egress.js";
@@ -1063,6 +1069,50 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
         "declared are permitted.",
     };
     recordToolPolicyCheckFailure(apiKey.id).catch(() => {});
+  }
+
+  try {
+    const imgKey = await prisma.apiKey.findUnique({ where: { id: apiKey.id }, select: { orgId: true } });
+    if (imgKey?.orgId) {
+      const ctx = await loadImagePromptContext(imgKey.orgId);
+      if (ctx.mode !== "allow") {
+        const declared = extractDeclaredImagePaths(body.metadata);
+        const attachments = extractImageAttachments(
+          { prompt: body.prompt, messages: (body as { messages?: unknown }).messages, metadata: body.metadata },
+          declared,
+        );
+        const decision = evaluateImagePromptPolicy(attachments, ctx.rules, ctx.mode);
+        (result as unknown as Record<string, unknown>).image_policy = {
+          mode: decision.mode,
+          image_count: decision.imageCount,
+          allowed: decision.allowed,
+          reason: decision.reason,
+        };
+        if (!decision.allowed) {
+          result.flags.push({
+            category: "image_policy_violation",
+            severity: 7,
+            label: "Image not from an authorized directory",
+            detail: decision.reason,
+            id: "org.image_policy_violation",
+            source: "image_prompt_policy",
+          });
+          if (!result.categories.includes("image_policy_violation")) {
+            result.categories.push("image_policy_violation");
+          }
+          if (enforcementMode === "block") {
+            result.risk_score = Math.max(result.risk_score, 7);
+            result.verdict = "critical";
+            result.safe = false;
+            result.suggested_action = "block";
+            result.recommended_action = "block";
+            result.wouldBlock = true;
+          }
+        }
+      }
+    }
+  } catch (imgErr) {
+    console.error("[image-policy] screening check failed:", (imgErr as Error).message);
   }
 
   // ── Egress Destination Control (Task 8.3) ──
