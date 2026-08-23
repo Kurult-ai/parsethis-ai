@@ -215,7 +215,7 @@ attackPackRoutes.get("/attack", (c) => {
   ${cards}
 </section>
 <section style="max-width:720px;padding-bottom:40px">
-  <p style="color:#98a2b3;font-size:14px">Have your own text? <a href="/demo">Screen it at the demo console</a> — the same pipeline, your payload. Want this boundary on your stack? <a href="/get-started">Get a free API key</a>.</p>
+  <p style="color:#98a2b3;font-size:14px">Have your own text? <a href="/demo">Paste it at the demo console</a>. After you have a report: <a href="/get-started">Install Parse</a>.</p>
 </section>`;
 
   return c.html(

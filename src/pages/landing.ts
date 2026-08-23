@@ -481,7 +481,7 @@ Verification required before reporting done:
     </nav>
     <div class="nav-right">
       <a class="btn btn-ghost" href="/admin/login">Sign in</a>
-      <a class="btn btn-white" href="/get-started">Install Parse</a>
+      <a class="btn btn-white" href="/attack">Screen one</a>
     </div>
   </div>
 </header>
@@ -493,11 +493,11 @@ Verification required before reporting done:
       <h1>${hero.l1}<br><em>${hero.l2}</em></h1>
       <p class="hf-lede">${hero.lede}</p>
       <div class="hf-cta">
-        <a class="btn btn-white btn-lg" href="/get-started">Install Parse</a>
-        ${DEMO_API_KEY ? '<a class="btn btn-ghost btn-lg" href="/demo">Screen a prompt &mdash; no key</a>' : ""}
-        <a class="btn btn-ghost btn-lg" href="/docs">Documentation</a>
+        <a class="btn btn-white btn-lg" href="/attack">Screen one</a>
+        ${DEMO_API_KEY ? '<a class="btn btn-ghost btn-lg" href="/demo">Paste your own</a>' : ""}
+        <a class="btn btn-ghost btn-lg" href="/get-started">Install Parse</a>
       </div>
-      <div class="hf-fine">npm install @parsethis/sdk · or point any MCP runtime at parsethis.ai/mcp · no credit card</div>
+      <div class="hf-fine">Screen one. Forward the report. No key, no meeting.</div>
       <!--
         Prospect run 21: confidence peaked at 88 of 100 on step 3 — the keyless
         demo answering his real question with his own payload, before any key,
@@ -685,8 +685,8 @@ curl -s ${baseUrl}/v1/parse \\
   <div class="wrap">
     <h2>Agent governance,<br><em>receipted.</em></h2>
     <div class="hf-cta">
-      <a class="btn btn-white btn-lg" href="/get-started">Install Parse</a>
-      <a class="btn btn-ghost btn-lg" href="/support">Talk to security engineering</a>
+      <a class="btn btn-white btn-lg" href="/attack">Screen one</a>
+      <a class="btn btn-ghost btn-lg" href="/get-started">Install Parse</a>
     </div>
   </div>
 </div>

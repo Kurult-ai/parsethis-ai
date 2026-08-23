@@ -26,7 +26,7 @@ export function getOgImageSvg(): string {
   <text x="96" y="306" fill="#f2f2f2" font-family="Georgia, 'Times New Roman', serif" font-size="66">Govern your agent fleet.</text>
   <text x="96" y="386" fill="#adb1b3" font-family="Schibsted Grotesk, system-ui, sans-serif" font-weight="450" font-size="30">Every agent registered. Every boundary screened. Every decision receipted.</text>
   <rect x="96" y="452" width="204" height="52" rx="26" fill="#f2f2f2"/>
-  <text x="198" y="486" text-anchor="middle" fill="#000000" font-family="Schibsted Grotesk, system-ui, sans-serif" font-weight="700" font-size="19">Install Parse</text>
+  <text x="198" y="486" text-anchor="middle" fill="#000000" font-family="Schibsted Grotesk, system-ui, sans-serif" font-weight="700" font-size="19">Screen one</text>
   <text x="336" y="485" fill="#878b8e" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="18">parsethis.ai</text>
 </svg>`;
 }

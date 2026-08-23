@@ -222,10 +222,10 @@ export function renderAboutPage(baseUrl: string): string {
 
 <div class="about-cta">
   <h2>See for yourself</h2>
-  <p>Start with the free tier, explore the trust package, or request a demo.</p>
+  <p>Screen one sample. Forward the report. No key, no meeting.</p>
   <div class="about-cta-actions">
-    <a href="/get-started" class="btn btn-primary">Install Parse</a>
-    <a href="/playground" class="btn btn-outline">Open the Test Lab</a>
+    <a href="/attack" class="btn btn-primary">Screen one</a>
+    <a href="/get-started" class="btn btn-outline">Install Parse</a>
     <a href="/trust" class="btn btn-outline">Trust &amp; Security</a>
   </div>
 </div>

@@ -165,15 +165,21 @@ marketing copy — the brand claims section here should mirror those statuses.
 
 ## 5. Calls to action
 
-- Primary CTA everywhere: **Install Parse** (variant: "Install Parse — free").
-  The verb is install because that is the flow: `npm install @parsethis/sdk`,
-  or add the MCP endpoint, or one keygen curl. Never "Get API key" as a
-  primary CTA — keys are plumbing, not the product.
-- Secondary CTA by audience: builders → "Open the Test Lab" / "Read the docs";
-  security → "See the framework crosswalk" / "Talk to security engineering";
-  executive → "Request a security briefing" / "Start a Security Audit."
-- Under a primary CTA, show the self-serve fact line in monospace:
-  `npm install @parsethis/sdk · no credit card, no sales call`.
+Two asks, in order. Do not invert them.
+
+- **First-touch CTA** (homepage hero, persistent nav, email, closer):
+  **Screen one** → `/attack`. Variant: "Screen an email". The job is a
+  stalled security review; the conversion asset is a forwardable
+  `/report/:id`, not a key. Never "Book a demo" or "Talk to security
+  engineering" as a co-equal first ask — that is a $25k+ motion. Ours is
+  $49–$199 on a card.
+- **After-proof CTA** (the report page, `/get-started`, pricing cards):
+  **Install Parse** (variant: "Install Parse — free"). The verb is install
+  because that is the flow: `npm install @parsethis/sdk`, or add the MCP
+  endpoint, or one keygen curl. Never "Get API key" as button text —
+  keys are plumbing, not the product.
+- Under the first-touch CTA, the fact line is: `Screen one. Forward the report. No key, no meeting.`
+- Under the install CTA: `npm install @parsethis/sdk · no credit card, no sales call`.
 
 ## 6. Logo
 

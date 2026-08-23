@@ -658,7 +658,7 @@ export function renderPage(options: PageOptions): string {
       <div class="nav-links" id="nav-links">
       ${navLinksHtml}
       <a href="/admin/login" class="nav-signin">Sign in</a>
-      <a href="/get-started" class="nav-cta">Install Parse</a>
+      <a href="/attack" class="nav-cta">Screen one</a>
       </div>
     </nav>
   </header>

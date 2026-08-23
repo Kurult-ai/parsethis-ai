@@ -5,8 +5,8 @@
  * Rules enforced (brand doc section in parentheses):
  *   1. Banned hype vocabulary in page copy (§3): bulletproof, military-grade,
  *      cutting-edge, revolutionary, seamless, "100% protection".
- *   2. "Get API key" must not appear as element text — the primary CTA is
- *      "Install Parse" (§5). Prose like "generate an API key" is fine.
+ *   2. "Get API key" must not appear as element text — first-touch CTA is
+ *      "Screen one" → /attack; after-proof CTA is "Install Parse" (§5).
  *   3. Forbidden brand names in customer-facing copy (§2): "Parse Agents",
  *      "Parse for agents", "ParseThis" (the domain parsethis.ai is fine).
  *   4. Certification overclaims (§4): "SOC 2 certified", "SOC 2 compliant",
