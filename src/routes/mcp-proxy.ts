@@ -5,6 +5,7 @@ import { parsePrompt, analyzeOutputRisks, computeSuggestedAction, computeVerdict
 import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 import type { AppEnv } from "../types.js";
 import { persistLedgerEventSafe } from "../lib/compliance/ledger-store.js";
+import { applyOrgPromptPolicies } from "../lib/org-screening-policies.js";
 
 export const mcpProxyRoutes = new Hono<AppEnv>();
 
@@ -168,7 +169,7 @@ mcpProxyRoutes.post(
 
     try {
       if (toolName === "screen_prompt") {
-        const result = await handleScreenPrompt(args);
+        const result = await handleScreenPrompt(c, args);
         recordMcpLedger(c, toolName, args, "ok");
         return c.json(result);
       }
@@ -192,21 +193,38 @@ mcpProxyRoutes.post(
 
 // ─── Tool handlers ─────────────────────────────────────────────────────────
 
-async function handleScreenPrompt(args: Record<string, unknown>) {
+async function handleScreenPrompt(c: Context<AppEnv>, args: Record<string, unknown>) {
   const prompt = requireString(args.prompt, "prompt");
   if (prompt.length > 50_000) {
     throw new Error("prompt must be 50,000 characters or less");
   }
 
+  const metadata: Record<string, unknown> = {
+    source: typeof args.source === "string" ? args.source : "mcp_proxy",
+    ...(isRecord(args.metadata) ? args.metadata : {}),
+  };
+
   const result = await parsePrompt({
     prompt,
     execute: false,
     mode: args.mode === "pattern-only" || args.mode === "full" ? args.mode : undefined,
-    metadata: {
-      source: typeof args.source === "string" ? args.source : "mcp_proxy",
-      ...(isRecord(args.metadata) ? args.metadata : {}),
-    },
+    metadata: metadata as never,
   });
+
+  const key = c.get("apiKey");
+  if (key?.id) {
+    const tools = Array.isArray(args.tools)
+      ? args.tools.filter((t): t is string => typeof t === "string")
+      : undefined;
+    await applyOrgPromptPolicies(result, {
+      prompt,
+      metadata,
+      tools,
+      apiKeyId: key.id,
+      role: key.role,
+      agentId: typeof metadata.agent_id === "string" ? metadata.agent_id : undefined,
+    });
+  }
 
   const structured = {
     tool: "screen_prompt",

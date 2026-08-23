@@ -10,6 +10,7 @@ import { getBaseUrl } from "../lib/route-utils.js";
 import { recordGeoSurfaceHit } from "../lib/geo-analytics.js";
 import { MCP_TOOLS } from "../lib/mcp-tools.js";
 import { overrideAffordance } from "../lib/override-affordance.js";
+import { applyOrgPromptPolicies } from "../lib/org-screening-policies.js";
 
 export const mcpRoutes = new Hono<AppEnv>();
 
@@ -128,14 +129,29 @@ async function requireEvaluateAuth(c: Context<AppEnv>, id: JsonRpcId) {
 
 async function callScreenPrompt(c: Context<AppEnv>, args: Record<string, unknown>) {
   const prompt = requireString(args.prompt, "prompt");
+  const metadata: Record<string, unknown> = {
+    source: typeof args.source === "string" ? args.source : "mcp",
+    ...(isRecord(args.metadata) ? args.metadata : {}),
+  };
   const result = await parsePrompt({
     prompt,
     execute: false,
-    metadata: {
-      source: typeof args.source === "string" ? args.source : "mcp",
-      ...(isRecord(args.metadata) ? args.metadata as Record<string, string> : {}),
-    },
+    metadata: metadata as never,
   });
+  const key = c.get("apiKey");
+  if (key?.id) {
+    const tools = Array.isArray(args.tools)
+      ? args.tools.filter((t): t is string => typeof t === "string")
+      : undefined;
+    await applyOrgPromptPolicies(result, {
+      prompt,
+      metadata,
+      tools,
+      apiKeyId: key.id,
+      role: key.role,
+      agentId: typeof metadata.agent_id === "string" ? metadata.agent_id : undefined,
+    });
+  }
   const action = recommendedAction(result.risk_score);
   return {
     risk_score: result.risk_score,
