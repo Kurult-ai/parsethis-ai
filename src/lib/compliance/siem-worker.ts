@@ -26,6 +26,7 @@ import { getRedis } from "../../redis.js";
 import { prisma } from "../../db.js";
 import {
   screeningEventToSIEM,
+  ledgerEventToSIEM,
   forwardToSIEM,
   testSIEMConnection,
   type PrismaSIEMConfig,
@@ -55,6 +56,7 @@ export interface SIEMForwardBatch {
 
 const QUEUE_NAME = "siem-forward";
 const LAST_FORWARD_KEY = "siem:last_forwarded";
+const LAST_LEDGER_KEY = "siem:last_forwarded_ledger";
 const FAILED_COUNT_KEY = "siem:failed_count";
 const DEST_HEALTH_PREFIX = "siem:destination_health:";
 
@@ -426,6 +428,78 @@ export async function getSIEMStatus(): Promise<SIEMStatus> {
   };
 }
 
+function configWantsLedger(config: PrismaSIEMConfig): boolean {
+  const types = config.eventTypes ?? [];
+  return types.includes("ledger") || types.includes("all");
+}
+
+export async function pollAndForwardLedger(): Promise<{ forwarded: number; failed: number }> {
+  const redis = getRedis();
+  const raw = await redis.get(LAST_LEDGER_KEY);
+  const lastTS = raw && !isNaN(new Date(raw).getTime()) ? new Date(raw) : new Date(Date.now() - 60 * 60 * 1000);
+
+  let configs: PrismaSIEMConfig[] = [];
+  try {
+    configs = await prisma.$queryRaw<PrismaSIEMConfig[]>`
+      SELECT * FROM siem_configs WHERE active = true ORDER BY created_at DESC
+    `;
+  } catch {
+    return { forwarded: 0, failed: 0 };
+  }
+  const targets = configs.filter(configWantsLedger);
+  if (targets.length === 0) return { forwarded: 0, failed: 0 };
+
+  let rows: Array<{
+    eventId: string;
+    timestamp: Date;
+    agentId: string;
+    sessionId: string;
+    kind: string;
+    tool: string;
+    pathGlob: string;
+    argsDigest: string;
+    outcome: string;
+    orgId: string | null;
+    source: string;
+    seqNum: number;
+    integrityHash: string;
+    chainHash: string;
+  }> = [];
+  try {
+    rows = await prisma.ledgerEvent.findMany({
+      where: { createdAt: { gt: lastTS } },
+      orderBy: { createdAt: "asc" },
+      take: MAX_EVENTS_PER_TICK,
+    });
+  } catch {
+    return { forwarded: 0, failed: 0 };
+  }
+  if (rows.length === 0) return { forwarded: 0, failed: 0 };
+
+  let forwarded = 0;
+  let failed = 0;
+  let newest = lastTS;
+  for (const row of rows) {
+    const siemEvent = ledgerEventToSIEM(row);
+    let ok = true;
+    for (const config of targets) {
+      const success = await forwardBatchWithRetry(config, [siemEvent]);
+      if (success) forwarded++;
+      else {
+        failed++;
+        ok = false;
+        await incrementFailedCount(redis, 1);
+      }
+      await setDestinationHealth(redis, config.id, success);
+    }
+    if (ok && row.timestamp > newest) newest = row.timestamp;
+  }
+  if (forwarded > 0 && newest > lastTS) {
+    await redis.set(LAST_LEDGER_KEY, newest.toISOString());
+  }
+  return { forwarded, failed };
+}
+
 // ─── BullMQ Worker ───────────────────────────────────────────────────────
 
 export function createSIEMWorker(): Worker<SIEMPollJobData> {
@@ -433,12 +507,13 @@ export function createSIEMWorker(): Worker<SIEMPollJobData> {
     QUEUE_NAME,
     async (job: Job<SIEMPollJobData>) => {
       const result = await pollAndForward();
-      if (result.forwarded > 0) {
+      const ledger = await pollAndForwardLedger();
+      if (result.forwarded + ledger.forwarded > 0) {
         console.log(
-          `[siem-worker] Forwarded ${result.forwarded} events, failed ${result.failed}, last=${result.lastForwarded}`,
+          `[siem-worker] Forwarded ${result.forwarded}+${ledger.forwarded} ledger, failed ${result.failed + ledger.failed}`,
         );
       }
-      return result;
+      return { ...result, ledger };
     },
     {
       connection: getRedis() as any,

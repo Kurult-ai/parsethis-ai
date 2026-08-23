@@ -51,6 +51,7 @@ export interface EvidencePackSummary {
   topRiskCategories: Array<{ category: string; count: number }>;
   policyChanges: number;
   agentCount: number;
+  ledgerCount: number;
 }
 
 /** One screening decision, as it appears in the evidence. No prompt text. */
@@ -107,6 +108,16 @@ export interface EvidencePack {
     changes: Array<{ at: string; from: unknown; to: unknown; reason: string }>;
   };
   controlMappings: ControlMapping[];
+  /** Agent-action rows in the period. Paths and digests only. */
+  ledgerActions: Array<{
+    at: string;
+    sessionId: string;
+    agentId: string;
+    kind: string;
+    tool: string;
+    pathGlob: string;
+    integrityHash: string;
+  }>;
   integrityHash: string;
 }
 
@@ -163,7 +174,7 @@ export async function generateEvidencePack(
   const screeningScope = orgScopedWhere(orgId ?? null, apiKeyId);
   const auditScope = await auditScopedWhere(orgId ?? null, apiKeyId);
 
-  const [screenings, auditEvents, policyRevisions, agents] = await Promise.all([
+  const [screenings, auditEvents, policyRevisions, agents, ledgerRows] = await Promise.all([
     prisma.screeningEvent.findMany({
       where: { ...screeningScope, createdAt: { gte: dateFrom, lte: dateTo } },
       orderBy: { createdAt: "asc" },
@@ -188,6 +199,25 @@ export async function generateEvidencePack(
           .then((r) => r as unknown[])
           .catch(() => [] as unknown[])
       : Promise.resolve([] as unknown[]),
+    prisma.ledgerEvent
+      .findMany({
+        where: {
+          timestamp: { gte: dateFrom, lte: dateTo },
+          ...(orgId ? { orgId } : {}),
+        },
+        orderBy: { timestamp: "asc" },
+        take: 500,
+        select: {
+          timestamp: true,
+          sessionId: true,
+          agentId: true,
+          kind: true,
+          tool: true,
+          pathGlob: true,
+          integrityHash: true,
+        },
+      })
+      .catch(() => []),
   ]);
 
   // ── Build summary ──
@@ -287,13 +317,14 @@ export async function generateEvidencePack(
   const refusals = screenings.filter((s) => s.disposition === "block").map(toDecision);
 
   const summary: EvidencePackSummary = {
-    totalEvents: screenings.length + auditEvents.length,
+    totalEvents: screenings.length + auditEvents.length + ledgerRows.length,
     screeningCount: screenings.length,
     blockedCount,
     dispositionCounts,
     topRiskCategories,
     policyChanges: policyRevisions.length,
     agentCount: agents.length,
+    ledgerCount: ledgerRows.length,
   };
 
   // The state of the org-wide downgrade control across the period, and every
@@ -339,6 +370,15 @@ export async function generateEvidencePack(
     refusals,
     subjectRoleControl,
     controlMappings,
+    ledgerActions: ledgerRows.map((r) => ({
+      at: r.timestamp.toISOString(),
+      sessionId: r.sessionId,
+      agentId: r.agentId,
+      kind: r.kind,
+      tool: r.tool,
+      pathGlob: r.pathGlob,
+      integrityHash: r.integrityHash,
+    })),
   };
 
   const integrityHash = createHash("sha256")
@@ -541,6 +581,9 @@ function mapISO42001(ctx: EvidenceContext): ControlMapping[] {
     evidenceParts.push(
       `Period data: ${ctx.screenings.length} screenings, ${ctx.policyRevisions.length} policy revisions, ${ctx.agents.length} registered agents`,
     );
+    if (m.clause.includes("6.2") || m.title.toLowerCase().includes("log") || m.title.toLowerCase().includes("record")) {
+      evidenceParts.push("Agent-action ledger rows (paths and digests only) are included when present.");
+    }
 
     return {
       controlId: `Clause ${m.clause}`,

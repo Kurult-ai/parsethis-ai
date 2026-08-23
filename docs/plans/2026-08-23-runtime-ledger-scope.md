@@ -1,6 +1,6 @@
 # Scope: Parse Runtime Ledger — agent-side tool-call + file-access instrumentation
 
-Date: 2026-08-23 · Status: BUILDING (core slice shipping) — ICP locked: one security-review unblocker; ledger is core, not add-on. See 2026-08-23-icp-and-ledger.md
+Date: 2026-08-23 · Status: SHIPPED core + dashboard + evidence pack + SIEM + MCP collector. Hook package local (not on npm — no @parsethis org). See 2026-08-23-icp-and-ledger.md
 
 ## The one-line version
 A drop-in shim that captures every tool call and file access at the agent runtime and streams each into the existing hash-chained ComplianceReceipt ledger — turning "audit trail of what Parse screened" into "audit trail of what the agent did."

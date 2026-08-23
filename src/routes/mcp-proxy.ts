@@ -1,8 +1,10 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { authMiddleware } from "../auth.js";
 import { parsePrompt, analyzeOutputRisks, computeSuggestedAction, computeVerdict } from "../parse.js";
 import { billableUsageMiddleware } from "../lib/billable-usage-middleware.js";
 import type { AppEnv } from "../types.js";
+import { persistLedgerEventSafe } from "../lib/compliance/ledger-store.js";
 
 export const mcpProxyRoutes = new Hono<AppEnv>();
 
@@ -166,11 +168,15 @@ mcpProxyRoutes.post(
 
     try {
       if (toolName === "screen_prompt") {
-        return c.json(await handleScreenPrompt(args));
+        const result = await handleScreenPrompt(args);
+        recordMcpLedger(c, toolName, args, "ok");
+        return c.json(result);
       }
 
       if (toolName === "screen_output") {
-        return c.json(handleScreenOutput(args));
+        const result = handleScreenOutput(args);
+        recordMcpLedger(c, toolName, args, "ok");
+        return c.json(result);
       }
 
       return c.json(
@@ -259,3 +265,30 @@ function requireString(value: unknown, field: string): string {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+function recordMcpLedger(
+  c: Context<AppEnv>,
+  tool: string,
+  args: Record<string, unknown>,
+  outcome: string,
+): void {
+  const key = c.get("apiKey");
+  const meta = isRecord(args.metadata) ? args.metadata : {};
+  const sessionId =
+    (typeof meta.session_id === "string" && meta.session_id) ||
+    c.req.header("x-parse-session") ||
+    `mcp:${key?.id ?? "anon"}`;
+  persistLedgerEventSafe(
+    {
+      agentId: typeof meta.agent_id === "string" ? meta.agent_id : "mcp-gateway",
+      sessionId,
+      kind: "tool_call",
+      tool,
+      argsDigest: undefined,
+      outcome,
+      source: "mcp-gateway",
+    },
+    key?.org_id ?? null,
+  );
+}
+

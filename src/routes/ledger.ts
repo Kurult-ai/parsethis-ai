@@ -24,6 +24,7 @@ import {
   type LedgerKind,
   verifyLedgerEvent,
 } from "../lib/compliance/agent-ledger.js";
+import { loadSessionEvents, loadSharedSession, persistLedgerEvent, shareSession } from "../lib/compliance/ledger-store.js";
 
 function requestBaseUrl(c: { req: { header: (n: string) => string | undefined } }): string {
   const proto = c.req.header("x-forwarded-proto");
@@ -214,35 +215,6 @@ function parseEventBody(raw: unknown): LedgerEventInput | { error: string } {
   };
 }
 
-async function persistEvent(input: LedgerEventInput, orgId: string | null): Promise<LedgerEventRecord> {
-  const prev = await prisma.ledgerEvent.findFirst({
-    where: { sessionId: input.sessionId },
-    orderBy: { seqNum: "desc" },
-  });
-  const seq = (prev?.seqNum ?? 0) + 1;
-  const minted = mintLedgerEvent({ ...input, orgId: orgId ?? input.orgId }, prev?.chainHash ?? "GENESIS", seq);
-  await prisma.ledgerEvent.create({
-    data: {
-      eventId: minted.event_id,
-      timestamp: new Date(minted.timestamp),
-      agentId: minted.agent_id,
-      sessionId: minted.session_id,
-      kind: minted.kind,
-      tool: minted.tool,
-      pathGlob: minted.path_glob,
-      argsDigest: minted.args_digest,
-      outcome: minted.outcome,
-      durationMs: minted.duration_ms,
-      orgId: minted.org_id || orgId,
-      source: minted.source,
-      seqNum: minted.seq_num,
-      integrityHash: minted.integrity_hash,
-      chainHash: minted.chain_hash,
-    },
-  });
-  return minted;
-}
-
 ledgerRoutes.post("/v1/ledger/event", authMiddleware("evaluate"), async (c) => {
   let body: unknown;
   try {
@@ -254,7 +226,7 @@ ledgerRoutes.post("/v1/ledger/event", authMiddleware("evaluate"), async (c) => {
   if ("error" in parsed) return c.json({ error: parsed.error }, 400);
   const key = c.get("apiKey");
   try {
-    const event = await persistEvent(parsed, key?.org_id ?? null);
+    const event = await persistLedgerEvent(parsed, key?.org_id ?? null);
     return c.json({ event }, 201);
   } catch (err) {
     const message = err instanceof Error ? err.message : "persist failed";
@@ -278,7 +250,7 @@ ledgerRoutes.post("/v1/ledger/events", authMiddleware("evaluate"), async (c) => 
     for (const item of list) {
       const parsed = parseEventBody(item);
       if ("error" in parsed) return c.json({ error: parsed.error, accepted: minted.length }, 400);
-      minted.push(await persistEvent(parsed, key?.org_id ?? null));
+      minted.push(await persistLedgerEvent(parsed, key?.org_id ?? null));
     }
     return c.json({ events: minted, count: minted.length }, 201);
   } catch (err) {
@@ -360,4 +332,47 @@ ledgerRoutes.post("/v1/ledger/events/:id/verify", authMiddleware("evaluate"), as
     const message = err instanceof Error ? err.message : "verify failed";
     return c.json({ error: "ledger_unavailable", detail: message }, 503);
   }
+});
+
+function sessionPage(title: string, path: string, events: LedgerEventRecord[], baseUrl: string, note: string): string {
+  const last = events[events.length - 1];
+  const checks = events.map((e, i) => verifyLedgerEvent(e, i === 0 ? "GENESIS" : events[i - 1].chain_hash));
+  const allValid = checks.every((x) => x.valid);
+  const html = `
+    <section class="wrap" style="padding:48px 0 80px;max-width:900px">
+      <p class="eyebrow">${escape(note)}</p>
+      <h1>${escape(title)}</h1>
+      <p>Chain ${allValid ? "verifies" : "BROKEN"} · ${events.length} events · tail <code>${escape((last?.chain_hash ?? "").slice(0, 16))}…</code></p>
+      <p>Paths and digests only. No file contents. No prompt text.</p>
+      ${eventTable(events)}
+      <p style="margin-top:24px"><a href="/ledger">← Ledger</a></p>
+    </section>`;
+  return renderPage({
+    title: `${title} — Parse`,
+    description: "Forwardable agent-action ledger session.",
+    path,
+    content: html,
+    baseUrl,
+  });
+}
+
+ledgerRoutes.post("/v1/ledger/sessions/:sessionId/share", authMiddleware("evaluate"), async (c) => {
+  const sessionId = c.req.param("sessionId");
+  const key = c.get("apiKey");
+  try {
+    const events = await loadSessionEvents(c.req.param("sessionId") ?? "", key?.org_id ?? null);
+    if (events.length === 0) return c.json({ error: "not_found" }, 404);
+    const id = await shareSession(events);
+    if (!id) return c.json({ events, share_url: null, detail: "share store unavailable" }, 200);
+    return c.json({ share_url: `${requestBaseUrl(c)}/ledger/s/${id}`, event_count: events.length });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "share failed";
+    return c.json({ error: "ledger_unavailable", detail: message }, 503);
+  }
+});
+
+ledgerRoutes.get("/ledger/s/:id", async (c) => {
+  const packed = await loadSharedSession(c.req.param("id"));
+  if (!packed) return c.text("Not found or expired", 404);
+  return c.html(sessionPage("Shared ledger session", `/ledger/s/${c.req.param("id")}`, packed.events, requestBaseUrl(c), `Shared ${packed.shared_at} · 7-day TTL`));
 });

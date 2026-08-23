@@ -120,6 +120,44 @@ export function auditEventToSIEM(event: PrismaAuditEvent, orgId?: string): BaseS
   };
 }
 
+export function ledgerEventToSIEM(event: {
+  eventId: string;
+  timestamp: Date;
+  agentId: string;
+  sessionId: string;
+  kind: string;
+  tool: string;
+  pathGlob: string;
+  argsDigest: string;
+  outcome: string;
+  orgId: string | null;
+  source: string;
+  seqNum: number;
+  integrityHash: string;
+  chainHash: string;
+}): BaseSIEMEvent {
+  return {
+    timestamp: event.timestamp.toISOString(),
+    source: "parse-for-agents",
+    source_type: "ledger",
+    severity: event.kind === "file_delete" || event.kind === "net_egress" ? "medium" : "info",
+    message: `Agent ${event.agentId} ${event.kind}${event.tool ? ` ${event.tool}` : ""}${event.pathGlob ? ` ${event.pathGlob}` : ""}`,
+    org_id: event.orgId ?? undefined,
+    agent_id: event.agentId,
+    event_id: event.eventId,
+    session_id: event.sessionId,
+    kind: event.kind,
+    tool: event.tool || undefined,
+    path_glob: event.pathGlob || undefined,
+    args_digest: event.argsDigest || undefined,
+    outcome: event.outcome || undefined,
+    ledger_source: event.source,
+    seq_num: event.seqNum,
+    integrity_hash: event.integrityHash,
+    chain_hash: event.chainHash,
+  };
+}
+
 // ─── Format Adapters ────────────────────────────────────────────────────
 
 /**

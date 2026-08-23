@@ -69,6 +69,7 @@ import { invalidateApiKeyCache } from "../result-store.js";
 import { recordActivationEvent, getActivationFunnel, type ActivationEvent } from "../lib/activation-tracker.js";
 import { renderBillingDashboardPage } from "../pages/billing.js";
 import { renderAgentDashboardPage } from "../pages/agent-dashboard.js";
+import { renderLedgerDashboardPage } from "../pages/ledger-dashboard.js";
 import { renderOrgControlPanelPage } from "../pages/org-control-panel.js";
 import { renderMyAgentsPage } from "../pages/my-agents.js";
 import { renderOrgGetStartedPage } from "../pages/org-get-started.js";
@@ -1172,6 +1173,13 @@ publicRoutes.get("/dashboard/agents", authMiddleware("evaluate"), async (c) => {
   const baseUrl = getBaseUrl(c);
   const apiKey = c.get("apiKey");
   const html = await renderAgentDashboardPage(baseUrl, apiKey.id, apiKey.name || "Parse");
+  return c.html(html);
+});
+
+publicRoutes.get("/dashboard/ledger", authMiddleware("evaluate"), async (c) => {
+  const baseUrl = getBaseUrl(c);
+  const apiKey = c.get("apiKey");
+  const html = await renderLedgerDashboardPage(baseUrl, apiKey.id, apiKey.name || "Parse");
   return c.html(html);
 });
 
