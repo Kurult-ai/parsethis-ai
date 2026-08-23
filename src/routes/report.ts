@@ -159,6 +159,7 @@ reportRoutes.get("/report/:id", async (c) => {
     <div class="rep-score">
       <div class="rep-score-num" style="color:${disp.color}">${v.risk_score.toFixed(1)}</div>
       <div class="rep-score-label">RISK SCORE / 10</div>
+      <div style="font-size:11.5px;color:#98a2b3;margin-top:6px;max-width:180px;line-height:1.45;">0–2.9 allow · 3–5.9 review<br>6–9.4 block (high risk)<br>9.5–10 block (critical)</div>
     </div>
   </div>
 
