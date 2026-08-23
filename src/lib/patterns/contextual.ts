@@ -31,7 +31,7 @@ const URL_ACTIONS = /\b(?:open|call|fetch|get|post|send|visit|browse|request|loa
 // vocabulary. Both added: ledger/transaction/reconciliation records are
 // exactly the data a partner-bank phishing lookalike asks an ops agent to
 // ship to an attacker-controlled host.
-const EXFIL_DATA_TERMS = /\b(?:user\s+data|private\s+data|secret|api\s*key|credentials?|conversation|system\s+prompt|internal\s+notes?|customer\s+data|pii|email\s+address|account\s+id|session\s+id|(?:customer|user|client|member|subscriber|patient|employee)\s+(?:records?|data|lists?|databases?|details|information)|(?:unreconciled\s+)?(?:ledger|ledgers|transaction\s+(?:history|log|records?)|reconciliation\s+(?:report|records?|data)|bank\s+(?:statement|statements|records?)|account\s+(?:numbers?|details))|financial\s+(?:records?|data|statements?))\b/i;
+const EXFIL_DATA_TERMS = /\b(?:user\s+data|private\s+data|secret|api\s*key|credentials?|conversation|system\s+prompt|internal\s+notes?|customer\s+data|pii|email\s+address|account\s+id|session\s+id|(?:customer|user|client|member|subscriber|patient|employee)\s+(?:records?|data|lists?|databases?|details|information|tables?)|(?:full|complete|entire|whole)\s+(?:customer|user|client|member|subscriber|patient|employee)\s+(?:table|database|export|dump|dataset|list)|(?:unreconciled\s+)?(?:ledger|ledgers|transaction\s+(?:history|log|records?)|reconciliation\s+(?:report|records?|data)|bank\s+(?:statement|statements|records?)|account\s+(?:numbers?|details))|financial\s+(?:records?|data|statements?))\b/i;
 
 const ECHO_ACTIONS = /\b(?:include|cite|echo|return|send|post|append|acknowledge|confirm|report|mention|repeat|copy|quote|write|add)\b/i;
 const TOKEN_NOUNS = /\b(?:receipt|token|code|identifier|id|ref(?:erence)?|ack|event\s*id|tracking\s*id|nonce|canary|marker|proof)\b/i;
@@ -90,7 +90,7 @@ function hasUrl(text: string): boolean {
 }
 
 function hasDataExfilToUrl(text: string): boolean {
-  return /\b(?:send|post|upload|transmit|forward|exfiltrate|copy|export|dump|deliver)\b/i.test(text) && EXFIL_DATA_TERMS.test(text) && hasUrl(text);
+  return /\b(?:send|post|upload|transmit|forward|exfiltrate|copy|export|dump|deliver|append|attach|include)\b/i.test(text) && EXFIL_DATA_TERMS.test(text) && hasUrl(text);
 }
 
 function addFlag(flags: ContextualRiskFlag[], flag: ContextualRiskFlag): void {
