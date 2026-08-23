@@ -53,6 +53,7 @@ export async function renderLedgerDashboardPage(baseUrl: string, apiKeyId: strin
       <p class="eyebrow">Dashboard · ${esc(apiKeyName)}</p>
       <h1>Agent-action ledger</h1>
       <p>${eventCount} events · ${sessionCount} sessions. Paths and digests only.</p>
+      <p>Replay today’s org policy against a session: <code>GET /v1/ledger/sessions/:id/replay</code>. Hypothetical. Logging is not a control.</p>
       <p><a href="/ledger">Public ledger</a> · <a href="/ledger/sample">Sample</a> · <a href="/dashboard/compliance">Compliance</a></p>
       <table>
         <thead><tr><th>Session</th><th>Agent</th><th>Kind</th><th>Tool</th><th>Path</th><th>#</th><th>When</th></tr></thead>

@@ -12,6 +12,9 @@
 import { createHash } from "node:crypto";
 import { prisma } from "../../db.js";
 import { orgScopedWhere, auditScopedWhere } from "../org-scope.js";
+import { replayPolicy } from "./policy-replay.js";
+import { getOrgToolPolicy } from "../tool-policy-store.js";
+import type { LedgerEventRecord, LedgerKind } from "./agent-ledger.js";
 import {
   OWASP_LLM_2025,
   NIST_AI_RMF,
@@ -118,6 +121,15 @@ export interface EvidencePack {
     pathGlob: string;
     integrityHash: string;
   }>;
+  /** Today's policy replayed against the period's ledger. Not a control. */
+  policyReplay: {
+    note: string;
+    wouldRefuse: number;
+    wouldHold: number;
+    wouldAllow: number;
+    unverifiable: number;
+    rows: Array<{ eventId: string; tool: string; pathGlob: string; verdict: string; reason: string }>;
+  };
   integrityHash: string;
 }
 
@@ -208,12 +220,15 @@ export async function generateEvidencePack(
         orderBy: { timestamp: "asc" },
         take: 500,
         select: {
+          eventId: true,
+          seqNum: true,
           timestamp: true,
           sessionId: true,
           agentId: true,
           kind: true,
           tool: true,
           pathGlob: true,
+          argsDigest: true,
           integrityHash: true,
         },
       })
@@ -360,6 +375,53 @@ export async function generateEvidencePack(
     topRiskCategories,
   });
 
+  let replayToolMode: "blocklist" | "allowlist" = "blocklist";
+  let replayToolRules: import("../tool-policy.js").ToolRule[] = [];
+  let replayFileRules: import("../file-acl.js").FileAclRuleLike[] = [];
+  if (orgId) {
+    try {
+      const tp = await getOrgToolPolicy(orgId);
+      replayToolMode = tp.mode;
+      replayToolRules = tp.rules;
+      const fr = await prisma.fileAclRule.findMany({
+        where: { orgId },
+        select: { id: true, pathPattern: true, action: true, priority: true, comment: true },
+      });
+      replayFileRules = fr.map((r) => ({
+        id: r.id,
+        pathPattern: r.pathPattern,
+        action: r.action as import("../file-acl.js").FileAclAction,
+        priority: r.priority,
+        comment: r.comment,
+      }));
+    } catch {
+      // Fail open: empty policy → replay reports allow-by-default, not a fake deny.
+    }
+  }
+
+  const replayEvents: LedgerEventRecord[] = ledgerRows.map((r) => ({
+    event_id: r.eventId,
+    timestamp: r.timestamp.toISOString(),
+    agent_id: r.agentId,
+    session_id: r.sessionId,
+    kind: r.kind as LedgerKind,
+    tool: r.tool,
+    path_glob: r.pathGlob,
+    args_digest: r.argsDigest,
+    outcome: "",
+    duration_ms: 0,
+    org_id: orgId ?? "",
+    source: "",
+    seq_num: r.seqNum,
+    integrity_hash: r.integrityHash,
+    chain_hash: "",
+  }));
+  const replay = replayPolicy(replayEvents, {
+    toolMode: replayToolMode,
+    toolRules: replayToolRules,
+    fileRules: replayFileRules,
+  });
+
   // ── Assemble pack and compute integrity hash ──
   const pack: Omit<EvidencePack, "integrityHash"> = {
     generatedAt: new Date().toISOString(),
@@ -379,6 +441,23 @@ export async function generateEvidencePack(
       pathGlob: r.pathGlob,
       integrityHash: r.integrityHash,
     })),
+    policyReplay: {
+      note: replay.note,
+      wouldRefuse: replay.counts.would_refuse,
+      wouldHold: replay.counts.would_hold,
+      wouldAllow: replay.counts.would_allow,
+      unverifiable: replay.counts.unverifiable,
+      rows: replay.rows
+        .filter((r) => r.verdict === "would_refuse" || r.verdict === "would_hold" || r.verdict === "unverifiable")
+        .slice(0, 100)
+        .map((r) => ({
+          eventId: r.event_id,
+          tool: r.tool,
+          pathGlob: r.path_glob,
+          verdict: r.verdict,
+          reason: r.reason,
+        })),
+    },
   };
 
   const integrityHash = createHash("sha256")

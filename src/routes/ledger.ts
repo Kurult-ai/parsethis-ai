@@ -25,6 +25,8 @@ import {
   verifyLedgerEvent,
 } from "../lib/compliance/agent-ledger.js";
 import { loadSessionEvents, loadSharedSession, persistLedgerEvent, shareSession } from "../lib/compliance/ledger-store.js";
+import { replayPolicy, sampleReplayPolicy } from "../lib/compliance/policy-replay.js";
+import { getOrgToolPolicy } from "../lib/tool-policy-store.js";
 
 function requestBaseUrl(c: { req: { header: (n: string) => string | undefined } }): string {
   const proto = c.req.header("x-forwarded-proto");
@@ -121,6 +123,28 @@ function eventTable(events: LedgerEventRecord[]): string {
   </table>`;
 }
 
+function replayAppendix(events: LedgerEventRecord[]): string {
+  const policy = sampleReplayPolicy();
+  const replay = replayPolicy(events, policy);
+  const rows = replay.rows
+    .map(
+      (r) => `<tr>
+        <td>${r.seq_num}</td>
+        <td><code>${escape(r.tool || r.kind)}</code></td>
+        <td>${escape(r.verdict)}</td>
+        <td>${escape(r.reason)}</td>
+      </tr>`,
+    )
+    .join("");
+  return `<h2>Would have refused</h2>
+    <p>Today’s sample allowlist (Read only) replayed against this session. Not a control. ${replay.counts.would_refuse} would refuse · ${replay.counts.unverifiable} unverifiable.</p>
+    <p class="muted">${escape(replay.note)}</p>
+    <table>
+      <thead><tr><th>#</th><th>Tool</th><th>Replay</th><th>Why</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 function escape(s: string): string {
   return s
     .replaceAll("&", "&amp;")
@@ -136,6 +160,7 @@ ledgerRoutes.get("/ledger", (c) => {
       <h1>Ledger of agent actions</h1>
       <p>Parse records every tool call and file path the agent touches — then seals each row into an append-only SHA-256 chain. You forward the page. A reviewer can recompute the hashes.</p>
       <p><strong>This is not an endpoint agent.</strong> Paths and digests only. No file contents. No prompt text. No kernel monitor.</p>
+      <p>Replay today’s allowlist against a session: <code>GET /v1/ledger/sessions/:id/replay</code>. Hypothetical. Logging is not a control.</p>
       <p>
         <a class="btn" href="/ledger/sample">See a sample session</a>
         <a class="btn btn-ghost" href="/attack">Screen an email first</a>
@@ -170,6 +195,7 @@ ledgerRoutes.get("/ledger/sample", (c) => {
       <p>Composite walkthrough: Claude Code reads a client playbook, runs a command in that workspace, writes notes. Chain ${allValid ? "verifies" : "BROKEN"}.</p>
       <p>Head: <code>GENESIS</code> → tail <code>${escape(last.chain_hash.slice(0, 16))}…</code> · ${events.length} events · no file contents stored.</p>
       ${eventTable(events)}
+      ${replayAppendix(events)}
       <p style="margin-top:24px"><a href="/ledger">← Ledger</a> · <a href="/attack">Attack Pack</a></p>
     </section>`;
   return c.html(
@@ -355,6 +381,39 @@ function sessionPage(title: string, path: string, events: LedgerEventRecord[], b
     baseUrl,
   });
 }
+
+ledgerRoutes.get("/v1/ledger/sessions/:sessionId/replay", authMiddleware("evaluate"), async (c) => {
+  const sessionId = c.req.param("sessionId") ?? "";
+  const key = c.get("apiKey");
+  const orgId = key?.org_id ?? null;
+  try {
+    const events = await loadSessionEvents(sessionId, orgId);
+    if (events.length === 0) return c.json({ error: "not_found" }, 404);
+    let toolMode: "blocklist" | "allowlist" = "blocklist";
+    let toolRules: import("../lib/tool-policy.js").ToolRule[] = [];
+    let fileRules: import("../lib/file-acl.js").FileAclRuleLike[] = [];
+    if (orgId) {
+      const policy = await getOrgToolPolicy(orgId);
+      toolMode = policy.mode;
+      toolRules = policy.rules;
+      const rows = await prisma.fileAclRule.findMany({
+        where: { orgId },
+        select: { id: true, pathPattern: true, action: true, priority: true, comment: true },
+      });
+      fileRules = rows.map((r) => ({
+        id: r.id,
+        pathPattern: r.pathPattern,
+        action: r.action as import("../lib/file-acl.js").FileAclAction,
+        priority: r.priority,
+        comment: r.comment,
+      }));
+    }
+    return c.json(replayPolicy(events, { toolMode, toolRules, fileRules }));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "replay failed";
+    return c.json({ error: "ledger_unavailable", detail: message }, 503);
+  }
+});
 
 ledgerRoutes.post("/v1/ledger/sessions/:sessionId/share", authMiddleware("evaluate"), async (c) => {
   const sessionId = c.req.param("sessionId");

@@ -21,6 +21,7 @@ describe("ledger routes", () => {
     assert.equal(res.status, 200);
     const html = await res.text();
     assert.match(html, /Chain verifies/);
+    assert.match(html, /Would have refused/);
     assert.doesNotMatch(html, /\/Users\//);
   });
 
