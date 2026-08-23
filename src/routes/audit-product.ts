@@ -92,6 +92,7 @@ auditProductRoutes.get("/audit", (c) => {
       : process.env.PUBLIC_BASE_URL || "https://www.parsethis.ai";
 
   const paid = c.req.query("paid") === "1";
+  const sessionId = c.req.query("session_id");
 
   const content = `
 <style>
@@ -234,6 +235,7 @@ auditProductRoutes.get("/audit", (c) => {
     <ul class="audit-features">
       <li>Risk score (0–100) across all submitted prompts</li>
       <li>Vulnerability breakdown by attack category</li>
+      <li><strong>Adversarial red-team battery</strong> — we also attack your setup with 10 evasion techniques (homoglyphs, zero-width splits, authority fabrication, multilingual smuggling, and more), so you see what slips past — disclosed honestly in the report</li>
       <li>Actionable remediation checklist with priority levels</li>
       <li>OWASP LLM Top 10, NIST AI RMF, and SOC 2 compliance mapping</li>
       <li>Branded PDF-ready HTML report — yours to keep</li>
@@ -357,6 +359,7 @@ ${paid ? `
   }
 
   // Run audit
+  var PAID_SESSION_ID = ${JSON.stringify(sessionId ?? null)};
   var form = document.getElementById('audit-form');
   if (form) {
     form.addEventListener('submit', async function(e) {
@@ -385,7 +388,7 @@ ${paid ? `
         var resp = await fetch('/audit/run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompts: prompts })
+          body: JSON.stringify({ prompts: prompts, session_id: PAID_SESSION_ID })
         });
         if (resp.ok) {
           var data = await resp.json();
@@ -458,12 +461,47 @@ auditProductRoutes.post("/audit/purchase", async (c) => {
 
 // ── POST /audit/run — Run screening and generate report ─────────────────────
 
+/**
+ * Payment gate: the report is a $47 product. The paid landing page carries the
+ * Stripe checkout session_id; we verify it server-side (payment_status ===
+ * "paid") before running. Mock mode (staging) passes through. This closes the
+ * ungated-runner hole found in prospect run 41 (full report obtainable free).
+ */
+async function verifyAuditPayment(sessionId: string | undefined): Promise<
+  { ok: true } | { ok: false; status: 402 | 500; error: string }
+> {
+  if (!isStripeEnabled() || isStripeMockMode()) return { ok: true };
+  if (!sessionId) {
+    return {
+      ok: false,
+      status: 402,
+      error: "Payment required. Purchase the $47 audit on the Audit page, then re-run from the paid page.",
+    };
+  }
+  try {
+    const stripe = getStripe();
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (session.payment_status !== "paid") {
+      return { ok: false, status: 402, error: "This checkout session is not completed. Payment required." };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[audit] session verification failed:", (err as Error).message);
+    return { ok: false, status: 500, error: "Could not verify payment. Please contact support." };
+  }
+}
+
 auditProductRoutes.post("/audit/run", async (c) => {
-  let body: { prompts?: string[]; customer_name?: string };
+  let body: { prompts?: string[]; customer_name?: string; session_id?: string };
   try {
     body = await c.req.json();
   } catch {
     return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const gate = await verifyAuditPayment(body.session_id);
+  if (!gate.ok) {
+    return c.json({ error: gate.error, checkout: "/audit" }, gate.status);
   }
 
   const prompts = body.prompts;

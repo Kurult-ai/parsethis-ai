@@ -90,16 +90,20 @@ reportRoutes.get("/report/:id", async (c) => {
 
   const flagRows = v.flags.length
     ? v.flags
-        .map(
-          (f) => `
+        .map((f) => {
+          const name = f.label ?? f.code;
+          const rationale =
+            f.detail ?? f.evidence ?? undefined;
+          return `
       <tr>
         <td><code>${escapeHtml(f.code)}</code></td>
+        <td>${escapeHtml(name)}</td>
         <td>${f.matched_token ? `<code>${escapeHtml(f.matched_token)}</code>` : "<span style='color:#98a2b3'>—</span>"}</td>
-        <td style="font-size:13px;color:#475467">${f.evidence ? escapeHtml(f.evidence.slice(0, 220)) : "<span style='color:#98a2b3'>semantic finding — see rationale</span>"}</td>
-      </tr>`,
-        )
+        <td style="font-size:13px;color:#475467">${rationale ? escapeHtml(rationale.slice(0, 220)) : "<span style='color:#98a2b3'>detected by the " + escapeHtml(f.code.split(".")[0]) + " layer</span>"}</td>
+      </tr>`;
+        })
         .join("")
-    : `<tr><td colspan="3" style="color:#98a2b3">No flags fired.</td></tr>`;
+    : `<tr><td colspan="4" style="color:#98a2b3">No flags fired.</td></tr>`;
 
   const catChips = v.categories.length
     ? v.categories.map((cat) => `<span class="rep-chip">${escapeHtml(cat)}</span>`).join(" ")
@@ -175,7 +179,7 @@ reportRoutes.get("/report/:id", async (c) => {
   <div class="rep-sec">
     <h2>Flags fired</h2>
     <table class="rep-flags">
-      <thead><tr><th>Flag</th><th>Matched</th><th>Evidence</th></tr></thead>
+      <thead><tr><th>Flag</th><th>Detection</th><th>Matched</th><th>Rationale</th></tr></thead>
       <tbody>${flagRows}</tbody>
     </table>
   </div>

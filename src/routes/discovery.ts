@@ -81,6 +81,13 @@ discoveryRoutes.get("/sitemap.xml", (c) => {
 
   const pages: Array<{ loc: string; priority: string; changefreq: string; lastmod: string }> = [
     { loc: "/", priority: "1.0", changefreq: "daily", lastmod: "2026-05-03" },
+    { loc: "/attack", priority: "0.95", changefreq: "weekly", lastmod: "2026-08-23" },
+    { loc: "/attack/invoice-payment-update", priority: "0.8", changefreq: "monthly", lastmod: "2026-08-23" },
+    { loc: "/attack/crm-exfil-rag", priority: "0.8", changefreq: "monthly", lastmod: "2026-08-23" },
+    { loc: "/attack/urgent-exec-brief", priority: "0.8", changefreq: "monthly", lastmod: "2026-08-23" },
+    { loc: "/attack/calendar-attachment", priority: "0.8", changefreq: "monthly", lastmod: "2026-08-23" },
+    { loc: "/attack/support-ticket-credential", priority: "0.8", changefreq: "monthly", lastmod: "2026-08-23" },
+    { loc: "/audit", priority: "0.85", changefreq: "weekly", lastmod: "2026-08-23" },
     { loc: "/playground", priority: "0.8", changefreq: "weekly", lastmod: "2026-05-04" },
     { loc: "/faq", priority: "0.8", changefreq: "weekly", lastmod: "2026-05-03" },
     { loc: "/pricing", priority: "0.9", changefreq: "weekly", lastmod: "2026-05-03" },
@@ -192,6 +199,8 @@ change. Included on every plan, Free upward.
 
 ## Public Facts
 
+- Attack Pack: ${baseUrl}/attack — five real-world prompt injections dressed as ordinary business email (invoice payment redirect, RAG document exfil, executive authority fabrication, calendar persistence, support-ticket credential echo). Screen one through the production pipeline, get a shareable, tamper-evident evidence report (7-day URL) built to forward to a client security reviewer.
+- Security Audit: ${baseUrl}/audit — one-time $47 audit: your prompts screened plus a 10-technique adversarial red-team battery, OWASP/NIST/SOC2 mapping, and an honest gap disclosure.
 - Free API keys: ${PLAN_LIMITS.free.requestsPerMinute} requests/minute and ${PLAN_LIMITS.free.sandboxExecutionsPerHour} sandbox executions/hour.
 - Pro keys: ${PLAN_LIMITS.pro.requestsPerMinute} requests/minute.
 - Team keys: ${PLAN_LIMITS.team.requestsPerMinute} requests/minute.

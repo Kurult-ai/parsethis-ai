@@ -109,7 +109,7 @@ interface StoredReport {
     risk_score: number;
     disposition: string;
     categories: string[];
-    flags: Array<{ code: string; matched_token?: string; evidence?: string }>;
+    flags: Array<{ code: string; label?: string; matched_token?: string; evidence?: string; detail?: string }>;
     deterministic_floor: boolean;
   };
   /** What an unscreened agent would have done. */
@@ -369,9 +369,11 @@ attackPackRoutes.post("/attack/api/screen", async (c) => {
     const d = (await res.json()) as Record<string, unknown>;
     const flags = Array.isArray(d.flags)
       ? (d.flags as Array<Record<string, unknown>>).map((f) => ({
-          code: String(f.code ?? f.flag ?? "flag"),
+          code: String(f.id ?? f.code ?? f.flag ?? "flag"),
+          label: typeof f.label === "string" ? f.label : undefined,
           matched_token: typeof f.matched_token === "string" ? f.matched_token : undefined,
           evidence: typeof f.evidence === "string" ? f.evidence : undefined,
+          detail: typeof f.detail === "string" ? f.detail : undefined,
         }))
       : [];
 
