@@ -1,0 +1,11 @@
+{
+  "name": "@parsethis/agent-ledger",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude Code hooks that append tool-call and file-path events to the Parse ledger. Paths and digests only.",
+  "bin": {
+    "parsethis-ledger": "./bin/install.mjs"
+  },
+  "type": "module",
+  "license": "MIT"
+}

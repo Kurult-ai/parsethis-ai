@@ -952,6 +952,33 @@ model ComplianceReceipt {
   @@map("compliance_receipts")
 }
 
+/// Agent-action ledger. Paths and digests only — never file contents or prompts.
+/// integrity_hash + chain_hash use the same append-only construction as receipts.
+model LedgerEvent {
+  id             String   @id @default(cuid())
+  eventId        String   @unique @map("event_id")
+  timestamp      DateTime @map("timestamp")
+  agentId        String   @map("agent_id")
+  sessionId      String   @map("session_id")
+  kind           String
+  tool           String   @default("")
+  pathGlob       String   @default("") @map("path_glob")
+  argsDigest     String   @default("") @map("args_digest")
+  outcome        String   @default("")
+  durationMs     Int      @default(0) @map("duration_ms")
+  orgId          String?  @map("org_id")
+  source         String   @default("sdk")
+  seqNum         Int      @map("seq_num")
+  integrityHash  String   @map("integrity_hash")
+  chainHash      String   @map("chain_hash")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, createdAt(sort: Desc)], name: "idx_ledger_events_org_created")
+  @@index([agentId, sessionId], name: "idx_ledger_events_agent_session")
+  @@index([sessionId, seqNum], name: "idx_ledger_events_session_seq")
+  @@map("ledger_events")
+}
+
 /// Signed Agent Identity (Task 10.1)
 /// Cryptographic signing of agent requests so downstream systems can verify
 /// who made a screening call. Agents register an Ed25519 public key, then sign

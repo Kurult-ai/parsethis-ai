@@ -477,7 +477,7 @@ Verification required before reporting done:
   <div class="wrap nav">
     <a class="logo" href="/">${getLogoMarkSvg()}Parse</a>
     <nav class="nav-links">
-      <a href="/demo">Try it</a><a href="/attack">Attack Pack</a><a href="/docs">Docs</a><a href="/technology">Technology</a><a href="/pricing">Pricing</a><a href="/blog">Blog</a><a href="/about">About</a>
+      <a href="/demo">Try it</a><a href="/attack">Attack Pack</a><a href="/ledger">Ledger</a><a href="/docs">Docs</a><a href="/technology">Technology</a><a href="/pricing">Pricing</a><a href="/blog">Blog</a><a href="/about">About</a>
     </nav>
     <div class="nav-right">
       <a class="btn btn-ghost" href="/admin/login">Sign in</a>

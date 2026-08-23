@@ -533,6 +533,7 @@ export const FEATURE_STATUS: FeatureStatusEntry[] = [
   { name: "Delegation Chain", status: "shipped", aliases: ["delegation chain", "agent delegation"] },
   { name: "Policy Engine", status: "shipped", aliases: ["policy engine", "custom rules"] },
   { name: "Evidence Pack", status: "shipped", aliases: ["evidence pack"] },
+  { name: "Agent Action Ledger", status: "shipped", aliases: ["ledger", "agent ledger", "tool call log", "file access log"] },
   // Guard 3 of the subject-role control (src/lib/analysis-role.ts). Was
   // documented on /docs as though it existed, for months, while it did not —
   // which is the finding that cost prospect run 11 more credibility than the

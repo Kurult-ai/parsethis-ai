@@ -109,6 +109,7 @@ export function renderPage(options: PageOptions): string {
   // Build nav links with aria-current for active page
   const navLinks = [
     { href: "/attack", label: "Attack Pack" },
+    { href: "/ledger", label: "Ledger" },
     { href: "/demo", label: "Try it" },
     { href: "/docs", label: "Docs" },
     { href: "/technology", label: "Technology" },
