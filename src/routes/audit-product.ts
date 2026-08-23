@@ -16,6 +16,8 @@ import { PRODUCT } from "../lib/product-facts.js";
 import { parsePrompt } from "../parse.js";
 import type { ParseResponse } from "../parse.js";
 import { generateAuditReport } from "../lib/compliance/audit-report.js";
+import { runAdversarialBattery } from "../lib/compliance/adversarial-battery.js";
+import type { BatteryResult } from "../lib/compliance/adversarial-battery.js";
 import type { AppEnv } from "../types.js";
 
 export const auditProductRoutes = new Hono<AppEnv>();
@@ -519,12 +521,23 @@ auditProductRoutes.post("/audit/run", async (c) => {
     return c.json({ error: "All prompt screenings failed. Please try again." }, 500);
   }
 
+  // Red-team battery: the audit's adversarial half. Same pipeline, hostile
+  // corpus. Runs after customer prompts so their results render first.
+  let batteryResults: BatteryResult[] = [];
+  try {
+    batteryResults = await runAdversarialBattery();
+  } catch (err) {
+    console.error("[audit] Adversarial battery failed:", (err as Error).message);
+    // Customer results still deliver; report simply omits the red-team section.
+  }
+
   // Generate the branded HTML report
   const reportHtml = generateAuditReport({
     prompts: results,
     customerName: body.customer_name,
     auditedAt: new Date().toISOString(),
     baseUrl,
+    adversarial: batteryResults,
   });
 
   return c.json({

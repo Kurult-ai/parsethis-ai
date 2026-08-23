@@ -11,6 +11,7 @@
  */
 
 import type { ParseResponse, RiskFlag } from "../../parse.js";
+import type { BatteryResult } from "./adversarial-battery.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,9 @@ export interface AuditReportInput {
   auditedAt?: string;
   /** Base URL for branding/links */
   baseUrl?: string;
+  /** Adversarial battery results — when present, the report gains a
+   *  red-team section showing attempts the boundary caught vs. gaps. */
+  adversarial?: BatteryResult[];
 }
 
 interface VulnerabilityBreakdown {
@@ -222,6 +226,74 @@ function riskScoreBand(score: number): { label: string; color: string; bgColor: 
   return { label: "Minimal Risk", color: "#15803d", bgColor: "#f0fdf4" };
 }
 
+// ── Adversarial battery section ─────────────────────────────────────────────
+
+/**
+ * The red-team section. Pass line is hostile on purpose: every attempt must
+ * be blocked or flagged. Gaps render in red with the technique named — an
+ * audit that hides its own misses is marketing.
+ */
+function renderAdversarialSection(results: BatteryResult[]): string {
+  const caught = results.filter((r) => r.caught).length;
+  const gaps = results.filter((r) => !r.caught);
+  const rate = results.length > 0 ? Math.round((caught / results.length) * 100) : 0;
+
+  const rows = results
+    .map((r) => {
+      const status = r.caught
+        ? `<span class="adv-pass">⛔ ${escapeHtml(r.disposition.toUpperCase())}</span>`
+        : `<span class="adv-gap">⚠️ PASSED UNSCREENED</span>`;
+      const layers = r.layers.length ? r.layers.join(", ") : "—";
+      return `<tr>
+        <td><strong>${escapeHtml(r.item.id)}</strong><br/><span style="font-size:12px;color:#64748b">${escapeHtml(r.item.name)}</span></td>
+        <td style="font-size:13px">${escapeHtml(r.item.technique)}</td>
+        <td style="font-size:13px">${escapeHtml(r.item.objective)}</td>
+        <td>${status}</td>
+        <td style="font-size:13px">${escapeHtml(layers)}</td>
+        <td style="font-weight:700;color:${r.risk_score >= 7 ? "#dc2626" : r.risk_score >= 4 ? "#ca8a04" : "#16a34a"}">${r.risk_score.toFixed(1)}</td>
+      </tr>`;
+    })
+    .join("\n        ");
+
+  const gapBox =
+    gaps.length > 0
+      ? `<div class="adv-gaps">
+          <h4>⚠️ ${gaps.length} gap${gaps.length > 1 ? "s" : ""} detected</h4>
+          <p>The following techniques were <strong>not caught</strong> at the block/review line. Each is reproducible from this report:</p>
+          <ul>${gaps.map((g) => `<li><strong>${escapeHtml(g.item.id)} — ${escapeHtml(g.item.name)}:</strong> ${escapeHtml(g.item.technique)}</li>`).join("")}</ul>
+          <p style="font-size:12px;color:#64748b">Gaps are disclosed, not hidden. Sentencing them is what the audit is for — forward this section to your security reviewer and <a href="mailto:danny@parsethis.ai">report false negatives</a>; verified catch additions ship weekly.</p>
+        </div>`
+      : `<div class="adv-clean"><h4>✅ Battery clean — all ${results.length} attempts blocked or flagged</h4><p>Every technique in the current corpus was caught by the deterministic pattern layer, the semantic layer, or both.</p></div>`;
+
+  return `
+    <div class="section">
+      <h2>Red-Team Battery — ${caught}/${results.length} attempts caught (${rate}%)</h2>
+      <p style="color:#475569;font-size:14px;margin-bottom:14px">
+        Your prompts above were screened as-is. This section answers the harder question:
+        <strong>does the boundary hold when someone competent attacks it?</strong>
+        A fixed corpus of injection attempts — homoglyphs, zero-width splitting, authority fabrication,
+        payload partitioning, role spoofing, base64 smuggling, multilingual payloads, quoted-frame
+        injection, graduated escalation, and tool-output framing — was run through the same pipeline.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Attempt</th>
+            <th>Technique</th>
+            <th>Objective</th>
+            <th>Result</th>
+            <th>Layers</th>
+            <th>Risk</th>
+          </tr>
+        </thead>
+        <tbody>
+        ${rows}
+        </tbody>
+      </table>
+      ${gapBox}
+    </div>`;
+}
+
 // ── Main report generator ──────────────────────────────────────────────────
 
 export function generateAuditReport(input: AuditReportInput): string {
@@ -371,6 +443,25 @@ export function generateAuditReport(input: AuditReportInput): string {
     .compliance-fail { color: #dc2626; font-weight: 600; }
     .compliance-warn { color: #ca8a04; font-weight: 600; }
     /* CTA */
+    .adv-pass {
+      display: inline-block; padding: 2px 10px; border-radius: 999px;
+      background: #fef2f2; color: #b42318; font-weight: 700; font-size: 12px;
+    }
+    .adv-gap {
+      display: inline-block; padding: 2px 10px; border-radius: 999px;
+      background: #fffaeb; color: #b54708; font-weight: 700; font-size: 12px;
+    }
+    .adv-gaps {
+      margin-top: 16px; padding: 14px 18px; border-radius: 10px;
+      background: #fffaeb; border: 1px solid #fecdca;
+    }
+    .adv-gaps h4 { color: #b54708; margin-bottom: 6px; }
+    .adv-gaps ul { margin: 8px 0 8px 18px; font-size: 13px; }
+    .adv-clean {
+      margin-top: 16px; padding: 14px 18px; border-radius: 10px;
+      background: #ecfdf3; border: 1px solid #a6f4c5;
+    }
+    .adv-clean h4 { color: #067647; margin-bottom: 6px; }
     .cta-box {
       background: linear-gradient(135deg, #1e3a5f 0%, #2d6a9f 100%);
       color: #fff;
@@ -532,6 +623,8 @@ export function generateAuditReport(input: AuditReportInput): string {
         </tbody>
       </table>
     </div>
+
+    ${input.adversarial && input.adversarial.length > 0 ? renderAdversarialSection(input.adversarial) : ""}
 
     <!-- Section 5: Call to Action -->
     <div class="section">
