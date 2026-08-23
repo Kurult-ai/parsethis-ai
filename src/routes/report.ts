@@ -201,8 +201,11 @@ reportRoutes.get("/report/:id", async (c) => {
     <h3>This is the boundary your security review is asking about.</h3>
     <p>Every input your agents read — emails, documents, tool output, web pages — can carry instructions aimed at the agent's authority. Parse screens all of it, blocks what crosses the line, and receipts every decision.</p>
     <p>
-      <a class="btn-primary" href="/attack" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:8px;font-weight:700;text-decoration:none;font-size:14.5px;margin-right:10px">Screen another →</a>
-      <a class="btn-primary" href="/get-started" style="display:inline-block;background:#2f6fed;color:#fff;padding:10px 18px;border-radius:8px;font-weight:700;text-decoration:none;font-size:14.5px">Install Parse →</a>
+      ${v.disposition === "block"
+        ? `<a class="btn-primary" href="/ledger/sample" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:8px;font-weight:700;text-decoration:none;font-size:14.5px;margin-right:10px">See the ledger sample →</a>
+      <a class="btn-primary" href="/attack" style="display:inline-block;background:#2f6fed;color:#fff;padding:10px 18px;border-radius:8px;font-weight:700;text-decoration:none;font-size:14.5px">Screen another →</a>`
+        : `<a class="btn-primary" href="/attack" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:8px;font-weight:700;text-decoration:none;font-size:14.5px;margin-right:10px">Screen another →</a>
+      <a class="btn-primary" href="/get-started" style="display:inline-block;background:#2f6fed;color:#fff;padding:10px 18px;border-radius:8px;font-weight:700;text-decoration:none;font-size:14.5px">Install Parse →</a>`}
     </p>
     <p style="font-size:13px;color:#667085;margin-top:10px">Forward this URL into the review thread. Then put the same boundary on the agent.</p>
   </div>

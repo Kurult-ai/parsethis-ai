@@ -1077,6 +1077,100 @@ discoveryRoutes.get("/openapi.json", (c) => {
           responses: { "200": { description: "Categories with sample tool names" } },
         },
       },
+      "/v1/org/tool-policy/presets": {
+        post: {
+          operationId: "applyOrgToolPolicyPreset",
+          summary: "Apply a named tool-policy preset",
+          description: "block-claude-chrome bans Claude-in-Chrome MCP tools. Does not uninstall the Chrome extension.",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: { preset: { type: "string", enum: ["block-claude-chrome"] } },
+                  required: ["preset"],
+                },
+              },
+            },
+          },
+          responses: { "201": { description: "Preset applied" }, "403": { description: "Requires org_admin" } },
+        },
+      },
+      "/v1/org/image-policy": {
+        get: {
+          operationId: "getOrgImagePolicy",
+          summary: "Read the org image-in-prompt policy",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Mode and allow rules" }, "403": { description: "No organization" } },
+        },
+        put: {
+          operationId: "setOrgImagePolicy",
+          summary: "Set allow, deny, or whitelist for files in a prompt",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Updated" }, "403": { description: "Requires org_admin" } },
+        },
+      },
+      "/v1/org/image-policy/test": {
+        post: {
+          operationId: "testOrgImagePolicy",
+          summary: "Dry-run a prompt's declared file sources against the policy",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Decision" }, "403": { description: "No organization" } },
+        },
+      },
+      "/v1/ledger/event": {
+        post: {
+          operationId: "appendLedgerEvent",
+          summary: "Append one agent-action ledger event",
+          description:
+            "Paths and digests only. `kind` is tool_call | file_read | file_write | file_delete | net_egress | session_start | session_stop. A body with tool or path_glob and no kind defaults to tool_call.",
+          security: [{ BearerAuth: [] }],
+          responses: { "201": { description: "Minted event" }, "400": { description: "Invalid body" } },
+        },
+      },
+      "/v1/ledger/events": {
+        get: {
+          operationId: "listLedgerEvents",
+          summary: "List ledger events for the calling key or its organization",
+          security: [{ BearerAuth: [] }],
+          responses: { "200": { description: "Events the caller is entitled to see" } },
+        },
+        post: {
+          operationId: "appendLedgerEventsBatch",
+          summary: "Append a batch of ledger events",
+          security: [{ BearerAuth: [] }],
+          responses: { "201": { description: "Minted events" } },
+        },
+      },
+      "/v1/ledger/events/{id}/verify": {
+        post: {
+          operationId: "verifyLedgerEvent",
+          summary: "Recompute hashes for one ledger event",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Valid or broken" }, "404": { description: "Not found" } },
+        },
+      },
+      "/v1/ledger/sessions/{sessionId}/replay": {
+        get: {
+          operationId: "replayLedgerSession",
+          summary: "Replay today's allowlist against a session. Hypothetical. Logging is not a control.",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Replay rows" }, "404": { description: "Not found" } },
+        },
+      },
+      "/v1/ledger/sessions/{sessionId}/share": {
+        post: {
+          operationId: "shareLedgerSession",
+          summary: "Mint a 7-day public share URL for one session",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "sessionId", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "share_url" } },
+        },
+      },
       "/v1/org/policy-defaults": {
         get: {
           operationId: "getOrgPolicyCeiling",

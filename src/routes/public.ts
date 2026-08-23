@@ -2069,6 +2069,10 @@ const GUIDE_SLUG_ALIASES: Record<string, string> = {
   "tool-results": "screen-tool-results",
   "code": "code-tool-agent-screening",
 };
+publicRoutes.get("/docs/guides/:slug", (c) => {
+  return c.redirect(`/guides/${c.req.param("slug")}`, 301);
+});
+
 publicRoutes.get("/guides/:slug", (c) => {
   const rawSlug = c.req.param("slug");
   const alias = GUIDE_SLUG_ALIASES[rawSlug];

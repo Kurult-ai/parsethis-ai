@@ -307,6 +307,7 @@ function recordMcpLedger(
       source: "mcp-gateway",
     },
     key?.org_id ?? null,
+    key?.id ?? null,
   );
 }
 

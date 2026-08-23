@@ -49,6 +49,7 @@ import {
 import { prisma } from "../db.js";
 import { getOrgToolPolicy } from "../lib/tool-policy-store.js";
 import { resolveToolList } from "../lib/tool-policy.js";
+import { applyBlockEnforcement } from "../lib/org-screening-policies.js";
 import { verifySignature } from "../lib/identity/signed-identity.js";
 import { recordActivationEvent, getActivationEventTs } from "../lib/activation-tracker.js";
 
@@ -843,12 +844,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
 
         // Enforcement: under "block" mode, escalate risk and block
         if (enforcementMode === "block") {
-          result.risk_score = Math.max(result.risk_score, 7);
-          result.verdict = "critical";
-          result.safe = false;
-          result.suggested_action = "block";
-          result.recommended_action = "block";
-          result.wouldBlock = true;
+          applyBlockEnforcement(result);
         }
       }
     } catch (dgErr) {
@@ -911,12 +907,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
 
             // Enforcement: under "block" mode, escalate risk and block
             if (enforcementMode === "block") {
-              result.risk_score = Math.max(result.risk_score, 7);
-              result.verdict = "critical";
-              result.safe = false;
-              result.suggested_action = "block";
-              result.recommended_action = "block";
-              result.wouldBlock = true;
+              applyBlockEnforcement(result);
             }
           }
         }
@@ -1038,12 +1029,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
 
           // Enforcement: under "block" mode, escalate risk and block
           if (enforcementMode === "block") {
-            result.risk_score = Math.max(result.risk_score, 7);
-            result.verdict = "critical";
-            result.safe = false;
-            result.suggested_action = "block";
-            result.recommended_action = "block";
-            result.wouldBlock = true;
+            applyBlockEnforcement(result);
           }
         }
       }
@@ -1101,12 +1087,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
             result.categories.push("image_policy_violation");
           }
           if (enforcementMode === "block") {
-            result.risk_score = Math.max(result.risk_score, 7);
-            result.verdict = "critical";
-            result.safe = false;
-            result.suggested_action = "block";
-            result.recommended_action = "block";
-            result.wouldBlock = true;
+            applyBlockEnforcement(result);
           }
         }
       }
@@ -1182,12 +1163,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
 
           // Enforcement: under "block" mode, escalate risk and block
           if (enforcementMode === "block") {
-            result.risk_score = Math.max(result.risk_score, 8);
-            result.verdict = "critical";
-            result.safe = false;
-            result.suggested_action = "block";
-            result.recommended_action = "block";
-            result.wouldBlock = true;
+            applyBlockEnforcement(result, 8);
           } else if (enforcementMode === "warn") {
             c.header("X-Egress-Warning", `Egress to "${egressDestination}" would be blocked under "block" mode`);
           }
@@ -1293,12 +1269,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
 
         // Enforcement: under "block" mode, escalate risk and block
         if (enforcementMode === "block") {
-          result.risk_score = Math.max(result.risk_score, 8);
-          result.verdict = "critical";
-          result.safe = false;
-          result.suggested_action = "block";
-          result.recommended_action = "block";
-          result.wouldBlock = true;
+          applyBlockEnforcement(result, 8);
         } else if (enforcementMode === "warn") {
           c.header("X-Volume-Budget-Warning", "Data volume budget exceeded — would be blocked under \"block\" mode");
         }
@@ -1416,12 +1387,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
 
           // Enforcement: under "block" mode, escalate risk and block
           if (enforcementMode === "block") {
-            result.risk_score = Math.max(result.risk_score, 9);
-            result.verdict = "critical";
-            result.safe = false;
-            result.suggested_action = "block";
-            result.recommended_action = "block";
-            result.wouldBlock = true;
+            applyBlockEnforcement(result, 9);
           } else if (enforcementMode === "warn") {
             c.header("X-Approval-Matrix-Block", `Action "${matrixActionType}" on "${cls}" data would be blocked under "block" mode`);
           }

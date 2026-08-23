@@ -69,7 +69,13 @@ mcpRoutes.post("/mcp", async (c) => {
     return c.json(jsonRpcResult(id, {}));
   }
 
+  if (typeof request.method === "string" && request.method.startsWith("notifications/")) {
+    return c.json(jsonRpcResult(id, {}), 202);
+  }
+
   if (request.method === "tools/list") {
+    const authError = await requireEvaluateAuth(c, id);
+    if (authError) return c.json(authError);
     return c.json(jsonRpcResult(id, { tools: MCP_TOOLS }));
   }
 
@@ -153,16 +159,19 @@ async function callScreenPrompt(c: Context<AppEnv>, args: Record<string, unknown
     });
   }
   const action = recommendedAction(result.risk_score);
+  const rec = result.recommended_action ?? result.suggested_action ?? action;
   return {
     risk_score: result.risk_score,
     verdict: result.verdict,
     categories: result.categories,
     flags: result.flags,
     explanation: explainFlags(result.flags),
-    recommended_action: result.suggested_action ?? action,
-    suggested_action: result.suggested_action ?? action,
+    recommended_action: rec,
+    suggested_action: rec,
+    disposition: result.disposition ?? (rec === "block" && result.wouldBlock ? "block" : undefined),
+    wouldBlock: result.wouldBlock,
     approval_request: result.approval_request,
-    override: overrideAffordance(result.suggested_action ?? action, result.categories, result.flags),
+    override: overrideAffordance(rec, result.categories, result.flags),
     trace_id: result.id,
     payment_status: paymentStatus(c),
   };

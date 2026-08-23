@@ -24,7 +24,7 @@ import {
   type LedgerKind,
   verifyLedgerEvent,
 } from "../lib/compliance/agent-ledger.js";
-import { loadSessionEvents, loadSharedSession, persistLedgerEvent, shareSession } from "../lib/compliance/ledger-store.js";
+import { loadSessionEvents, loadSharedSession, persistLedgerEvent, shareSession, ledgerCallerScope } from "../lib/compliance/ledger-store.js";
 import { replayPolicy, sampleReplayPolicy } from "../lib/compliance/policy-replay.js";
 import { getOrgToolPolicy } from "../lib/tool-policy-store.js";
 
@@ -158,18 +158,17 @@ ledgerRoutes.get("/ledger", (c) => {
     <section class="wrap" style="padding:48px 0 80px;max-width:760px">
       <p class="eyebrow">Core product</p>
       <h1>Ledger of agent actions</h1>
-      <p>Parse records every tool call and file path the agent touches — then seals each row into an append-only SHA-256 chain. You forward the page. A reviewer can recompute the hashes.</p>
-      <p><strong>This is not an endpoint agent.</strong> Paths and digests only. No file contents. No prompt text. No kernel monitor.</p>
-      <p>Replay today’s allowlist against a session: <code>GET /v1/ledger/sessions/:id/replay</code>. Hypothetical. Logging is not a control.</p>
+      <p>Parse records the tool names and file-path globs an agent declares — then seals each row into an append-only SHA-256 chain. You forward the page. A reviewer can recompute the hashes.</p>
+      <p><strong>This is not an endpoint agent.</strong> Paths and digests only. No file contents. No prompt text. No kernel monitor. Logging is not a control.</p>
+      <p>Replay today’s allowlist against a session: <code>GET /v1/ledger/sessions/:id/replay</code>. Hypothetical.</p>
       <p>
         <a class="btn" href="/ledger/sample">See a sample session</a>
         <a class="btn btn-ghost" href="/attack">Screen an email first</a>
       </p>
       <h2>Who this is for</h2>
       <p>Technical directors and staff engineers whose agents sit in front of client input. The security review asks two questions: what would the agent have executed, and what did it actually touch? Attack Pack answers the first. Ledger answers the second.</p>
-      <h2>Install (Claude Code)</h2>
-      <pre><code>npx --yes @parsethis/agent-ledger install --key $PARSE_API_KEY</code></pre>
-      <p>Writes <code>PreToolUse</code> / <code>PostToolUse</code> / <code>Stop</code> hooks. Events POST to <code>/v1/ledger/event</code>.</p>
+      <h2>POST an event</h2>
+      <p>Send JSON to <code>POST /v1/ledger/event</code> with a Bearer key. Required: <code>agent_id</code>, <code>session_id</code>. <code>kind</code> is one of <code>tool_call</code>, <code>file_read</code>, <code>file_write</code>, <code>file_delete</code>, <code>net_egress</code>, <code>session_start</code>, <code>session_stop</code>. A body that names <code>tool</code> or <code>path_glob</code> and omits <code>kind</code> defaults to <code>tool_call</code>.</p>
     </section>`;
   return c.html(
     renderPage({
@@ -212,12 +211,15 @@ ledgerRoutes.get("/ledger/sample", (c) => {
 function parseEventBody(raw: unknown): LedgerEventInput | { error: string } {
   if (!raw || typeof raw !== "object") return { error: "JSON object required" };
   const b = raw as Record<string, unknown>;
-  const kind = typeof b.kind === "string" ? b.kind : "";
+  const toolHint = b.tool != null ? String(b.tool) : b.tool_name != null ? String(b.tool_name) : undefined;
+  const pathHint = b.path_glob != null ? String(b.path_glob) : b.path != null ? String(b.path) : undefined;
+  let kind = typeof b.kind === "string" ? b.kind : "";
+  if (!kind && (toolHint || pathHint)) kind = "tool_call";
   if (!isLedgerKind(kind)) return { error: `kind must be one of ${["tool_call", "file_read", "file_write", "file_delete", "net_egress", "session_start", "session_stop"].join(", ")}` };
   const agentId = String(b.agent_id ?? b.agentId ?? "").trim();
   const sessionId = String(b.session_id ?? b.sessionId ?? "").trim();
   if (!agentId || !sessionId) return { error: "agent_id and session_id required" };
-  const tool = b.tool != null ? String(b.tool).slice(0, 80) : undefined;
+  const tool = toolHint != null ? toolHint.slice(0, 80) : undefined;
   const pathGlob = b.path_glob != null ? String(b.path_glob).slice(0, 512) : b.path != null ? String(b.path).slice(0, 512) : undefined;
   const argsDigest =
     typeof b.args_digest === "string"
@@ -252,7 +254,7 @@ ledgerRoutes.post("/v1/ledger/event", authMiddleware("evaluate"), async (c) => {
   if ("error" in parsed) return c.json({ error: parsed.error }, 400);
   const key = c.get("apiKey");
   try {
-    const event = await persistLedgerEvent(parsed, key?.org_id ?? null);
+    const event = await persistLedgerEvent(parsed, key?.org_id ?? null, key?.id ?? null);
     return c.json({ event }, 201);
   } catch (err) {
     const message = err instanceof Error ? err.message : "persist failed";
@@ -276,7 +278,7 @@ ledgerRoutes.post("/v1/ledger/events", authMiddleware("evaluate"), async (c) => 
     for (const item of list) {
       const parsed = parseEventBody(item);
       if ("error" in parsed) return c.json({ error: parsed.error, accepted: minted.length }, 400);
-      minted.push(await persistLedgerEvent(parsed, key?.org_id ?? null));
+      minted.push(await persistLedgerEvent(parsed, key?.org_id ?? null, key?.id ?? null));
     }
     return c.json({ events: minted, count: minted.length }, 201);
   } catch (err) {
@@ -285,15 +287,23 @@ ledgerRoutes.post("/v1/ledger/events", authMiddleware("evaluate"), async (c) => 
   }
 });
 
+function ledgerListWhere(
+  key: { id: string; org_id?: string | null } | undefined,
+  sessionId?: string,
+  agentId?: string,
+): Record<string, unknown> {
+  const scope: Record<string, unknown> = ledgerCallerScope(key?.org_id, key?.id);
+  if (sessionId) scope.sessionId = sessionId;
+  if (agentId) scope.agentId = agentId;
+  return scope;
+}
+
 ledgerRoutes.get("/v1/ledger/events", authMiddleware("evaluate"), async (c) => {
   const key = c.get("apiKey");
   const sessionId = c.req.query("session_id");
   const agentId = c.req.query("agent_id");
   const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") ?? "50")));
-  const where: Record<string, unknown> = {};
-  if (key?.org_id) where.orgId = key.org_id;
-  if (sessionId) where.sessionId = sessionId;
-  if (agentId) where.agentId = agentId;
+  const where = ledgerListWhere(key, sessionId, agentId);
   try {
     const rows = await prisma.ledgerEvent.findMany({
       where,
@@ -329,12 +339,13 @@ ledgerRoutes.get("/v1/ledger/events", authMiddleware("evaluate"), async (c) => {
 ledgerRoutes.post("/v1/ledger/events/:id/verify", authMiddleware("evaluate"), async (c) => {
   const id = c.req.param("id");
   try {
+    const key = c.get("apiKey");
     const row = await prisma.ledgerEvent.findFirst({
-      where: { OR: [{ eventId: id }, { id }] },
+      where: { AND: [ledgerListWhere(key), { OR: [{ eventId: id }, { id }] }] },
     });
     if (!row) return c.json({ error: "not_found" }, 404);
     const prev = await prisma.ledgerEvent.findFirst({
-      where: { sessionId: row.sessionId, seqNum: row.seqNum - 1 },
+      where: { sessionId: row.sessionId, seqNum: row.seqNum - 1, ...ledgerCallerScope(key?.org_id, key?.id) },
     });
     const event: LedgerEventRecord = {
       event_id: row.eventId,
@@ -387,7 +398,7 @@ ledgerRoutes.get("/v1/ledger/sessions/:sessionId/replay", authMiddleware("evalua
   const key = c.get("apiKey");
   const orgId = key?.org_id ?? null;
   try {
-    const events = await loadSessionEvents(sessionId, orgId);
+    const events = await loadSessionEvents(sessionId, orgId, orgId ? null : key?.id ?? null);
     if (events.length === 0) return c.json({ error: "not_found" }, 404);
     let toolMode: "blocklist" | "allowlist" = "blocklist";
     let toolRules: import("../lib/tool-policy.js").ToolRule[] = [];
@@ -419,7 +430,11 @@ ledgerRoutes.post("/v1/ledger/sessions/:sessionId/share", authMiddleware("evalua
   const sessionId = c.req.param("sessionId");
   const key = c.get("apiKey");
   try {
-    const events = await loadSessionEvents(c.req.param("sessionId") ?? "", key?.org_id ?? null);
+    const events = await loadSessionEvents(
+      c.req.param("sessionId") ?? "",
+      key?.org_id ?? null,
+      key?.org_id ? null : key?.id ?? null,
+    );
     if (events.length === 0) return c.json({ error: "not_found" }, 404);
     const id = await shareSession(events);
     if (!id) return c.json({ events, share_url: null, detail: "share store unavailable" }, 200);

@@ -14,6 +14,7 @@ import { prisma } from "../../db.js";
 import { orgScopedWhere, auditScopedWhere } from "../org-scope.js";
 import { replayPolicy } from "./policy-replay.js";
 import { getOrgToolPolicy } from "../tool-policy-store.js";
+import { ledgerCallerScope } from "./ledger-store.js";
 import type { LedgerEventRecord, LedgerKind } from "./agent-ledger.js";
 import {
   OWASP_LLM_2025,
@@ -215,7 +216,7 @@ export async function generateEvidencePack(
       .findMany({
         where: {
           timestamp: { gte: dateFrom, lte: dateTo },
-          ...(orgId ? { orgId } : {}),
+          ...ledgerCallerScope(orgId, apiKeyId),
         },
         orderBy: { timestamp: "asc" },
         take: 500,

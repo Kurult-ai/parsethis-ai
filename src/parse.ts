@@ -781,6 +781,11 @@ export interface ParseResponse {
    */
   override?: OverrideAffordance;
   latency_ms: number;
+  /**
+   * What the caller should do. Distinct from `recommended_action` only when a
+   * later org-policy escalate mutates the finding — both must stay aligned.
+   */
+  disposition?: "allow" | "block" | "review" | "report";
 }
 
 export function computeVerdict(score: number): ParseResponse["verdict"] {

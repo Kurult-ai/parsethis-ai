@@ -211,8 +211,6 @@ Required verification:
     <span style="background:rgba(25,182,175,0.10);border:1px solid var(--accent2);border-radius:20px;padding:4px 14px;font-weight:600;">+ Compliance $199/mo</span>
     <span style="color:var(--text-dim);">→</span>
     <span style="background:rgba(47,111,237,0.10);border:1px solid rgba(47,111,237,0.40);border-radius:20px;padding:4px 14px;font-weight:600;">Enterprise</span>
-    <span style="color:var(--text-dim);">→</span>
-    <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Implementation $3K–$15K</span>
   </div>
   <!--
     Run 40 / A2: the $47 one-time Security Audit no longer occupies a rung on
@@ -369,24 +367,6 @@ latency: 21 ms</pre>
         <li style="padding:6px 0;">Dedicated support</li>
       </ul>
       <a href="mailto:${PRODUCT.contactEmail}?subject=Enterprise%20Plan" class="btn btn-outline" style="width:100%;text-align:center;">Contact Sales</a>
-    </div>
-
-    <!-- Implementation (custom) -->
-    <div class="card" style="display:flex;flex-direction:column;gap:12px;border-color:var(--accent2);position:relative;">
-      <span class="badge badge-accent" style="position:absolute;top:-10px;right:16px;">Custom</span>
-      <div>
-        <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Implementation</div>
-        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$3K&ndash;$15K</div>
-        <div style="font-size:13px;color:var(--text-dim);">one-time project</div>
-      </div>
-      <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Agent architecture review</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Custom screening rules</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Integration &amp; deployment</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Training &amp; handoff</li>
-        <li style="padding:6px 0;">Dedicated engineer</li>
-      </ul>
-      <a href="mailto:${PRODUCT.contactEmail}?subject=Implementation%20Project" class="btn btn-primary" style="width:100%;text-align:center;">Book Consultation</a>
     </div>
 
   </div>
@@ -805,7 +785,7 @@ Content-Type: application/json
   return renderPage({
     title: "Pricing — Free → $12 Solo → $49 Pro → $199 Team → +$199 Compliance add-on",
     description:
-      `${PRODUCT.name} value ladder: Free tier (unlimited instant screening, ${PLAN_LIMITS.free.deepScreeningsPerDay} deep screenings a day), Solo $12/mo (one agent, ${PLAN_LIMITS.solo.deepScreeningsPerMonth.toLocaleString("en-US")} deep screenings, no idle expiry), Pro $49/mo (${PLAN_LIMITS.pro.agents} agents, ${PLAN_LIMITS.pro.environments} environments, ${PLAN_LIMITS.pro.deepScreeningsPerMonth.toLocaleString("en-US")} deep screenings), Team $199/mo, a $199/mo Compliance add-on, and custom Implementation ($3K–$15K). A one-time $47 Security Audit report is available at /audit. ${PRODUCT.name} also offers x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}.`,
+      `${PRODUCT.name} value ladder: Free tier (unlimited instant screening, ${PLAN_LIMITS.free.deepScreeningsPerDay} deep screenings a day), Solo $12/mo (one agent, ${PLAN_LIMITS.solo.deepScreeningsPerMonth.toLocaleString("en-US")} deep screenings, no idle expiry), Pro $49/mo (${PLAN_LIMITS.pro.agents} agents, ${PLAN_LIMITS.pro.environments} environments, ${PLAN_LIMITS.pro.deepScreeningsPerMonth.toLocaleString("en-US")} deep screenings), Team $199/mo, and a $199/mo Compliance add-on. A one-time $47 Security Audit report is available at /audit. ${PRODUCT.name} also offers x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}.`,
     path: "/pricing",
     content,
     baseUrl,

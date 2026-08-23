@@ -136,18 +136,18 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), requi
         select: { id: true, action: true, detail: true, createdAt: true },
       }),
       prisma.auditEvent.count({
-        where: { ...auditScope, action: { in: ["policy_updated", "policy_deleted", "org_policy_defaults.updated", "org_tool_rule.created", "org_tool_rule.deleted"] } },
+        where: { ...auditScope, action: { in: ["policy_updated", "policy_deleted", "org_policy_defaults.updated", "org_tool_rule.created", "org_tool_rule.deleted", "file_acl_rule_created", "file_acl_rule_deleted", "image_prompt_policy_updated", "tool_policy_preset_applied"] } },
       }),
       prisma.$queryRaw<Array<{ agent_id: string; count: bigint; avg_risk: number }>>`
         SELECT
-          (e.metadata->>'agent_id')::text as agent_id,
+          e.agent_id as agent_id,
           count(*) as count,
           AVG(e.risk_score)::float as avg_risk
         FROM screening_events e
         JOIN api_keys k ON k.id = e.api_key_id
         WHERE ${orgFilter}
-          AND e.metadata->>'agent_id' IS NOT NULL
-        GROUP BY agent_id
+          AND e.agent_id IS NOT NULL
+        GROUP BY e.agent_id
         ORDER BY avg_risk DESC
         LIMIT 5
       `,
@@ -197,17 +197,7 @@ complianceRoutes.get("/v1/compliance/summary", authMiddleware("evaluate"), requi
     });
   } catch (err) {
     console.error("[compliance] summary error:", (err as Error).message);
-    return c.json({
-      kpis: { total_screenings: 0, screenings_24h: 0, total_blocked: 0, blocked_24h: 0, pass_rate: "100", total_audit_events: 0, policy_changes: 0 },
-      risk_distribution: [],
-      dispositions: [],
-      top_categories: [],
-      recent_screenings: [],
-      recent_audit: [],
-      top_agents_by_risk: [],
-      enforcement_holes: 0,
-      generated_at: new Date().toISOString(),
-    });
+    return serviceDependencyProblem(c, err);
   }
 });
 

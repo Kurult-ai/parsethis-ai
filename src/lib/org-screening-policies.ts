@@ -18,6 +18,7 @@ type MutableResult = ParseResponse & {
   wouldBlock?: boolean;
   suggested_action?: string;
   recommended_action?: string;
+  disposition?: string;
 };
 
 export async function applyOrgPromptPolicies(
@@ -105,12 +106,17 @@ export async function applyOrgPromptPolicies(
   }
 }
 
-function escalate(result: MutableResult, enforcementMode: string): void {
-  if (enforcementMode !== "block") return;
-  result.risk_score = Math.max(result.risk_score, 7);
+export function applyBlockEnforcement(result: MutableResult, minScore = 7): void {
+  result.risk_score = Math.max(result.risk_score, minScore);
   result.verdict = "critical";
   result.safe = false;
   result.suggested_action = "block";
   result.recommended_action = "block";
   result.wouldBlock = true;
+  result.disposition = "block";
+}
+
+function escalate(result: MutableResult, enforcementMode: string): void {
+  if (enforcementMode !== "block") return;
+  applyBlockEnforcement(result);
 }

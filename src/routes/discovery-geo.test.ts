@@ -70,7 +70,7 @@ describe("GEO discovery surfaces", () => {
     ]);
   });
 
-  it("hosted MCP lists tools and exposes pricing without auth", async () => {
+  it("hosted MCP does not list screening tools without auth; pricing stays public", async () => {
     const listRes = await app.request("/mcp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -78,7 +78,13 @@ describe("GEO discovery surfaces", () => {
     });
     assert.equal(listRes.status, 200);
     const list = await listRes.json();
-    assert.equal(list.result.tools.length, 4);
+    const tools = list.result?.tools;
+    if (Array.isArray(tools)) {
+      assert.equal(tools.length, 0);
+    } else {
+      assert.ok(list.error);
+      assert.notEqual(list.error.code, -32601);
+    }
 
     const pricingRes = await app.request("/mcp", {
       method: "POST",

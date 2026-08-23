@@ -93,7 +93,15 @@ fileAclRoutes.post(
 fileAclRoutes.get("/v1/org/file-acl", authMiddleware("evaluate"), async (c) => {
   const apiKey = c.get("apiKey");
   const orgId = await resolveOrgId(apiKey.id);
-  if (!orgId) return c.json({ rules: [] });
+  if (!orgId) {
+    return problem(c, {
+      status: 403,
+      title: "No organization",
+      detail: "File ACL rules belong to an organization. Bootstrap one first.",
+      code: ErrorCode.AUTH_FORBIDDEN_ROLE,
+      retryable: false,
+    });
+  }
 
   const rules = await prisma.fileAclRule.findMany({
     where: { orgId },

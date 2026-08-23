@@ -16,12 +16,22 @@ import {
 const SHARE_TTL_SEC = 7 * 24 * 60 * 60;
 const SHARE_PREFIX = "ledger:share:";
 
+/** Never `{}`. Empty org selects the caller's rows, not the table. */
+export function ledgerCallerScope(
+  orgId: string | null | undefined,
+  apiKeyId: string | null | undefined,
+): { orgId: string } | { createdByApiKeyId: string } {
+  if (orgId) return { orgId };
+  return { createdByApiKeyId: apiKeyId || "__none__" };
+}
+
 export async function persistLedgerEvent(
   input: LedgerEventInput,
   orgId: string | null,
+  createdByApiKeyId?: string | null,
 ): Promise<LedgerEventRecord> {
   const prev = await prisma.ledgerEvent.findFirst({
-    where: { sessionId: input.sessionId },
+    where: { sessionId: input.sessionId, ...ledgerCallerScope(orgId, createdByApiKeyId) },
     orderBy: { seqNum: "desc" },
   });
   const seq = (prev?.seqNum ?? 0) + 1;
@@ -39,6 +49,7 @@ export async function persistLedgerEvent(
       outcome: minted.outcome,
       durationMs: minted.duration_ms,
       orgId: minted.org_id || orgId,
+      createdByApiKeyId: createdByApiKeyId || null,
       source: minted.source,
       seqNum: minted.seq_num,
       integrityHash: minted.integrity_hash,
@@ -84,9 +95,15 @@ export function rowToRecord(r: {
   };
 }
 
-export async function loadSessionEvents(sessionId: string, orgId?: string | null): Promise<LedgerEventRecord[]> {
-  const where: { sessionId: string; orgId?: string } = { sessionId };
+export async function loadSessionEvents(
+  sessionId: string,
+  orgId?: string | null,
+  createdByApiKeyId?: string | null,
+): Promise<LedgerEventRecord[]> {
+  const where: { sessionId: string; orgId?: string; createdByApiKeyId?: string } = { sessionId };
   if (orgId) where.orgId = orgId;
+  else if (createdByApiKeyId) where.createdByApiKeyId = createdByApiKeyId;
+  else return [];
   const rows = await prisma.ledgerEvent.findMany({
     where,
     orderBy: { seqNum: "asc" },
@@ -120,8 +137,12 @@ export async function loadSharedSession(id: string): Promise<{ events: LedgerEve
 }
 
 /** Fire-and-forget persist. Never throws into the agent path. */
-export function persistLedgerEventSafe(input: LedgerEventInput, orgId: string | null): void {
-  void persistLedgerEvent(input, orgId).catch((err) => {
+export function persistLedgerEventSafe(
+  input: LedgerEventInput,
+  orgId: string | null,
+  createdByApiKeyId?: string | null,
+): void {
+  void persistLedgerEvent(input, orgId, createdByApiKeyId).catch((err) => {
     console.error("[ledger] persist failed:", err instanceof Error ? err.message : err);
   });
 }

@@ -1288,10 +1288,34 @@ function isBenignDomainExpertFraming(text: string): boolean {
   return /\b(?:act\s+as\s+(?:a|an)\s+|pretend\s+(?:you\s+are|to\s+be\s+(?:a|an))\s+|role-?play\s+(?:as\s+(?:a|an)\s+)?)\w+\s+(?:expert|analyst|specialist|consultant|advisor|researcher|engineer|scientist|reviewer|auditor|professional)\b/i.test(text);
 }
 
+/**
+ * `/admin` in a URL path is a location, not a claimed role. `\badmin\b` matches
+ * inside `/admin` because `/` is a non-word character — that is not hierarchy
+ * spoofing. Do not drop `"admin"` from ROLE_SPOOF.
+ */
+function roleTokenIsOnlyPathSegment(window: string): boolean {
+  const re = new RegExp(ROLE_RE.source, "gi");
+  let any = false;
+  let anyNonPath = false;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(window))) {
+    any = true;
+    if (m.index > 0 && window[m.index - 1] === "/") continue;
+    anyNonPath = true;
+  }
+  return any && !anyNonPath;
+}
+
 function maybeFlagRoleSpoof(flags: IntentRiskFlag[], text: string): void {
   for (const window of sentenceWindows(text)) {
+    const roleHit = ROLE_RE.test(window) || UNRESTRICTED_ROLE.test(window) || SYSTEM_DEVELOPER_BOUNDARY.test(window);
+    const pathOnlyRole =
+      roleTokenIsOnlyPathSegment(window) &&
+      !UNRESTRICTED_ROLE.test(window) &&
+      !SYSTEM_DEVELOPER_BOUNDARY.test(window);
     if (
-      !(ROLE_RE.test(window) || UNRESTRICTED_ROLE.test(window) || SYSTEM_DEVELOPER_BOUNDARY.test(window)) ||
+      !roleHit ||
+      pathOnlyRole ||
       !(OPERATIONAL_INSTRUCTION.test(window) || UNRESTRICTED_ROLE.test(window)) ||
       isDefensiveDiscussion(window) ||
       isBenignWorkflowHandoff(window) ||

@@ -6,6 +6,7 @@
 import { renderPage } from "../lib/html-template.js";
 import { prisma } from "../db.js";
 import { resolveOrgId } from "../lib/org-scope.js";
+import { ledgerCallerScope } from "../lib/compliance/ledger-store.js";
 
 export async function renderLedgerDashboardPage(baseUrl: string, apiKeyId: string, apiKeyName: string): Promise<string> {
   const orgId = await resolveOrgId(apiKeyId);
@@ -14,7 +15,7 @@ export async function renderLedgerDashboardPage(baseUrl: string, apiKeyId: strin
   let recent: Array<{ sessionId: string; agentId: string; kind: string; tool: string; pathGlob: string; seqNum: number; timestamp: Date }> = [];
 
   try {
-    const where = orgId ? { orgId } : {};
+    const where = ledgerCallerScope(orgId, apiKeyId);
     const [count, sessions, rows] = await Promise.all([
       prisma.ledgerEvent.count({ where }),
       prisma.ledgerEvent.groupBy({ by: ["sessionId"], where, _count: true }),
