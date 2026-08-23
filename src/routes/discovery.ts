@@ -156,7 +156,7 @@ If your agent's job is to READ content that contains attacks — triaging a phis
 {"prompt": "<the alert>", "metadata": {"intended_action": "summarize"}}
 \`\`\`
 
-\`intended_action\` of \`summarize\`, \`extract\` or \`route\` means your agent reasons ABOUT the content and never acts on it. Findings come back in full — same risk_score, same flags, same categories — with \`disposition: "report"\` instead of a refusal. \`reply\`, \`execute\`, and omitting the field, screen the content as an instruction addressed to your agent, which is the default.
+\`intended_action\` of \`summarize\`, \`extract\`, \`draft\` or \`route\` means your agent reasons ABOUT the content and never acts on it. Findings come back in full — same risk_score, same flags, same categories — with \`disposition: "report"\` instead of a refusal. \`reply\`, \`execute\`, and omitting the field, screen the content as an instruction addressed to your agent, which is the default.
 
 Parse does not infer this. A quoted phishing body and a live injection aimed at your agent can be the same string; the difference is whether YOUR agent will act on it, and only you know that.
 

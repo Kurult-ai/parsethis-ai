@@ -1454,7 +1454,7 @@ parseRoutes.post("/v1/parse", authMiddleware("evaluate"), billableUsageMiddlewar
         risk_score: result.risk_score,
         categories: result.categories,
         flags: result.flags.map((f) => ({ id: f.id, category: f.category, severity: f.severity })),
-        agent_id: body.metadata?.agent_id ?? null,
+        agent_id: sigAgentId ?? null,
         source_kind: body.metadata?.source_kind ?? null,
       },
       reason:

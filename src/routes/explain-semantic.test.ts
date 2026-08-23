@@ -39,7 +39,7 @@ describe("/v1/explain on a semantic refusal", () => {
       fakeModel({
         risk_score: 9,
         categories: ["prompt_injection"],
-        reasoning: "Hidden instruction to close the case and suppress the finding.",
+        reasoning: "Hidden instruction buried in \"the counterparty relationship\" note to close the case and suppress the finding.",
       }),
     );
   });

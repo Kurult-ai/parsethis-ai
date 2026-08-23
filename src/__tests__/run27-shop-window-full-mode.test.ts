@@ -125,6 +125,14 @@ describe("third-party client email on the keyless full path", () => {
     // request path: the demo proxy incrs a counter. Use a unique IP and tolerate
     // 503 when Redis is down in CI — in that case assert via buildDemoUpstream
     // is already covered; here we require a live path when Redis answers.
+    //
+    // The demo key meters deep-screening budget in Redis under `deep:d:demo:<date>`.
+    // A local (persistent) Redis carries yesterday's spent budget into today's
+    // suite run and the semantic layer degrades to skipped_budget — green in CI
+    // (ephemeral Redis), red locally forever after 50 demo calls. Reset the one
+    // key this test depends on; production budget state is untouched.
+    const { getRedis } = await import("../redis.js");
+    try { await getRedis().del("deep:d:demo:" + new Date().toISOString().slice(0, 10)); } catch { /* tolerate Redis down */ }
     const res = await app.request("/demo/api", {
       method: "POST",
       headers: {
