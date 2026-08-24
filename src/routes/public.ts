@@ -1614,7 +1614,7 @@ person who sent the message.</p>
   </table>
 </div>
 
-<p>Human-readable views of the same data: the <a href="/dashboard/compliance">compliance dashboard</a> and <a href="/dashboard/agents">agent dashboard</a> (both need an API key), and the <a href="/trust">trust page</a> for security posture and the pre-answered vendor questionnaire. Org-wide controls — SIEM forwarding, custom rules, evidence packs, RBAC — are part of the <a href="/pricing">Compliance tier</a>.</p>
+<p>Human-readable views of the same data: the <a href="/dashboard/compliance">compliance dashboard</a> and <a href="/dashboard/agents">agent dashboard</a> (both need an API key), and the <a href="/trust">trust page</a> for security posture and the pre-answered vendor questionnaire. Evidence packs and SIEM forwarding are included from <a href="/pricing">Pro</a>. Org-wide controls — custom rules, RBAC, the policy ceiling — are on every plan including Free.</p>
 
 <h2>Authentication</h2>
 

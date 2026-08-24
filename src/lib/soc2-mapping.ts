@@ -42,7 +42,7 @@ export const SOC2_CONTROLS: readonly Soc2Control[] = [
   { principle: "Security (Common Criteria)", criteria: "CC1: Control Environment", control: "Security governance documented; designated security contact. Parse is operated by one person, so that contact is the operator.", status: "implemented" },
   { principle: "", criteria: "CC2: Communication and Information", control: "Security headers endpoint (<code>GET /v1/security/headers</code>), trust page, docs hub, RFC 9116 security.txt", status: "implemented" },
   { principle: "", criteria: "CC3: Risk Assessment", control: "Threat model documented for the prompt injection taxonomy", status: "implemented" },
-  { principle: "", criteria: "CC4: Monitoring Activities", control: "Audit logging on security-relevant events; SIEM forwarding on the compliance tier", status: "implemented" },
+  { principle: "", criteria: "CC4: Monitoring Activities", control: "Audit logging on security-relevant events; SIEM forwarding from the Pro plan up", status: "implemented" },
   { principle: "", criteria: "CC5: Control Activities", control: "RBAC, rate limiting, input validation, policy enforcement", status: "implemented" },
   { principle: "", criteria: "CC6: Logical and Physical Access", control: "Bearer auth, bcrypt-hashed API keys, HSTS, TLS, CORS allowlisting", status: "implemented" },
   { principle: "", criteria: "CC7: System Operations", control: "Structured logging, request tracing (<code>X-Request-ID</code>), graceful shutdown, health checks", status: "implemented" },

@@ -665,7 +665,7 @@ curl -s ${baseUrl}/v1/parse \\
       <div class="prow"><span class="t">Free</span><span class="d">unlimited instant screening · ${PLAN_LIMITS.free.deepScreeningsPerDay} deep/day · org governance</span><span class="p">$0<small>forever</small></span><a class="go" href="/get-started">Install →</a></div>
       <div class="prow"><span class="t">Solo</span><span class="d">my agent · ${PLAN_LIMITS.solo.deepScreeningsPerMonth.toLocaleString("en-US")} deep/mo · no idle expiry</span><span class="p">$${PLAN_LIMITS.solo.pricePerMonth}<small>/mo</small></span><a class="go" href="/pricing">Start →</a></div>
       <div class="prow"><span class="t">Pro</span><span class="d">my product&rsquo;s agents · ${PLAN_LIMITS.pro.agents} agents, ${PLAN_LIMITS.pro.environments} environments</span><span class="p">$${PLAN_LIMITS.pro.pricePerMonth}<small>/mo</small></span><a class="go" href="/pricing">Deploy →</a></div>
-      <div class="prow"><span class="t">Team</span><span class="d">my company&rsquo;s agents · SIEM · data governance</span><span class="p">$${PLAN_LIMITS.team.pricePerMonth}<small>/mo</small></span><a class="go" href="/pricing">Scale →</a></div>
+      <div class="prow"><span class="t">Team</span><span class="d">unlimited agents · ${PLAN_LIMITS.team.deepScreeningsPerMonth.toLocaleString("en-US")} deep/mo</span><span class="p">$${PLAN_LIMITS.team.pricePerMonth}<small>/mo</small></span><a class="go" href="/pricing">Scale →</a></div>
     </div>
     <div class="price-note">$47 one-time Security Audit · x402 pay-per-call is not configured on this deployment (see /v1/pricing).</div>
   </div>

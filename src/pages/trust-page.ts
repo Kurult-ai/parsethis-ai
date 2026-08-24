@@ -288,7 +288,7 @@ having to remember the flag.</p>
     <ul>
       <li>Events: auth_failure, rate_limit_exceeded, policy_change, prompt_screened, bypass_codeword</li>
       <li>Storage: Postgres + structured console logs</li>
-      <li>SIEM forwarding (Compliance tier)</li>
+      <li>SIEM forwarding (Pro plan and above)</li>
       <li><code>X-Request-ID</code> on every response</li>
     </ul>
   </div>
@@ -378,7 +378,7 @@ ${soc2TableHtml()}
     <thead><tr><th>Framework</th><th>Status</th><th>Target</th></tr></thead>
     <tbody>
       <tr><td>ISO 27001</td><td>Planned</td><td>Q3 2027</td></tr>
-      <tr><td>HIPAA</td><td>Planned</td><td>On customer request</td></tr>
+      <tr><td>HIPAA</td><td>Not certified</td><td>No BAA today</td></tr>
       <tr><td>FedRAMP</td><td>Planned</td><td>Q4 2027</td></tr>
       <tr><td>GDPR</td><td>Aligned</td><td>Ongoing — retention + erasure</td></tr>
     </tbody>

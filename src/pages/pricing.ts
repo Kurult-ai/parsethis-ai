@@ -306,7 +306,8 @@ latency: 21 ms</pre>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Going over the included volume never stops your screening</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.pro.sandboxExecutionsPerHour} sandbox/hr</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Determinism cache</strong> — identical input returns the same verdict; the response <code>determinism</code> object says whether it was computed or remembered (replays in ~0.1&nbsp;s against 2.9–12.9&nbsp;s, n=the cached semantic call)</li>
-        <li style="padding:6px 0;">Team ($199) is the same capabilities at unlimited agents, environments and keys</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Team ($199) is the same capabilities at unlimited agents, environments and keys</li>
+        <li style="padding:6px 0;">Forbid per-request downgrades org-wide, with the change on the audit trail</li>
       </ul>
       <a href="/v1/billing/checkout" class="btn btn-primary" style="width:100%;text-align:center;" onclick="event.preventDefault();(async()=>{try{const k=localStorage.getItem('pfa_key');if(k){const r=await fetch('/v1/billing/checkout',{method:'POST',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'},body:JSON.stringify({tier:'pro'})});if(r.ok){const d=await r.json();if(d.url){window.location=d.url;return;}}}const r2=await fetch('/v1/billing/signup-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier:'pro'})});if(!r2.ok){const err=await r2.json().catch(()=>({}));alert(err.error||'Signup failed');return;}const d2=await r2.json();if(d2.key)localStorage.setItem('pfa_key',d2.key);if(d2.checkout_url){window.location=d2.checkout_url;}else{window.location='mailto:${PRODUCT.contactEmail}?subject=Pro%20Plan';}}catch{window.location='mailto:${PRODUCT.contactEmail}?subject=Pro%20Plan';}})();">Start Pro</a>
     </div>
@@ -325,7 +326,7 @@ latency: 21 ms</pre>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.team.requestsPerMinute} req/min</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Going over the included volume never stops your screening</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.team.sandboxExecutionsPerHour} sandbox/hr</li>
-        <li style="padding:6px 0;">Priority support</li>
+        <li style="padding:6px 0;">Forbid per-request downgrades org-wide, with the change on the audit trail</li>
       </ul>
       <a href="/v1/billing/checkout" class="btn btn-primary" style="width:100%;text-align:center;" onclick="event.preventDefault();(async()=>{try{const k=localStorage.getItem('pfa_key');if(k){const r=await fetch('/v1/billing/checkout',{method:'POST',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'},body:JSON.stringify({tier:'team'})});if(r.ok){const d=await r.json();if(d.url){window.location=d.url;return;}}}const r2=await fetch('/v1/billing/signup-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier:'team'})});if(!r2.ok){const err=await r2.json().catch(()=>({}));alert(err.error||'Signup failed');return;}const d2=await r2.json();if(d2.key)localStorage.setItem('pfa_key',d2.key);if(d2.checkout_url){window.location=d2.checkout_url;}else{window.location='mailto:${PRODUCT.contactEmail}?subject=Team%20Plan';}}catch{window.location='mailto:${PRODUCT.contactEmail}?subject=Team%20Plan';}})();">Start Team</a>
     </div>
@@ -342,7 +343,6 @@ latency: 21 ms</pre>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Evidence packs, SIEM forwarding, data governance and the framework crosswalk are included from Pro — this add-on is not the only route to them</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Dedicated support, DPA review and vendor-questionnaire turnaround</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><a href="/dpa">DPA + SCCs</a> handled with you, not self-serve</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Forbid per-request downgrades org-wide, with the change on the audit trail</li>
         <li style="padding:6px 0;">Talk to sales — checkout for this SKU is not self-serve</li>
       </ul>
       <a href="mailto:${PRODUCT.contactEmail}?subject=Compliance%20Plan" class="btn btn-primary" style="width:100%;text-align:center;">Talk to sales</a>
@@ -456,8 +456,10 @@ latency: 21 ms</pre>
       with the rest</strong> &mdash; it has no monthly cap and it wins on price wherever
       ${PLAN_LIMITS.free.requestsPerMinute} req/min is enough. What the paid plans buy is rate headroom,
       evidence spans, no idle expiry and support, not permission to keep screening. Going over a plan's
-      included volume is never a cut-off and is not charged as overage today; a plan shown as
-      &ldquo;over included&rdquo; is simply not the one we would put you on. x402 is pay-per-call with no
+      included volume is never a cut-off and is not charged as overage today. A dim price means
+      that volume is above the plan&rsquo;s included deep budget &mdash; screening still runs.
+      Above ${PLAN_LIMITS.team.deepScreeningsPerMonth.toLocaleString("en-US")} deep/mo, Team still screens;
+      Enterprise is Contact Sales, not a calculator column. x402 is pay-per-call with no
       account, priced alongside so you can compare.
     </p>
   </div>
@@ -482,10 +484,10 @@ latency: 21 ms</pre>
       return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
     }
 
-    // Included volume per plan. Going over is not a cut-off and is not billed as
-    // overage today, so the calculator no longer quotes an overage total it
-    // cannot charge — a plan that does not cover the volume reads "over
-    // included" and drops out of the ranking instead.
+    // Included volume per plan. Going over is not a cut-off and is not billed
+    // as overage today, so every plan still shows its monthly price. Volume
+    // above included dims the figure; lowest-cost is ranked by price, not
+    // by whether the slider is inside the included bucket (run 47).
     var PLANS = [
       { name: 'free', price: 0, included: ${PLAN_LIMITS.free.deepScreeningsPerDay * 30}, el: elFree },
       { name: 'solo', price: ${PLAN_LIMITS.solo.pricePerMonth}, included: ${PLAN_LIMITS.solo.deepScreeningsPerMonth}, el: elSolo },
@@ -504,10 +506,9 @@ latency: 21 ms</pre>
       // the only uncapped tier in the product. Three surfaces, three answers.
       var best = null;
       PLANS.forEach(function(plan) {
-        var covers = reqs <= plan.included;
-        plan.el.textContent = covers ? fmt(plan.price) : 'over included';
-        plan.el.style.color = covers ? '' : 'var(--text-dim)';
-        if (covers && (best === null || plan.price < best.price)) best = plan;
+        plan.el.textContent = fmt(plan.price);
+        plan.el.style.color = reqs > plan.included ? 'var(--text-dim)' : '';
+        if (best === null || plan.price < best.price) best = plan;
       });
 
       elX402.textContent = fmt(reqs * ${Number(X402_ENDPOINTS.parse.price.replace("$", ""))});

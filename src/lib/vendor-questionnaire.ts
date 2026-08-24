@@ -94,7 +94,7 @@ export const VENDOR_QUESTIONNAIRE: QuestionnaireGroup[] = [
     title: `Logging &amp; Monitoring (Q25–Q28)`,
     qas: [
       { num: `25.`, q: `Are security-relevant events logged?`, a: `Yes. Audit events: auth failures, rate limit breaches, policy changes, screening events, bypass codeword usage. Stored in Postgres + structured logs.` },
-      { num: `26.`, q: `Is SIEM integration available?`, a: `Yes. SIEM forwarding via HTTP webhook on Compliance tier. Real-time event forwarding.` },
+      { num: `26.`, q: `Is SIEM integration available?`, a: `Yes. SIEM forwarding via HTTP webhook from the Pro plan up. Real-time event forwarding.` },
       { num: `27.`, q: `Are logs retained and protected?`, a: `Yes, in access-controlled, encrypted storage. Stated retention is ${RETENTION.screeningEventsDays} days for screening logs and 1 year for compliance receipts, enforced by a daily purge job — see <a href="#retention">Retention</a>.` },
       { num: `28.`, q: `Is request traceability supported?`, a: `Yes. X-Request-ID on every API response for end-to-end correlation.` },
     ],

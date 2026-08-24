@@ -205,17 +205,22 @@ export const billingRoutes = new Hono<AppEnv>();
 // so the pricing page "Start Pro" button works for unauthenticated browsers
 // without the mailto fallback.
 billingRoutes.post("/v1/billing/signup-checkout", async (c) => {
+  const body = await c.req
+    .json<{ tier?: string; name?: string }>()
+    .catch(() => ({} as { tier?: string; name?: string }));
+  const tier = body.tier;
+  if (tier === "enterprise") {
+    return c.json(
+      { error: `The enterprise plan is not available for self-serve checkout. Contact ${CONTACT_EMAIL}.` },
+      503,
+    );
+  }
   if (!isStripeEnabled()) {
     return c.json({ error: "Billing not configured" }, 503);
   }
   if (process.env.KEY_GENERATION_ENABLED === "false") {
     return c.json({ error: "Key generation is disabled by the operator" }, 403);
   }
-
-  const body = await c.req
-    .json<{ tier?: string; name?: string }>()
-    .catch(() => ({} as { tier?: string; name?: string }));
-  const tier = body.tier;
   if (!tier || !Object.prototype.hasOwnProperty.call(TIER_CONFIG, tier)) {
     return c.json({ error: "Invalid tier. Must be 'solo', 'pro', 'team', or 'compliance'" }, 400);
   }
@@ -313,13 +318,18 @@ billingRoutes.post("/v1/billing/signup-checkout", async (c) => {
 });
 
 billingRoutes.post("/v1/billing/checkout", authMiddleware("evaluate"), async (c) => {
-  if (!isStripeEnabled()) {
-    return c.json({ error: "Billing not configured" }, 503);
-  }
-
   const body = await c.req.json<{ tier?: string }>();
   const tier = body.tier;
 
+  if (tier === "enterprise") {
+    return c.json(
+      { error: `The enterprise plan is not available for self-serve checkout. Contact ${CONTACT_EMAIL}.` },
+      503,
+    );
+  }
+  if (!isStripeEnabled()) {
+    return c.json({ error: "Billing not configured" }, 503);
+  }
   if (!tier || !Object.prototype.hasOwnProperty.call(TIER_CONFIG, tier)) {
     return c.json({ error: "Invalid tier. Must be 'solo', 'pro', 'team', or 'compliance'" }, 400);
   }

@@ -49,12 +49,22 @@ export function renderCheckoutSuccessPage(baseUrl: string, outcome: CheckoutOutc
       ? "Stripe has taken the payment and we are waiting on its confirmation. This usually takes a few seconds. Your key keeps working throughout."
       : `That checkout session could not be read. If you were charged, nothing is lost — email ${CONTACT_EMAIL} with the receipt and we will put the plan on your key.`;
 
+  const scaleLine =
+    outcome.state === "paid" && outcome.tier === "team"
+      ? `<li><strong>Unlimited agents, environments and keys</strong> — the scale Pro does not include</li>
+  <li><strong>Forbid per-request downgrades org-wide</strong>, with the change on the audit trail</li>`
+      : outcome.state === "paid" && outcome.tier === "pro"
+        ? `<li><strong>${PLAN_LIMITS.pro.agents} agents, ${PLAN_LIMITS.pro.environments} environments</strong></li>
+  <li><strong>Forbid per-request downgrades org-wide</strong>, with the change on the audit trail</li>`
+        : "";
+
   const whatChanged = outcome.state === "paid" && limits
     ? `
 <ul class="checkout-facts">
   <li><strong>${limits.requestsPerMinute} requests/minute</strong>, up from ${PLAN_LIMITS.free.requestsPerMinute} on free</li>
   <li><strong>Unlimited instant screening</strong>, on every plan</li>
   ${"deepScreeningsPerMonth" in limits ? `<li><strong>${limits.deepScreeningsPerMonth.toLocaleString("en-US")} deep screenings</strong> included each month &mdash; going over never stops your screening</li>` : ""}
+  ${scaleLine}
   <li><strong>Evidence spans on flags</strong> — the exact text that tripped each one</li>
   <li><strong>No expiry</strong> on the key</li>
 </ul>`
