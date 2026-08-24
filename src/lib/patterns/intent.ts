@@ -1406,7 +1406,7 @@ const CONCEALMENT_FROM_OWNER =
  * this into the /i regex above — [A-Z][a-z] would then match any word.
  */
 const CONCEALMENT_FROM_NAMED_PERSON =
-  /\b(?:do\s+not|don'?t|never)\b[^.\n]{0,40}\b(?:email|message|contact|text)\b[^.\n]{0,40}\b[A-Z][a-z]{2,20}\b/;
+  /\b(?:[Dd]o\s+not|[Dd]on'?t|[Nn]ever)\b[^.\n]{0,40}\b(?:[Ee]mail|[Mm]essage|[Cc]ontact|[Tt]ext)\b[^.\n]{0,40}\b[A-Z][a-z]{2,20}\b/;
 
 /**
  * Skip the audit trail for the action — same concealment family as
