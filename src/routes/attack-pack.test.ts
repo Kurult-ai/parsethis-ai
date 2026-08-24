@@ -12,6 +12,8 @@ describe("Attack Pack pages", () => {
     assert.match(html, /class="attack-pack"/);
     assert.match(html, /The invoice that redirects payment/);
     assert.match(html, /Would have executed/);
+    assert.match(html, /Five pre-built injections\. One click each/);
+    assert.doesNotMatch(html, /Paste any email/);
     assert.doesNotMatch(html, /#2f6fed/);
     assert.doesNotMatch(html, /var\(--card, #fff\)/);
     assert.doesNotMatch(html, /background: var\(--card/);

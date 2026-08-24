@@ -357,7 +357,7 @@ attackPackRoutes.get("/attack", (c) => {
     <div class="horizon-void"><div class="horizon-core">event horizon</div></div>
   </div>
   <div>
-    <h1 id="attack-title">Paste any email your agent will read. <span class="watch">Watch what it would have executed.</span></h1>
+    <h1 id="attack-title">Five pre-built injections. One click each. <span class="watch">Watch what it would have executed.</span></h1>
     <p class="attack-lede">Five real-world injections dressed as ordinary business text — an invoice, a knowledge-base article, an executive forward, a calendar invite, a support ticket. Every one of them reads as routine to a busy human. Every one carries a payload aimed at an AI agent's authority.</p>
     <p class="attack-fine">Screen one. Forward the report. That's the demo.</p>
   </div>
