@@ -271,7 +271,7 @@ having to remember the flag.</p>
     <ul>
       <li>OAuth 2.0 / OpenID Connect</li>
       <li>Okta, Microsoft Entra ID, Google Workspace, WorkOS</li>
-      <li>Available on Team + Compliance tiers</li>
+      <li>Available on Team</li>
     </ul>
   </div>
   <div class="trust-card">

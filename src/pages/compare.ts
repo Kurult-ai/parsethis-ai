@@ -1,6 +1,6 @@
 import { renderPage } from "../lib/html-template.js";
 import { organizationSchema } from "../lib/schema.js";
-import { DETECTION_FACTS } from "../lib/product-facts.js";
+import { DETECTION_FACTS, PLAN_LIMITS } from "../lib/product-facts.js";
 
 /**
  * Competitive Comparison / SEO Pages (Task 17.3)
@@ -56,7 +56,7 @@ const COMPETITORS: Record<string, CompetitorProfile> = {
       "Notable enterprise clients (Dropbox, AWS, Asana)",
     ],
     gapsParseAddresses: [
-      "Developer self-serve with a published pricing ladder (Free to $199/mo plus a $199 compliance add-on) — no sales call required",
+      `Developer self-serve with a published pricing ladder (Free to $${PLAN_LIMITS.team.pricePerMonth}/mo) — no sales call required on those plans`,
       "Compliance evidence packs with SHA-256 integrity hashes",
       "Agent registry with signed identity",
     ],
@@ -87,7 +87,7 @@ const COMPETITORS: Record<string, CompetitorProfile> = {
     ],
     gapsParseAddresses: [
       "Developer self-serve with transparent pricing — no demo required",
-      "Published pricing ladder from Free to $199/mo",
+      `Published pricing ladder from Free to $${PLAN_LIMITS.team.pricePerMonth}/mo`,
       "Compliance evidence packs with signed receipts",
       "Focused API-first screening (lighter-weight than a full platform)",
     ],
@@ -179,7 +179,7 @@ const COMPETITORS: Record<string, CompetitorProfile> = {
     ],
     gapsParseAddresses: [
       "Developer self-serve — no demo or sales call required",
-      "Published pricing ladder (Free to $199/mo)",
+      `Published pricing ladder (Free to $${PLAN_LIMITS.team.pricePerMonth}/mo)`,
       "Compliance evidence packs with signed receipts and integrity hashes",
       "API-first focused screening",
     ],
@@ -204,7 +204,7 @@ function comparisonTable(competitor: CompetitorProfile): string {
     <tbody>
       <tr>
         <td><strong>Pricing Model</strong></td>
-        <td>Published ladder: Free → $12 → $49 → $199/mo, plus a $199 compliance add-on. No sales call at any tier.</td>
+        <td>Published ladder: Free → $${PLAN_LIMITS.solo.pricePerMonth} → $${PLAN_LIMITS.pro.pricePerMonth} → $${PLAN_LIMITS.team.pricePerMonth}/mo. No sales call on those plans. DPA handling is a support conversation, not a fifth plan.</td>
         <td>${competitor.pricingModel}</td>
       </tr>
       <tr>
@@ -259,7 +259,7 @@ function comparisonTable(competitor: CompetitorProfile): string {
 
 function renderComparePageHtml(competitor: CompetitorProfile, baseUrl: string): string {
   const parseStrengths = [
-    "Published pricing ladder (Free → $12 → $49 → $199/mo) with no sales call at any tier",
+    `Published pricing ladder (Free → $${PLAN_LIMITS.solo.pricePerMonth} → $${PLAN_LIMITS.pro.pricePerMonth} → $${PLAN_LIMITS.team.pricePerMonth}/mo) with no sales call on those plans`,
     "Compliance evidence packs with SHA-256 integrity hashes and signed receipts",
     "Developer self-serve with instant API key generation — no email required for free tier",
     "API-first screening with hosted MCP endpoint and x402 micropayment support",
@@ -282,7 +282,7 @@ function renderComparePageHtml(competitor: CompetitorProfile, baseUrl: string): 
           name: `What is the difference between Parse and ${competitor.name}?`,
           acceptedAnswer: {
             "@type": "Answer",
-            text: `Parse is a developer-first, compliance-focused agent governance API with published pricing (Free to $199/mo plus a $199 compliance add-on). ${competitor.name} is ${competitor.coreProduct.toLowerCase().split(".")[0]}. Parse differentiates through transparent pricing, compliance evidence packs with signed receipts, and a focused API-first screening layer.`,
+            text: `Parse is a developer-first, compliance-focused agent governance API with published pricing (Free to $${PLAN_LIMITS.team.pricePerMonth}/mo). ${competitor.name} is ${competitor.coreProduct.toLowerCase().split(".")[0]}. Parse differentiates through transparent pricing, compliance evidence packs with signed receipts, and a focused API-first screening layer.`,
           },
         },
         {
@@ -290,7 +290,7 @@ function renderComparePageHtml(competitor: CompetitorProfile, baseUrl: string): 
           name: `Is Parse cheaper than ${competitor.name}?`,
           acceptedAnswer: {
             "@type": "Answer",
-            text: `Parse publishes all pricing: Free tier, Solo ($12/mo), Pro ($49/mo), Team ($199/mo), and a Compliance add-on ($199/mo). ${competitor.name}'s pricing is ${competitor.pricingModel.toLowerCase()}. Parse's free tier requires no credit card and no email.`,
+            text: `Parse publishes all pricing: Free tier, Solo ($${PLAN_LIMITS.solo.pricePerMonth}/mo), Pro ($${PLAN_LIMITS.pro.pricePerMonth}/mo), Team ($${PLAN_LIMITS.team.pricePerMonth}/mo). DPA handling is a support conversation, not a fifth plan. ${competitor.name}'s pricing is ${competitor.pricingModel.toLowerCase()}. Parse's free tier requires no credit card and no email.`,
           },
         },
         {

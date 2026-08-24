@@ -202,15 +202,11 @@ Required verification:
   <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:16px 0 24px;font-size:13px;">
     <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Free $0</span>
     <span style="color:var(--text-dim);">→</span>
-    <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Solo $12/mo</span>
+    <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Solo $${PLAN_LIMITS.solo.pricePerMonth}/mo</span>
     <span style="color:var(--text-dim);">→</span>
-    <span style="background:var(--surface);border:1px solid var(--accent);border-radius:20px;padding:4px 14px;font-weight:600;">Pro $49/mo</span>
+    <span style="background:var(--surface);border:1px solid var(--accent);border-radius:20px;padding:4px 14px;font-weight:600;">Pro $${PLAN_LIMITS.pro.pricePerMonth}/mo</span>
     <span style="color:var(--text-dim);">→</span>
-    <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Team $199/mo</span>
-    <span style="color:var(--text-dim);">→</span>
-    <span style="background:rgba(25,182,175,0.10);border:1px solid var(--accent2);border-radius:20px;padding:4px 14px;font-weight:600;">+ Compliance $199/mo</span>
-    <span style="color:var(--text-dim);">→</span>
-    <span style="background:rgba(47,111,237,0.10);border:1px solid rgba(47,111,237,0.40);border-radius:20px;padding:4px 14px;font-weight:600;">Enterprise</span>
+    <span style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-weight:600;">Team $${PLAN_LIMITS.team.pricePerMonth}/mo</span>
   </div>
   <!--
     Run 40 / A2: the $47 one-time Security Audit no longer occupies a rung on
@@ -247,7 +243,7 @@ Required verification:
       <span class="badge" style="position:absolute;top:-10px;right:16px;background:var(--surface);border:1px solid var(--border);">For one agent</span>
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Solo</div>
-        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$12<span style="font-size:14px;font-weight:400;color:var(--text-dim);">/mo</span></div>
+        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$${PLAN_LIMITS.solo.pricePerMonth}<span style="font-size:14px;font-weight:400;color:var(--text-dim);">/mo</span></div>
         <div style="font-size:13px;color:var(--text-dim);">Instant screening by default &middot; ${PLAN_LIMITS.solo.deepScreeningsPerMonth.toLocaleString("en-US")} deep/mo when you ask for it</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
@@ -292,7 +288,7 @@ latency: 21 ms</pre>
       <span class="badge badge-accent" style="position:absolute;top:-10px;right:16px;">Most Popular</span>
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Pro</div>
-        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$49<span style="font-size:14px;font-weight:400;color:var(--text-dim);">/mo</span></div>
+        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$${PLAN_LIMITS.pro.pricePerMonth}<span style="font-size:14px;font-weight:400;color:var(--text-dim);">/mo</span></div>
         <div style="font-size:13px;color:var(--text-dim);">Unlimited instant screening &middot; ${PLAN_LIMITS.pro.deepScreeningsPerMonth.toLocaleString("en-US")} deep/mo</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
@@ -306,7 +302,7 @@ latency: 21 ms</pre>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Going over the included volume never stops your screening</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.pro.sandboxExecutionsPerHour} sandbox/hr</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Determinism cache</strong> — identical input returns the same verdict; the response <code>determinism</code> object says whether it was computed or remembered (replays in ~0.1&nbsp;s against 2.9–12.9&nbsp;s, n=the cached semantic call)</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Team ($199) is the same capabilities at unlimited agents, environments and keys</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Team ($${PLAN_LIMITS.team.pricePerMonth}) is the same capabilities at unlimited agents, environments and keys</li>
         <li style="padding:6px 0;">Forbid per-request downgrades org-wide, with the change on the audit trail</li>
       </ul>
       <a href="/v1/billing/checkout" class="btn btn-primary" style="width:100%;text-align:center;" onclick="event.preventDefault();(async()=>{try{const k=localStorage.getItem('pfa_key');if(k){const r=await fetch('/v1/billing/checkout',{method:'POST',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'},body:JSON.stringify({tier:'pro'})});if(r.ok){const d=await r.json();if(d.url){window.location=d.url;return;}}}const r2=await fetch('/v1/billing/signup-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier:'pro'})});if(!r2.ok){const err=await r2.json().catch(()=>({}));alert(err.error||'Signup failed');return;}const d2=await r2.json();if(d2.key)localStorage.setItem('pfa_key',d2.key);if(d2.checkout_url){window.location=d2.checkout_url;}else{window.location='mailto:${PRODUCT.contactEmail}?subject=Pro%20Plan';}}catch{window.location='mailto:${PRODUCT.contactEmail}?subject=Pro%20Plan';}})();">Start Pro</a>
@@ -316,59 +312,37 @@ latency: 21 ms</pre>
     <div class="card" id="team" style="display:flex;flex-direction:column;gap:12px;scroll-margin-top:90px;">
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Team</div>
-        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$199<span style="font-size:14px;font-weight:400;color:var(--text-dim);">/mo</span></div>
+        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">$${PLAN_LIMITS.team.pricePerMonth}<span style="font-size:14px;font-weight:400;color:var(--text-dim);">/mo</span></div>
         <div style="font-size:13px;color:var(--text-dim);">Unlimited instant screening &middot; ${PLAN_LIMITS.team.deepScreeningsPerMonth.toLocaleString("en-US")} deep/mo</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Org governance</strong> — tool rules, roles, ceiling, audit trail</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Everything on Pro</strong> — evidence packs, SIEM forwarding, data governance, framework crosswalk</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Unlimited agents, environments and keys</strong> — the scale Pro does not include</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Unlimited agents, environments and keys</strong> — the 11th agent is 201; named environments persist</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Undeclared Chrome tools 403 on the gateway</strong> — the wire path does not trust metadata</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.team.requestsPerMinute} req/min</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Going over the included volume never stops your screening</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.team.sandboxExecutionsPerHour} sandbox/hr</li>
-        <li style="padding:6px 0;">Forbid per-request downgrades org-wide, with the change on the audit trail</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Forbid per-request downgrades org-wide, with the change on the audit trail</li>
+        <li style="padding:6px 0;">Leave: <code>GET /billing/cancel</code> (Bearer key). There is no <code>POST /v1/billing/cancel</code>.</li>
       </ul>
       <a href="/v1/billing/checkout" class="btn btn-primary" style="width:100%;text-align:center;" onclick="event.preventDefault();(async()=>{try{const k=localStorage.getItem('pfa_key');if(k){const r=await fetch('/v1/billing/checkout',{method:'POST',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'},body:JSON.stringify({tier:'team'})});if(r.ok){const d=await r.json();if(d.url){window.location=d.url;return;}}}const r2=await fetch('/v1/billing/signup-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier:'team'})});if(!r2.ok){const err=await r2.json().catch(()=>({}));alert(err.error||'Signup failed');return;}const d2=await r2.json();if(d2.key)localStorage.setItem('pfa_key',d2.key);if(d2.checkout_url){window.location=d2.checkout_url;}else{window.location='mailto:${PRODUCT.contactEmail}?subject=Team%20Plan';}}catch{window.location='mailto:${PRODUCT.contactEmail}?subject=Team%20Plan';}})();">Start Team</a>
     </div>
 
-    <!-- Compliance -->
-    <div class="card" style="display:flex;flex-direction:column;gap:12px;border-color:var(--accent2);position:relative;">
-      <span class="badge badge-accent" style="position:absolute;top:-10px;right:16px;">Compliance</span>
-      <div>
-        <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Compliance</div>
-        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">+$199<span style="font-size:14px;font-weight:400;color:var(--text-dim);">/mo on Pro or Team</span></div>
-        <div style="font-size:13px;color:var(--text-dim);">Dedicated support, DPA handling and named-contact review cycles — evidence packs and SIEM are already on Pro. We do not sell an uptime SLA until high-availability infrastructure ships; the DPA is the contract that exists today.</div>
-      </div>
-      <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Evidence packs, SIEM forwarding, data governance and the framework crosswalk are included from Pro — this add-on is not the only route to them</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Dedicated support, DPA review and vendor-questionnaire turnaround</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><a href="/dpa">DPA + SCCs</a> handled with you, not self-serve</li>
-        <li style="padding:6px 0;">Talk to sales — checkout for this SKU is not self-serve</li>
-      </ul>
-      <a href="mailto:${PRODUCT.contactEmail}?subject=Compliance%20Plan" class="btn btn-primary" style="width:100%;text-align:center;">Talk to sales</a>
-      <div style="font-size:12px;color:var(--text-soft);text-align:center;">
-        An add-on for support and contractual handling. The artifacts a compliance buyer needs ship with Pro and Team.
-      </div>
-    </div>
+  </div>
 
-    <!-- Enterprise -->
-    <div class="card" style="display:flex;flex-direction:column;gap:12px;">
-      <div>
-        <div style="font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;">Enterprise</div>
-        <div style="font-size:32px;font-weight:700;letter-spacing:-0.03em;margin:4px 0;">Custom</div>
-        <div style="font-size:13px;color:var(--text-dim);">Beyond Team&rsquo;s rate limit or evidence window</div>
-      </div>
-      <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.enterprise.requestsPerMinute.toLocaleString()}+ req/min &mdash; the limit Team cannot raise</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Deep screening priced on your measured volume</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">Custom SLAs</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.enterprise.sandboxExecutionsPerHour.toLocaleString()} sandbox/hr</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><a href="/dpa">DPA + SCCs</a></li>
-        <li style="padding:6px 0;">Dedicated support</li>
-      </ul>
-      <a href="mailto:${PRODUCT.contactEmail}?subject=Enterprise%20Plan" class="btn btn-outline" style="width:100%;text-align:center;">Contact Sales</a>
-    </div>
-
+  <div class="card" id="dpa-support" style="margin-top:20px;padding:22px;">
+    <h3 style="margin:0 0 6px;font-size:17px;">DPA, SCCs, vendor questionnaires</h3>
+    <p class="pricing-muted" style="margin:0 0 12px;font-size:14px;">
+      Evidence packs, SIEM forwarding, data governance and the framework crosswalk ship with Pro and Team &mdash;
+      they are not a fifth plan. A <a href="/dpa">DPA + SCCs</a> or a named contact for a vendor review is a
+      support conversation. We do not sell an uptime SLA until high-availability infrastructure ships.
+    </p>
+    <p class="pricing-muted" style="margin:0 0 14px;font-size:14px;">
+      Need more than Team&rsquo;s ${PLAN_LIMITS.team.requestsPerMinute} req/min? Same inbox &mdash; there is no public
+      Enterprise price until we have one, and checkout for that path is not self-serve.
+    </p>
+    <a href="mailto:${PRODUCT.contactEmail}?subject=DPA%20and%20support" class="btn btn-outline">Talk to us</a>
   </div>
 
   <!-- What "evidence spans" actually means, shown rather than described. -->
@@ -427,17 +401,17 @@ latency: 21 ms</pre>
       </div>
       <div class="card calc-plan" id="calc-card-solo" style="text-align:center;padding:16px;position:relative;">
         <div style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">Solo</div>
-        <div id="calc-solo" style="font-size:20px;font-weight:700;">$52</div>
+        <div id="calc-solo" style="font-size:20px;font-weight:700;">$${PLAN_LIMITS.solo.pricePerMonth}</div>
         <div class="calc-rec" style="display:none;font-size:11px;color:var(--accent);margin-top:4px;font-weight:600;">Lowest-cost plan</div>
       </div>
       <div class="card calc-plan" id="calc-card-pro" style="text-align:center;padding:16px;position:relative;">
         <div style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">Pro</div>
-        <div id="calc-pro" style="font-size:20px;font-weight:700;">$49</div>
+        <div id="calc-pro" style="font-size:20px;font-weight:700;">$${PLAN_LIMITS.pro.pricePerMonth}</div>
         <div class="calc-rec" style="display:none;font-size:11px;color:var(--accent);margin-top:4px;font-weight:600;">Lowest-cost plan</div>
       </div>
       <div class="card calc-plan" id="calc-card-team" style="text-align:center;padding:16px;position:relative;">
         <div style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">Team</div>
-        <div id="calc-team" style="font-size:20px;font-weight:700;">$199</div>
+        <div id="calc-team" style="font-size:20px;font-weight:700;">$${PLAN_LIMITS.team.pricePerMonth}</div>
         <div class="calc-rec" style="display:none;font-size:11px;color:var(--accent);margin-top:4px;font-weight:600;">Lowest-cost plan</div>
       </div>
       <div class="card calc-plan" id="calc-card-x402" style="text-align:center;padding:16px;position:relative;">
@@ -452,15 +426,16 @@ latency: 21 ms</pre>
       Going over never stops your screening: the request falls back to instant screening and the response
       says so.
 
-      &ldquo;Lowest-cost plan&rdquo; marks the cheapest option at this volume, and <strong>Free is ranked
-      with the rest</strong> &mdash; it has no monthly cap and it wins on price wherever
-      ${PLAN_LIMITS.free.requestsPerMinute} req/min is enough. What the paid plans buy is rate headroom,
-      evidence spans, no idle expiry and support, not permission to keep screening. Going over a plan's
-      included volume is never a cut-off and is not charged as overage today. A dim price means
-      that volume is above the plan&rsquo;s included deep budget &mdash; screening still runs.
-      Above ${PLAN_LIMITS.team.deepScreeningsPerMonth.toLocaleString("en-US")} deep/mo, Team still screens;
-      Enterprise is Contact Sales, not a calculator column. x402 is pay-per-call with no
-      account, priced alongside so you can compare.
+      &ldquo;Lowest-cost plan&rdquo; is the cheapest plan whose rate limit can serve this volume at a
+      4&times; peak during 22 &times; 8-hour business days. Free wins only where
+      ${PLAN_LIMITS.free.requestsPerMinute} req/min is enough for that peak; at fleet volume that is
+      Pro, not a $0 sticker. What the paid plans buy is rate headroom, evidence spans, no idle
+      expiry and support, not permission to keep screening. Going over a plan's included volume
+      is never a cut-off and is not charged as overage today. A dim price means that volume is
+      above the plan&rsquo;s included deep budget &mdash; screening still runs.
+      Above ${PLAN_LIMITS.team.deepScreeningsPerMonth.toLocaleString("en-US")} deep/mo, Team still screens.
+      Need more than ${PLAN_LIMITS.team.requestsPerMinute} req/min? Talk to us &mdash; there is no
+      public Enterprise price yet. x402 is pay-per-call with no account, priced alongside so you can compare.
     </p>
   </div>
 
@@ -486,30 +461,39 @@ latency: 21 ms</pre>
 
     // Included volume per plan. Going over is not a cut-off and is not billed
     // as overage today, so every plan still shows its monthly price. Volume
-    // above included dims the figure; lowest-cost is ranked by price, not
-    // by whether the slider is inside the included bucket (run 47).
+    // above included dims the figure. Lowest-cost is the cheapest plan whose
+    // req/min covers a 4x peak on 22x8h (run 49); Free no longer wins at
+    // fleet volume just because its sticker is $0.
+    var BUSINESS_MINUTES = 22 * 8 * 60;
+    var PEAK_FACTOR = 4;
     var PLANS = [
-      { name: 'free', price: 0, included: ${PLAN_LIMITS.free.deepScreeningsPerDay * 30}, el: elFree },
-      { name: 'solo', price: ${PLAN_LIMITS.solo.pricePerMonth}, included: ${PLAN_LIMITS.solo.deepScreeningsPerMonth}, el: elSolo },
-      { name: 'pro', price: ${PLAN_LIMITS.pro.pricePerMonth}, included: ${PLAN_LIMITS.pro.deepScreeningsPerMonth}, el: elPro },
-      { name: 'team', price: 199, included: 50000, el: elTeam }
+      { name: 'free', price: 0, included: ${PLAN_LIMITS.free.deepScreeningsPerDay * 30}, rpm: ${PLAN_LIMITS.free.requestsPerMinute}, el: elFree },
+      { name: 'solo', price: ${PLAN_LIMITS.solo.pricePerMonth}, included: ${PLAN_LIMITS.solo.deepScreeningsPerMonth}, rpm: ${PLAN_LIMITS.solo.requestsPerMinute}, el: elSolo },
+      { name: 'pro', price: ${PLAN_LIMITS.pro.pricePerMonth}, included: ${PLAN_LIMITS.pro.deepScreeningsPerMonth}, rpm: ${PLAN_LIMITS.pro.requestsPerMinute}, el: elPro },
+      { name: 'team', price: ${PLAN_LIMITS.team.pricePerMonth}, included: ${PLAN_LIMITS.team.deepScreeningsPerMonth}, rpm: ${PLAN_LIMITS.team.requestsPerMinute}, el: elTeam }
     ];
 
     function update() {
       var reqs = parseInt(slider.value, 10);
       valDisplay.textContent = reqs.toLocaleString();
 
-      // Free has no monthly cap, so it covers any volume the per-minute limit
-      // can serve and is ranked with the rest. Prospect run 14: the calculator
-      // refused to rank it as "the evaluation tier" two screens below a card
-      // reading "$0 forever, for one agent", while the middleware treated it as
-      // the only uncapped tier in the product. Three surfaces, three answers.
-      var best = null;
+      var peak = reqs <= 0 ? 0 : (reqs / BUSINESS_MINUTES) * PEAK_FACTOR;
+      var fitting = [];
       PLANS.forEach(function(plan) {
         plan.el.textContent = fmt(plan.price);
         plan.el.style.color = reqs > plan.included ? 'var(--text-dim)' : '';
-        if (best === null || plan.price < best.price) best = plan;
+        if (plan.rpm >= peak) fitting.push(plan);
       });
+      var best = null;
+      if (fitting.length) {
+        fitting.forEach(function(plan) {
+          if (best === null || plan.price < best.price) best = plan;
+        });
+      } else {
+        PLANS.forEach(function(plan) {
+          if (best === null || plan.rpm > best.rpm) best = plan;
+        });
+      }
 
       elX402.textContent = fmt(reqs * ${Number(X402_ENDPOINTS.parse.price.replace("$", ""))});
 
@@ -710,9 +694,9 @@ res = session.post("https://www.parsethis.ai/v1/parse", json={"prompt": "..."})<
           <td>Predictable rate limits and lower operational friction</td>
         </tr>
         <tr>
-          <td>Enterprise</td>
-          <td><strong>Enterprise key</strong></td>
-          <td>Custom limits, DPA review, deployment support</td>
+          <td>DPA, named support, or above Team&rsquo;s rate limit</td>
+          <td><strong>Talk to us</strong></td>
+          <td>Support conversation, not a fifth plan. No public Enterprise price until we have one.</td>
         </tr>
       </tbody>
     </table>
@@ -784,9 +768,9 @@ Content-Type: application/json
 `;
 
   return renderPage({
-    title: "Pricing — Free → $12 Solo → $49 Pro → $199 Team → +$199 Compliance add-on",
+    title: `Pricing — Free → $${PLAN_LIMITS.solo.pricePerMonth} Solo → $${PLAN_LIMITS.pro.pricePerMonth} Pro → $${PLAN_LIMITS.team.pricePerMonth} Team`,
     description:
-      `${PRODUCT.name} value ladder: Free tier (unlimited instant screening, ${PLAN_LIMITS.free.deepScreeningsPerDay} deep screenings a day), Solo $12/mo (one agent, ${PLAN_LIMITS.solo.deepScreeningsPerMonth.toLocaleString("en-US")} deep screenings, no idle expiry), Pro $49/mo (${PLAN_LIMITS.pro.agents} agents, ${PLAN_LIMITS.pro.environments} environments, ${PLAN_LIMITS.pro.deepScreeningsPerMonth.toLocaleString("en-US")} deep screenings), Team $199/mo, and a $199/mo Compliance add-on. A one-time $47 Security Audit report is available at /audit. ${PRODUCT.name} also offers x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}.`,
+      `${PRODUCT.name} value ladder: Free tier (unlimited instant screening, ${PLAN_LIMITS.free.deepScreeningsPerDay} deep screenings a day), Solo $${PLAN_LIMITS.solo.pricePerMonth}/mo (one agent, ${PLAN_LIMITS.solo.deepScreeningsPerMonth.toLocaleString("en-US")} deep screenings, no idle expiry), Pro $${PLAN_LIMITS.pro.pricePerMonth}/mo (${PLAN_LIMITS.pro.agents} agents, ${PLAN_LIMITS.pro.environments} environments, ${PLAN_LIMITS.pro.deepScreeningsPerMonth.toLocaleString("en-US")} deep screenings), Team $${PLAN_LIMITS.team.pricePerMonth}/mo. DPA handling is a support conversation, not a fifth plan. A one-time $47 Security Audit report is available at /audit. ${PRODUCT.name} also offers x402 pay-per-call screening at ${parsePrice} for prompts and ${outputPrice} for outputs, paid in ${X402_PAYMENT.currency} on ${X402_PAYMENT.networkName}.`,
     path: "/pricing",
     content,
     baseUrl,
@@ -795,6 +779,6 @@ Content-Type: application/json
       { name: "Home", href: "/" },
       { name: "Pricing", href: "/pricing" },
     ],
-    lastUpdated: "2026-08-19T12:00:00-04:00",
+    lastUpdated: "2026-08-24T12:00:00-04:00",
   });
 }

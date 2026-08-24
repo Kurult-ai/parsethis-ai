@@ -51,8 +51,10 @@ export function renderCheckoutSuccessPage(baseUrl: string, outcome: CheckoutOutc
 
   const scaleLine =
     outcome.state === "paid" && outcome.tier === "team"
-      ? `<li><strong>Unlimited agents, environments and keys</strong> — the scale Pro does not include</li>
-  <li><strong>Forbid per-request downgrades org-wide</strong>, with the change on the audit trail</li>`
+      ? `<li><strong>Unlimited agents, environments and keys</strong> — the 11th agent is 201; named environments persist</li>
+  <li><strong>Undeclared Chrome tools 403 on the gateway</strong> — the wire path does not trust metadata</li>
+  <li><strong>Forbid per-request downgrades org-wide</strong>, with the change on the audit trail</li>
+  <li>Leave later via <code>GET /billing/cancel</code></li>`
       : outcome.state === "paid" && outcome.tier === "pro"
         ? `<li><strong>${PLAN_LIMITS.pro.agents} agents, ${PLAN_LIMITS.pro.environments} environments</strong></li>
   <li><strong>Forbid per-request downgrades org-wide</strong>, with the change on the audit trail</li>`

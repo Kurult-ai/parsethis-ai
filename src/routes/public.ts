@@ -1591,8 +1591,8 @@ person who sent the message.</p>
         <td>Posture overview: verdict counts, coverage, policy state.</td>
       </tr>
       <tr>
-        <td><code>POST /v1/compliance/export</code></td>
-        <td>Evidence pack export for auditors and vendor reviews.</td>
+        <td><code>GET or POST /v1/compliance/export</code></td>
+        <td>Evidence pack export for auditors and vendor reviews. GET is an alias of POST; query params stand in for the JSON body.</td>
       </tr>
       <tr>
         <td><code>GET /v1/compliance/framework-map</code></td>
@@ -1601,6 +1601,10 @@ person who sent the message.</p>
       <tr>
         <td><code>POST /v1/compliance/siem</code></td>
         <td>SIEM forwarding: register a destination, test it, stream decisions.</td>
+      </tr>
+      <tr>
+        <td><code>GET /billing/cancel</code></td>
+        <td>The leave door for a monthly key. Sends you to the Stripe portal when a subscription exists, otherwise the billing dashboard. Requires a Bearer key (401 without one). There is no <code>POST /v1/billing/cancel</code>.</td>
       </tr>
       <tr>
         <td><code>GET /v1/coverage</code></td>
@@ -1974,7 +1978,7 @@ you can send it to us (<code>pattern.*</code> flags may omit that field).</p>
 <ul>
   <li><a href="/trust">Trust &amp; Security</a> — Security posture, SOC 2 alignment, and vendor questionnaire</li>
   <li><a href="/technology">Technology</a> — Public architecture and non-claimable evidence state</li>
-  <li><a href="/pricing">Pricing</a> — free and monthly tiers, the Compliance tier, and x402 pay-per-call</li>
+  <li><a href="/pricing">Pricing</a> — Free through Team, and x402 pay-per-call. DPA handling is a support conversation, not a fifth plan.</li>
   <li><a href="/faq">FAQ</a> — 20+ common questions</li>
   <li><a href="/blog">Blog</a> — release notes and boundary-defense writing</li>
 </ul>
@@ -4437,7 +4441,9 @@ publicRoutes.post("/account/keys/adopt", sessionMiddleware, async (c) => {
 });
 
 /**
- * POST /v1/billing/portal — the only way out of a subscription.
+ * POST /v1/billing/portal — open the Stripe customer portal.
+ * The browser leave door is GET /billing/cancel (Bearer key). Do not add
+ * POST /v1/billing/cancel.
  *
  * Two surfaces call this with two different credentials, and it must serve
  * both: `/account` (pages/account-dashboard.ts) posts with no Authorization

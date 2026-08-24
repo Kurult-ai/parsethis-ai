@@ -70,7 +70,8 @@ mcpRoutes.post("/mcp", async (c) => {
   }
 
   if (typeof request.method === "string" && request.method.startsWith("notifications/")) {
-    return c.json(jsonRpcResult(id, {}), 202);
+    // JSON-RPC 2.0: a Notification must not receive a Response object.
+    return c.body(null, 202);
   }
 
   if (request.method === "tools/list") {

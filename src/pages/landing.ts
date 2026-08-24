@@ -547,6 +547,8 @@ Verification required before reporting done:
         rather than at the SDK.
       -->
       <div class="hf-fine" style="margin-top:6px;">
+        Running a fleet, not one inbox? Team is the 11th agent and named environments that persist.
+        Undeclared Chrome tools return HTTP 403 on the gateway.
         Running an assistant that drafts replies, triages tickets or reads customer messages?
         <a href="/demo">Screen a batch of your own tickets</a> and see what it would refuse.
         On ${INPUT_PRECISION_FINCRIME.harmlessTotal} lines of financial-crime investigative prose the deterministic layer refused ${INPUT_PRECISION_FINCRIME.harmlessRefusedPatternOnly === 0 ? "none" : INPUT_PRECISION_FINCRIME.harmlessRefusedPatternOnly} — <a href="/docs#precision">the corpus size and measured surface are published</a>.
@@ -665,9 +667,9 @@ curl -s ${baseUrl}/v1/parse \\
       <div class="prow"><span class="t">Free</span><span class="d">unlimited instant screening · ${PLAN_LIMITS.free.deepScreeningsPerDay} deep/day · org governance</span><span class="p">$0<small>forever</small></span><a class="go" href="/get-started">Install →</a></div>
       <div class="prow"><span class="t">Solo</span><span class="d">my agent · ${PLAN_LIMITS.solo.deepScreeningsPerMonth.toLocaleString("en-US")} deep/mo · no idle expiry</span><span class="p">$${PLAN_LIMITS.solo.pricePerMonth}<small>/mo</small></span><a class="go" href="/pricing">Start →</a></div>
       <div class="prow"><span class="t">Pro</span><span class="d">my product&rsquo;s agents · ${PLAN_LIMITS.pro.agents} agents, ${PLAN_LIMITS.pro.environments} environments</span><span class="p">$${PLAN_LIMITS.pro.pricePerMonth}<small>/mo</small></span><a class="go" href="/pricing">Deploy →</a></div>
-      <div class="prow"><span class="t">Team</span><span class="d">unlimited agents · ${PLAN_LIMITS.team.deepScreeningsPerMonth.toLocaleString("en-US")} deep/mo</span><span class="p">$${PLAN_LIMITS.team.pricePerMonth}<small>/mo</small></span><a class="go" href="/pricing">Scale →</a></div>
+      <div class="prow"><span class="t">Team</span><span class="d">unlimited agents · 11th agent · named envs persist · undeclared Chrome 403</span><span class="p">$${PLAN_LIMITS.team.pricePerMonth}<small>/mo</small></span><a class="go" href="/pricing">Scale →</a></div>
     </div>
-    <div class="price-note">$47 one-time Security Audit · x402 pay-per-call is not configured on this deployment (see /v1/pricing).</div>
+    <div class="price-note">Team: the 11th agent is 201 and named environments persist. Undeclared Chrome tools return HTTP 403 on the gateway. $47 one-time Security Audit · x402 pay-per-call is not configured on this deployment (see /v1/pricing).</div>
   </div>
 </section>
 

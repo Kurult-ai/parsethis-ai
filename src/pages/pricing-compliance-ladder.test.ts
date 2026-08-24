@@ -21,8 +21,12 @@ describe("pricing page — compliance surface lives on Pro", () => {
     assert.match(team, /Everything on Pro/);
   });
 
-  it("does not present the Compliance add-on as the only route to evidence packs", () => {
-    assert.match(html, /not the only route/);
-    assert.match(html, /already on Pro/);
+  it("does not sell a Compliance or Enterprise SKU on the value ladder", () => {
+    assert.doesNotMatch(html, /\+\$199/);
+    assert.doesNotMatch(html, /Compliance add-on/);
+    assert.doesNotMatch(html, />Custom</);
+    assert.match(html, /id="dpa-support"/);
+    assert.match(html, /not a fifth plan/);
+    assert.match(html, /no public\s+Enterprise price/);
   });
 });

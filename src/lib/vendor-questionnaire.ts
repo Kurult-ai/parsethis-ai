@@ -55,7 +55,7 @@ export const VENDOR_QUESTIONNAIRE: QuestionnaireGroup[] = [
     qas: [
       { num: `6.`, q: `Is access to systems and data based on role (RBAC)?`, a: `Yes. RBAC with defined roles (${VALID_ROLES.join(", ")}). Access is enforced at route level by middleware, and org-scoped routes additionally refuse a caller outside the organization that owns the record.` },
       { num: `7.`, q: `Are access rights reviewed periodically?`, a: `Not applicable in the form this question assumes. There are no employee accounts with production access, so there are no access rights to review periodically and no departures to revoke. Customer-facing access is per API key: keys are revocable immediately by their owner (<code>DELETE /v1/keys/self</code>) and self-service keys expire after ${RETENTION.selfServiceKeyExpiryDays} idle days.` },
-      { num: `8.`, q: `Are MFA and SSO supported?`, a: `Yes. OAuth 2.0 / OIDC-based SSO (Team + Compliance tiers). MFA enforced for administrative access.` },
+      { num: `8.`, q: `Are MFA and SSO supported?`, a: `Yes. OAuth 2.0 / OIDC-based SSO (Team). MFA enforced for administrative access.` },
       { num: `9.`, q: `Are API keys encrypted at rest?`, a: `Yes. ${SECURITY_FACTS.apiKeyStorage}` },
       { num: `10.`, q: `Is least-privilege access enforced?`, a: `Yes. API keys scoped to organizations and roles. Cross-org access denied at middleware level.` },
     ],

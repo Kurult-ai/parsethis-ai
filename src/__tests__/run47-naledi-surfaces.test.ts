@@ -12,23 +12,22 @@ describe("run 47 Naledi — calculator, copy, enterprise checkout", () => {
   it("calculator still prices Team at 80k and has a lowest-cost plan", async () => {
     const { calculatorView } = await import("../lib/pricing-calculator.js");
     const view = calculatorView(80_000, [
-      { name: "free", price: 0, included: 1500 },
-      { name: "solo", price: 12, included: 3000 },
-      { name: "pro", price: 49, included: 12_000 },
-      { name: "team", price: 199, included: 50_000 },
+      { name: "free", price: 0, included: 1500, rpm: 10 },
+      { name: "solo", price: 12, included: 3000, rpm: 30 },
+      { name: "pro", price: 49, included: 12_000, rpm: 100 },
+      { name: "team", price: 199, included: 50_000, rpm: 500 },
     ]);
     assert.equal(view.priceLabel.team, "$199");
-    assert.equal(view.lowestCost, "free");
+    assert.equal(view.lowestCost, "pro");
     assert.ok(view.overDeep.includes("team"));
   });
 
-  it("pricing page ranks by price not included cap; ceiling lock is on Team not Compliance unique", async () => {
+  it("pricing page ranks by rate-limit fit; ceiling lock is on Team", async () => {
     const html = await (await app.request("/pricing")).text();
     assert.match(html, /plan\.el\.textContent = fmt\(plan\.price\)/);
     assert.doesNotMatch(html, /covers \? fmt\(plan\.price\) : 'over included'/);
     assert.match(html, /id="team"[\s\S]*Forbid per-request downgrades org-wide/);
-    const complianceSlice = html.slice(html.indexOf("+$199"));
-    assert.doesNotMatch(complianceSlice.slice(0, 2500), /Forbid per-request downgrades org-wide/);
+    assert.doesNotMatch(html, /\+\$199/);
     assert.doesNotMatch(html, />Priority support</);
   });
 

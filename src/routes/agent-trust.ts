@@ -103,14 +103,21 @@ agentTrustRoutes.post("/v1/agent/trust/verify", authMiddleware("evaluate"), bill
     }
   }
 
-  const trusted = riskScore <= 3;
+  // Same floor as /v1/parse: a shared-layer block flag is a stop, even when
+  // the numeric score sits just under 7 (a lone severity-8 flag floors at 6.8).
+  const sharedBlocks = shared.flags.some(
+    (f) => f.action_floor === "block" || (f.severity ?? 0) >= 8,
+  );
+  const trusted = riskScore <= 3 && !sharedBlocks;
 
   // The recommendation must reflect the raised risk, not just the trust
   // orchestrator's own view. When the shared layer is what lifted the score,
-  // escalate the recommendation to match (BLOCK at >= 7, FLAG_REVIEW above the
-  // trusted line) rather than returning ALLOW next to risk_score 10.
-  const recommendation =
-    shared.riskScore > trustRiskScore
+  // escalate the recommendation to match (BLOCK at >= 7 or a block floor,
+  // FLAG_REVIEW above the trusted line) rather than returning ALLOW next to
+  // risk_score 10.
+  const recommendation = sharedBlocks
+    ? "BLOCK"
+    : shared.riskScore > trustRiskScore
       ? riskScore >= 7
         ? "BLOCK"
         : riskScore > 3

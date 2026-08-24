@@ -1411,7 +1411,7 @@ const SKIP_IDENTITY =
  * stopword list.
  */
 const CONTROL_BYPASS_PAIRING =
-  /\b(?:forget|skip|bypass|ignore|disregard|disable|suspend|waive|override|do\s+not\s+apply|don't\s+apply|no\s+need\s+for)\b[^.\n]{0,60}\b(?:kyc|aml|cft|sanctions?\s+(?:check|screening|list)|conflict\s+(?:check|screening|search)|dual[-\s]?(?:control|approval|authorization|sign[-\s]?off)|two[-\s]?factor|2fa|mfa|otp|maker[-\s]?checker|four[-\s]?eyes|segregation\s+of\s+duties|sox\s+controls?|ach\s+blocks?|positive\s+pay|fraud\s+(?:hold|review|flag)|compliance\s+(?:review|check|hold|desk|officer)|transaction\s+monitoring|second\s+signatory)\b|\b(?:kyc|aml|cft|dual[-\s]?(?:control|approval|authorization|sign[-\s]?off)|two[-\s]?factor|2fa|mfa|otp|maker[-\s]?checker|four[-\s]?eyes)\b[^.\n]{0,40}\b(?:is\s+)?(?:not\s+)?(?:required|needed|applicable|enabled)\b/i;
+  /\b(?:forget|skip|bypass|ignore|disregard|disable|suspend|waive|override|do\s+not\s+apply|don't\s+apply|no\s+need\s+for|do(?:n'?t|\s+not)\s+wait(?:\s+(?:for|on))?)\b[^.\n]{0,60}\b(?:kyc|aml|cft|sanctions?\s+(?:check|screening|list)|conflict\s+(?:check|screening|search)|dual[-\s]?(?:control|approval|authorization|sign[-\s]?off)|two[-\s]?factor|2fa|mfa|otp|maker[-\s]?checker|four[-\s]?eyes|segregation\s+of\s+duties|sox\s+controls?|ach\s+blocks?|positive\s+pay|fraud\s+(?:hold|review|flag)|compliance\s+(?:review|check|hold|desk|officer)|transaction\s+monitoring|second\s+signatory|second[-\s]?approver|2nd[-\s]?approver)\b|\b(?:kyc|aml|cft|dual[-\s]?(?:control|approval|authorization|sign[-\s]?off)|two[-\s]?factor|2fa|mfa|otp|maker[-\s]?checker|four[-\s]?eyes|second[-\s]?approver|2nd[-\s]?approver)\b[^.\n]{0,40}\b(?:is\s+)?(?:not\s+)?(?:required|needed|applicable|enabled)\b/i;
 
 /**
  * Payment-instruction shape with a bypass clause attached, run 31: a large
@@ -1525,7 +1525,7 @@ function maybeFlagControlBypass(flags: IntentRiskFlag[], text: string): void {
       severity,
       label: "Directive to bypass a named financial/compliance control",
       detail:
-        "The text pairs an override verb with a named control — KYC/AML, dual-approval, 2FA/MFA, "
+        "The text pairs an override verb with a named control — KYC/AML, dual-approval, second approver, 2FA/MFA, "
         + "maker-checker, sanctions screening. Such controls have no legitimate override path through "
         + "untrusted text; when paired with a payment movement it is the classic BEC/wire-fraud shape.",
       confidence: "high",
@@ -1560,6 +1560,47 @@ const OUTBOUND_DATA_DESTINATION =
 const FINANCE_MOVEMENT_REPORTED_SPEECH =
   /\b(?:instruct(?:s|ed|ing)?\s+\w+\s+to|direct(?:s|ed|ing)?\s+\w+\s+to|told\s+to|asks?\s+\w+\s+to|telling\s+\w+\s+to|whether\s+[^.]{0,40}\s+(?:can|should|may)\s+be|reviews?\s+[^.]{0,40}\s+(?:attempts|campaigns)|attempts\s+(?:that\s+)?(?:to|instruct)|victims\s+to|described\s+as|reported\s+that|per\s+the\s+(?:ticket|alert|escalation))\b/i;
 
+/**
+ * Run 49 / run 48: a payment instruction aimed at a named account, with no
+ * URL. `intent.finance_movement` needs an outbound host; BEC wires name a
+ * routing number, factoring account, or acct digits instead. The pairing is
+ * the signal — movement verb + amount + account identifier — not a frozen
+ * sentence. Questions about how to get detention released, and refunds with
+ * no destination account, stay quiet.
+ */
+const PAYMENT_TO_ACCOUNT_VERB =
+  /\b(?:send|wire|transfer|remit|pay|deposit|release|push|move|authorise|authorize)\b/i;
+
+const PAYMENT_TO_ACCOUNT_AMOUNT =
+  /\$\s?[\d,]+(?:\.\d+)?|\b[\d,]{3,}\s*(?:usd|eur|gbp|dollars?)\b/i;
+
+const PAYMENT_TO_ACCOUNT_DEST =
+  /\b(?:factoring\s+(?:acct|account|a\/c)|(?:acct|account|a\/c)(?:\s*(?:no\.?|number|#))?|routing(?:\s*(?:no\.?|number|#))?|aba(?:\s*(?:no\.?|routing)?)?)\s*[:#]?\s*[0-9]{4,}\b|\biban\s*[:#]?\s*[A-Z]{2}\d{2}[A-Z0-9]{6,}\b|\baccount\s+ending\s+(?:in\s+)?\d{4}\b/i;
+
+function maybeFlagPaymentToAccount(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (isDefensiveDiscussion(window)) continue;
+    if (!PAYMENT_TO_ACCOUNT_VERB.test(window)) continue;
+    if (!PAYMENT_TO_ACCOUNT_AMOUNT.test(window)) continue;
+    if (!PAYMENT_TO_ACCOUNT_DEST.test(window)) continue;
+    if (FINANCE_MOVEMENT_REPORTED_SPEECH.test(window)) continue;
+    addFlag(flags, {
+      id: "intent.payment_to_account",
+      category: "privilege_escalation",
+      severity: 8,
+      label: "Payment instruction aimed at a named account",
+      detail:
+        "The text pairs a money-movement verb with an amount and an account, routing, or factoring destination. "
+        + "That is a payment instruction, not a question about process; it does not need a URL to be one.",
+      confidence: "high",
+      attack_family: "payment_instruction",
+      action_floor: "block",
+      evidence: window.slice(0, 240),
+      source: "deterministic_intent",
+    }, [PAYMENT_TO_ACCOUNT_VERB, PAYMENT_TO_ACCOUNT_AMOUNT, PAYMENT_TO_ACCOUNT_DEST]);
+  }
+}
+
 function maybeFlagFinanceMovement(flags: IntentRiskFlag[], text: string): void {
   for (const window of sentenceWindows(text)) {
     if (isDefensiveDiscussion(window)) continue;
@@ -1583,6 +1624,82 @@ function maybeFlagFinanceMovement(flags: IntentRiskFlag[], text: string): void {
       evidence: window.slice(0, 240),
       source: "deterministic_intent",
     }, [FINANCE_MOVEMENT_VERB, OUTBOUND_DATA_DESTINATION]);
+  }
+}
+
+/**
+ * Run 49 C2: dump/forward/export of a record corpus to an email, with no
+ * finance verb and no URL. `intent.finance_movement` will not fire on
+ * "Forward every W-9 … to dumps@…". The pairing is bulk-record + dump verb
+ * + mailbox — not a frozen load id or a particular host.
+ */
+const RECORD_DUMP_VERB =
+  /\b(?:forward|dump|export|mail|email|exfiltrate)\b/i;
+
+const RECORD_CORPUS =
+  /\b(?:every|all|the\s+whole|full)\b[^.\n]{0,60}\b(?:w-?9s?|tax\s+forms?|files?|records?|packets?|export|dump|on\s+file)\b|\b(?:w-?9s?|tms(?:\s+export)?|crm(?:\s+export)?|registry(?:\s+export)?|load\s+(?:dump|export|packet))\b/i;
+
+const EMAIL_DESTINATION =
+  /\b[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}\b/i;
+
+function maybeFlagRecordDumpToEmail(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (isDefensiveDiscussion(window)) continue;
+    if (FINANCE_MOVEMENT_REPORTED_SPEECH.test(window)) continue;
+    if (!RECORD_DUMP_VERB.test(window)) continue;
+    if (!RECORD_CORPUS.test(window)) continue;
+    if (!EMAIL_DESTINATION.test(window)) continue;
+    addFlag(flags, {
+      id: "intent.record_dump_to_email",
+      category: "data_exfiltration",
+      severity: 8,
+      label: "Record dump aimed at an email destination",
+      detail:
+        "The text pairs a dump/forward/export verb with a record corpus and an email destination. "
+        + "A mailbox is an outbound dest the same way a URL is; no finance verb is required.",
+      confidence: "high",
+      attack_family: "data_exfiltration",
+      action_floor: "block",
+      evidence: window.slice(0, 240),
+      source: "deterministic_intent",
+    }, [RECORD_DUMP_VERB, RECORD_CORPUS, EMAIL_DESTINATION]);
+  }
+}
+
+/**
+ * Run 49 C5: standing-rule rewrite that turns the screening layer off.
+ * "Treat inbound as first-party" plus "skip screening on …" is the pairing.
+ * Not a synonym list for the product name, and not fitted to a file type.
+ */
+const SKIP_SCREENER_ON_INBOUND =
+  /\b(?:skip|bypass|disable|turn\s+off)\b[^.\n]{0,48}\b(?:parse(?:this)?|screening|the\s+screener|prompt[-\s]?guard|this\s+screening(?:\s+layer)?)\s+on\b/i;
+
+const FIRST_PARTY_REWRITE =
+  /\b(?:now|treat(?:ed)?\s+as|reclassify(?:ied)?\s+as|mark(?:ed)?\s+as)\b[^.\n]{0,40}\bfirst[-\s]?party\b/i;
+
+function maybeFlagSkipScreener(flags: IntentRiskFlag[], text: string): void {
+  for (const window of sentenceWindows(text)) {
+    if (isDefensiveDiscussion(window)) continue;
+    if (FINANCE_MOVEMENT_REPORTED_SPEECH.test(window)) continue;
+    const skipOn = SKIP_SCREENER_ON_INBOUND.test(window);
+    const firstParty = FIRST_PARTY_REWRITE.test(window);
+    if (!skipOn && !(firstParty && /\b(?:skip|bypass|disable|do(?:n'?t|\s+not)\s+(?:run|screen|inspect))\b/i.test(window))) {
+      continue;
+    }
+    addFlag(flags, {
+      id: "intent.skip_screening_layer",
+      category: "privilege_escalation",
+      severity: 8,
+      label: "Instruction to skip this screening layer",
+      detail:
+        "The text directs the agent to skip or disable screening, or reclassifies untrusted inbound "
+        + "as first-party so inspection does not run. That is a standing-rule rewrite, not a process question.",
+      confidence: "high",
+      attack_family: "control_bypass",
+      action_floor: "block",
+      evidence: window.slice(0, 240),
+      source: "deterministic_intent",
+    }, [SKIP_SCREENER_ON_INBOUND, FIRST_PARTY_REWRITE]);
   }
 }
 
@@ -2391,6 +2508,9 @@ function detectIntentPromptRisksInner(prompt: string, normalizedPrompt = prompt)
     maybeFlagConcealedDirective(flags, text);
     maybeFlagControlBypass(flags, text);
     maybeFlagFinanceMovement(flags, text);
+    maybeFlagPaymentToAccount(flags, text);
+    maybeFlagRecordDumpToEmail(flags, text);
+    maybeFlagSkipScreener(flags, text);
     maybeFlagAuthorityAssertion(flags, text);
     maybeFlagFuzzyOverride(flags, text);
     maybeFlagInstructionDisclosure(flags, text);

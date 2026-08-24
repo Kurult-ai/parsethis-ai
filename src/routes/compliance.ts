@@ -12,7 +12,7 @@
  * Access: per-API-key, scoped to the key's org
  */
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { requireEntitlement } from "../lib/require-tier.js";
 import { authMiddleware } from "../auth.js";
 import { prisma } from "../db.js";
@@ -293,17 +293,24 @@ complianceRoutes.get("/v1/compliance/coverage", authMiddleware("evaluate"), requ
   return c.json({ frameworks: generateCoverageReport() });
 });
 
-// ─── POST /v1/compliance/export — Generate structured evidence pack ─────
+// ─── POST|GET /v1/compliance/export — Generate structured evidence pack ─
+// GET is an alias of POST: same guards, same pack. Query params stand in for
+// the JSON body so a browser or curl without -d can fetch the pack.
 
-complianceRoutes.post("/v1/compliance/export", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst"), requireEntitlement("evidenceArtifacts", "Evidence pack export"), async (c) => {
+async function handleEvidenceExport(c: Context<AppEnv>) {
   const apiKey = c.get("apiKey");
-  const body = await c.req.json().catch(() => ({}));
+  const body = c.req.method === "GET"
+    ? {}
+    : await c.req.json().catch(() => ({} as Record<string, unknown>)) as Record<string, unknown>;
+  const q = (name: string) => c.req.query(name);
 
-  const framework = body.framework ?? body.fw ?? "all";
-  const dateFrom = body.date_from ? new Date(body.date_from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const dateTo = body.date_to ? new Date(body.date_to) : new Date();
-  const format = body.format ?? "json";
-  const download = body.download === true || c.req.query("download") === "true";
+  const framework = String(body.framework ?? body.fw ?? q("framework") ?? q("fw") ?? "all");
+  const dateFromRaw = body.date_from ?? body.from ?? q("date_from") ?? q("from");
+  const dateToRaw = body.date_to ?? body.to ?? q("date_to") ?? q("to");
+  const dateFrom = dateFromRaw ? new Date(String(dateFromRaw)) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const dateTo = dateToRaw ? new Date(String(dateToRaw)) : new Date();
+  const format = String(body.format ?? q("format") ?? "json");
+  const download = body.download === true || q("download") === "true";
 
   try {
     const evidencePack = await generateEvidencePack(
@@ -352,7 +359,10 @@ complianceRoutes.post("/v1/compliance/export", authMiddleware("evaluate"), requi
     console.error("[compliance] export error:", (err as Error).message);
     return c.json({ error: "Failed to generate evidence pack", detail: (err as Error).message }, 500);
   }
-});
+}
+
+complianceRoutes.post("/v1/compliance/export", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst"), requireEntitlement("evidenceArtifacts", "Evidence pack export"), handleEvidenceExport);
+complianceRoutes.get("/v1/compliance/export", authMiddleware("evaluate"), requireRole("org_admin", "security_analyst"), requireEntitlement("evidenceArtifacts", "Evidence pack export"), handleEvidenceExport);
 
 // ─── SIEM Configuration ─────────────────────────────────────────────────
 

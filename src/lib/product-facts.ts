@@ -32,7 +32,6 @@ export const PLAN_LIMITS = {
   pro: { requestsPerMinute: 100, sandboxExecutionsPerHour: 50, label: "Pro", deepScreeningsPerMonth: 12_000, pricePerMonth: 49, agents: 10, environments: 3 },
   team: { requestsPerMinute: 500, sandboxExecutionsPerHour: 200, label: "Team", deepScreeningsPerMonth: 50_000, pricePerMonth: 199 },
   compliance: { requestsPerMinute: 500, sandboxExecutionsPerHour: 500, label: "Compliance" },
-  volume: { requestsPerMinute: 500, sandboxExecutionsPerHour: 200, label: "Volume", requestsPerMonth: 1_000_000, pricePerMonth: 4999, perMillionRate: 4000 },
   enterprise: { requestsPerMinute: 1000, sandboxExecutionsPerHour: 1000, label: "Enterprise" },
 } as const;
 

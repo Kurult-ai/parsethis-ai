@@ -1387,7 +1387,7 @@ discoveryRoutes.get("/openapi.json", (c) => {
           operationId: "exportEvidencePack",
           summary: "Evidence pack for auditors and vendor reviews",
           description:
-            "A tamper-evident pack for the period: disposition counts, the screens that were reported rather than refused (each with the declaration that caused it), the refusals, the state of the org-wide allowSubjectRole control and every change to it, and framework control mappings. Carries a SHA-256 integrity hash over the whole document.",
+            "A tamper-evident pack for the period: disposition counts, the screens that were reported rather than refused (each with the declaration that caused it), the refusals, the state of the org-wide allowSubjectRole control and every change to it, and framework control mappings. Carries a SHA-256 integrity hash over the whole document. GET on this path is an alias: the same guards, query params standing in for the JSON body.",
           security: [{ BearerAuth: [] }],
           requestBody: {
             required: false,
@@ -1400,6 +1400,8 @@ discoveryRoutes.get("/openapi.json", (c) => {
                     framework: { type: "string", enum: ["owasp-llm", "nist-ai-rmf", "eu-ai-act", "iso-42001", "soc2", "all"], default: "all" },
                     from: { type: "string", format: "date-time" },
                     to: { type: "string", format: "date-time" },
+                    date_from: { type: "string", format: "date-time" },
+                    date_to: { type: "string", format: "date-time" },
                   },
                 },
               },
@@ -1407,7 +1409,28 @@ discoveryRoutes.get("/openapi.json", (c) => {
           },
           responses: {
             "200": { description: "Evidence pack" },
-            "403": { description: "Requires org_admin, security_analyst or auditor" },
+            "403": { description: "Requires org_admin or security_analyst" },
+          },
+        },
+        get: {
+          operationId: "exportEvidencePackGet",
+          summary: "Evidence pack (GET alias of POST)",
+          description:
+            "Same pack as POST /v1/compliance/export. Query parameters stand in for the JSON body.",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "framework", in: "query", schema: { type: "string", enum: ["owasp-llm", "nist-ai-rmf", "eu-ai-act", "iso-42001", "soc2", "all"] } },
+            { name: "fw", in: "query", schema: { type: "string" } },
+            { name: "date_from", in: "query", schema: { type: "string", format: "date-time" } },
+            { name: "date_to", in: "query", schema: { type: "string", format: "date-time" } },
+            { name: "from", in: "query", schema: { type: "string", format: "date-time" } },
+            { name: "to", in: "query", schema: { type: "string", format: "date-time" } },
+            { name: "format", in: "query", schema: { type: "string", enum: ["json", "csv"], default: "json" } },
+            { name: "download", in: "query", schema: { type: "boolean" } },
+          ],
+          responses: {
+            "200": { description: "Evidence pack" },
+            "403": { description: "Requires org_admin or security_analyst" },
           },
         },
       },

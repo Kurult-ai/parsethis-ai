@@ -178,7 +178,7 @@ Pattern-only screening is a real trade: pattern matching alone under-reports par
 - **Protocol:** OAuth 2.0 / OpenID Connect
 - **Implementation:** `src/routes/sso.ts`, `src/lib/sso/sso-provider.ts`
 - **Supported providers:** Configurable (Google, Microsoft, Okta, Auth0, custom OIDC)
-- **Status:** Shipped — available on Team and Compliance tiers
+- **Status:** Shipped — available on Team
 
 ### 2.4 Encryption
 
@@ -378,7 +378,7 @@ Not applicable in the form this question assumes. There are no employee accounts
 
 **8. Are MFA and SSO supported?**
 
-Yes. OAuth 2.0 / OIDC-based SSO (Team + Compliance tiers). MFA enforced for administrative access.
+Yes. OAuth 2.0 / OIDC-based SSO (Team). MFA enforced for administrative access.
 
 **9. Are API keys encrypted at rest?**
 
