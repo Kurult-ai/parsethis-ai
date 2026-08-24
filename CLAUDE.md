@@ -117,6 +117,15 @@ severity ≥ 8, cannot downgrade via `summarize`. Hero and `/demo` share
 `POST /demo/api` but not a Redis bucket (`src/lib/demo-quota.ts`).
 Pins live in `src/__tests__/run23-helpdesk-pins.test.ts`.
 
+**Clinic-ops English is the job (run 47 / naledi-moyo-highest-tier).**
+`roster` / `MRN` / clinic `chart` count as exfil artifacts only with an
+export/send verb **and** a destination URL (`hasDataExfilToUrl` in
+`src/lib/patterns/contextual.ts`). Do not stopword those nouns. HTML comments
+that conceal `cc`/`send`/`export` to an email or URL are injection (severity 8).
+A clinic "24-hour cancel rule" is not `SAFETY_BYPASS_MODE` — that regex
+requires a safety-system collocate (`safety rules`, `content rules`). C4
+standing-rule injections stay on `intent.new_authority_assertion`. Pins:
+`src/__tests__/run47-naledi.test.ts`.
 
 ### Trust Verification (`src/lib/trust-verification/`)
 6-layer agent trust pipeline:
@@ -253,6 +262,13 @@ never before it is written: caching the clamped value would delay an admin's
 change until every member key's cache entry expired. A field in `lockedFields`
 takes the org value outright, and `PUT /v1/policy` returns 422 rather than
 clamping such a write silently.
+
+**Named environments (run 47).** Policy GET/PUT persist any name matching
+`[a-z0-9][a-z0-9._-]{0,39}` and echo it on `environments[]`. Invalid names
+400. Screening `resolveEnvironment` still fail-opens a garbage header to
+production so `/v1/parse` never 400s on a typo. The three reserved words are
+no longer the only names a Team key can write. Pins:
+`src/__tests__/run47-naledi-env.test.ts`.
 
 **Gateway custody (supersedes ADR-001 C17).** The gateway used to hold its
 config in one process-global variable and required `admin` scope to set, on the
@@ -489,7 +505,13 @@ would have sold the $999/mo plan for $47 the moment that price was wired up. A
 tier whose variable is unset is reported by `isTierPurchasable()` and its checkout
 returns 503 instead of throwing a 500. Only Solo, Pro and Team have prices in
 Stripe today; Compliance is sales-led, so its card links to email and self-serve
-checkout refuses on purpose.
+checkout refuses on purpose. Enterprise is not in `TIER_CONFIG`;
+`POST /v1/billing/signup-checkout` and `/v1/billing/checkout` with
+`tier: "enterprise"` return 503 with the contact email (same door as
+Compliance), not `400 Invalid tier`. The `/pricing` volume slider still shows
+each plan's monthly price when the requested volume is above included deep —
+going over never stops screening, so the calculator must not rank every key
+as "over included".
 
 ## Deployment (production)
 

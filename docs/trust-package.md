@@ -198,7 +198,7 @@ Pattern-only screening is a real trade: pattern matching alone under-reports par
   - `prompt_screened` — Screening events (verdict, categories, score)
   - `screening_codeword_bypass_used` — Emergency bypass codeword usage
 - **Storage:** Postgres `AuditEvent` table + structured console logs (JSON)
-- **SIEM forwarding:** Available on Compliance tier; forwards to customer SIEM via HTTP webhook
+- **SIEM forwarding:** Available from the Pro plan up; forwards to customer SIEM via HTTP webhook
 - **Request traceability:** Every response includes `X-Request-ID` for end-to-end correlation
 
 ### 2.6 Additional Security Headers
@@ -311,7 +311,7 @@ Parse is pursuing SOC 2 Type II certification. The audit is **in progress** with
 | **Security (Common Criteria)** | CC1: Control Environment | Security governance documented; designated security contact. Parse is operated by one person, so that contact is the operator. | ✅ Implemented |
 |  | CC2: Communication and Information | Security headers endpoint (`GET /v1/security/headers`), trust page, docs hub, RFC 9116 security.txt | ✅ Implemented |
 |  | CC3: Risk Assessment | Threat model documented for the prompt injection taxonomy | ✅ Implemented |
-|  | CC4: Monitoring Activities | Audit logging on security-relevant events; SIEM forwarding on the compliance tier | ✅ Implemented |
+|  | CC4: Monitoring Activities | Audit logging on security-relevant events; SIEM forwarding from the Pro plan up | ✅ Implemented |
 |  | CC5: Control Activities | RBAC, rate limiting, input validation, policy enforcement | ✅ Implemented |
 |  | CC6: Logical and Physical Access | Bearer auth, bcrypt-hashed API keys, HSTS, TLS, CORS allowlisting | ✅ Implemented |
 |  | CC7: System Operations | Structured logging, request tracing (`X-Request-ID`), graceful shutdown, health checks | ✅ Implemented |
@@ -322,7 +322,7 @@ Parse is pursuing SOC 2 Type II certification. The audit is **in progress** with
 | **Confidentiality** | C1: Confidentiality | TLS in transit, bcrypt/AES-256 for secrets, no prompt storage on the screening endpoints | ✅ Implemented |
 | **Privacy** | P1–P8: Privacy | Documented retention enforced by a daily purge job, data governance module, approval matrix | ✅ Implemented |
 
-No auditor has examined these controls. The column records whether Parse has implemented the control, self-assessed, and is not an audit result — SOC 2 Type II is in progress with an expected completion of Q1 2027, and there is no independent penetration test yet (first test scheduled for Q2 2027, after SOC 2 fieldwork).
+No auditor has examined these controls. The column records whether Parse has implemented the control, self-assessed, and is not an audit result — SOC 2 Type II is in progress with an expected completion of Q1 2027, and there is no independent penetration test.
 
 <!-- END GENERATED: soc2-mapping -->
 
@@ -331,7 +331,7 @@ No auditor has examined these controls. The column records whether Parse has imp
 | Framework | Status | Target |
 |---|---|---|
 | ISO 27001 | Planned | Q3 2027 |
-| HIPAA | Planned | On customer request |
+| HIPAA | Not certified | No BAA today |
 | FedRAMP | Planned | Q4 2027 |
 | GDPR | Aligned | Ongoing — data retention policies, right to erasure via support |
 
@@ -448,7 +448,7 @@ Yes. Reports accepted at security@parsethis.ai. 48h acknowledgment SLA, 90h reme
 
 **23. Are penetration tests performed?**
 
-**No — and the first one is scheduled.** No independent penetration test has been performed against Parse yet; the first is scheduled for Q2 2027, immediately after SOC 2 Type II fieldwork completes, so the remediation of findings feeds the same audit cycle. Saying the current state plainly is more useful to your assessment than a scheduled-basis claim you cannot verify — treat this as an open gap until the report exists, and weigh it against the compensating controls listed on this page. Automated dependency scanning does run on every CI build (`npm audit`, failing at high severity), and the vulnerability disclosure programme in section 4 is live.
+**No.** No independent penetration test has been performed against Parse. Saying so plainly is more useful to your assessment than a scheduled-basis claim you cannot verify — treat this as an open gap and weigh it against the compensating controls listed on this page. Automated dependency scanning does run on every CI build (`npm audit`, failing at high severity), and the vulnerability disclosure programme in section 4 is live.
 
 **24. Is there a patch management process?**
 
@@ -462,7 +462,7 @@ Yes. Audit events: auth failures, rate limit breaches, policy changes, screening
 
 **26. Is SIEM integration available?**
 
-Yes. SIEM forwarding via HTTP webhook on Compliance tier. Real-time event forwarding.
+Yes. SIEM forwarding via HTTP webhook from the Pro plan up. Real-time event forwarding.
 
 **27. Are logs retained and protected?**
 
