@@ -78,6 +78,9 @@ export const INJECTION_PATTERNS: Array<{
   // ── Indirect injection (15 patterns) ──────────────────────────────────────
   { pattern: /"instructions?":\s*"[^"]*(?:ignore|override|disregard)/i, category: "prompt_injection", severity: 7, label: "JSON embedded instruction override" },
   { pattern: /<!--\s*(?:ignore|override|system|disregard|instruction)/i, category: "prompt_injection", severity: 6, label: "HTML comment injection" },
+  // Concealed action + destination inside a comment (run 47 C3). Not the
+  // override lexicon — a cc/send/export/forward to an email or URL.
+  { pattern: /<!--[\s\S]{0,500}?\b(?:cc|send|export|forward|email)\b[\s\S]{0,240}?(?:https?:\/\/|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})[\s\S]{0,160}?-->/i, category: "prompt_injection", severity: 8, label: "HTML comment injection" },
   { pattern: /\[\/\/\]:\s*#\s*\(/, category: "prompt_injection", severity: 6, label: "Markdown hidden text" },
   { pattern: /\bfield\s*=\s*["'][^"']*ignore\s+previous/i, category: "prompt_injection", severity: 7, label: "Data field manipulation" },
   { pattern: /\bsystem\s*:\s*["']?(?:ignore|override|disregard|forget)/i, category: "prompt_injection", severity: 7, label: "YAML system field injection" },

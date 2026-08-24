@@ -491,7 +491,7 @@ const NEW_AUTHORITY_CLAIM =
   /\b(?:new|supplement|updated|correct|important\s+update|maintenance\s+mode|factory\s+settings)\b[^.\n]{0,80}\b(?:instructions?|rules?|directives?|task|statement|authority)\b|\b(?:instructions?|rules?|directives?)\b[^.\n]{0,80}\b(?:have|has|are|were)\s+(?:changed|updated|void|suspended|lifted|replaced|wrong|incorrect|false)\b|\bregardless\s+of\s+prior\s+instructions?\b/i;
 
 const SAFETY_BYPASS_MODE =
-  /\b(?:all\s+)?(?:content\s+polic(?:y|ies)|safety\s+(?:measures?|protocols?|features?|responses?)|filters?|restrictions?|rules?|guidelines?|moderation|alignment\s+training|ethics?)\b[^.\n]{0,120}\b(?:disabled|suspended|lifted|removed|deprecated|off|do\s+not\s+apply|don't\s+apply|no\s+longer\s+apply|replaced)|\b(?:unrestricted|uncensored|unfiltered|jailbroken|godmode|dan\s+mode|evil\s+genius|rogue\s+ai|without\s+(?:content\s+)?(?:warnings?|disclaimers?|restrictions?|limitations?|filters?|guidelines?|rules?))\b/i;
+  /\b(?:all\s+)?(?:content\s+polic(?:y|ies)|safety\s+(?:measures?|protocols?|features?|responses?|rules?|guidelines?)|(?:content|filter|moderation|guideline|restriction)\s+rules?|filters?|restrictions?|guidelines?|moderation|alignment\s+training|ethics?)\b[^.\n]{0,120}\b(?:disabled|suspended|lifted|removed|deprecated|off|do\s+not\s+apply|don't\s+apply|no\s+longer\s+apply|replaced)|\b(?:unrestricted|uncensored|unfiltered|jailbroken|godmode|dan\s+mode|evil\s+genius|rogue\s+ai|without\s+(?:content\s+)?(?:warnings?|disclaimers?|restrictions?|limitations?|filters?|guidelines?|rules?))\b/i;
 
 const TERMINAL_OR_INTERPRETER_MODE =
   /\b(?:act\s+as|function\s+as|be|fungieren\s+sie\s+als)\b[^.\n]{0,120}\b(?:linux\s+terminal|terminal|interpreter|sql|database|python|shell)\b[^]{0,520}\b(?:only\s+(?:reply|respond)|nothing\s+else|my\s+first\s+command|commands?|code\s+to\s+access|terminal\s+output|einzigen\s+codeblock)\b|\b(?:linux\s*-?\s*terminal|terminal)\b[^]{0,520}\b(?:fungieren|terminalausgabe|einzigen\s+codeblock|mein\s+erster\s+befehl)\b|\b(?:generate|generieren|write|schreibe)\b[^.\n]{0,80}\b(?:sql|c\+\+|python)\b[^.\n]{0,120}\b(?:access\s+a\s+database|auf\s+eine\s+datenbank\s+zuzugreifen|gedruckte anweisungen|printed statements?|database|datenbank)\b/i;
@@ -1709,9 +1709,19 @@ function maybeFlagReset(flags: IntentRiskFlag[], text: string): void {
   }
 }
 
+/** "cancel rule" as a compound noun (a cancellation policy) is not "cancel the rules". */
+function isBareCancelRuleCompound(window: string): boolean {
+  if (!/\bcancel\s+rules?\b/i.test(window)) return false;
+  return !/\bcancel\s+(?:the|all|any|every|those|these|previous|prior|earlier|above|old|original|governing)\s+(?:[\w'-]+\s+){0,3}rules?\b/i.test(window);
+}
+
 function maybeFlagFuzzyOverride(flags: IntentRiskFlag[], text: string): void {
   for (const window of sentenceWindows(text)) {
     if (!(FUZZY_OVERRIDE.test(window) || SPACED_OVERRIDE.test(window)) || isDefensiveDiscussion(window)) continue;
+    if (isBareCancelRuleCompound(window)) {
+      const withoutCompound = window.replace(/\bcancel\s+rules?\b/gi, " ");
+      if (!(FUZZY_OVERRIDE.test(withoutCompound) || SPACED_OVERRIDE.test(withoutCompound))) continue;
+    }
     // A speaker withdrawing their own words is not discarding the agent's
     // instructions. The finding stands; the floor drops. See isOwnerSelfCorrection.
     const selfCorrection = isOwnerSelfCorrection(window);
