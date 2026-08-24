@@ -439,6 +439,12 @@ for free and impossible to buy — while `/health`, the hourly service probes an
 the screening API all stayed green. **Every monitor checked whether Parse was
 alive; none checked whether it could be bought.**
 
+`GET /checkout/success` paints "the plan is live" only when `api_keys.tier`
+already matches the purchased plan. Stripe `payment_status=paid` is not enough:
+a Redis-fallback key (`redis_…`) has no row to upgrade, and a still-free key is
+webhook lag (processing, not congratulations). `POST /v1/billing/signup-checkout`
+returns 503 rather than taking a card for a Redis-fallback key.
+
 Two rules the probe must keep, because it runs against production:
 1. **It identifies itself** (`X-Parse-Probe: 1`, keys named per the synthetic
    convention), so it never pollutes the funnel it protects.

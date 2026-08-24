@@ -533,8 +533,15 @@ Verification required before reporting done:
           <div id="hero-why" style="font-size:13px;color:rgba(255,255,255,.8);margin-top:8px;"></div>
           <div id="hero-engine" style="font-size:12px;color:rgba(255,255,255,.58);margin-top:8px;">${escapeHtml(HERO_ENGINE_NOTE)}</div>
           <div id="hero-ask" style="margin-top:13px;display:none;">
-            <a class="btn btn-white" href="/get-started">Install Parse &mdash; free, no card</a>
-            <div style="font-size:12px;color:rgba(255,255,255,.62);margin-top:7px;">That verdict took milliseconds on the deterministic layer. The free tier runs it unlimited.</div>
+            <div id="hero-ask-refused" style="display:none;">
+              <a class="btn btn-white" href="/pricing#solo">Start Solo $${PLAN_LIMITS.solo.pricePerMonth}</a>
+              <a href="/get-started" style="margin-left:12px;font-size:13px;color:rgba(255,255,255,.78);">Install Parse &mdash; free, no card</a>
+              <div style="font-size:12px;color:rgba(255,255,255,.62);margin-top:7px;">No idle expiry — the plan for an agent nobody is watching. Free stays available.</div>
+            </div>
+            <div id="hero-ask-default">
+              <a class="btn btn-white" href="/get-started">Install Parse &mdash; free, no card</a>
+              <div style="font-size:12px;color:rgba(255,255,255,.62);margin-top:7px;">That verdict took milliseconds on the deterministic layer. The free tier runs it unlimited.</div>
+            </div>
           </div>
         </div>
       </div>` : ""}
@@ -1359,20 +1366,25 @@ curl -s ${baseUrl}/v1/parse \\
         }
         if (scoreEl) scoreEl.textContent = 'risk ' + score + ' / 10 · ' + (d.verdict || '') + ' · ' + (d.latency_ms != null ? d.latency_ms + ' ms' : 'deterministic');
         if (whyEl) {
+          var labels = [];
           var tokens = [];
           var categories = [];
           var flags = d.flags || [];
           for (var i = 0; i < flags.length; i++) {
+            var lab = flags[i] && flags[i].label;
+            if (lab && labels.indexOf(lab) === -1) labels.push(lab);
             var t = flags[i] && flags[i].matched_token;
             if (t && tokens.indexOf(t) === -1) tokens.push(t);
             var cat = flags[i] && flags[i].category;
             if (cat && categories.indexOf(cat) === -1) categories.push(cat);
           }
-          whyEl.textContent = tokens.length
-            ? 'What tripped it: ' + tokens.map(function (t) { return '“' + t + '”'; }).join(' ')
-            : (flags.length
-              ? 'Flagged: ' + (categories.join(', ') || 'present')
-              : (refused || held ? 'Flagged by the deterministic layer.' : 'Nothing flagged. Ordinary text is not refused.'));
+          whyEl.textContent = labels.length
+            ? labels.join(' · ')
+            : (tokens.length
+              ? 'What tripped it: ' + tokens.map(function (t) { return '“' + t + '”'; }).join(' ')
+              : (flags.length
+                ? 'Flagged: ' + (categories.join(', ') || 'present')
+                : (refused || held ? 'Flagged by the deterministic layer.' : 'Nothing flagged. Ordinary text is not refused.')));
         }
         paintRemaining(d);
         var engineEl = document.getElementById('hero-engine');
@@ -1381,8 +1393,12 @@ curl -s ${baseUrl}/v1/parse \\
           engineEl.textContent = llmRan ? ENGINE_FULL : ENGINE_PATTERN;
         }
         if (result) result.style.display = 'block';
-        /* The ask, after the proof — never before it. */
+        /* The ask, after the proof — never before it. Solo $12 only after a refusal. */
         if (ask) ask.style.display = 'block';
+        var refusedAsk = document.getElementById('hero-ask-refused');
+        var defaultAsk = document.getElementById('hero-ask-default');
+        if (refusedAsk) refusedAsk.style.display = refused ? 'block' : 'none';
+        if (defaultAsk) defaultAsk.style.display = refused ? 'none' : 'block';
       })
       .catch(function () {
         btn.disabled = false;

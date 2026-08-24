@@ -291,6 +291,22 @@ billingRoutes.post("/v1/billing/signup-checkout", async (c) => {
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   const apiKey = await createApiKey(name, ["analyze", "evaluate", "chat"], expiresAt);
 
+  // A Redis-fallback key has no api_keys row. Checkout can charge it; the
+  // webhook cannot grant the tier. Refuse the card instead of taking it.
+  if (apiKey.id.startsWith("redis_")) {
+    await revokeApiKey(apiKey.id).catch(() => {});
+    console.error(
+      `[billing] signup-checkout refused: minted Redis-fallback key ${apiKey.id}; checkout cannot grant a tier.`,
+    );
+    return c.json(
+      {
+        error: "Signup cannot take a card until the account store is available. Try again in a minute.",
+        retryable: true,
+      },
+      503,
+    );
+  }
+
   const baseUrl = process.env.PUBLIC_BASE_URL || "https://www.parsethis.ai";
   try {
     const checkoutUrl = await createCheckoutSession(apiKey.id, tier as PaidTier, baseUrl);

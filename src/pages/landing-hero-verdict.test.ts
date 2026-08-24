@@ -46,7 +46,18 @@ describe("formatHeroScreenResult — the shipped hero contract", () => {
     assert.match(view.why, /Nothing flagged/);
   });
 
-  it("says Flagged: <category> when a flag has no matched_token", () => {
+  it("prefers flag.label over category when a flag has no matched_token", () => {
+    const view = formatHeroScreenResult({
+      suggested_action: "block",
+      risk_score: 9.2,
+      flags: [{ label: "Hidden HTML-comment instruction", category: "indirect_injection" }],
+    });
+    assert.match(view.why, /Hidden HTML-comment instruction/);
+    assert.doesNotMatch(view.why, /Flagged: indirect_injection/);
+    assert.doesNotMatch(view.why, /Nothing flagged/);
+  });
+
+  it("says Flagged: <category> when a flag has neither label nor matched_token", () => {
     const view = formatHeroScreenResult({
       suggested_action: "sandbox",
       risk_score: 6,
@@ -107,6 +118,18 @@ describe("the rendered landing hero script keeps the contract", () => {
 
   it("never says Nothing flagged when a flag is present without a token", () => {
     assert.match(script!, /Flagged:/);
+  });
+
+  it("prefers flag.label in the inline hero script", () => {
+    assert.match(script!, /flags\[i\] && flags\[i\]\.label/);
+  });
+
+  it("offers Start Solo $12 after a refusal, not as the default ask", () => {
+    assert.match(html, /id="hero-ask-refused"/);
+    assert.match(html, /Start Solo/);
+    assert.match(html, /No idle expiry/);
+    assert.match(script!, /hero-ask-refused/);
+    assert.match(script!, /refused \? 'block' : 'none'/);
   });
 
   it("labels the engine and names the mode", () => {

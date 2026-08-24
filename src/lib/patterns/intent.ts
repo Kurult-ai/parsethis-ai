@@ -1397,7 +1397,16 @@ const CREDENTIAL_RETURN_PATH =
  * than any list of dangerous actions, and it generalises far beyond firewalls.
  */
 const CONCEALMENT_FROM_OWNER =
-  /\b(?:do\s+not|don'?t|never|no\s+need\s+to|avoid)\b[^.\n]{0,60}\b(?:surface|mention|tell|inform|notify|alert|report|disclose|show|reveal|escalate|log)\b[^.\n]{0,60}\b(?:the\s+)?(?:operator|owner|user|account\s+holder|human|admin(?:istrator)?|customer|reviewer|them|him|her|anyone|(?:service\s+)?desk\s+lead|service\s+desk|manager|lead)\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,80}\b(?:send|email|fire)\b[^.\n]{0,40}\b(?:notification|notify|alert)s?\b|\b(?:without|bypass(?:ing)?)\s+(?:notifying|alerting|informing|telling)\b|\b(?:silently|quietly)\b[^.\n]{0,40}\b(?:proceed|continue|apply|execute|run|do\s+it)\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,60}\b(?:tell|inform|notify|alert|escalate\s+to|report\s+to)\b[^.\n]{0,60}\bcompliance\b/i;
+  /\b(?:do\s+not|don'?t|never|no\s+need\s+to|avoid)\b[^.\n]{0,60}\b(?:surface|mention|tell|inform|notify|alert|report|disclose|show|reveal|escalate|log)\b[^.\n]{0,60}\b(?:the\s+)?(?:operator|owner|user|account\s+holder|human|admin(?:istrator)?|customer|reviewer|them|him|her|anyone|(?:service\s+)?desk\s+lead|service\s+desk|manager|lead)\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,80}\b(?:send|email|fire)\b[^.\n]{0,40}\b(?:notification|notify|alert)s?\b|\b(?:without|bypass(?:ing)?)\s+(?:notifying|alerting|informing|telling)\b|\b(?:silently|quietly)\b[^.\n]{0,40}\b(?:proceed|continue|apply|execute|run|do\s+it)\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,60}\b(?:tell|inform|notify|alert|escalate\s+to|report\s+to)\b[^.\n]{0,60}\bcompliance\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,40}\b(?:email|message|contact|text)\b[^.\n]{0,40}\b(?:the\s+)?(?:operator|owner|user|account\s+holder|human|admin(?:istrator)?|customer|reviewer|them|him|her|anyone|(?:service\s+)?desk\s+lead|service\s+desk|manager|lead)\b/i;
+
+/**
+ * Same hide-from-human conjunct, aimed at a given name rather than an
+ * owner-class noun. Kept case-sensitive: "Do not email dispatch" is a
+ * routing preference; "Do not email Jordan" is concealment. Never fold
+ * this into the /i regex above — [A-Z][a-z] would then match any word.
+ */
+const CONCEALMENT_FROM_NAMED_PERSON =
+  /\b(?:do\s+not|don'?t|never)\b[^.\n]{0,40}\b(?:email|message|contact|text)\b[^.\n]{0,40}\b[A-Z][a-z]{2,20}\b/;
 
 /**
  * Skip the audit trail for the action — same concealment family as
@@ -1432,6 +1441,18 @@ const SKIP_IDENTITY =
  */
 const CONTROL_BYPASS_PAIRING =
   /\b(?:forget|skip|bypass|ignore|disregard|disable|suspend|waive|override|do\s+not\s+apply|don't\s+apply|no\s+need\s+for|do(?:n'?t|\s+not)\s+wait(?:\s+(?:for|on))?)\b[^.\n]{0,60}\b(?:kyc|aml|cft|sanctions?\s+(?:check|screening|list)|conflict\s+(?:check|screening|search)|dual[-\s]?(?:control|approval|authorization|sign[-\s]?off)|two[-\s]?factor|2fa|mfa|otp|maker[-\s]?checker|four[-\s]?eyes|segregation\s+of\s+duties|sox\s+controls?|ach\s+blocks?|positive\s+pay|fraud\s+(?:hold|review|flag)|compliance\s+(?:review|check|hold|desk|officer)|transaction\s+monitoring|second\s+signatory|second[-\s]?approver|2nd[-\s]?approver)\b|\b(?:kyc|aml|cft|dual[-\s]?(?:control|approval|authorization|sign[-\s]?off)|two[-\s]?factor|2fa|mfa|otp|maker[-\s]?checker|four[-\s]?eyes|second[-\s]?approver|2nd[-\s]?approver)\b[^.\n]{0,40}\b(?:is\s+)?(?:not\s+)?(?:required|needed|applicable|enabled)\b/i;
+
+/**
+ * Spend/credit/refund/auto caps are named financial controls the same way
+ * dual-approval is: a ticket cannot override them. Do not add bare freeze —
+ * furious "ignore the freeze on this account" mail is owner speech.
+ */
+const SPEND_CAP_BYPASS_PAIRING =
+  /\b(?:forget|skip|bypass|ignore|disregard|disable|suspend|waive|override|lift|remove|do\s+not\s+apply|don't\s+apply)\b[^.\n]{0,60}\b(?:credit|refund|spend|auto)[- ]?caps?\b/i;
+
+/** "lift the credit cap I set" / "disable my spend cap" is the owner walking their own control back. */
+const OWNER_OWN_SPEND_CAP =
+  /\b(?:my|our)\s+(?:credit|refund|spend|auto)[- ]?caps?\b|\b(?:the\s+)?(?:credit|refund|spend|auto)[- ]?caps?\s+(?:that\s+)?(?:i|we)\s+(?:set|configured|defined|put|placed)\b/i;
 
 /**
  * Payment-instruction shape with a bypass clause attached, run 31: a large
@@ -1487,7 +1508,10 @@ function maybeFlagConcealedDirective(flags: IntentRiskFlag[], text: string): voi
   // suppress this flag. A tool invocation or an approval-record skip is a
   // live payload, not that discussion.
   if (isDefensiveDiscussion(text) && !toolCall && !approvalSkip) return;
-  const concealed = CONCEALMENT_FROM_OWNER.test(text) || approvalSkip;
+  const concealed =
+    CONCEALMENT_FROM_OWNER.test(text)
+    || CONCEALMENT_FROM_NAMED_PERSON.test(text)
+    || approvalSkip;
   if (!concealed) return;
   const classic = ACTION_DIRECTIVE.test(text);
   const skipIdentityRecovery = SKIP_IDENTITY.test(text) && ACCOUNT_RECOVERY_ACTION.test(text);
@@ -1505,7 +1529,7 @@ function maybeFlagConcealedDirective(flags: IntentRiskFlag[], text: string): voi
     action_floor: "block",
     evidence: text.slice(0, 240),
     source: "deterministic_intent",
-  }, [CONCEALMENT_FROM_OWNER, APPROVAL_RECORD_SUPPRESSION, TOOL_INVOCATION]);
+  }, [CONCEALMENT_FROM_OWNER, CONCEALMENT_FROM_NAMED_PERSON, APPROVAL_RECORD_SUPPRESSION, TOOL_INVOCATION]);
 }
 
 /**
@@ -1528,7 +1552,9 @@ const CONTROL_BYPASS_REPORTED_SPEECH =
 function maybeFlagControlBypass(flags: IntentRiskFlag[], text: string): void {
   for (const window of sentenceWindows(text)) {
     if (isDefensiveDiscussion(window)) continue;
-    const bypass = CONTROL_BYPASS_PAIRING.test(window);
+    const spendCap =
+      SPEND_CAP_BYPASS_PAIRING.test(window) && !OWNER_OWN_SPEND_CAP.test(window);
+    const bypass = CONTROL_BYPASS_PAIRING.test(window) || spendCap;
     const paymentShape = PAYMENT_BYPASS_SHAPE.test(window);
     if (!bypass && !paymentShape) continue;
     // A third party described as doing the bypassing is reported speech, not
@@ -1553,14 +1579,14 @@ function maybeFlagControlBypass(flags: IntentRiskFlag[], text: string): void {
       label: "Directive to bypass a named financial/compliance control",
       detail:
         "The text pairs an override verb with a named control — KYC/AML, dual-approval, second approver, 2FA/MFA, "
-        + "maker-checker, sanctions screening. Such controls have no legitimate override path through "
+        + "maker-checker, sanctions screening, a credit/refund/spend cap. Such controls have no legitimate override path through "
         + "untrusted text; when paired with a payment movement it is the classic BEC/wire-fraud shape.",
       confidence: "high",
       attack_family: "control_bypass",
       action_floor: "block",
       evidence: window,
       source: "deterministic_intent",
-    }, [bypass ? CONTROL_BYPASS_PAIRING : PAYMENT_BYPASS_SHAPE]);
+    }, [spendCap ? SPEND_CAP_BYPASS_PAIRING : bypass ? CONTROL_BYPASS_PAIRING : PAYMENT_BYPASS_SHAPE]);
   }
 }
 

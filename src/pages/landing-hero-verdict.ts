@@ -24,7 +24,7 @@ export const HERO_ENGINE_NOTE = HERO_ENGINE_NOTE_PATTERN;
 export type HeroScreenPayload = {
   suggested_action?: string;
   recommended_action?: string;
-  flags?: Array<{ matched_token?: string; category?: string }>;
+  flags?: Array<{ matched_token?: string; category?: string; label?: string }>;
   risk_score?: number;
   verdict?: string;
   latency_ms?: number;
@@ -49,15 +49,19 @@ export function formatHeroScreenResult(d: HeroScreenPayload): HeroScreenView {
   const color = refused ? "#ff8a8a" : held ? "#ffcc66" : "#8ff0b0";
 
   const flags = d.flags ?? [];
+  const labels: string[] = [];
   const tokens: string[] = [];
   const categories: string[] = [];
   for (const flag of flags) {
+    if (flag.label && !labels.includes(flag.label)) labels.push(flag.label);
     if (flag.matched_token && !tokens.includes(flag.matched_token)) tokens.push(flag.matched_token);
     if (flag.category && !categories.includes(flag.category)) categories.push(flag.category);
   }
 
   let why: string;
-  if (tokens.length > 0) {
+  if (labels.length > 0) {
+    why = labels.join(" · ");
+  } else if (tokens.length > 0) {
     why = "What tripped it: " + tokens.map((t) => `“${t}”`).join(" ");
   } else if (flags.length > 0) {
     why = "Flagged: " + (categories.join(", ") || "present");

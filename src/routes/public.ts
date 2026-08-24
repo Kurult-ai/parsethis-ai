@@ -39,7 +39,7 @@ import { renderDocsPage, renderGuidePage, renderComparePage, renderSecurityPage 
 import { renderPricingPage } from "../pages/pricing.js";
 import { renderAnalyticsDashboardPage } from "../pages/analytics-dashboard.js";
 import { renderSupportPage } from "../pages/support.js";
-import { renderCheckoutSuccessPage, type CheckoutOutcome } from "../pages/checkout-success.js";
+import { renderCheckoutSuccessPage, resolveCheckoutOutcome, type CheckoutOutcome } from "../pages/checkout-success.js";
 import { renderTechnologyPage } from "../pages/technology.js";
 import { renderGeoPage } from "../pages/geo.js";
 import { getFaviconSvg } from "../pages/favicon.js";
@@ -3420,12 +3420,21 @@ publicRoutes.get("/checkout/success", async (c) => {
       const { getStripe, isStripeEnabled } = await import("../stripe.js");
       if (isStripeEnabled()) {
         const session = await getStripe().checkout.sessions.retrieve(sessionId);
-        const tier = session.metadata?.tier;
-        if (session.payment_status === "paid" && tier) {
-          outcome = { state: "paid", tier };
-        } else if (session.status === "complete" || session.payment_status === "no_payment_required") {
-          outcome = { state: "processing" };
+        const apiKeyId = session.metadata?.apiKeyId;
+        let key: { id: string; tier: string } | null = null;
+        if (apiKeyId && !apiKeyId.startsWith("redis_")) {
+          key = await prisma.apiKey.findUnique({
+            where: { id: apiKeyId },
+            select: { id: true, tier: true },
+          });
         }
+        outcome = resolveCheckoutOutcome({
+          paymentStatus: session.payment_status,
+          sessionStatus: session.status,
+          metadataTier: session.metadata?.tier,
+          metadataApiKeyId: apiKeyId,
+          key,
+        });
       }
     } catch (err) {
       // A charged customer must never meet a stack trace. Fall through to the
