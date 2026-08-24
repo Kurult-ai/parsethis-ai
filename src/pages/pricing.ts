@@ -228,7 +228,7 @@ Required verification:
         <div style="font-size:13px;color:var(--text-dim);">forever &middot; unlimited instant screening &middot; ${PLAN_LIMITS.free.deepScreeningsPerDay} deep/day</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Org governance</strong> — tool rules, roles, ceiling, audit trail</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Org governance</strong> — tool rules, roles, ceiling, audit trail, after a verified account. An anonymous <code>/get-started</code> key will not bootstrap.</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.free.requestsPerMinute} req/min</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Keys auto-renew while in use; idle ${RETENTION.selfServiceKeyExpiryDays} days = expiry (fails closed, 401)</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Correcting your own assistant is not an attack &mdash; <a href="/docs#personal-agents" style="color:var(--accent2);">personal agents</a>, when you say the message came from you</li>
@@ -273,7 +273,7 @@ latency: 21 ms</pre>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Evidence spans: the exact text that tripped each flag</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">Going over the included volume never stops your screening</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.solo.requestsPerMinute} req/min — a backlog import does not stall</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Org governance</strong> — tool rules, roles, ceiling, audit trail</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Org governance</strong> — tool rules, roles, ceiling, audit trail, after a verified account</li>
         <li style="padding:6px 0;">${PLAN_LIMITS.solo.sandboxExecutionsPerHour} sandbox/hr</li>
       </ul>
       <a href="/v1/billing/checkout" class="btn btn-outline" style="width:100%;text-align:center;" onclick="event.preventDefault();(async()=>{try{const k=localStorage.getItem('pfa_key');if(k){const r=await fetch('/v1/billing/checkout',{method:'POST',headers:{'Authorization':'Bearer '+k,'Content-Type':'application/json'},body:JSON.stringify({tier:'solo'})});if(r.ok){const d=await r.json();if(d.url){window.location=d.url;return;}}}const r2=await fetch('/v1/billing/signup-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tier:'solo'})});if(!r2.ok){const err=await r2.json().catch(()=>({}));alert(err.error||'Signup failed');return;}const d2=await r2.json();if(d2.key)localStorage.setItem('pfa_key',d2.key);if(d2.checkout_url){window.location=d2.checkout_url;}else{window.location='mailto:${PRODUCT.contactEmail}?subject=Solo%20Plan';}}catch{window.location='mailto:${PRODUCT.contactEmail}?subject=Solo%20Plan';}})();">Start Solo</a>
@@ -292,8 +292,8 @@ latency: 21 ms</pre>
         <div style="font-size:13px;color:var(--text-dim);">Unlimited instant screening &middot; ${PLAN_LIMITS.pro.deepScreeningsPerMonth.toLocaleString("en-US")} deep/mo</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Org governance</strong> — tool rules, roles, ceiling, audit trail</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>${PLAN_LIMITS.pro.agents} agents, ${PLAN_LIMITS.pro.environments} environments</strong> &mdash; production, staging and dev, each with its own enforcement dial</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Org governance</strong> — tool rules, roles, ceiling, audit trail, after a verified account</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>${PLAN_LIMITS.pro.agents} agents, ${PLAN_LIMITS.pro.environments} environments</strong> &mdash; production, staging and dev, each with its own enforcement dial, after a verified account</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Evidence packs</strong> — the decisions you hand to someone else, including screens reported rather than refused</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>SIEM forwarding</strong> (Splunk/Datadog) — decisions streamed with their declarations</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Data governance</strong> — grants, egress, budgets</li>
@@ -316,8 +316,9 @@ latency: 21 ms</pre>
         <div style="font-size:13px;color:var(--text-dim);">Unlimited instant screening &middot; ${PLAN_LIMITS.team.deepScreeningsPerMonth.toLocaleString("en-US")} deep/mo</div>
       </div>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Org governance</strong> — tool rules, roles, ceiling, audit trail</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Org governance</strong> — tool rules, roles, ceiling, audit trail, after a verified account</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Everything on Pro</strong> — evidence packs, SIEM forwarding, data governance, framework crosswalk</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Ledger</strong> — declared tool names and path globs, hash chain. Logging is not a control.</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Unlimited agents, environments and keys</strong> — the 11th agent is 201; named environments persist</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Undeclared Chrome tools 403 on the gateway</strong> — the wire path does not trust metadata</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.team.requestsPerMinute} req/min</li>
@@ -779,6 +780,6 @@ Content-Type: application/json
       { name: "Home", href: "/" },
       { name: "Pricing", href: "/pricing" },
     ],
-    lastUpdated: "2026-08-24T12:00:00-04:00",
+    lastUpdated: "2026-08-24T18:00:00-04:00",
   });
 }

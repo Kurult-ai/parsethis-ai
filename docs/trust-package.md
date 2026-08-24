@@ -480,6 +480,6 @@ Backups yes; failover no. Parse runs on a **single node** — there is no multi-
 
 **30. What is your uptime commitment?**
 
-Parse targets 99.9% and **does not commit to it contractually except on the Compliance and Enterprise tiers**, where a formal SLA is available. Treat the figure as an operating target rather than a guarantee. Measured availability is published on the [status page](/status); liveness is monitored at `/health`.
+Parse targets 99.9% as an operating target and **does not sell a contractual uptime SLA on any tier** until high-availability infrastructure ships. Measured availability is published on the [status page](/status); liveness is monitored at `/health`. The [DPA](/dpa) states the contractual commitments that do exist.
 
 <!-- END GENERATED: vendor-questionnaire -->

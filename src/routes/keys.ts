@@ -3,6 +3,7 @@ import { authMiddleware, createApiKey, listApiKeys, deleteApiKey } from "../auth
 import { prisma } from "../db.js";
 import { problem, ErrorCode } from "../lib/problem-response.js";
 import { auditLog } from "../lib/audit-log.js";
+import { RETENTION } from "../lib/retention-facts.js";
 
 export const keysRoutes = new Hono();
 
@@ -81,6 +82,64 @@ keysRoutes.post("/v1/keys", authMiddleware("admin"), async (c) => {
     },
     201,
   );
+});
+
+keysRoutes.get("/v1/keys/self", authMiddleware(), async (c) => {
+  const apiKey = c.get("apiKey");
+
+  if (apiKey.id === "master") {
+    return problem(c, {
+      status: 400,
+      title: "Master key has no self descriptor",
+      detail: "The master admin key is not a customer key. There is no idle expiry to read.",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
+  }
+  if (typeof apiKey.id === "string" && apiKey.id.startsWith("x402:")) {
+    return problem(c, {
+      status: 400,
+      title: "x402 caller has no persistent key",
+      detail: "x402-paid requests have no stored key record. There is nothing to describe.",
+      code: ErrorCode.VALIDATION_INVALID_TYPE,
+      retryable: false,
+    });
+  }
+
+  let name: string | null = null;
+  let lastUsedAt: string | null = null;
+  let expiresAt: string | null = null;
+  try {
+    const row = await prisma.apiKey.findUnique({
+      where: { id: apiKey.id },
+      select: { name: true, lastUsedAt: true, expiresAt: true },
+    });
+    if (row) {
+      name = row.name;
+      lastUsedAt = row.lastUsedAt ? row.lastUsedAt.toISOString() : null;
+      expiresAt = row.expiresAt ? row.expiresAt.toISOString() : null;
+    }
+  } catch {
+    // Auth context is enough to answer expiry; a DB blip must not 500 this.
+  }
+
+  const tier = apiKey.tier ?? "free";
+  const idleDays = tier === "free" ? RETENTION.selfServiceKeyExpiryDays : null;
+
+  return c.json({
+    id: apiKey.id,
+    name: name ?? apiKey.name ?? null,
+    tier,
+    org_id: apiKey.org_id ?? null,
+    expires_at: expiresAt,
+    expires_in_days: apiKey.expires_in_days ?? null,
+    last_used_at: lastUsedAt,
+    idle_expiry_days: idleDays,
+    note: idleDays
+      ? `Expires after ${idleDays} idle days (fails closed with 401). Paid plans have no idle expiry.`
+      : "This key does not idle-expire.",
+    self_revoke: { method: "DELETE", url: "/v1/keys/self" },
+  });
 });
 
 keysRoutes.delete("/v1/keys/self", authMiddleware(), async (c) => {

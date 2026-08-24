@@ -16,6 +16,7 @@ import { renderPage } from "../lib/html-template.js";
 import { PRODUCT } from "../lib/product-facts.js";
 import { organizationSchema } from "../lib/schema.js";
 import { loadReport } from "./attack-pack.js";
+import { flagsFiredDeterministicFloor } from "../lib/deterministic-floor.js";
 import type { AppEnv } from "../types.js";
 
 export const reportRoutes = new Hono<AppEnv>();
@@ -193,7 +194,7 @@ reportRoutes.get("/report/:id", async (c) => {
   <div class="rep-prov">
     <div class="rep-prov-item"><div class="k">Screened at (UTC)</div><div class="val">${escapeHtml(report.screened_at)}</div></div>
     <div class="rep-prov-item"><div class="k">Text SHA-256 (first 16)</div><div class="val">${report.text_sha256_16}</div></div>
-    <div class="rep-prov-item"><div class="k">Deterministic floor</div><div class="val">${v.deterministic_floor ? "yes — pattern layer fired" : "no — semantic-only findings capped at report"}</div></div>
+    <div class="rep-prov-item"><div class="k">Deterministic floor</div><div class="val">${flagsFiredDeterministicFloor(v.flags ?? []) || v.deterministic_floor ? "yes — pattern layer fired" : "no — semantic-only findings capped at report"}</div></div>
     <div class="rep-prov-item"><div class="k">Pipeline</div><div class="val">pattern + semantic (full)</div></div>
   </div>
 

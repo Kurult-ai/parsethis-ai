@@ -1719,6 +1719,50 @@ discoveryRoutes.get("/openapi.json", (c) => {
         },
       },
       "/v1/keys/self": {
+        get: {
+          operationId: "describeCurrentApiKey",
+          summary: "Describe the current API key",
+          description:
+            "Returns metadata for the bearer API key used on this request: tier, org, idle expiry. Does not return the secret. Possession of the key is sufficient authorization.",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            "200": {
+              description: "Current API key metadata",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["id", "tier"],
+                    properties: {
+                      id: { type: "string" },
+                      name: { type: "string", nullable: true },
+                      tier: { type: "string" },
+                      org_id: { type: "string", nullable: true },
+                      expires_at: { type: "string", format: "date-time", nullable: true },
+                      expires_in_days: { type: "integer", nullable: true },
+                      last_used_at: { type: "string", format: "date-time", nullable: true },
+                      idle_expiry_days: { type: "integer", nullable: true },
+                      note: { type: "string" },
+                      self_revoke: {
+                        type: "object",
+                        properties: {
+                          method: { type: "string" },
+                          url: { type: "string" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "401": {
+              description: "Missing or invalid API key",
+              content: {
+                "application/problem+json": { schema: { $ref: "#/components/schemas/Problem" } },
+              },
+            },
+          },
+        },
         delete: {
           operationId: "revokeCurrentApiKey",
           summary: "Revoke the current API key",

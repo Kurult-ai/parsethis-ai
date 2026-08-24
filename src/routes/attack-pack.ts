@@ -21,6 +21,7 @@ import { createHash } from "node:crypto";
 import { renderPage } from "../lib/html-template.js";
 import { organizationSchema } from "../lib/schema.js";
 import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
+import { flagsFiredDeterministicFloor } from "../lib/deterministic-floor.js";
 import type { AppEnv } from "../types.js";
 
 export const attackPackRoutes = new Hono<AppEnv>();
@@ -555,7 +556,13 @@ attackPackRoutes.post("/attack/api/screen", async (c) => {
         disposition: String(d.disposition ?? "allow"),
         categories: Array.isArray(d.categories) ? (d.categories as string[]) : [],
         flags,
-        deterministic_floor: Boolean(d.deterministic_floor ?? false),
+        deterministic_floor: flagsFiredDeterministicFloor(
+          (Array.isArray(d.flags) ? (d.flags as Array<Record<string, unknown>>) : []).map((f) => ({
+            id: typeof f.id === "string" ? f.id : undefined,
+            code: typeof f.code === "string" ? f.code : undefined,
+            source: typeof f.source === "string" ? f.source : undefined,
+          })),
+        ),
       },
       blast: sample.blast,
       sample_title: sample.title,

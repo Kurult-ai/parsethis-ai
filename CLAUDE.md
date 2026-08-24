@@ -39,7 +39,7 @@ npm run seed         # Seed database (prisma/seed.ts)
 | evaluate.ts | `/v1/evaluate` | Cost, latency, safety, quality evaluation |
 | analyze.ts | `/v1/analyze` | Media credibility analysis pipeline |
 | chat.ts | `/v1/chat` | Conversational interface |
-| keys.ts | `/v1/keys` | API key management |
+| keys.ts | `/v1/keys`, `GET/DELETE /v1/keys/self` | API key management. GET `/v1/keys/self` returns tier, org, idle expiry — not the secret. Anonymous keys cannot `POST /v1/orgs/bootstrap`. |
 | policy.ts | `/v1/policy` | Auto-block policy configuration |
 | discovery.ts | `/v1/discovery` | Service discovery endpoints |
 | screening-metrics.ts | `/v1/screening-metrics` | Screening analytics |
@@ -591,3 +591,10 @@ inline script — a template-literal newline will kill the widget invisibly.
 **Keygen expiry.** `expires_at` and the response `note` must both come from
 `RETENTION.selfServiceKeyExpiryDays` (`src/lib/self-service-key-copy.ts`).
 Hardcoding "30 idle days" against a 90-day `expires_at` has shipped twice.
+
+**Attack Pack floor.** `/v1/parse` does not emit `deterministic_floor`. Derive
+it from non-LLM flags (`src/lib/deterministic-floor.ts`) at store *and* at
+render, or a 10.0 pattern block reads as "semantic-only findings capped at
+report". GET `/v1/keys/self` is metadata only — never the secret. Anonymous
+keys still cannot `POST /v1/orgs/bootstrap`; qualify org-governance copy
+instead of opening bootstrap.

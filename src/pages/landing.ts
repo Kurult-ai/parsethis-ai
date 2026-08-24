@@ -147,7 +147,7 @@ Verification required before reporting done:
     c: {
       l1: "Screen what your inbox",
       l2: "feeds your agent.",
-      lede: "One poisoned ticket can turn a helpful support agent into the attacker's hands. Parse screens every message for injection, exfiltration and fraud before your agent acts — deterministic verdicts in milliseconds, a receipt for every decision. Start in monitor for $0; production keys from $49/mo.",
+      lede: `One poisoned ticket can turn a helpful support agent into the attacker's hands. Parse screens every message for injection, exfiltration and fraud before your agent acts — deterministic verdicts in milliseconds, a receipt for every decision. Start in monitor for $0; production keys from $${PLAN_LIMITS.solo.pricePerMonth}/mo (Solo) or $${PLAN_LIMITS.pro.pricePerMonth}/mo (Pro).`,
     },
   };
   // The variant experiment map must know the new arm exists, or admin
@@ -156,7 +156,7 @@ Verification required before reporting done:
 
   const canonicalUrl = `${baseUrl}/`;
   const title = "Screen untrusted text before your AI agent can act";
-  const description = `Parse is the gate in front of agents that read tickets, email or customer messages and then use tools. Deterministic injection/exfiltration/fraud screening on every message, a receipt on every verdict, monitor mode from $0 — production from $49/mo.`;
+  const description = `Parse is the gate in front of agents that read tickets, email or customer messages and then use tools. Deterministic injection/exfiltration/fraud screening on every message, a receipt on every verdict, monitor mode from $0 — production from $${PLAN_LIMITS.solo.pricePerMonth}/mo (Solo) or $${PLAN_LIMITS.pro.pricePerMonth}/mo (Pro).`;
   const jsonLd = [organizationSchema(baseUrl), webApplicationSchema(baseUrl)]
     .map((obj) => `<script type="application/ld+json">${JSON.stringify(obj).replace(/<\//g, "<\\/")}</script>`)
     .join("\n  ");
@@ -664,7 +664,7 @@ curl -s ${baseUrl}/v1/parse \\
     <div class="cube v">$</div>
     <h2>Start free. <span class="thin">Scale on evidence.</span></h2>
     <div class="price-strip aura-line">
-      <div class="prow"><span class="t">Free</span><span class="d">unlimited instant screening · ${PLAN_LIMITS.free.deepScreeningsPerDay} deep/day · org governance</span><span class="p">$0<small>forever</small></span><a class="go" href="/get-started">Install →</a></div>
+      <div class="prow"><span class="t">Free</span><span class="d">unlimited instant screening · ${PLAN_LIMITS.free.deepScreeningsPerDay} deep/day · org governance after a verified account</span><span class="p">$0<small>forever</small></span><a class="go" href="/get-started">Install →</a></div>
       <div class="prow"><span class="t">Solo</span><span class="d">my agent · ${PLAN_LIMITS.solo.deepScreeningsPerMonth.toLocaleString("en-US")} deep/mo · no idle expiry</span><span class="p">$${PLAN_LIMITS.solo.pricePerMonth}<small>/mo</small></span><a class="go" href="/pricing">Start →</a></div>
       <div class="prow"><span class="t">Pro</span><span class="d">my product&rsquo;s agents · ${PLAN_LIMITS.pro.agents} agents, ${PLAN_LIMITS.pro.environments} environments</span><span class="p">$${PLAN_LIMITS.pro.pricePerMonth}<small>/mo</small></span><a class="go" href="/pricing">Deploy →</a></div>
       <div class="prow"><span class="t">Team</span><span class="d">unlimited agents · 11th agent · named envs persist · undeclared Chrome 403</span><span class="p">$${PLAN_LIMITS.team.pricePerMonth}<small>/mo</small></span><a class="go" href="/pricing">Scale →</a></div>

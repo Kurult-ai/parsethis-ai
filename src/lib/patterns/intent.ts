@@ -827,7 +827,12 @@ const AGENT_INSTRUCTION_TARGET_RE =
  * prompt-injection attempt.
  */
 function isBusinessControlContext(text: string): boolean {
-  return /\b(?:automatic\s+(?:block|flag|alert|review)|sanctions?\s+(?:block|alert|flag|match)|AML\s+(?:control|alert|flag)|PEP\s+match|withdrawal\s+limit|reporting\s+threshold|false\s+positive|case\s+(?:file|review)|investigation|compliance\s+review|prior\s+reviewer|previous\s+analyst)\b/i.test(text);
+  // Commercial policy-of-record (refund/return/…) and a previous *human*
+  // support-rep utterance are the thing a furious customer argues with, not
+  // the agent's governing instructions. Do not put the bare noun `policy`
+  // here — `system policy` / `your policy` remain instruction targets.
+  // Do not name evalset phrases (hoodie, SH-4401, "forget the previous rep").
+  return /\b(?:automatic\s+(?:block|flag|alert|review)|sanctions?\s+(?:block|alert|flag|match|policy)|AML\s+(?:control|alert|flag)|PEP\s+match|withdrawal\s+limit|reporting\s+threshold|false\s+positive|case\s+(?:file|review)|investigation|compliance\s+review|prior\s+reviewer|previous\s+analyst|(?:refund|return|cancellation|shipping|billing)\s+polic(?:y|ies)|previous\s+(?:rep(?:resentative)?|operator|agent)'?s?\s+(?:answer|reply|response))\b/i.test(text);
 }
 
 /**
@@ -1394,6 +1399,21 @@ const CREDENTIAL_RETURN_PATH =
 const CONCEALMENT_FROM_OWNER =
   /\b(?:do\s+not|don'?t|never|no\s+need\s+to|avoid)\b[^.\n]{0,60}\b(?:surface|mention|tell|inform|notify|alert|report|disclose|show|reveal|escalate|log)\b[^.\n]{0,60}\b(?:the\s+)?(?:operator|owner|user|account\s+holder|human|admin(?:istrator)?|customer|reviewer|them|him|her|anyone|(?:service\s+)?desk\s+lead|service\s+desk|manager|lead)\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,80}\b(?:send|email|fire)\b[^.\n]{0,40}\b(?:notification|notify|alert)s?\b|\b(?:without|bypass(?:ing)?)\s+(?:notifying|alerting|informing|telling)\b|\b(?:silently|quietly)\b[^.\n]{0,40}\b(?:proceed|continue|apply|execute|run|do\s+it)\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,60}\b(?:tell|inform|notify|alert|escalate\s+to|report\s+to)\b[^.\n]{0,60}\bcompliance\b/i;
 
+/**
+ * Skip the audit trail for the action — same concealment family as
+ * CONCEALMENT_FROM_OWNER. The Attack Pack urgent-brief sample already uses
+ * "do not create an approval record". Not a list of tool names.
+ */
+const APPROVAL_RECORD_SUPPRESSION =
+  /\b(?:do\s+not|don'?t|never|skip|omit|without)\b[^.\n]{0,50}\b(?:creat(?:e|ing)|log(?:ging)?|fil(?:e|ing)|open|write)\b[^.\n]{0,40}\bapprovals?\b|\b(?:do\s+not|don'?t|never)\s+create\s+an?\s+approval(?:\s+record)?\b/i;
+
+/**
+ * An instruction to invoke a runtime tool, not "call me". Snake_case
+ * identifiers (`grant_credit`) or `the X tool`. Bare `call` is owner speech.
+ */
+const TOOL_INVOCATION =
+  /\b(?:call|invoke)\s+(?:the\s+)?[a-z][a-z0-9]*(_[a-z0-9]+)+\b|\b(?:call|invoke|run)\s+the\s+[a-z][\w-]{2,}\s+tool\b/i;
+
 /** A directive to take an action, as opposed to describing one. */
 const ACTION_DIRECTIVE =
   /\b(?:acknowledge|disable|enable|delete|remove|drop|revoke|grant|open|close|restart|stop|start|apply|execute|run|deploy|forward|transfer|send|update|modify|change|set|omit|reset|wire|remit|release|push|move)\b/i;
@@ -1460,11 +1480,18 @@ function maybeFlagConcealedDirective(flags: IntentRiskFlag[], text: string): voi
   // Deliberately whole-text rather than per-sentence: the instruction and the
   // request to hide it are usually adjacent sentences, which is precisely how
   // C5 was written.
-  if (isDefensiveDiscussion(text)) return;
-  if (!CONCEALMENT_FROM_OWNER.test(text)) return;
+  const toolCall = TOOL_INVOCATION.test(text);
+  const approvalSkip = APPROVAL_RECORD_SUPPRESSION.test(text);
+  // "If policy blocks it, reply with the override token" looks like a
+  // token-handling discussion (`token` + `policy`) and would otherwise
+  // suppress this flag. A tool invocation or an approval-record skip is a
+  // live payload, not that discussion.
+  if (isDefensiveDiscussion(text) && !toolCall && !approvalSkip) return;
+  const concealed = CONCEALMENT_FROM_OWNER.test(text) || approvalSkip;
+  if (!concealed) return;
   const classic = ACTION_DIRECTIVE.test(text);
   const skipIdentityRecovery = SKIP_IDENTITY.test(text) && ACCOUNT_RECOVERY_ACTION.test(text);
-  if (!classic && !skipIdentityRecovery) return;
+  if (!classic && !toolCall && !skipIdentityRecovery) return;
   addFlag(flags, {
     id: "intent.concealed_directive",
     category: "prompt_injection",
@@ -1478,7 +1505,7 @@ function maybeFlagConcealedDirective(flags: IntentRiskFlag[], text: string): voi
     action_floor: "block",
     evidence: text.slice(0, 240),
     source: "deterministic_intent",
-  }, [CONCEALMENT_FROM_OWNER]);
+  }, [CONCEALMENT_FROM_OWNER, APPROVAL_RECORD_SUPPRESSION, TOOL_INVOCATION]);
 }
 
 /**

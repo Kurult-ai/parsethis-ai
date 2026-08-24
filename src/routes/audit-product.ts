@@ -231,6 +231,9 @@ auditProductRoutes.get("/audit", (c) => {
     <p class="answer-capsule">
       Submit your agent prompts and get a full security audit report with risk scores,
       vulnerability breakdown, remediation checklist, and compliance mapping — in minutes.
+      Need a forwardable artifact tonight without paying? The free
+      <a href="/attack/invoice-payment-update">invoice Attack Pack sample</a>
+      screens to 10.0 BLOCKED (text SHA-256 first 16: <code>b094e5fe737c81f5</code>).
     </p>
     <ul class="audit-features">
       <li>Risk score (0–100) across all submitted prompts</li>
@@ -433,7 +436,7 @@ ${paid ? `
         { name: "Home", href: "/" },
         { name: "Security Audit", href: "/audit" },
       ],
-      lastUpdated: "2026-08-08T00:00:00-04:00",
+      lastUpdated: "2026-08-24T18:00:00-04:00",
     }),
   );
 });
