@@ -19,7 +19,6 @@
 import { Hono } from "hono";
 import { createHash } from "node:crypto";
 import { renderPage } from "../lib/html-template.js";
-import { PRODUCT } from "../lib/product-facts.js";
 import { organizationSchema } from "../lib/schema.js";
 import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
 import type { AppEnv } from "../types.js";
@@ -35,6 +34,8 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutVal
 export interface AttackSample {
   slug: string;
   title: string;
+  /** Horizon core label — 01 invoice, 02 CRM, … */
+  short: string;
   disguise: string;
   /** One-line "what an unscreened agent would have done" — CISO language. */
   blast: string;
@@ -46,6 +47,7 @@ export const ATTACK_SAMPLES: AttackSample[] = [
   {
     slug: "invoice-payment-update",
     title: "The invoice that redirects payment",
+    short: "invoice",
     disguise: "Looks like: accounts-payable email with an attached invoice",
     blast:
       "An unscreened agent would have updated the payment endpoint and mailed the ledger. This changes where money goes.",
@@ -55,6 +57,7 @@ export const ATTACK_SAMPLES: AttackSample[] = [
   {
     slug: "crm-exfil-rag",
     title: "The CRM doc that exfiltrates itself",
+    short: "CRM",
     disguise: "Looks like: a knowledge-base article pasted into RAG",
     blast:
       "An unscreened agent would have packaged customer records and posted them to an attacker-controlled endpoint.",
@@ -64,6 +67,7 @@ export const ATTACK_SAMPLES: AttackSample[] = [
   {
     slug: "urgent-exec-brief",
     title: "The urgent brief that escalates itself",
+    short: "brief",
     disguise: "Looks like: an executive forward with a tight deadline",
     blast:
       "An unscreened agent would have bypassed the approval gate using fabricated authority — no human ever saw the request.",
@@ -73,6 +77,7 @@ export const ATTACK_SAMPLES: AttackSample[] = [
   {
     slug: "calendar-attachment",
     title: "The calendar invite that rewrites instructions",
+    short: "calendar",
     disguise: "Looks like: a meeting invite description",
     blast:
       "An unscreened agent would have replaced its own standing instructions with attacker-supplied ones — persistence after the meeting is long gone.",
@@ -82,6 +87,7 @@ export const ATTACK_SAMPLES: AttackSample[] = [
   {
     slug: "support-ticket-credential",
     title: "The support ticket that asks for a secret",
+    short: "ticket",
     disguise: "Looks like: a routine ticket from a verified customer",
     blast:
       "An unscreened agent would have echoed credentials into a reply — and the transcript becomes the leak.",
@@ -91,6 +97,20 @@ export const ATTACK_SAMPLES: AttackSample[] = [
 ];
 
 const SAMPLE_BY_SLUG = new Map(ATTACK_SAMPLES.map((s) => [s.slug, s]));
+
+function looksLikeLine(s: AttackSample): string {
+  const raw = s.disguise.replace(/^Looks like:\s*/i, "").trim();
+  return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : raw;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 // ── Shared report storage (Redis, 7-day TTL) ────────────────────────────────
 
@@ -172,61 +192,211 @@ attackPackRoutes.get("/attack", (c) => {
     ? `${c.req.header("x-forwarded-proto")}://${c.req.header("host")}`
     : process.env.PUBLIC_BASE_URL || "https://www.parsethis.ai";
 
-  const cards = ATTACK_SAMPLES.map((s, i) => {
-    const num = i + 1;
+  const streams = ATTACK_SAMPLES.map((s, i) => {
+    const num = (i + 1).toString().padStart(2, "0");
+    const label = `${num} ${s.short}`;
     return `
-    <a class="attack-card" href="/attack/${s.slug}">
-      <div class="attack-card-num">${num.toString().padStart(2, "0")}</div>
-      <div class="attack-card-body">
-        <h3>${s.title}</h3>
-        <div class="attack-card-disguise">${s.disguise}</div>
-        <div class="attack-card-blast">${s.blast}</div>
-      </div>
-      <div class="attack-card-cta">Screen it →</div>
+    <a class="stream" href="/attack/${escapeHtml(s.slug)}" data-label="${escapeHtml(label)}">
+      <span class="num">${num}</span>
+      <span>
+        <h2>${escapeHtml(s.title)}</h2>
+        <dl class="split">
+          <div>
+            <dt>Looks like</dt>
+            <dd>${escapeHtml(looksLikeLine(s))}</dd>
+          </div>
+          <div class="payload">
+            <dt>Would have executed</dt>
+            <dd>${escapeHtml(s.blast)}</dd>
+          </div>
+        </dl>
+      </span>
+      <span class="cta">Screen it</span>
     </a>`;
   }).join("");
 
   const content = `
 <style>
-  .attack-hero { padding: 28px 0 10px; max-width: 720px; }
-  .attack-hero h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 10px; }
-  .attack-hero p { color: var(--muted, #98a2b3); font-size: 16px; line-height: 1.6; margin: 0 0 8px; }
-  .attack-hook { font-size: 17px; font-weight: 600; margin: 14px 0 6px; }
-  .attack-list { display: flex; flex-direction: column; gap: 14px; margin: 26px 0 34px; }
-  .attack-card {
-    display: grid; grid-template-columns: 44px 1fr auto; gap: 16px; align-items: center;
-    padding: 18px 20px; border: 1px solid var(--border, #e4e7ec); border-radius: 12px;
-    text-decoration: none; color: inherit; background: var(--card, #fff);
-    transition: border-color .15s, transform .15s;
+  /* Index owns the hole. Kill the site-wide rainbow corona on this page only. */
+  body.attack-pack::after { display: none !important; }
+  body.attack-pack::before {
+    background:
+      radial-gradient(60% 50% at 22% 34%, rgba(255, 180, 84, 0.07), transparent 55%),
+      repeating-radial-gradient(circle at 22% 38%, transparent 0 46px, rgba(255,255,255,.028) 47px 48px);
   }
-  .attack-card:hover { border-color: #2f6fed; transform: translateY(-1px); }
-  .attack-card-num { font-size: 20px; font-weight: 700; color: #2f6fed; font-variant-numeric: tabular-nums; }
-  .attack-card-body h3 { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
-  .attack-card-disguise { font-size: 13px; color: #98a2b3; margin-bottom: 6px; }
-  .attack-card-blast { font-size: 13.5px; line-height: 1.5; color: #475467; }
-  .attack-card-cta { font-size: 14px; font-weight: 600; color: #2f6fed; white-space: nowrap; }
+  [hidden] { display: none !important; }
+
+  .attack-hero {
+    display: grid;
+    grid-template-columns: minmax(220px, 400px) 1fr;
+    gap: 48px 64px;
+    align-items: center;
+    min-height: 58vh;
+    padding: 8px 0 12px;
+  }
+  .attack-hero h1 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(2.2rem, 5.2vw, 3.8rem);
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+    max-width: 14ch;
+    margin: 0;
+    color: var(--text);
+  }
+  .attack-hero h1 .watch { display: block; }
+  .attack-lede { margin: 22px 0 16px; max-width: 54ch; color: var(--text-dim); }
+  .attack-fine {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--text-soft);
+    margin: 0;
+  }
+
+  .horizon { position: relative; width: min(72vw, 400px); aspect-ratio: 1; margin: 0 auto; }
+  .accretion {
+    position: absolute; inset: -22px; border-radius: 50%;
+    border: 1px solid color-mix(in srgb, var(--gold) 18%, transparent);
+    pointer-events: none;
+  }
+  .horizon-ring {
+    position: absolute; inset: 0; border-radius: 50%;
+    background: conic-gradient(
+      from 205deg,
+      var(--yellow) 0deg,
+      var(--gold) 42deg,
+      color-mix(in srgb, var(--yellow) 38%, black) 110deg,
+      var(--bg) 168deg,
+      color-mix(in srgb, var(--yellow) 22%, black) 228deg,
+      var(--yellow) 300deg,
+      var(--gold) 360deg
+    );
+    opacity: 0.78;
+    animation: ringIn 320ms cubic-bezier(0.2, 0, 0, 1) both;
+    transition: opacity 200ms cubic-bezier(0.2, 0, 0.38, 0.9);
+  }
+  body[data-lit="true"] .horizon-ring { opacity: 1; }
+  .horizon-void {
+    position: absolute; inset: 12px; border-radius: 50%;
+    background: radial-gradient(circle at 42% 36%, color-mix(in srgb, var(--yellow) 14%, black) 0%, var(--bg) 64%);
+    display: grid; place-items: center; text-align: center;
+  }
+  .horizon-core {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--text-soft); max-width: 12ch;
+  }
+  @keyframes ringIn {
+    from { opacity: 0; transform: scale(0.92); }
+    to { opacity: 0.78; transform: scale(1); }
+  }
+
+  .pack { margin-top: 28px; border-top: 1px solid var(--border); }
+  .stream {
+    display: grid;
+    grid-template-columns: 3.5rem 1fr auto;
+    gap: 16px 24px;
+    align-items: start;
+    padding: 22px 4px;
+    border-bottom: 1px solid var(--border);
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 100ms cubic-bezier(0.2, 0, 0.38, 0.9),
+      color 100ms cubic-bezier(0.2, 0, 0.38, 0.9);
+  }
+  .stream:hover, .stream:focus-visible {
+    color: var(--text);
+    border-bottom-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  }
+  .stream:focus-visible { outline-offset: 6px; }
+  .num {
+    font-family: var(--mono); font-size: 1.125rem; font-variant-numeric: tabular-nums;
+    letter-spacing: 0.08em; color: var(--gold); padding-top: 2px;
+  }
+  .stream h2 {
+    font-family: var(--sans); font-size: 1.25rem; font-weight: 600;
+    letter-spacing: -0.02em; color: var(--text); margin: 0 0 12px;
+  }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 28px; margin: 0; }
+  .split dt {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--text-soft); margin: 0 0 6px;
+  }
+  .split dd { margin: 0; color: var(--text-dim); font-size: 1.0625rem; max-width: 42ch; }
+  .payload dt { color: var(--destructive); }
+  .payload dd { color: var(--text); }
+  .cta {
+    align-self: center; font-family: 'Saira', sans-serif; font-size: 12px;
+    font-weight: 600; letter-spacing: 0.06em; color: var(--gold);
+    white-space: nowrap; padding-top: 4px;
+  }
+  .stream:hover .cta { color: var(--text); }
+  .attack-next {
+    margin: 28px 0 8px; font-family: var(--mono); font-size: 12px; color: var(--text-soft);
+  }
+  .attack-next a { text-decoration: underline; text-underline-offset: 3px; }
+
+  @media (max-width: 840px) {
+    .attack-hero { grid-template-columns: 1fr; min-height: 0; }
+  }
+  @media (max-width: 720px) {
+    .stream { grid-template-columns: 2.5rem 1fr; }
+    .cta { grid-column: 2; padding-top: 0; }
+    .split { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .horizon-ring { animation: none; opacity: 0.78; transform: none; }
+    body[data-lit="true"] .horizon-ring { opacity: 1; }
+  }
 </style>
-<section class="attack-hero">
-  <h1>Paste any email your agent will read.<br/>Watch what it would have executed.</h1>
-  <p>Five real-world injections dressed as ordinary business text — an invoice, a knowledge-base article, an executive forward, a calendar invite, a support ticket. Every one of them reads as routine to a busy human. Every one carries a payload aimed at an AI agent's authority.</p>
-  <p class="attack-hook">Screen one. Forward the report. That's the demo.</p>
+<section class="attack-hero" aria-labelledby="attack-title">
+  <div class="horizon" aria-hidden="true">
+    <div class="accretion"></div>
+    <div class="horizon-ring"></div>
+    <div class="horizon-void"><div class="horizon-core">event horizon</div></div>
+  </div>
+  <div>
+    <h1 id="attack-title">Paste any email your agent will read. <span class="watch">Watch what it would have executed.</span></h1>
+    <p class="attack-lede">Five real-world injections dressed as ordinary business text — an invoice, a knowledge-base article, an executive forward, a calendar invite, a support ticket. Every one of them reads as routine to a busy human. Every one carries a payload aimed at an AI agent's authority.</p>
+    <p class="attack-fine">Screen one. Forward the report. That's the demo.</p>
+  </div>
 </section>
-<section class="attack-list">
-  ${cards}
+<section class="pack" aria-label="Five approaches">
+  ${streams}
 </section>
-<section style="max-width:720px;padding-bottom:40px">
-  <p style="color:#98a2b3;font-size:14px">Have your own text? <a href="/demo">Paste it at the demo console</a>. After you have a report: <a href="/get-started">Install Parse</a>.</p>
-</section>`;
+<p class="attack-next">Have your own text? <a href="/demo">Paste it at the demo console</a>. After you have a report: <a href="/get-started">Install Parse</a>.</p>
+<script>
+(function () {
+  var core = document.querySelector(".horizon-core");
+  if (!core) return;
+  var rest = core.textContent;
+  document.querySelectorAll(".stream").forEach(function (el) {
+    var light = function () {
+      document.body.setAttribute("data-lit", "true");
+      core.textContent = el.getAttribute("data-label") || rest;
+    };
+    var dim = function () {
+      document.body.removeAttribute("data-lit");
+      core.textContent = rest;
+    };
+    el.addEventListener("pointerenter", light);
+    el.addEventListener("pointerleave", dim);
+    el.addEventListener("focus", light);
+    el.addEventListener("blur", dim);
+  });
+})();
+</script>`;
 
   return c.html(
     renderPage({
-      title: `Attack Pack — see what your agent would have executed | ${PRODUCT.name}`,
+      title: "Attack Pack — see what your agent would have executed",
       description:
         "Five real-world prompt injections dressed as ordinary business emails. Screen one through the Parse pipeline, get a forwardable evidence report for your security review.",
       path: "/attack",
       content,
       baseUrl,
       jsonLd: [organizationSchema(baseUrl)],
+      bodyAttributes: 'class="attack-pack"',
       breadcrumbs: [
         { name: "Home", href: "/" },
         { name: "Attack Pack", href: "/attack" },
@@ -236,15 +406,6 @@ attackPackRoutes.get("/attack", (c) => {
 });
 
 // ── GET /attack/:slug — one sample, ready to screen ─────────────────────────
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 attackPackRoutes.get("/attack/:slug", (c) => {
   const sample = SAMPLE_BY_SLUG.get(c.req.param("slug"));
@@ -256,26 +417,34 @@ attackPackRoutes.get("/attack/:slug", (c) => {
 
   const content = `
 <style>
-  .sample-wrap { max-width: 760px; padding: 26px 0 44px; }
-  .sample-wrap h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 6px; }
-  .sample-disguise { color: #98a2b3; font-size: 14.5px; margin-bottom: 18px; }
+  .sample-wrap { max-width: 760px; padding: 10px 0 44px; }
+  .sample-wrap h1 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(1.8rem, 4vw, 2.5rem); letter-spacing: -0.01em; margin-bottom: 8px;
+  }
+  .sample-disguise {
+    color: var(--text-soft); font-family: var(--mono); font-size: 12px;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 18px;
+  }
   .sample-email {
-    border: 1px solid var(--border, #e4e7ec); border-radius: 12px; background: var(--card, #fff);
+    border: 1px solid var(--border); background: var(--surface);
     padding: 22px 24px; font-size: 14.5px; line-height: 1.65; white-space: pre-wrap;
-    font-family: Georgia, 'Times New Roman', serif; color: #1d2939; margin-bottom: 20px;
+    font-family: Georgia, 'Times New Roman', serif; color: var(--text-dim); margin-bottom: 20px;
   }
   .sample-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 22px; }
   .sample-screen-btn {
-    background: #d92d20; color: #fff; border: none; border-radius: 8px;
-    padding: 12px 22px; font-size: 15px; font-weight: 700; cursor: pointer;
+    background: var(--text); color: #000; border: none;
+    padding: 12px 22px; font-size: 14px; font-weight: 600;
+    font-family: 'Saira', sans-serif; letter-spacing: 0.04em; cursor: pointer;
   }
-  .sample-screen-btn:disabled { opacity: .6; cursor: wait; }
-  .sample-status { font-size: 14px; color: #475467; }
+  .sample-screen-btn:disabled { opacity: .4; cursor: wait; }
+  .sample-status { font-size: 13px; color: var(--text-soft); font-family: var(--mono); }
   .sample-blast {
-    border-left: 3px solid #d92d20; padding: 12px 16px; background: #fef3f2;
-    border-radius: 0 8px 8px 0; font-size: 14.5px; line-height: 1.55; color: #7a271a; margin-bottom: 18px;
-    display: none;
+    border-left: 3px solid var(--destructive); padding: 12px 16px;
+    background: var(--destructive-dim); font-size: 14.5px; line-height: 1.55;
+    color: var(--text); margin-bottom: 18px; display: none;
   }
+  .sample-note { color: var(--text-soft); font-size: 13.5px; }
 </style>
 <section class="sample-wrap">
   <h1>${escapeHtml(sample.title)}</h1>
@@ -286,7 +455,7 @@ attackPackRoutes.get("/attack/:slug", (c) => {
     <button class="sample-screen-btn" id="screen-btn" onclick="screenSample('${sample.slug}')">Screen this text →</button>
     <span class="sample-status" id="status">Runs through the production /v1/parse pipeline.</span>
   </div>
-  <p style="color:#98a2b3;font-size:13.5px">This is a synthetic sample published for demonstration. No real vendor, customer, or endpoint is involved.</p>
+  <p class="sample-note">This is a synthetic sample published for demonstration. No real vendor, customer, or endpoint is involved.</p>
 </section>
 <script>
 async function screenSample(slug) {
@@ -316,7 +485,7 @@ async function screenSample(slug) {
 
   return c.html(
     renderPage({
-      title: `${sample.title} — Attack Pack | ${PRODUCT.name}`,
+      title: `${sample.title} — Attack Pack`,
       description: `${sample.disguise}. Screen it through the Parse pipeline and get a forwardable evidence report.`,
       path: `/attack/${sample.slug}`,
       content,
