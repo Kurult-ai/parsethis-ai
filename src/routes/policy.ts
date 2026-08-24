@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { authMiddleware, resolveEnvironment } from "../auth.js";
+import { authMiddleware, requestedPolicyEnvironment } from "../auth.js";
 import { prisma } from "../db.js";
 import { cachePolicyData, getCachedPolicyData, invalidatePolicyCache, invalidateLocalMemoForPolicy } from "../result-store.js";
 import type { AppEnv, ScreeningPolicy } from "../types.js";
@@ -202,8 +202,9 @@ policyRoutes.get("/v1/policy", authMiddleware("evaluate"), async (c) => {
   const tier = apiKey.tier ?? "free";
 
   // Environment: query param takes priority, then header, then default
-  const envQuery = c.req.query("environment");
-  const environment = envQuery || c.get("environment") || "production";
+  const envChoice = requestedPolicyEnvironment(c);
+  if (!envChoice.ok) return c.json({ error: envChoice.error }, 400);
+  const environment = envChoice.environment;
 
   // Which environments exist for this key (run 32/33): a prospect who wrote
   // staging via the PUT body and then read production saw "your change did
@@ -261,11 +262,9 @@ policyRoutes.put("/v1/policy", authMiddleware("evaluate"), async (c) => {
 
   const body = await c.req.json();
 
-  // Environment from body, header, or default
-  const environment =
-    (typeof body.environment === "string" && ["development", "staging", "production"].includes(body.environment) ? body.environment : undefined)
-    || c.get("environment")
-    || "production";
+  const envChoice = requestedPolicyEnvironment(c, body.environment);
+  if (!envChoice.ok) return c.json({ error: envChoice.error }, 400);
+  const environment = envChoice.environment;
 
   // Extract optional change reason for revision tracking
   const changeReason: string | undefined =

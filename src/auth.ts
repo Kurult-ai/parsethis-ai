@@ -51,16 +51,44 @@ const DEFAULT_POLICY: ScreeningPolicy = {
   defaultMode: undefined,
 };
 
-// Valid environments for policy pinning
+// Built-in names plus any [a-z0-9._-] token (run 47: silent remap of
+// disaster-recovery → production was the Team-card lie). Screening still
+// fail-opens a garbage header to production so /v1/parse never 400s on a typo.
 export const VALID_ENVIRONMENTS = ["development", "staging", "production"] as const;
 export type PolicyEnvironment = (typeof VALID_ENVIRONMENTS)[number];
 export const DEFAULT_ENVIRONMENT = "production";
+export const ENVIRONMENT_NAME_RE = /^[a-z0-9][a-z0-9._-]{0,39}$/i;
 
-/** Read and validate X-Parse-Environment header (default: "production"). */
+export function isEnvironmentName(value: string): boolean {
+  return ENVIRONMENT_NAME_RE.test(value);
+}
+
+/** Read X-Parse-Environment for screening. Missing or invalid → production. */
 export function resolveEnvironment(c: Context<AppEnv>): string {
-  const raw = c.req.header("x-parse-environment") || DEFAULT_ENVIRONMENT;
-  if (VALID_ENVIRONMENTS.includes(raw as PolicyEnvironment)) return raw;
+  const raw = c.req.header("x-parse-environment");
+  if (!raw) return DEFAULT_ENVIRONMENT;
+  if (isEnvironmentName(raw)) return raw;
   return DEFAULT_ENVIRONMENT;
+}
+
+export function requestedPolicyEnvironment(
+  c: Context<AppEnv>,
+  bodyEnv?: unknown,
+): { ok: true; environment: string } | { ok: false; error: string } {
+  const raw =
+    (typeof bodyEnv === "string" && bodyEnv.trim() ? bodyEnv.trim() : undefined) ||
+    c.req.query("environment") ||
+    c.req.header("x-parse-environment") ||
+    undefined;
+  if (!raw) return { ok: true, environment: DEFAULT_ENVIRONMENT };
+  if (!isEnvironmentName(raw)) {
+    return {
+      ok: false,
+      error:
+        `Invalid environment "${raw}". Use development, staging, production, or a name matching [a-z0-9._-]{1,40}.`,
+    };
+  }
+  return { ok: true, environment: raw };
 }
 
 // In-memory rate limit fallback (used when Redis is unavailable)
