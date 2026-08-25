@@ -239,9 +239,8 @@ billingRoutes.post("/v1/billing/signup-checkout", async (c) => {
     "unknown";
 
   // Fail-closed per-IP rate limit (5/min). Redis unreachable → 503.
-  if (!isRedisAvailable()) {
-    return c.json({ error: "Rate limiting service unavailable. Try again later." }, 503);
-  }
+  // Do not treat "client not constructed yet" as down — lazyConnect leaves
+  // `isRedisAvailable()` false until the first getRedis()/ensureRedisConnected().
   try {
     const connected = await ensureRedisConnected();
     if (!connected) {
