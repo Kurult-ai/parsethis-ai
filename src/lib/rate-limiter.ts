@@ -12,24 +12,9 @@
 
 import { createHash } from "node:crypto";
 import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
+import { TIER_RATE_LIMITS, getTierRateLimit } from "./tier-rpm.js";
 
-// ─── Tier-based rate limits (requests per minute) ──────────────────────────
-
-export const TIER_RATE_LIMITS: Record<string, number> = {
-  free: 10,
-  pro: 100,
-  team: 500,
-  compliance: 500,
-  enterprise: 500,
-};
-
-export function getTierRateLimit(tier?: string): number {
-  if (tier && tier in TIER_RATE_LIMITS) {
-    return TIER_RATE_LIMITS[tier];
-  }
-  // Default to the most restrictive tier if unknown
-  return TIER_RATE_LIMITS.free;
-}
+export { TIER_RATE_LIMITS, getTierRateLimit };
 
 // ─── In-memory fallback ────────────────────────────────────────────────────
 

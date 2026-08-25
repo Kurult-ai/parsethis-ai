@@ -252,7 +252,7 @@ having to remember the flag.</p>
     <h3>🔒 Rate Limiting</h3>
     <ul>
       <li>Redis sliding-window (atomic Lua) with in-memory fallback</li>
-      <li>Tier-based: Free ${TIER_RATE_LIMITS.free}/min → Team ${TIER_RATE_LIMITS.team}/min. Talk to us after high-availability ships.</li>
+      <li>Tier-based: Free ${TIER_RATE_LIMITS.free}/min → Team ${TIER_RATE_LIMITS.team}/min (public ceiling). Named overflow is ${TIER_RATE_LIMITS.enterprise} instant/min on a granted key — not a public SKU, not an SLA. Deep stays metered. Talk to us after high-availability for two-region.</li>
       <li>API keys SHA-256 hashed before use as rate-limit keys</li>
       <li>HTTP 429 + <code>Retry-After</code> on breach</li>
     </ul>

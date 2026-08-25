@@ -237,6 +237,8 @@ describe("trust rate-limit copy", () => {
     const html = renderTrustPage("https://www.parsethis.ai");
     const needle = `Free ${TIER_RATE_LIMITS.free}/min → Team ${TIER_RATE_LIMITS.team}/min`;
     assert.ok(html.includes(needle), `missing ${needle}`);
+    assert.ok(html.includes("public ceiling"));
+    assert.ok(html.includes("Named overflow"));
     assert.ok(html.includes("Talk to us after high-availability"));
     assert.equal(html.includes(`Enterprise ${TIER_RATE_LIMITS.enterprise}/min`), false);
   });

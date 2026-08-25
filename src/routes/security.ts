@@ -37,9 +37,15 @@ securityRoutes.get("/v1/security/headers", (c) => {
       algorithm: "redis_sliding_window_with_memory_fallback",
       tiers: {
         free: { requests_per_minute: TIER_RATE_LIMITS.free },
+        solo: { requests_per_minute: TIER_RATE_LIMITS.solo },
         pro: { requests_per_minute: TIER_RATE_LIMITS.pro },
-        team: { requests_per_minute: TIER_RATE_LIMITS.team },
+        team: { requests_per_minute: TIER_RATE_LIMITS.team, public_ceiling: true },
         compliance: { requests_per_minute: TIER_RATE_LIMITS.compliance },
+        enterprise: {
+          requests_per_minute: TIER_RATE_LIMITS.enterprise,
+          public_sku: false,
+          note: "Named overflow grant on instant screening. Not self-serve. Deep stays metered. No SLA until HA.",
+        },
       },
       headers: ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "Retry-After"],
       rate_limited_response: 429,

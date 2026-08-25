@@ -58,9 +58,10 @@ describe("admin routes", () => {
     assert.ok(actions.includes("admin.improvement_proposal.update_status"));
     assert.ok(actions.includes("admin.improvement_proposal.create_triage_task"));
 
-    const grant = body.actions.find((action: { name: string }) => action.name === "admin.entitlement.grant");
+    const grant = body.actions.find((action: { name: string; note?: string }) => action.name === "admin.entitlement.grant");
     assert.equal(grant.dry_run_supported, true);
     assert.equal(grant.mutates, true);
     assert.equal(grant.risk, "medium");
+    assert.match(String(grant.note), /overflow grant/i);
   });
 });

@@ -158,10 +158,11 @@ Pattern-only screening is a real trade: pattern matching alone under-reports par
   | Tier | Requests/Minute |
   |---|---|
   | Free | 10 |
+  | Solo | 30 |
   | Pro | 100 |
-  | Team | 500 |
+  | Team | 500 (public ceiling) |
   | Compliance | 500 |
-  | Enterprise | 500 (1000 burst) |
+  | Enterprise | 1000 instant/min named overflow grant — not a public SKU, not an SLA |
 - **Response headers:** `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`
 - **Rate-limited response:** HTTP 429 with `Retry-After` header
 - **Key hashing:** API keys are SHA-256 hashed before use as rate-limit keys (privacy)

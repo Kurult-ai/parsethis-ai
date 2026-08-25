@@ -358,8 +358,9 @@ latency: 21 ms</pre>
       Named contact replies within a business day. That is attention, not an uptime SLA.
     </p>
     <p class="pricing-muted" style="margin:0 0 14px;font-size:14px;">
-      Need more than Team&rsquo;s ${PLAN_LIMITS.team.requestsPerMinute} req/min? Same inbox &mdash; there is no public
-      Enterprise price until we have one, and checkout for that path is not self-serve.
+      Need more than Team&rsquo;s ${PLAN_LIMITS.team.requestsPerMinute} req/min? Same inbox &mdash; named overflow is
+      ${PLAN_LIMITS.enterprise.requestsPerMinute} instant/min on a granted key, not a public SKU and not an SLA.
+      Checkout for that path is not self-serve.
     </p>
     <form class="dpa-contact" method="post" action="/support" style="display:grid;gap:10px;max-width:440px;">
       <input type="text" name="company_website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-10000px;width:1px;height:1px;opacity:0;">
@@ -470,8 +471,9 @@ latency: 21 ms</pre>
       is never a cut-off and is not charged as overage today. A dim price means that volume is
       above the plan&rsquo;s included deep budget &mdash; screening still runs.
       Above ${PLAN_LIMITS.team.deepScreeningsPerMonth.toLocaleString("en-US")} deep/mo, Team still screens.
-      Need more than ${PLAN_LIMITS.team.requestsPerMinute} req/min? Talk to us &mdash; there is no
-      public Enterprise price yet. x402 is pay-per-call with no account, priced alongside so you can compare.
+      Need more than ${PLAN_LIMITS.team.requestsPerMinute} req/min? Talk to us &mdash; named overflow is
+      ${PLAN_LIMITS.enterprise.requestsPerMinute} instant/min on a granted key, not a public price.
+      x402 is pay-per-call with no account, priced alongside so you can compare.
     </p>
   </div>
 

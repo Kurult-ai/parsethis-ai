@@ -206,8 +206,8 @@ change. Included on every plan, Free upward.
 - Security Audit: ${baseUrl}/audit — one-time $47 audit: your prompts screened plus a 10-technique adversarial red-team battery, OWASP/NIST/SOC2 mapping, and an honest gap disclosure.
 - Free API keys: ${PLAN_LIMITS.free.requestsPerMinute} requests/minute and ${PLAN_LIMITS.free.sandboxExecutionsPerHour} sandbox executions/hour.
 - Pro keys: ${PLAN_LIMITS.pro.requestsPerMinute} requests/minute.
-- Team keys: ${PLAN_LIMITS.team.requestsPerMinute} requests/minute.
-- Enterprise keys: ${PLAN_LIMITS.enterprise.requestsPerMinute} requests/minute.
+- Team keys: ${PLAN_LIMITS.team.requestsPerMinute} requests/minute (public ceiling).
+- Named overflow is ${PLAN_LIMITS.enterprise.requestsPerMinute} instant/min on a granted key — not a public SKU, not an SLA. Checkout for that path is not self-serve.
 - Org governance (tool rules, roles, ceiling, audit trail) is included on every plan, including Free. Tiers differ on volume, rate limit, SIEM forwarding and evidence packs.
 - Org roles: org_admin, security_analyst, auditor, developer.
 - A tool ban is enforced at three points: agent registration (422 on a declared tool), screening (reads metadata.tool_permissions or body.tools), the org gateway (reads the tools array off the wire), and MCP screen_prompt (same org file + connector rules as /v1/parse).
@@ -242,7 +242,7 @@ ${prices}
 
 - Bearer key: POST ${baseUrl}/v1/keys/generate with {"name":"your-agent"}; use Authorization: Bearer <key>. This is the working auth method.
 - x402: not configured on this deployment (GET /v1/pricing.enabled is false). Do not emit or follow a 402 → sign USDC → retry path until enabled is true.
-- For sustained production volume, use Pro, Team, or Enterprise keys.
+- For sustained production volume, use Solo, Pro, Team, or Compliance. Named overflow rpm is a grant, not a public SKU.
 
 ## What Not To Claim
 

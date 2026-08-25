@@ -16,6 +16,13 @@ yet.
 
 ## 2026-08-25
 
+**Enterprise is overflow rpm, not a SKU.** Public ceiling is Team
+(500 instant/min). A named overflow grant is 1000 instant/min on the key
+(`admin.entitlement.grant` with `tier=enterprise`). One rpm table
+(`src/lib/tier-rpm.ts` from `PLAN_LIMITS`). Deep stays metered. Checkout
+stays 503. Not an SLA. `GET /v1/security/headers` marks enterprise
+`public_sku: false`.
+
 **Compliance is self-serve at $199/mo.** `POST /v1/billing/signup-checkout`
 `tier=compliance` opens Stripe Checkout. DPA + SCCs, Team-scale limits. No
 contractual SLA. Not SOC 2 Type II. Enterprise stays 503.

@@ -37,7 +37,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Is there a free tier?",
     answer:
-      `Yes. Self-service API keys have a free tier with ${PLAN_LIMITS.free.requestsPerMinute} requests per minute and ${PLAN_LIMITS.free.sandboxExecutionsPerHour} sandbox executions per hour. No credit card is required. For higher limits, use Pro, Team, or Enterprise keys; use x402 ${X402_PAYMENT.currency} payments on ${X402_PAYMENT.networkName} for first-call or autonomous pay-per-request access.`,
+      `Yes. Self-service API keys have a free tier with ${PLAN_LIMITS.free.requestsPerMinute} requests per minute and ${PLAN_LIMITS.free.sandboxExecutionsPerHour} sandbox executions per hour. No credit card is required. For higher limits, use Solo, Pro, Team, or Compliance; use x402 ${X402_PAYMENT.currency} payments on ${X402_PAYMENT.networkName} for first-call or autonomous pay-per-request access.`,
   },
 
   // --- Prompt Safety (5 items) ---
@@ -91,7 +91,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: "What are the rate limits?",
     answer:
-      `Free tier: ${PLAN_LIMITS.free.requestsPerMinute} requests per minute and ${PLAN_LIMITS.free.sandboxExecutionsPerHour} sandbox executions per hour. Pro: ${PLAN_LIMITS.pro.requestsPerMinute} requests per minute. Team: ${PLAN_LIMITS.team.requestsPerMinute} requests per minute. Enterprise: custom or ${PLAN_LIMITS.enterprise.requestsPerMinute} requests per minute by default. Key generation is limited separately to prevent abuse.`,
+      `Free: ${PLAN_LIMITS.free.requestsPerMinute} requests per minute and ${PLAN_LIMITS.free.sandboxExecutionsPerHour} sandbox executions per hour. Solo: ${PLAN_LIMITS.solo.requestsPerMinute}/min. Pro: ${PLAN_LIMITS.pro.requestsPerMinute}/min. Team: ${PLAN_LIMITS.team.requestsPerMinute}/min (public ceiling). Compliance matches Team. Named overflow is ${PLAN_LIMITS.enterprise.requestsPerMinute} instant/min on a granted key — not a public SKU and not an SLA. Deep stays metered. Key generation is limited separately to prevent abuse.`,
   },
   {
     question: "How do I configure screening policy?",

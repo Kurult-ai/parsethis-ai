@@ -13,7 +13,7 @@ import { getBaseUrl } from "../lib/route-utils.js";
 import { invalidateApiKeyCache, invalidatePolicyCache } from "../result-store.js";
 import type { AppEnv } from "../types.js";
 import { renderAdminDashboardPage } from "../pages/admin.js";
-import { PLAN_LIMITS } from "../lib/product-facts.js";
+import { TIER_RATE_LIMITS, isOverflowRpmTier } from "../lib/tier-rpm.js";
 import {
   addGrantPeriod,
   manualCustomerId,
@@ -26,17 +26,13 @@ import { GEO_AUDIT_ACTIONS } from "../lib/geo-analytics.js";
 export const adminRoutes = new Hono<AppEnv>();
 
 const VALID_SCOPES = ["analyze", "evaluate", "chat", "admin"] as const;
-const VALID_TIERS = ["free", "pro", "team", "enterprise"] as const;
-const TIER_RATE_LIMITS: Record<(typeof VALID_TIERS)[number], number> = {
-  free: PLAN_LIMITS.free.requestsPerMinute,
-  pro: PLAN_LIMITS.pro.requestsPerMinute,
-  team: PLAN_LIMITS.team.requestsPerMinute,
-  enterprise: PLAN_LIMITS.enterprise.requestsPerMinute,
-};
+const VALID_TIERS = ["free", "solo", "pro", "team", "compliance", "enterprise"] as const;
 const MAX_THRESHOLD_BY_TIER: Record<string, number> = {
   free: 5,
+  solo: 6,
   pro: 7,
   team: 9,
+  compliance: 9,
   enterprise: 10,
 };
 const DEFAULT_ADMIN_POLICY = {
@@ -505,7 +501,8 @@ function buildAdminManifest(baseUrl: string) {
       risk: "medium",
       dry_run_supported: true,
       autonomous_when: ["duration <= 30 days", "target customer resolved", "no abuse/security flags", "manual/comp price only"],
-      requires_approval_when: ["enterprise tier", "refund/charge", "duration > 30 days", "security-sensitive account"],
+      requires_approval_when: ["enterprise overflow rpm", "refund/charge", "duration > 30 days", "security-sensitive account"],
+      note: "tier=enterprise is a named overflow grant (instant rpm from PLAN_LIMITS via tier-rpm). Not a public SKU. Checkout stays 503. Deep stays metered. Not an SLA.",
       params: {
         email: "string optional when api_key_id is provided",
         api_key_id: "string optional when email is provided",
@@ -1675,6 +1672,7 @@ async function grantEntitlementData(c: AdminContext, params: UnknownRecord) {
   }
   if (!key && !userId) return jsonError(c, 400, "Missing field", "email/user_id is required when creating a key.");
 
+  const overflow = isOverflowRpmTier(tier);
   const planned = {
     dry_run: dryRun,
     user_id: userId || key?.userId,
@@ -1682,6 +1680,8 @@ async function grantEntitlementData(c: AdminContext, params: UnknownRecord) {
     create_key: !key,
     tier,
     rate_limit: TIER_RATE_LIMITS[tier],
+    overflow_rpm: overflow,
+    public_sku: !overflow,
     price_mode: priceUsdCents === 0 || period ? "comp" : "manual",
     price_usd_cents: priceUsdCents,
     stripe_price_id: priceId,
@@ -1764,6 +1764,8 @@ async function grantEntitlementData(c: AdminContext, params: UnknownRecord) {
     changed: true,
     api_key: afterKey ? serializeApiKey(afterKey) : serializeApiKey(key),
     raw_key_created: rawKey,
+    overflow_rpm: overflow,
+    public_sku: !overflow,
     entitlement_grant: serializeGrant(grant),
     subscription: { id: subscription.id, status: subscription.status, stripe_price_id: subscription.stripePriceId, current_period_end: subscription.currentPeriodEnd.toISOString(), cancel_at_period_end: subscription.cancelAtPeriodEnd },
     receipt: serializeReceipt(receipt),

@@ -3,7 +3,7 @@ import bcrypt from "bcrypt";
 import { prisma } from "./db.js";
 import { backfillApiKeyFastHash, cacheApiKey, getCachedApiKey, invalidateApiKeyCache } from "./result-store.js";
 import { isNegativelyCached, recordNegativeCache, isAuthFailureLimited } from "./lib/auth-dos-guard.js";
-import { PLAN_LIMITS } from "./lib/product-facts.js";
+import { TIER_RATE_LIMITS } from "./lib/tier-rpm.js";
 import { SELF_SERVICE_USER_ID } from "./lib/constants.js";
 import { isSyntheticKeyName } from "./lib/synthetic-keys.js";
 import { abandonRedisConnection, ensureRedisConnected, getRedis } from "./redis.js";
@@ -263,15 +263,6 @@ export interface ApiKeyRecord {
   createdAt: Date;
   revokedAt: Date | null;
 }
-
-const TIER_RATE_LIMITS: Record<string, number> = {
-  free: PLAN_LIMITS.free.requestsPerMinute,
-  solo: PLAN_LIMITS.solo.requestsPerMinute,
-  pro: PLAN_LIMITS.pro.requestsPerMinute,
-  team: PLAN_LIMITS.team.requestsPerMinute,
-  compliance: PLAN_LIMITS.compliance.requestsPerMinute,
-  enterprise: PLAN_LIMITS.enterprise.requestsPerMinute,
-};
 
 export async function createApiKey(
   userId: string,
@@ -677,7 +668,7 @@ export async function downgradeApiKeyTier(id: string): Promise<void> {
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   const key = await prisma.apiKey.update({
     where: { id },
-    data: { tier: "free", rateLimit: 10, expiresAt },
+    data: { tier: "free", rateLimit: TIER_RATE_LIMITS.free, expiresAt },
   });
   await invalidateApiKeyCache(key.keyPrefix);
   await syncOwnedOrgTier(id, "free");

@@ -94,5 +94,7 @@ describe("DPA form — named mailbox", () => {
     assert.match(card, /value="dpa"/);
     assert.match(card, /business day/);
     assert.match(card, /not an uptime SLA/i);
+    assert.match(card, /named overflow is/i);
+    assert.match(card, /not a public SKU/i);
   });
 });

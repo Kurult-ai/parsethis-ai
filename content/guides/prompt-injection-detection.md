@@ -137,4 +137,4 @@ Parse publishes:
 
 If an agent has no bearer key, it can call a billable REST endpoint without `Authorization`, receive a 402 response, sign the advertised USDC payment on Base mainnet, and retry with `payment-signature`.
 
-Use x402 for autonomous first-call or metered access. Use Pro, Team, or Enterprise keys for sustained production volume.
+Use x402 for autonomous first-call or metered access. Use Solo, Pro, Team, or Compliance for sustained production volume.

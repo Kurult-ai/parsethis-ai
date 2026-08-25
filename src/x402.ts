@@ -501,7 +501,7 @@ export function getPricingInfo() {
       typescript: "Use /skill#x402-node for the current TypeScript x402 client recipe",
       python: 'pip install x402 — then use wrap_requests(session, wallet)',
       cli: 'npm install -g @x402/purl — then use purl POST <url>',
-      note: "x402 is best for autonomous or first-call metered access. Use Pro, Team, or Enterprise keys for sustained production volume.",
+      note: "x402 is best for autonomous or first-call metered access. Use Solo, Pro, Team, or Compliance for sustained production volume.",
     },
   };
 }
