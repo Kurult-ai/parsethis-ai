@@ -13,6 +13,7 @@ lives, and the run-22 rules that must not be re-derived from stale comments.
 | Registry | `POST /v1/agents` | Org-scoped. Paid keys auto-provision an org. |
 | Bootstrap | `POST /v1/orgs/bootstrap` | Paid unaffiliated keys may create one org. Already-in-org stays refused. |
 | Entitlements | `src/lib/tier-entitlements.ts` | Price-monotonic. Compliance artifacts from Pro. |
+| Enterprise inbound | `docs/enterprise-inbound-runbook.md` | Overflow grant, not a SKU. Qualify T1–T4. Checkout 503. |
 | Stripe copy | `src/lib/stripe-copy.ts` | Lead with unlimited instant screening. |
 
 ## Run-22 decisions (2026-08-18)

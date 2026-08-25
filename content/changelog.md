@@ -21,7 +21,7 @@ yet.
 (`admin.entitlement.grant` with `tier=enterprise`). One rpm table
 (`src/lib/tier-rpm.ts` from `PLAN_LIMITS`). Deep stays metered. Checkout
 stays 503. Not an SLA. `GET /v1/security/headers` marks enterprise
-`public_sku: false`.
+`public_sku: false`. Inbound: `docs/enterprise-inbound-runbook.md`.
 
 **Compliance is self-serve at $199/mo.** `POST /v1/billing/signup-checkout`
 `tier=compliance` opens Stripe Checkout. DPA + SCCs, Team-scale limits. No

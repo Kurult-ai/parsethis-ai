@@ -639,3 +639,7 @@ Public ceiling is Team (500/min). `admin.entitlement.grant` with
 `src/lib/tier-rpm.ts`. Checkout stays 503. Do not mint a Stripe Enterprise
 price. Do not staff Enterprise GTM before Type II and HA. DPA/security
 tickets still email `d@kurult.ai`.
+
+**The second a real prospect needs Enterprise:** execute
+`docs/enterprise-inbound-runbook.md`. Qualify T1–T4 before any grant.
+Do not staff Guyuk. Intercom `kublai` in the first 15 minutes.
