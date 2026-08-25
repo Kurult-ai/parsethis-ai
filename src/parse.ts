@@ -81,7 +81,8 @@ function detectStructuralRisks(prompt: string): Array<{ category: RiskCategory; 
 
   // Hidden instruction in an HTML comment — a carrier the human reader does
   // not see. Severity 8 so it floors a block independently of source.
-  if (/<!--[\s\S]{0,800}?(?:assistant|system|instruction|do not mention)[\s\S]{0,800}?-->/i.test(prompt)) {
+  // Comment + imperative, not only the cooler-log "assistant/do not mention" frame.
+  if (/<!--[\s\S]{0,800}?(?:assistant|system|instruction|do not mention|ignore|override|disregard|rank|issue)[\s\S]{0,800}?-->/i.test(prompt)) {
     risks.push({
       category: "indirect_injection",
       severity: 8,

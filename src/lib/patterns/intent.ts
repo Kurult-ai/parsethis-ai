@@ -1318,10 +1318,18 @@ function maybeFlagRoleSpoof(flags: IntentRiskFlag[], text: string): void {
       roleTokenIsOnlyPathSegment(window) &&
       !UNRESTRICTED_ROLE.test(window) &&
       !SYSTEM_DEVELOPER_BOUNDARY.test(window);
+    // SYSTEM:/DEVELOPER: already is the hierarchy marker. Pairing it with an
+    // action verb (set, enable, omit…) is the same spoof as pairing it with
+    // Reveal. Do not add those verbs to OPERATIONAL_INSTRUCTION globally —
+    // "set the banner" in owner speech is not a jailbreak.
+    const hierarchyAction =
+      OPERATIONAL_INSTRUCTION.test(window)
+      || UNRESTRICTED_ROLE.test(window)
+      || (SYSTEM_DEVELOPER_BOUNDARY.test(window) && ACTION_DIRECTIVE.test(window));
     if (
       !roleHit ||
       pathOnlyRole ||
-      !(OPERATIONAL_INSTRUCTION.test(window) || UNRESTRICTED_ROLE.test(window)) ||
+      !hierarchyAction ||
       isDefensiveDiscussion(window) ||
       isBenignWorkflowHandoff(window) ||
       isBenignDomainExpertFraming(window)
@@ -1397,7 +1405,7 @@ const CREDENTIAL_RETURN_PATH =
  * than any list of dangerous actions, and it generalises far beyond firewalls.
  */
 const CONCEALMENT_FROM_OWNER =
-  /\b(?:do\s+not|don'?t|never|no\s+need\s+to|avoid)\b[^.\n]{0,60}\b(?:surface|mention|tell|inform|notify|alert|report|disclose|show|reveal|escalate|log)\b[^.\n]{0,60}\b(?:the\s+)?(?:operator|owner|user|account\s+holder|human|admin(?:istrator)?|customer|reviewer|them|him|her|anyone|(?:service\s+)?desk\s+lead|service\s+desk|manager|lead)\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,80}\b(?:send|email|fire)\b[^.\n]{0,40}\b(?:notification|notify|alert)s?\b|\b(?:without|bypass(?:ing)?)\s+(?:notifying|alerting|informing|telling)\b|\b(?:silently|quietly)\b[^.\n]{0,40}\b(?:proceed|continue|apply|execute|run|do\s+it)\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,60}\b(?:tell|inform|notify|alert|escalate\s+to|report\s+to)\b[^.\n]{0,60}\bcompliance\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,40}\b(?:email|message|contact|text)\b[^.\n]{0,40}\b(?:the\s+)?(?:operator|owner|user|account\s+holder|human|admin(?:istrator)?|customer|reviewer|them|him|her|anyone|(?:service\s+)?desk\s+lead|service\s+desk|manager|lead)\b/i;
+  /\b(?:do\s+not|don'?t|never|no\s+need\s+to|avoid)\b[^.\n]{0,60}\b(?:surface|mention|tell|inform|notify|alert|report|disclose|show|reveal|escalate|log)\b[^.\n]{0,60}\b(?:the\s+)?(?:operator|owner|user|account\s+holder|human|admin(?:istrator)?|customer|merchant|vendor|client|subscriber|reviewer|them|him|her|anyone|(?:service\s+)?desk\s+lead|service\s+desk|manager|lead)\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,80}\b(?:send|email|fire)\b[^.\n]{0,40}\b(?:notification|notify|alert)s?\b|\b(?:without|bypass(?:ing)?)\s+(?:notifying|alerting|informing|telling)\b|\b(?:silently|quietly)\b[^.\n]{0,40}\b(?:proceed|continue|apply|execute|run|do\s+it)\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,60}\b(?:tell|inform|notify|alert|escalate\s+to|report\s+to)\b[^.\n]{0,60}\bcompliance\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,40}\b(?:email|message|contact|text)\b[^.\n]{0,40}\b(?:the\s+)?(?:operator|owner|user|account\s+holder|human|admin(?:istrator)?|customer|merchant|vendor|client|subscriber|reviewer|them|him|her|anyone|(?:service\s+)?desk\s+lead|service\s+desk|manager|lead)\b/i;
 
 /**
  * Same hide-from-human conjunct, aimed at a given name rather than an
@@ -1415,6 +1423,14 @@ const CONCEALMENT_FROM_NAMED_PERSON =
  */
 const APPROVAL_RECORD_SUPPRESSION =
   /\b(?:do\s+not|don'?t|never|skip|omit|without)\b[^.\n]{0,50}\b(?:creat(?:e|ing)|log(?:ging)?|fil(?:e|ing)|open|write)\b[^.\n]{0,40}\bapprovals?\b|\b(?:do\s+not|don'?t|never)\s+create\s+an?\s+approval(?:\s+record)?\b/i;
+
+/**
+ * Hide the credit itself, with no owner-class noun. Only concealment when a
+ * live tool invocation is already present — furious "credit this pallet" mail
+ * is not this shape.
+ */
+const CONCEALMENT_MENTION_CREDIT =
+  /\b(?:do\s+not|don'?t|never)\b[^.\n]{0,40}\bmention\s+the\s+credit\b/i;
 
 /**
  * An instruction to invoke a runtime tool, not "call me". Snake_case
@@ -1511,7 +1527,8 @@ function maybeFlagConcealedDirective(flags: IntentRiskFlag[], text: string): voi
   const concealed =
     CONCEALMENT_FROM_OWNER.test(text)
     || CONCEALMENT_FROM_NAMED_PERSON.test(text)
-    || approvalSkip;
+    || approvalSkip
+    || (CONCEALMENT_MENTION_CREDIT.test(text) && toolCall);
   if (!concealed) return;
   const classic = ACTION_DIRECTIVE.test(text);
   const skipIdentityRecovery = SKIP_IDENTITY.test(text) && ACCOUNT_RECOVERY_ACTION.test(text);
@@ -1529,7 +1546,7 @@ function maybeFlagConcealedDirective(flags: IntentRiskFlag[], text: string): voi
     action_floor: "block",
     evidence: text.slice(0, 240),
     source: "deterministic_intent",
-  }, [CONCEALMENT_FROM_OWNER, CONCEALMENT_FROM_NAMED_PERSON, APPROVAL_RECORD_SUPPRESSION, TOOL_INVOCATION]);
+  }, [CONCEALMENT_FROM_OWNER, CONCEALMENT_FROM_NAMED_PERSON, APPROVAL_RECORD_SUPPRESSION, CONCEALMENT_MENTION_CREDIT, TOOL_INVOCATION]);
 }
 
 /**

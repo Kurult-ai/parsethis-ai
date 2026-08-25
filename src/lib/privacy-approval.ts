@@ -138,6 +138,13 @@ const SECRET_SIGNAL: PrivacySignal[] = [
 const DESTINATION_CONSTRUCTION =
   /\b(?:reply|replies|respond|responding|write|writing|send|sending|mail|e-?mail|post|posting|forward|forwarding|deliver|return|returning|confirm|confirming|report|reporting)\b[^.\n]{0,40}?\bto\s+(?:this|that|the\s+following|the\s+above|the|below|our|its)\s+(?:e-?mail\s+|postal\s+|billing\s+|return\s+)?address(?:es)?\b/gi;
 
+/**
+ * Owner-referent outbound mail. "summarise the emails we sent" is the owner's
+ * own thread, not a request for someone else's private messages.
+ */
+const OWNER_SENT_COMMUNICATIONS =
+  /\b(?:we|i)\s+sent\b|\b(?:our|my)\s+outreach\b/i;
+
 function withoutDestinations(text: string): string {
   DESTINATION_CONSTRUCTION.lastIndex = 0;
   return text.replace(DESTINATION_CONSTRUCTION, (match) => " ".repeat(match.length));
@@ -306,6 +313,9 @@ function analyzeTextForPrivacyRequest(
   const signalText = withoutDestinations(text);
 
   for (const signal of APPROVAL_SIGNALS) {
+    if (signal.id === "private_communications" && OWNER_SENT_COMMUNICATIONS.test(signalText)) {
+      continue;
+    }
     if (signal.pattern.test(signalText)) {
       addFlag(flags, {
         category: signal.category,
