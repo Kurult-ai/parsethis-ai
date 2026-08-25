@@ -233,7 +233,7 @@ function riskScoreBand(score: number): { label: string; color: string; bgColor: 
  * be blocked or flagged. Gaps render in red with the technique named — an
  * audit that hides its own misses is marketing.
  */
-function renderAdversarialSection(results: BatteryResult[]): string {
+function renderAdversarialSection(results: BatteryResult[], hadCustomerPrompts: boolean): string {
   const caught = results.filter((r) => r.caught).length;
   const gaps = results.filter((r) => !r.caught);
   const rate = results.length > 0 ? Math.round((caught / results.length) * 100) : 0;
@@ -269,8 +269,10 @@ function renderAdversarialSection(results: BatteryResult[]): string {
     <div class="section">
       <h2>Red-Team Battery — ${caught}/${results.length} attempts caught (${rate}%)</h2>
       <p style="color:#475569;font-size:14px;margin-bottom:14px">
-        Your prompts above were screened as-is. This section answers the harder question:
-        <strong>does the boundary hold when someone competent attacks it?</strong>
+        ${hadCustomerPrompts
+          ? "Your prompts above were screened as-is. This section answers the harder question:"
+          : "This report is the $47 red-team battery — ten evasion techniques, not the free invoice Attack Pack."}
+        <strong> Does the boundary hold when someone competent attacks it?</strong>
         A fixed corpus of injection attempts — homoglyphs, zero-width splitting, authority fabrication,
         payload partitioning, role spoofing, base64 smuggling, multilingual payloads, quoted-frame
         injection, graduated escalation, and tool-output framing — was run through the same pipeline.
@@ -624,7 +626,7 @@ export function generateAuditReport(input: AuditReportInput): string {
       </table>
     </div>
 
-    ${input.adversarial && input.adversarial.length > 0 ? renderAdversarialSection(input.adversarial) : ""}
+    ${input.adversarial && input.adversarial.length > 0 ? renderAdversarialSection(input.adversarial, input.prompts.length > 0) : ""}
 
     <!-- Section 5: Call to Action -->
     <div class="section">

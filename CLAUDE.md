@@ -619,3 +619,16 @@ record". HTML-comment instructions include action-directives
 (`skip|set|enable|grant|add … to`), not only ignore/issue. Do not fit frozen
 evalset nouns. Pattern-only must block these; do not promote LLM-only sandbox
 to a stop.
+
+**Team Ledger install is an HTTP hook.** `/ledger#install` is curl
+`POST /v1/ledger/event` then `GET /v1/ledger/events`, plus Claude Code
+`PostToolUse` `settings.json`. Do not revive `npx @parsethis/agent-ledger`.
+Logging is not a control.
+
+**$47 audit is the 10-technique battery**, not a reprint of the free invoice
+pack SHA. Unpaid `POST /audit/run` stays 402. Empty customer prompts are
+allowed after payment — the battery still runs.
+
+**DPA intake pages `d@kurult.ai`.** Category `dpa`/`security` emails the
+monitored mailbox. Checkout for Compliance/Enterprise stays 503. Do not
+staff Enterprise GTM before Type II and HA.

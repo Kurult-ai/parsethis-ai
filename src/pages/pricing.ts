@@ -318,7 +318,7 @@ latency: 21 ms</pre>
       <ul style="list-style:none;padding:0;margin:0;font-size:14px;flex:1;">
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Org governance</strong> — tool rules, roles, ceiling, audit trail, after a verified account</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Everything on Pro</strong> — evidence packs, SIEM forwarding, data governance, framework crosswalk</li>
-        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Ledger</strong> — declared tool names and path globs, hash chain. Logging is not a control.</li>
+        <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Ledger</strong> — declared tool names and path globs, hash chain. Logging is not a control. Install the HTTP hook, not an npm package: <a href="/ledger#install">/ledger#install</a>.</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Unlimited agents, environments and keys</strong> — the 11th agent is 201; named environments persist</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);"><strong>Undeclared Chrome tools 403 on the gateway</strong> — the wire path does not trust metadata</li>
         <li style="padding:6px 0;border-bottom:1px solid var(--border);">${PLAN_LIMITS.team.requestsPerMinute} req/min</li>
@@ -338,6 +338,7 @@ latency: 21 ms</pre>
       Evidence packs, SIEM forwarding, data governance and the framework crosswalk ship with Pro and Team &mdash;
       they are not a fifth plan. A <a href="/dpa">DPA + SCCs</a> or a named contact for a vendor review is a
       support conversation. We do not sell an uptime SLA until high-availability infrastructure ships.
+      Named contact replies within a business day. That is attention, not an uptime SLA.
     </p>
     <p class="pricing-muted" style="margin:0 0 14px;font-size:14px;">
       Need more than Team&rsquo;s ${PLAN_LIMITS.team.requestsPerMinute} req/min? Same inbox &mdash; there is no public

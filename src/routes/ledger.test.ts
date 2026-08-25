@@ -14,6 +14,10 @@ describe("ledger routes", () => {
     const html = await res.text();
     assert.match(html, /Ledger of agent actions/);
     assert.match(html, /not an endpoint agent/i);
+    assert.match(html, /id="install"/);
+    assert.match(html, /settings\.json/);
+    assert.match(html, /PostToolUse/);
+    assert.doesNotMatch(html, /@parsethis\/agent-ledger/);
   });
 
   it("GET /ledger/sample verifies the chain in HTML", async () => {

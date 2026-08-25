@@ -3346,7 +3346,7 @@ async function handleSupportTicketIntake(c: Context, input: SupportTicketIntakeB
   const sanitizedApiKeyHint = apiKeyHint ? extractApiKeyPrefix(apiKeyHint) : undefined;
   const category = normalizedSupportCategory(rawCategory);
   const spam = scoreSupportSpam({ requesterName, requesterEmail, subject, body, category });
-  const priority = category === "security" ? "high" : spam.score >= 50 ? "low" : "normal";
+  const priority = category === "security" || category === "dpa" ? "high" : spam.score >= 50 ? "low" : "normal";
   const verdict = spam.score >= 100 ? "discarded_spam" : spam.score >= 50 ? "flagged_spam" : "accepted";
   const messageBody = sanitizedApiKeyHint
     ? `${body}\n\n[api_key_prefix:${sanitizedApiKeyHint}]`
@@ -3406,6 +3406,21 @@ async function handleSupportTicketIntake(c: Context, input: SupportTicketIntakeB
         },
       },
     });
+    try {
+      const { sendEmail, supportIntakeNotifyEmail, shouldNotifySupportMailbox } = await import("../lib/email.js");
+      if (shouldNotifySupportMailbox(category)) {
+        await sendEmail(supportIntakeNotifyEmail({
+          category,
+          subject,
+          requesterEmail,
+          requesterName,
+          body: messageBody,
+          ticketId: ticket.id,
+        }));
+      }
+    } catch {
+      // Ticket is stored. Mail is the pager, not the record.
+    }
     if (responseMode === "html") return c.html(renderSupportPage(getBaseUrl(c), "success"));
     return c.json(publicSupportTicketResponse(ticket), 201);
   } catch {

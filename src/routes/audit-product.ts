@@ -16,7 +16,7 @@ import { PRODUCT } from "../lib/product-facts.js";
 import { parsePrompt } from "../parse.js";
 import type { ParseResponse } from "../parse.js";
 import { generateAuditReport } from "../lib/compliance/audit-report.js";
-import { runAdversarialBattery } from "../lib/compliance/adversarial-battery.js";
+import { ADVERSARIAL_BATTERY, runAdversarialBattery } from "../lib/compliance/adversarial-battery.js";
 import type { BatteryResult } from "../lib/compliance/adversarial-battery.js";
 import type { AppEnv } from "../types.js";
 
@@ -229,16 +229,15 @@ auditProductRoutes.get("/audit", (c) => {
   <div class="audit-hero-copy">
     <h1>AI Agent Security Audit</h1>
     <p class="answer-capsule">
-      Submit your agent prompts and get a full security audit report with risk scores,
-      vulnerability breakdown, remediation checklist, and compliance mapping — in minutes.
-      Need a forwardable artifact tonight without paying? The free
-      <a href="/attack/invoice-payment-update">invoice Attack Pack sample</a>
-      screens to 10.0 BLOCKED (text SHA-256 first 16: <code>b094e5fe737c81f5</code>).
+      The $47 audit is a <strong>10-technique red-team battery</strong> plus any prompts you paste.
+      It is not a reprint of the free invoice Attack Pack sample.
+      Need one payload tonight without paying? Screen the
+      <a href="/attack/invoice-payment-update">invoice pack</a>. That is one sample. This is ten.
     </p>
     <ul class="audit-features">
-      <li>Risk score (0–100) across all submitted prompts</li>
+      <li>Risk score (0–100) across submitted prompts (optional — the battery runs with none)</li>
       <li>Vulnerability breakdown by attack category</li>
-      <li><strong>Adversarial red-team battery</strong> — we also attack your setup with 10 evasion techniques (homoglyphs, zero-width splits, authority fabrication, multilingual smuggling, and more), so you see what slips past — disclosed honestly in the report</li>
+      <li><strong>Adversarial red-team battery</strong> — ${ADVERSARIAL_BATTERY.map((i) => i.name).join(", ")}. Gaps are disclosed in the report, not hidden.</li>
       <li>Actionable remediation checklist with priority levels</li>
       <li>OWASP LLM Top 10, NIST AI RMF, and SOC 2 compliance mapping</li>
       <li>Branded PDF-ready HTML report — yours to keep</li>
@@ -281,7 +280,7 @@ auditProductRoutes.get("/audit", (c) => {
 ${paid ? `
 <div class="section-chunk audit-runner" id="audit-runner-section">
   <h2 style="margin-top:0;">Run Your Audit</h2>
-  <p class="answer-capsule">Paste your agent prompts below (one per field). Each will be screened through Parse's full pattern + LLM analysis pipeline.</p>
+  <p class="answer-capsule">Paste agent prompts if you have them (optional). With an empty form, Parse still runs the 10-technique battery — that is the $47 product.</p>
   <form id="audit-form">
     <div id="prompt-fields">
       <div class="prompt-row">
@@ -291,7 +290,7 @@ ${paid ? `
     </div>
     <div class="btn-row">
       <button type="button" class="btn btn-secondary" id="add-prompt-btn">+ Add Prompt</button>
-      <button type="submit" class="btn btn-primary" id="run-audit-btn">Run Audit & Generate Report</button>
+      <button type="submit" class="btn btn-primary" id="run-audit-btn">Run the 10-technique battery</button>
     </div>
     <p id="audit-error" style="color:#dc2626;font-size:14px;margin-top:8px;display:none;"></p>
   </form>
@@ -378,14 +377,8 @@ ${paid ? `
         if (v) prompts.push(v);
       });
 
-      if (prompts.length === 0) {
-        errEl.textContent = 'Please enter at least one prompt to audit.';
-        errEl.style.display = 'block';
-        return;
-      }
-
       runBtn.disabled = true;
-      runBtn.textContent = 'Running audit...';
+      runBtn.textContent = 'Running battery...';
 
       try {
         var resp = await fetch('/audit/run', {
@@ -415,7 +408,7 @@ ${paid ? `
         errEl.style.display = 'block';
       } finally {
         runBtn.disabled = false;
-        runBtn.textContent = 'Run Audit & Generate Report';
+        runBtn.textContent = 'Run the 10-technique battery';
       }
     });
   }
@@ -427,7 +420,7 @@ ${paid ? `
     renderPage({
       title: `AI Agent Security Audit — $${AUDIT_PRODUCT_CONFIG.priceUSD} | ${PRODUCT.name}`,
       description:
-        `One-time AI agent security audit for $${AUDIT_PRODUCT_CONFIG.priceUSD}. Submit your prompts, get a branded report with risk scores, vulnerability breakdown, remediation checklist, and OWASP/NIST/SOC 2 compliance mapping.`,
+        `One-time $${AUDIT_PRODUCT_CONFIG.priceUSD} red-team battery: ten evasion techniques, honest gaps, optional customer prompts. Not a reprint of the free Attack Pack.`,
       path: "/audit",
       content,
       baseUrl,
@@ -436,7 +429,7 @@ ${paid ? `
         { name: "Home", href: "/" },
         { name: "Security Audit", href: "/audit" },
       ],
-      lastUpdated: "2026-08-24T18:00:00-04:00",
+      lastUpdated: "2026-08-25T12:00:00-04:00",
     }),
   );
 });
@@ -507,10 +500,9 @@ auditProductRoutes.post("/audit/run", async (c) => {
     return c.json({ error: gate.error, checkout: "/audit" }, gate.status);
   }
 
-  const prompts = body.prompts;
-  if (!Array.isArray(prompts) || prompts.length === 0) {
-    return c.json({ error: "Must provide at least one prompt to audit" }, 400);
-  }
+  const prompts = Array.isArray(body.prompts)
+    ? body.prompts.filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+    : [];
 
   if (prompts.length > AUDIT_PRODUCT_CONFIG.maxPromptsPerAudit) {
     return c.json(
@@ -519,11 +511,7 @@ auditProductRoutes.post("/audit/run", async (c) => {
     );
   }
 
-  // Validate prompt lengths
   for (const p of prompts) {
-    if (typeof p !== "string" || p.trim().length === 0) {
-      return c.json({ error: "All prompts must be non-empty strings" }, 400);
-    }
     if (p.length > AUDIT_PRODUCT_CONFIG.maxPromptLength) {
       return c.json(
         { error: `Each prompt must be under ${AUDIT_PRODUCT_CONFIG.maxPromptLength} characters` },
@@ -558,18 +546,16 @@ auditProductRoutes.post("/audit/run", async (c) => {
     }
   }
 
-  if (results.length === 0) {
-    return c.json({ error: "All prompt screenings failed. Please try again." }, 500);
-  }
-
-  // Red-team battery: the audit's adversarial half. Same pipeline, hostile
-  // corpus. Runs after customer prompts so their results render first.
+  // Red-team battery: the $47 product. Customer prompts are optional.
   let batteryResults: BatteryResult[] = [];
   try {
     batteryResults = await runAdversarialBattery();
   } catch (err) {
     console.error("[audit] Adversarial battery failed:", (err as Error).message);
-    // Customer results still deliver; report simply omits the red-team section.
+  }
+
+  if (results.length === 0 && batteryResults.length === 0) {
+    return c.json({ error: "Audit battery failed. Please try again." }, 500);
   }
 
   // Generate the branded HTML report

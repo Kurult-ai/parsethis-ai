@@ -30,6 +30,8 @@ lives, and the run-22 rules that must not be re-derived from stale comments.
 5. **Hero and Stripe are production.** A hold is not "Allowed". Stripe copy
    must not open with a volume figure that reads as a cap. A green hero must
    not sell Install-free as proof; Start Solo $12 is the ask after a refuse.
+   Team Ledger is an HTTP hook on `/ledger#install`, not npm. The $47 audit is
+   the 10-technique battery, not the free pack.
 
 ## Run-23 decisions (2026-08-18)
 

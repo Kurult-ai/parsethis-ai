@@ -163,10 +163,42 @@ ledgerRoutes.get("/ledger", (c) => {
       <p>Replay today’s allowlist against a session: <code>GET /v1/ledger/sessions/:id/replay</code>. Hypothetical.</p>
       <p>
         <a class="btn" href="/ledger/sample">See a sample session</a>
+        <a class="btn btn-ghost" href="/ledger#install">Install the HTTP hook</a>
         <a class="btn btn-ghost" href="/attack">Screen an email first</a>
       </p>
       <h2>Who this is for</h2>
       <p>Technical directors and staff engineers whose agents sit in front of client input. The security review asks two questions: what would the agent have executed, and what did it actually touch? Attack Pack answers the first. Ledger answers the second.</p>
+      <h2 id="install">Install — HTTP hook, not an npm package</h2>
+      <p><strong>Logging is not a control.</strong> The hook declares tool names and path globs. No file contents. No prompt text. There is no <code>npx</code> installer.</p>
+      <p>Mint a key at <a href="/get-started">/get-started</a>, then prove the round-trip:</p>
+      <pre><code>export PARSE_API_KEY=pfa_live_…
+curl -sS -X POST https://www.parsethis.ai/v1/ledger/event \\
+  -H "Authorization: Bearer $PARSE_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"agent_id":"claude-code","session_id":"sess_demo","kind":"tool_call","tool":"Read","path_glob":"~/clients/*/invoice.md","source":"claude-code-hooks"}'
+curl -sS "https://www.parsethis.ai/v1/ledger/events?session_id=sess_demo" \\
+  -H "Authorization: Bearer $PARSE_API_KEY"</code></pre>
+      <p>Weekly motion: save this as <code>~/.claude/hooks/parse-ledger.sh</code> (executable), then paste <code>settings.json</code>.</p>
+      <pre><code>#!/bin/sh
+payload=$(python3 -c 'import json,sys; e=json.load(sys.stdin); i=e.get("tool_input") or {}; p=i.get("file_path") or i.get("path") or "*"; print(json.dumps({"agent_id":"claude-code","session_id":e.get("session_id") or "local","kind":"tool_call","tool":e.get("tool_name") or "unknown","path_glob":str(p)[:512],"source":"claude-code-hooks"}))')
+curl -sS -X POST "\${PARSE_LEDGER_URL:-https://www.parsethis.ai/v1/ledger/event}" \\
+  -H "Authorization: Bearer $PARSE_API_KEY" -H "Content-Type: application/json" \\
+  -d "$payload" >/dev/null</code></pre>
+      <pre><code>{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/parse-ledger.sh"
+          }
+        ]
+      }
+    ]
+  }
+}</code></pre>
+      <p>Then <code>GET /v1/ledger/events</code> with the same Bearer key. If the declared tool name is there, the hook works. Replay remains hypothetical.</p>
       <h2>POST an event</h2>
       <p>Send JSON to <code>POST /v1/ledger/event</code> with a Bearer key. Required: <code>agent_id</code>, <code>session_id</code>. <code>kind</code> is one of <code>tool_call</code>, <code>file_read</code>, <code>file_write</code>, <code>file_delete</code>, <code>net_egress</code>, <code>session_start</code>, <code>session_stop</code>. A body that names <code>tool</code> or <code>path_glob</code> and omits <code>kind</code> defaults to <code>tool_call</code>.</p>
     </section>`;

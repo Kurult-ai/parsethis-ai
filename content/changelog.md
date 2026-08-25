@@ -16,6 +16,21 @@ yet.
 
 ## 2026-08-25
 
+**Team Ledger installs as an HTTP hook.** `/ledger#install` is a curl
+round-trip (`POST /v1/ledger/event` → `GET /v1/ledger/events`) plus a Claude
+Code `PostToolUse` `settings.json`. There is no npm package. Logging is not a
+control.
+
+**The $47 audit is a 10-technique battery.** The unpaid `/audit` page names
+those techniques and no longer quotes the free invoice pack SHA as the
+product. After payment, the battery runs even with no customer prompts.
+Unpaid `POST /audit/run` stays 402.
+
+**DPA forms page the mailbox.** A `dpa` or `security` support ticket emails
+`d@kurult.ai` with reply-to set to the requester. Named contact replies
+within a business day — attention, not an uptime SLA. Compliance checkout
+stays 503.
+
 **Pattern-only catches a tool grant hidden from a member/student thread.**
 Vendor-visible + "mention the credit" already blocked. Member-visible +
 complimentary pass, and "keep that adjustment off the email", did not.

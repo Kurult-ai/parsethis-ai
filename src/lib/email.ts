@@ -6,6 +6,7 @@
  */
 
 import { DETECTION_FACTS, LATENCY_FACTS } from "./product-facts.js";
+import { CONTACT_EMAIL } from "./constants.js";
 
 const RESEND_API = "https://api.resend.com/emails";
 const FROM_ADDRESS = "hello@parsethis.ai";
@@ -17,6 +18,44 @@ export interface EmailParams {
   html: string;
   replyTo?: string;
   tags?: { name: string; value: string }[];
+}
+
+/** DPA and security intake pages a named human. Billing noise stays in the ticket table. */
+export function shouldNotifySupportMailbox(category: string): boolean {
+  return category === "dpa" || category === "security";
+}
+
+export function supportIntakeNotifyEmail(input: {
+  category: string;
+  subject: string;
+  requesterEmail: string;
+  requesterName?: string | null;
+  body: string;
+  ticketId: string;
+}): EmailParams {
+  const who = input.requesterName
+    ? `${escapeHtml(input.requesterName)} (${escapeHtml(input.requesterEmail)})`
+    : escapeHtml(input.requesterEmail);
+  return {
+    to: CONTACT_EMAIL,
+    replyTo: input.requesterEmail,
+    subject: `[Parse ${input.category}] ${input.subject}`.slice(0, 180),
+    html: `
+      <p>New <strong>${escapeHtml(input.category)}</strong> intake.</p>
+      <p>From: ${who}</p>
+      <p>Ticket <code>${escapeHtml(input.ticketId)}</code> — reply in the admin ticket or reply-all to this mail.</p>
+      <pre style="white-space:pre-wrap;font-size:14px;">${escapeHtml(input.body)}</pre>
+    `,
+    tags: [{ name: "support", value: input.category }],
+  };
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 export async function sendEmail(params: EmailParams): Promise<{ id: string } | { error: string }> {
