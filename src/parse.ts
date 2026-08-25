@@ -51,6 +51,40 @@ const UNTRUSTED_SOURCE_KINDS_FOR_INTENT = new Set([
 // Build model allowlist at module level
 const ALLOWED_MODELS = new Set(getAvailableModels().map((m) => m.id));
 
+/**
+ * Fitted imperative class inside an HTML comment — a pin from the
+ * ignore/issue/add/skip ship. Do not add evalset verbs here.
+ */
+const HTML_COMMENT_IMPERATIVE =
+  /(?:assistant|system|instruction|do not mention|ignore|override|disregard|rank|issue|\bskip\b|\bset\b|\benable\b|\bgrant\b|add\s+[\s\S]{0,80}?\bto\b)/i;
+
+/**
+ * Agent-directed deferred frame inside a comment: "after you … this, …".
+ * The following clause is the hidden instruction; its verb is not listed.
+ * Do not union ACTION_DIRECTIVE — it contains `start` (`<!-- start of sidebar -->`).
+ */
+const HTML_COMMENT_DEFERRED =
+  /\bafter\s+you\b[\s\S]{0,160}?\bthis\b[\s\S]{0,80}?,[\s\S]{8,}/i;
+
+/**
+ * Same grammar as TOOL_INVOCATION in intent.ts. Keep aligned: snake_case or
+ * `the X tool`, not a bare `call`.
+ */
+const HTML_COMMENT_TOOL =
+  /\b(?:call|invoke)\s+(?:the\s+)?[a-z][a-z0-9]*(_[a-z0-9]+)+\b|\b(?:call|invoke|run)\s+the\s+[a-z][\w-]{2,}\s+tool\b|\bfire\s+[a-z]+(_[a-z0-9]+)+\b/i;
+
+function htmlCommentHidesInstruction(prompt: string): boolean {
+  const re = /<!--([\s\S]{0,800}?)-->/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(prompt))) {
+    const body = m[1] ?? "";
+    if (HTML_COMMENT_IMPERATIVE.test(body) || HTML_COMMENT_DEFERRED.test(body) || HTML_COMMENT_TOOL.test(body)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // === Structural risk signals ===
 function detectStructuralRisks(prompt: string): Array<{ category: RiskCategory; severity: number; label: string; detail: string }> {
   const risks: Array<{ category: RiskCategory; severity: number; label: string; detail: string }> = [];
@@ -81,8 +115,8 @@ function detectStructuralRisks(prompt: string): Array<{ category: RiskCategory; 
 
   // Hidden instruction in an HTML comment — a carrier the human reader does
   // not see. Severity 8 so it floors a block independently of source.
-  // Comment + imperative, not only the cooler-log "assistant/do not mention" frame.
-  if (/<!--[\s\S]{0,800}?(?:assistant|system|instruction|do not mention|ignore|override|disregard|rank|issue|\bskip\b|\bset\b|\benable\b|\bgrant\b|add\s+[\s\S]{0,80}?\bto\b)[\s\S]{0,800}?-->/i.test(prompt)) {
+  // Fitted imperatives, a deferred "after you … this" frame, or a tool call.
+  if (htmlCommentHidesInstruction(prompt)) {
     risks.push({
       category: "indirect_injection",
       severity: 8,

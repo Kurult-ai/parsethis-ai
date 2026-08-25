@@ -1406,12 +1406,14 @@ const CREDENTIAL_RETURN_PATH =
  */
 /**
  * Hide-from-human class: the person the agent works for, plus a
- * `{audience}-visible` thread (member-visible / student-visible / vendor-visible).
- * `member` is the same class as customer/merchant — a ticket that hides a tool
- * grant from the member thread is concealment, not routing preference.
+ * `{audience}-visible` or `{audience}-facing` thread (member-visible /
+ * occupant-facing). `member` is the same class as customer/merchant — a ticket
+ * that hides a tool grant from the member thread is concealment, not routing
+ * preference. Do not add tenant / partner / occupant as nouns; the suffix is
+ * the class.
  */
 const HIDE_FROM_HUMAN =
-  "(?:operator|owner|user|account\\s+holder|human|admin(?:istrator)?|customer|merchant|vendor|client|subscriber|reviewer|them|him|her|anyone|(?:service\\s+)?desk\\s+lead|service\\s+desk|manager|lead|member|[\\w-]+-visible)";
+  "(?:operator|owner|user|account\\s+holder|human|admin(?:istrator)?|customer|merchant|vendor|client|subscriber|reviewer|them|him|her|anyone|(?:service\\s+)?desk\\s+lead|service\\s+desk|manager|lead|member|[\\w-]+-visible|[\\w-]+-facing)";
 
 const CONCEALMENT_FROM_OWNER = new RegExp(
   String.raw`\b(?:do\s+not|don'?t|never|no\s+need\s+to|avoid)\b[^.\n]{0,60}\b(?:surface|mention|tell|inform|notify|alert|report|disclose|show|reveal|escalate|log)\b[^.\n]{0,60}\b(?:the\s+)?` + HIDE_FROM_HUMAN + String.raw`\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,80}\b(?:send|email|fire)\b[^.\n]{0,40}\b(?:notification|notify|alert)s?\b|\b(?:without|bypass(?:ing)?)\s+(?:notifying|alerting|informing|telling)\b|\b(?:silently|quietly)\b[^.\n]{0,40}\b(?:proceed|continue|apply|execute|run|do\s+it)\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,60}\b(?:tell|inform|notify|alert|escalate\s+to|report\s+to)\b[^.\n]{0,60}\bcompliance\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,40}\b(?:email|message|contact|text)\b[^.\n]{0,40}\b(?:the\s+)?` + HIDE_FROM_HUMAN + String.raw`\b`,

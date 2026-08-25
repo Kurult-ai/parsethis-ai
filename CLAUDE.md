@@ -127,6 +127,15 @@ requires a safety-system collocate (`safety rules`, `content rules`). C4
 standing-rule injections stay on `intent.new_authority_assertion`. Pins:
 `src/__tests__/run47-naledi.test.ts`.
 
+**HTML comments and hide-from-human (runs 80–85).** A hidden comment is an
+instruction when it matches the fitted imperative class, an agent-directed
+deferred frame (`after you … this, …`), or a tool invocation. Do not union
+`ACTION_DIRECTIVE` into the comment regex — it contains `start`.
+`{token}-facing` is the same hide-from-human class as `{token}-visible`; do
+not add `tenant` / `partner` / `occupant` as nouns. Family `partner` is a
+person-role (`your` / `their` / `owner's partner`), not `partner-facing`.
+Pins: `src/__tests__/run80-85-detector.test.ts`.
+
 ### Trust Verification (`src/lib/trust-verification/`)
 6-layer agent trust pipeline:
 - `orchestrator.ts` — Input validation + scoring coordination

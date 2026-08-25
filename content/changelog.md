@@ -16,6 +16,14 @@ yet.
 
 ## 2026-08-25
 
+**HTML comments, `*-facing` concealment, and partner-as-family.** A hidden
+comment that says `after you … this, …` is an instruction even when the verb
+is not last week's `add`/`skip`/`grant`/`enable` list. So is a tool call
+inside the comment. `<!-- start of sidebar -->` is not. Hide-a-tool now
+treats `{audience}-facing` the same as `{audience}-visible` (occupant-facing
+is the cousin). Family `partner` is a person (`your partner`), not
+`partner-facing`. Pins: `src/__tests__/run80-85-detector.test.ts`.
+
 **Enterprise is overflow rpm, not a SKU.** Public ceiling is Team
 (500 instant/min). A named overflow grant is 1000 instant/min on the key
 (`admin.entitlement.grant` with `tier=enterprise`). One rpm table

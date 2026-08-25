@@ -203,7 +203,7 @@ const APPROVAL_SIGNALS: PrivacySignal[] = [
     severity: 5,
     category: "social_engineering",
     pattern:
-      /\b(?:family|spouse|wife|husband|partner|children|kids|child|parents?|personal\s+relationship|dating|home\s+life)\b/i,
+      /\b(?:family|spouse|wife|husband|(?:your|their|his|her|(?:the\s+)?owner'?s)\s+partner|children|kids|child|parents?|personal\s+relationship|dating|home\s+life)\b/i,
   },
   {
     id: "private_financial_details",

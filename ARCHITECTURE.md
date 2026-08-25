@@ -46,5 +46,14 @@ lives, and the run-22 rules that must not be re-derived from stale comments.
 4. **Hero and lab demo buckets are independent.** Shared proxy,
    `src/lib/demo-quota.ts` keys.
 
+## Run-80–85 decisions (2026-08-25)
+
+1. **HTML comments are a carrier, not a verb list.** Deferred `after you … this, …`
+   and a tool invocation inside the comment are instructions. Do not union
+   `ACTION_DIRECTIVE` (contains `start`).
+2. **`{token}-facing` is hide-from-human**, parallel to `{token}-visible`. Do not
+   add tenant / partner / occupant as nouns.
+3. **Family `partner` is a person-role**, not a compound (`partner-facing`).
+
 
 Production deploy is local launchd, not GitHub: see `CLAUDE.md` § Deployment.
