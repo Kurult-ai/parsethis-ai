@@ -30,7 +30,7 @@ function descriptionFor(tier: PaidTier): string {
   return stripeProductDescription(tier);
 }
 
-const TIERS: PaidTier[] = ["solo", "pro", "team"];
+const TIERS: PaidTier[] = ["solo", "pro", "team", "compliance"];
 let drift = 0;
 
 for (const tier of TIERS) {

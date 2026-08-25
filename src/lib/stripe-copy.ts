@@ -15,8 +15,14 @@ export function stripeProductDescription(tier: PaidTier): string {
   };
   const deep = limits.deepScreeningsPerMonth?.toLocaleString("en-US");
   const rpm = limits.requestsPerMinute;
-  return (
+  const base =
     `Unlimited instant screening, plus ${deep} deep screenings a month, at ${rpm} requests a minute. `
-    + "Included volume is not a cap and overage is not billed."
-  );
+    + "Included volume is not a cap and overage is not billed.";
+  if (tier === "compliance") {
+    return (
+      base
+      + " DPA and SCCs. Named vendor-review contact. No contractual uptime SLA. Not SOC 2 Type II."
+    );
+  }
+  return base;
 }

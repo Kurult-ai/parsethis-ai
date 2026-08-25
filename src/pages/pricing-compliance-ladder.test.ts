@@ -21,12 +21,14 @@ describe("pricing page — compliance surface lives on Pro", () => {
     assert.match(team, /Everything on Pro/);
   });
 
-  it("does not sell a Compliance or Enterprise SKU on the value ladder", () => {
-    assert.doesNotMatch(html, /\+\$199/);
-    assert.doesNotMatch(html, /Compliance add-on/);
+  it("sells Compliance as a self-serve card and still refuses Enterprise", () => {
+    assert.match(html, /id="compliance"/);
+    assert.match(html, /Start Compliance/);
+    assert.match(html, /id="start-compliance"/);
     assert.doesNotMatch(html, />Custom</);
     assert.match(html, /id="dpa-support"/);
-    assert.match(html, /not a fifth plan/);
     assert.match(html, /no public\s+Enterprise price/);
+    assert.match(html, /Not SOC 2 Type II/);
+    assert.match(html, /No contractual uptime SLA/);
   });
 });

@@ -626,9 +626,11 @@ to a stop.
 Logging is not a control.
 
 **$47 audit is the 10-technique battery**, not a reprint of the free invoice
-pack SHA. Unpaid `POST /audit/run` stays 402. Empty customer prompts are
-allowed after payment — the battery still runs.
+pack SHA. Unpaid `POST /audit/run` stays 402. After payment the battery
+auto-runs and returns a 7-day `/audit/report/:id`. Empty customer prompts
+are allowed.
 
-**DPA intake pages `d@kurult.ai`.** Category `dpa`/`security` emails the
-monitored mailbox. Checkout for Compliance/Enterprise stays 503. Do not
-staff Enterprise GTM before Type II and HA.
+**Compliance is self-serve** via `STRIPE_COMPLIANCE_PRICE_ID` ($199/mo).
+DPA/SCCs, no SLA, not Type II. Enterprise checkout stays 503. Do not staff
+Enterprise GTM before Type II and HA. DPA/security tickets still email
+`d@kurult.ai`.

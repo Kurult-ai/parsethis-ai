@@ -16,9 +16,11 @@ import { PRODUCT } from "../lib/product-facts.js";
 import { parsePrompt } from "../parse.js";
 import type { ParseResponse } from "../parse.js";
 import { generateAuditReport } from "../lib/compliance/audit-report.js";
-import { ADVERSARIAL_BATTERY, runAdversarialBattery } from "../lib/compliance/adversarial-battery.js";
+import { ADVERSARIAL_BATTERY, BATTERY_CORPUS_SHA16, runAdversarialBattery } from "../lib/compliance/adversarial-battery.js";
 import type { BatteryResult } from "../lib/compliance/adversarial-battery.js";
 import type { AppEnv } from "../types.js";
+import { createHash } from "node:crypto";
+import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
 
 export const auditProductRoutes = new Hono<AppEnv>();
 
@@ -232,7 +234,8 @@ auditProductRoutes.get("/audit", (c) => {
       The $47 audit is a <strong>10-technique red-team battery</strong> plus any prompts you paste.
       It is not a reprint of the free invoice Attack Pack sample.
       Need one payload tonight without paying? Screen the
-      <a href="/attack/invoice-payment-update">invoice pack</a>. That is one sample. This is ten.
+      <a href="/attack/invoice-payment-update">invoice pack</a>. That is one sample. This is ten
+      (corpus SHA-256 first 16: <code>${BATTERY_CORPUS_SHA16}</code>).
     </p>
     <ul class="audit-features">
       <li>Risk score (0–100) across submitted prompts (optional — the battery runs with none)</li>
@@ -390,7 +393,10 @@ ${paid ? `
           var data = await resp.json();
           var container = document.getElementById('audit-result-container');
           if (data.report_html) {
-            container.innerHTML = '<div class="audit-result"><iframe srcdoc="' +
+            var link = data.report_url
+              ? '<p style="margin:12px 0"><a class="btn btn-primary" href="' + data.report_url + '">Forward the 7-day battery report</a> corpus SHA ' + (data.battery_sha16 || '') + '</p>'
+              : '';
+            container.innerHTML = link + '<div class="audit-result"><iframe srcdoc="' +
               data.report_html.replace(/"/g, '&quot;') +
               '"></iframe></div>';
             container.scrollIntoView({ behavior: 'smooth' });
@@ -411,6 +417,15 @@ ${paid ? `
         runBtn.textContent = 'Run the 10-technique battery';
       }
     });
+    if (PAID_SESSION_ID) {
+      var ranKey = 'audit_battery_' + PAID_SESSION_ID;
+      try {
+        if (!sessionStorage.getItem(ranKey)) {
+          sessionStorage.setItem(ranKey, '1');
+          form.dispatchEvent(new Event('submit'));
+        }
+      } catch (e3) { /* storage blocked — buyer can click */ }
+    }
   }
 })();
 </script>
@@ -567,9 +582,49 @@ auditProductRoutes.post("/audit/run", async (c) => {
     adversarial: batteryResults,
   });
 
+  const reportId = await storeAuditHtml(reportHtml);
   return c.json({
     report_html: reportHtml,
+    report_url: reportId ? `/audit/report/${reportId}` : null,
+    battery_sha16: BATTERY_CORPUS_SHA16,
     prompts_screened: results.length,
     generated_at: new Date().toISOString(),
   });
+});
+
+const AUDIT_REPORT_TTL = 60 * 60 * 24 * 7;
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutValue: T): Promise<T> {
+  return Promise.race([promise, new Promise<T>((r) => setTimeout(() => r(timeoutValue), timeoutMs))]);
+}
+
+async function storeAuditHtml(html: string): Promise<string | null> {
+  try {
+    if (!isRedisAvailable()) return null;
+    if (!(await withTimeout(ensureRedisConnected(), 1_500, false))) return null;
+    const id = createHash("sha256").update(html + Math.random().toString(36)).digest("hex").slice(0, 24);
+    await withTimeout(
+      getRedis().set(`audit:report:${id}`, html, "EX", AUDIT_REPORT_TTL),
+      1_500,
+      undefined as unknown as null,
+    );
+    return id;
+  } catch {
+    return null;
+  }
+}
+
+auditProductRoutes.get("/audit/report/:id", async (c) => {
+  const id = c.req.param("id");
+  if (!/^[a-f0-9]{24}$/.test(id)) return c.text("Report not found", 404);
+  try {
+    if (!isRedisAvailable() || !(await withTimeout(ensureRedisConnected(), 1_500, false))) {
+      return c.text("Report store unavailable", 503);
+    }
+    const html = await withTimeout(getRedis().get(`audit:report:${id}`), 1_500, null as string | null);
+    if (!html) return c.text("Report not found or expired (7 days).", 404);
+    return c.html(html);
+  } catch {
+    return c.text("Report store unavailable", 503);
+  }
 });

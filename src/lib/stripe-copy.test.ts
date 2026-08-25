@@ -5,7 +5,7 @@ import { PLAN_LIMITS } from "./product-facts.js";
 import { stripeProductDescription } from "./stripe-copy.js";
 
 describe("Stripe product copy leads with what is unlimited", () => {
-  for (const tier of ["solo", "pro", "team"] as const) {
+  for (const tier of ["solo", "pro", "team", "compliance"] as const) {
     it(`${tier} leads with unlimited instant screening`, () => {
       const copy = stripeProductDescription(tier);
       assert.match(copy, /^Unlimited instant screening/);
@@ -19,6 +19,10 @@ describe("Stripe product copy leads with what is unlimited", () => {
         .toLocaleString("en-US");
       assert.match(copy, new RegExp(`${deep} deep screenings a month`));
       assert.match(copy, /Included volume is not a cap and overage is not billed/);
+      if (tier === "compliance") {
+        assert.match(copy, /No contractual uptime SLA/);
+        assert.match(copy, /Not SOC 2 Type II/);
+      }
     });
   }
 });

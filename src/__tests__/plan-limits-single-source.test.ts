@@ -17,7 +17,7 @@ import { TIER_CONFIG } from "../stripe.js";
  * never extended to the part of the product that takes money.
  */
 
-const PAID_TIERS = ["solo", "pro", "team"] as const;
+const PAID_TIERS = ["solo", "pro", "team", "compliance"] as const;
 
 describe("included volume and deep budget are coherent", () => {
   // They are DIFFERENT quantities: includedRequests is total billable

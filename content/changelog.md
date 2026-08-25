@@ -16,6 +16,14 @@ yet.
 
 ## 2026-08-25
 
+**Compliance is self-serve at $199/mo.** `POST /v1/billing/signup-checkout`
+`tier=compliance` opens Stripe Checkout. DPA + SCCs, Team-scale limits. No
+contractual SLA. Not SOC 2 Type II. Enterprise stays 503.
+
+**Paid $47 audit auto-runs the 10-technique battery** and returns a 7-day
+`/audit/report/:id`. Corpus SHA is not the invoice pack. Unpaid `POST /audit/run`
+stays 402.
+
 **Team Ledger installs as an HTTP hook.** `/ledger#install` is a curl
 round-trip (`POST /v1/ledger/event` → `GET /v1/ledger/events`) plus a Claude
 Code `PostToolUse` `settings.json`. There is no npm package. Logging is not a

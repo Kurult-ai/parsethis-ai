@@ -27,7 +27,7 @@ describe("run 47 Naledi — calculator, copy, enterprise checkout", () => {
     assert.match(html, /plan\.el\.textContent = fmt\(plan\.price\)/);
     assert.doesNotMatch(html, /covers \? fmt\(plan\.price\) : 'over included'/);
     assert.match(html, /id="team"[\s\S]*Forbid per-request downgrades org-wide/);
-    assert.doesNotMatch(html, /\+\$199/);
+    assert.doesNotMatch(html, /\+\$199\/mo add-on/);
     assert.doesNotMatch(html, />Priority support</);
   });
 

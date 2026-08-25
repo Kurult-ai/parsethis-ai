@@ -102,6 +102,10 @@ export function renderCheckoutSuccessPage(baseUrl: string, outcome: CheckoutOutc
       : outcome.state === "paid" && outcome.tier === "pro"
         ? `<li><strong>${PLAN_LIMITS.pro.agents} agents, ${PLAN_LIMITS.pro.environments} environments</strong></li>
   <li><strong>Forbid per-request downgrades org-wide</strong>, with the change on the audit trail</li>`
+      : outcome.state === "paid" && outcome.tier === "compliance"
+        ? `<li><strong>DPA + SCCs</strong> — named vendor-review contact. Not SOC 2 Type II. No contractual uptime SLA.</li>
+  <li><strong>Unlimited agents, environments and keys</strong> — Team-scale limits</li>
+  <li>Leave later via <code>GET /billing/cancel</code></li>`
         : "";
 
   const whatChanged = outcome.state === "paid" && limits

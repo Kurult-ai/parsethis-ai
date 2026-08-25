@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { app } from "../app.js";
 import { renderPricingPage } from "../pages/pricing.js";
-import { ADVERSARIAL_BATTERY } from "../lib/compliance/adversarial-battery.js";
+import { ADVERSARIAL_BATTERY, BATTERY_CORPUS_SHA16 } from "../lib/compliance/adversarial-battery.js";
 import { shouldNotifySupportMailbox } from "../lib/email.js";
 
 describe("Team ledger — HTTP hook, not npm", () => {
@@ -41,6 +41,8 @@ describe("Audit $47 — battery is not the free pack", () => {
     const html = await res.text();
     assert.doesNotMatch(html, /b094e5fe737c81f5/);
     assert.match(html, /10.technique|10-technique|10 evasion/i);
+    assert.ok(html.includes(BATTERY_CORPUS_SHA16), "battery corpus SHA missing on unpaid /audit");
+    assert.notEqual(BATTERY_CORPUS_SHA16, "b094e5fe737c81f5");
     for (const item of ADVERSARIAL_BATTERY) {
       assert.ok(html.includes(item.name), `missing technique ${item.name}`);
     }
@@ -62,6 +64,17 @@ describe("Audit $47 — battery is not the free pack", () => {
     const body = await res.json();
     assert.match(String(body.error || ""), /Payment required/);
     assert.equal(body.checkout, "/audit");
+  });
+});
+
+describe("Compliance is self-serve", () => {
+  it("pricing has Start Compliance at $199 and no Type II promise", () => {
+    const html = renderPricingPage("https://www.parsethis.ai");
+    assert.match(html, /id="compliance"/);
+    assert.match(html, /Start Compliance/);
+    assert.match(html, /tier:'compliance'/);
+    assert.match(html, /Not SOC 2 Type II/);
+    assert.match(html, /No contractual uptime SLA/);
   });
 });
 
