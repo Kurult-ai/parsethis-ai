@@ -18,6 +18,10 @@ export const HERO_ENGINE_NOTE_PATTERN =
 export const HERO_ENGINE_NOTE_FULL =
   "full pipeline — pattern matching plus the semantic layer (mode: full). Untick “Also run the semantic layer” for the fast deterministic path. Two modes are a trade, not a speed setting.";
 
+/** Shop-window copy when pattern-only allows: do not sell Install-free as proof. */
+export const HERO_MISS_COPY =
+  "The deterministic layer did not fire on this paste. A 7-day report is the Slack artifact — try the Attack Pack if you want a caught payload.";
+
 /** @deprecated Prefer HERO_ENGINE_NOTE_PATTERN; kept so older tests that import the name still resolve. */
 export const HERO_ENGINE_NOTE = HERO_ENGINE_NOTE_PATTERN;
 
@@ -38,6 +42,8 @@ export type HeroScreenView = {
   why: string;
   scoreLine: string;
   engine: string;
+  /** Solo $12 after a refuse; miss copy after an allow; report-only on a hold. */
+  ask: "solo" | "miss" | "held";
 };
 
 export function formatHeroScreenResult(d: HeroScreenPayload): HeroScreenView {
@@ -78,6 +84,7 @@ export function formatHeroScreenResult(d: HeroScreenPayload): HeroScreenView {
 
   const llmRan = d.layers?.llm === "ran";
   const engine = llmRan ? HERO_ENGINE_NOTE_FULL : HERO_ENGINE_NOTE_PATTERN;
+  const ask: HeroScreenView["ask"] = refused ? "solo" : held ? "held" : "miss";
 
-  return { label, tone, color, why, scoreLine, engine };
+  return { label, tone, color, why, scoreLine, engine, ask };
 }

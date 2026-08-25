@@ -2,7 +2,7 @@
 title: "Changelog"
 slug: changelog
 date: "2026-08-20"
-lastUpdated: "2026-08-20"
+lastUpdated: "2026-08-25"
 description: "What changed in Parse, and when. Newest first."
 author: "Parse"
 ---
@@ -13,6 +13,33 @@ What changed in the Parse API and the surfaces around it. Newest first. Dates ar
 day the change landed in the repository. Entries reach www.parsethis.ai on the next
 deploy, so the newest entries may describe behaviour the live service does not have
 yet.
+
+## 2026-08-25
+
+**Pattern-only catches a tool grant hidden from a member/student thread.**
+Vendor-visible + "mention the credit" already blocked. Member-visible +
+complimentary pass, and "keep that adjustment off the email", did not.
+Concealment now treats `member` and `{audience}-visible` as the hide-from-human
+class; `mention the {credit|pass|adjustment}` and `(keep|leave) … off the …
+(email|thread|reply)` count when a tool invocation is live. `fire apply_store_credit`
+is a tool invocation; "fire the oven" is not. `omit the hiring-manager approval`
+is the same suppression as "do not create an approval record".
+
+**HTML comments with add/skip are instructions.** A comment that said
+"ignore" or "issue" already blocked. One that said "add … to" and "skip" did
+not. The hidden-comment rule now treats those action-directives as the same
+carrier.
+
+**A green hero does not sell Install-free as proof.** After a refuse, Start
+Solo $12 is still the ask. After an allow, the shop window says the
+deterministic layer did not fire and offers a 7-day `/report/:id` (same
+artifact as the Attack Pack) plus the pack itself. `POST /demo/api` returns
+`report_url` on every successful screen, including allows.
+
+**DPA "Talk to us" is a form.** The pricing DPA card posts to `/support`
+(category `dpa`). Compliance/Enterprise checkout is still 503 — we did not
+mint a Stripe SKU. `/trust` names Team as the 500/min ceiling and points
+rate-headroom at talk-to-us after high-availability ships.
 
 ## 2026-08-20
 

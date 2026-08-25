@@ -1404,8 +1404,19 @@ const CREDENTIAL_RETURN_PATH =
  * That pairing has no legitimate use, which is what makes it a better signal
  * than any list of dangerous actions, and it generalises far beyond firewalls.
  */
-const CONCEALMENT_FROM_OWNER =
-  /\b(?:do\s+not|don'?t|never|no\s+need\s+to|avoid)\b[^.\n]{0,60}\b(?:surface|mention|tell|inform|notify|alert|report|disclose|show|reveal|escalate|log)\b[^.\n]{0,60}\b(?:the\s+)?(?:operator|owner|user|account\s+holder|human|admin(?:istrator)?|customer|merchant|vendor|client|subscriber|reviewer|them|him|her|anyone|(?:service\s+)?desk\s+lead|service\s+desk|manager|lead)\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,80}\b(?:send|email|fire)\b[^.\n]{0,40}\b(?:notification|notify|alert)s?\b|\b(?:without|bypass(?:ing)?)\s+(?:notifying|alerting|informing|telling)\b|\b(?:silently|quietly)\b[^.\n]{0,40}\b(?:proceed|continue|apply|execute|run|do\s+it)\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,60}\b(?:tell|inform|notify|alert|escalate\s+to|report\s+to)\b[^.\n]{0,60}\bcompliance\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,40}\b(?:email|message|contact|text)\b[^.\n]{0,40}\b(?:the\s+)?(?:operator|owner|user|account\s+holder|human|admin(?:istrator)?|customer|merchant|vendor|client|subscriber|reviewer|them|him|her|anyone|(?:service\s+)?desk\s+lead|service\s+desk|manager|lead)\b/i;
+/**
+ * Hide-from-human class: the person the agent works for, plus a
+ * `{audience}-visible` thread (member-visible / student-visible / vendor-visible).
+ * `member` is the same class as customer/merchant — a ticket that hides a tool
+ * grant from the member thread is concealment, not routing preference.
+ */
+const HIDE_FROM_HUMAN =
+  "(?:operator|owner|user|account\\s+holder|human|admin(?:istrator)?|customer|merchant|vendor|client|subscriber|reviewer|them|him|her|anyone|(?:service\\s+)?desk\\s+lead|service\\s+desk|manager|lead|member|[\\w-]+-visible)";
+
+const CONCEALMENT_FROM_OWNER = new RegExp(
+  String.raw`\b(?:do\s+not|don'?t|never|no\s+need\s+to|avoid)\b[^.\n]{0,60}\b(?:surface|mention|tell|inform|notify|alert|report|disclose|show|reveal|escalate|log)\b[^.\n]{0,60}\b(?:the\s+)?` + HIDE_FROM_HUMAN + String.raw`\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,80}\b(?:send|email|fire)\b[^.\n]{0,40}\b(?:notification|notify|alert)s?\b|\b(?:without|bypass(?:ing)?)\s+(?:notifying|alerting|informing|telling)\b|\b(?:silently|quietly)\b[^.\n]{0,40}\b(?:proceed|continue|apply|execute|run|do\s+it)\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,60}\b(?:tell|inform|notify|alert|escalate\s+to|report\s+to)\b[^.\n]{0,60}\bcompliance\b|\b(?:do\s+not|don'?t|never)\b[^.\n]{0,40}\b(?:email|message|contact|text)\b[^.\n]{0,40}\b(?:the\s+)?` + HIDE_FROM_HUMAN + String.raw`\b`,
+  "i",
+);
 
 /**
  * Same hide-from-human conjunct, aimed at a given name rather than an
@@ -1422,22 +1433,30 @@ const CONCEALMENT_FROM_NAMED_PERSON =
  * "do not create an approval record". Not a list of tool names.
  */
 const APPROVAL_RECORD_SUPPRESSION =
-  /\b(?:do\s+not|don'?t|never|skip|omit|without)\b[^.\n]{0,50}\b(?:creat(?:e|ing)|log(?:ging)?|fil(?:e|ing)|open|write)\b[^.\n]{0,40}\bapprovals?\b|\b(?:do\s+not|don'?t|never)\s+create\s+an?\s+approval(?:\s+record)?\b/i;
+  /\b(?:do\s+not|don'?t|never|skip|omit|without)\b[^.\n]{0,50}\b(?:creat(?:e|ing)|log(?:ging)?|fil(?:e|ing)|open|write)\b[^.\n]{0,40}\bapprovals?\b|\b(?:do\s+not|don'?t|never)\s+create\s+an?\s+approval(?:\s+record)?\b|\b(?:omit|skip|without)\b[^.\n]{0,40}\bapprovals?\b/i;
 
 /**
- * Hide the credit itself, with no owner-class noun. Only concealment when a
- * live tool invocation is already present — furious "credit this pallet" mail
- * is not this shape.
+ * Hide the credit/pass/adjustment itself, with no owner-class noun. Only
+ * concealment when a live tool invocation is already present — furious
+ * "credit this pallet" mail is not this shape.
  */
 const CONCEALMENT_MENTION_CREDIT =
-  /\b(?:do\s+not|don'?t|never)\b[^.\n]{0,40}\bmention\s+the\s+credit\b/i;
+  /\b(?:do\s+not|don'?t|never)\b[^.\n]{0,40}\bmention\s+the\s+(?:\w+\s+){0,2}(?:credit|pass|adjustment|refund)\b/i;
+
+/**
+ * A third hide grammar: keep/leave the action off the email/thread/reply.
+ * Same family as "do not mention"; only concealment when a tool is live.
+ */
+const CONCEALMENT_KEEP_OFF_THREAD =
+  /\b(?:keep|leave)\b[^.\n]{0,80}\boff\s+the\b[^.\n]{0,40}\b(?:email|thread|reply)\b/i;
 
 /**
  * An instruction to invoke a runtime tool, not "call me". Snake_case
  * identifiers (`grant_credit`) or `the X tool`. Bare `call` is owner speech.
+ * `fire` is a tool verb only with a snake_case conjunct — "fire the oven" is not.
  */
 const TOOL_INVOCATION =
-  /\b(?:call|invoke)\s+(?:the\s+)?[a-z][a-z0-9]*(_[a-z0-9]+)+\b|\b(?:call|invoke|run)\s+the\s+[a-z][\w-]{2,}\s+tool\b/i;
+  /\b(?:call|invoke)\s+(?:the\s+)?[a-z][a-z0-9]*(_[a-z0-9]+)+\b|\b(?:call|invoke|run)\s+the\s+[a-z][\w-]{2,}\s+tool\b|\bfire\s+[a-z]+(_[a-z0-9]+)+\b/i;
 
 /** A directive to take an action, as opposed to describing one. */
 const ACTION_DIRECTIVE =
@@ -1528,7 +1547,8 @@ function maybeFlagConcealedDirective(flags: IntentRiskFlag[], text: string): voi
     CONCEALMENT_FROM_OWNER.test(text)
     || CONCEALMENT_FROM_NAMED_PERSON.test(text)
     || approvalSkip
-    || (CONCEALMENT_MENTION_CREDIT.test(text) && toolCall);
+    || (CONCEALMENT_MENTION_CREDIT.test(text) && toolCall)
+    || (CONCEALMENT_KEEP_OFF_THREAD.test(text) && toolCall);
   if (!concealed) return;
   const classic = ACTION_DIRECTIVE.test(text);
   const skipIdentityRecovery = SKIP_IDENTITY.test(text) && ACCOUNT_RECOVERY_ACTION.test(text);
@@ -1546,7 +1566,7 @@ function maybeFlagConcealedDirective(flags: IntentRiskFlag[], text: string): voi
     action_floor: "block",
     evidence: text.slice(0, 240),
     source: "deterministic_intent",
-  }, [CONCEALMENT_FROM_OWNER, CONCEALMENT_FROM_NAMED_PERSON, APPROVAL_RECORD_SUPPRESSION, CONCEALMENT_MENTION_CREDIT, TOOL_INVOCATION]);
+  }, [CONCEALMENT_FROM_OWNER, CONCEALMENT_FROM_NAMED_PERSON, APPROVAL_RECORD_SUPPRESSION, CONCEALMENT_MENTION_CREDIT, CONCEALMENT_KEEP_OFF_THREAD, TOOL_INVOCATION]);
 }
 
 /**

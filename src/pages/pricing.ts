@@ -343,7 +343,24 @@ latency: 21 ms</pre>
       Need more than Team&rsquo;s ${PLAN_LIMITS.team.requestsPerMinute} req/min? Same inbox &mdash; there is no public
       Enterprise price until we have one, and checkout for that path is not self-serve.
     </p>
-    <a href="mailto:${PRODUCT.contactEmail}?subject=DPA%20and%20support" class="btn btn-outline">Talk to us</a>
+    <form class="dpa-contact" method="post" action="/support" style="display:grid;gap:10px;max-width:440px;">
+      <input type="text" name="company_website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-10000px;width:1px;height:1px;opacity:0;">
+      <input type="hidden" name="category" value="dpa">
+      <input type="hidden" name="subject" value="DPA and support">
+      <label style="font-size:13px;font-weight:600;">Name
+        <input type="text" name="name" autocomplete="name" maxlength="120" required placeholder="Your name" style="width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--input);color:var(--text);font:inherit;">
+      </label>
+      <label style="font-size:13px;font-weight:600;">Email
+        <input type="email" name="email" autocomplete="email" maxlength="320" required placeholder="you@example.com" style="width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--input);color:var(--text);font:inherit;">
+      </label>
+      <label style="font-size:13px;font-weight:600;">Company
+        <input type="text" name="company" maxlength="120" placeholder="Company" style="width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--input);color:var(--text);font:inherit;">
+      </label>
+      <label style="font-size:13px;font-weight:600;">What you need
+        <textarea name="message" rows="4" maxlength="5000" required placeholder="DPA, SCCs, vendor questionnaire, or rate headroom above Team." style="width:100%;margin-top:5px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--input);color:var(--text);font:inherit;resize:vertical;"></textarea>
+      </label>
+      <button type="submit" class="btn btn-outline">Send to Parse</button>
+    </form>
   </div>
 
   <!-- What "evidence spans" actually means, shown rather than described. -->

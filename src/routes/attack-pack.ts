@@ -133,9 +133,44 @@ interface StoredReport {
     flags: Array<{ code: string; label?: string; matched_token?: string; evidence?: string; detail?: string }>;
     deterministic_floor: boolean;
   };
-  /** What an unscreened agent would have done. */
+  /** What an unscreened agent would have done. Empty for visitor-pasted hero screens. */
   blast: string;
   sample_title?: string;
+}
+
+export function storedReportFromParse(
+  text: string,
+  d: Record<string, unknown>,
+  extras?: { blast?: string; sample_title?: string },
+): StoredReport {
+  const rawFlags = Array.isArray(d.flags) ? (d.flags as Array<Record<string, unknown>>) : [];
+  const flags = rawFlags.map((f) => ({
+    code: String(f.id ?? f.code ?? f.flag ?? "flag"),
+    label: typeof f.label === "string" ? f.label : undefined,
+    matched_token: typeof f.matched_token === "string" ? f.matched_token : undefined,
+    evidence: typeof f.evidence === "string" ? f.evidence : undefined,
+    detail: typeof f.detail === "string" ? f.detail : undefined,
+  }));
+  return {
+    text_sha256_16: createHash("sha256").update(text).digest("hex").slice(0, 16),
+    screened_at: new Date().toISOString(),
+    preview: text.slice(0, 240),
+    verdict: {
+      risk_score: typeof d.risk_score === "number" ? d.risk_score : 0,
+      disposition: String(d.disposition ?? d.recommended_action ?? d.suggested_action ?? "allow"),
+      categories: Array.isArray(d.categories) ? (d.categories as string[]) : [],
+      flags,
+      deterministic_floor: flagsFiredDeterministicFloor(
+        rawFlags.map((f) => ({
+          id: typeof f.id === "string" ? f.id : undefined,
+          code: typeof f.code === "string" ? f.code : undefined,
+          source: typeof f.source === "string" ? f.source : undefined,
+        })),
+      ),
+    },
+    blast: extras?.blast ?? "",
+    sample_title: extras?.sample_title,
+  };
 }
 
 function reportKey(id: string): string {
@@ -537,36 +572,10 @@ attackPackRoutes.post("/attack/api/screen", async (c) => {
       );
     }
     const d = (await res.json()) as Record<string, unknown>;
-    const flags = Array.isArray(d.flags)
-      ? (d.flags as Array<Record<string, unknown>>).map((f) => ({
-          code: String(f.id ?? f.code ?? f.flag ?? "flag"),
-          label: typeof f.label === "string" ? f.label : undefined,
-          matched_token: typeof f.matched_token === "string" ? f.matched_token : undefined,
-          evidence: typeof f.evidence === "string" ? f.evidence : undefined,
-          detail: typeof f.detail === "string" ? f.detail : undefined,
-        }))
-      : [];
-
-    const report: StoredReport = {
-      text_sha256_16: createHash("sha256").update(sample.text).digest("hex").slice(0, 16),
-      screened_at: new Date().toISOString(),
-      preview: sample.text.slice(0, 240),
-      verdict: {
-        risk_score: typeof d.risk_score === "number" ? d.risk_score : 0,
-        disposition: String(d.disposition ?? "allow"),
-        categories: Array.isArray(d.categories) ? (d.categories as string[]) : [],
-        flags,
-        deterministic_floor: flagsFiredDeterministicFloor(
-          (Array.isArray(d.flags) ? (d.flags as Array<Record<string, unknown>>) : []).map((f) => ({
-            id: typeof f.id === "string" ? f.id : undefined,
-            code: typeof f.code === "string" ? f.code : undefined,
-            source: typeof f.source === "string" ? f.source : undefined,
-          })),
-        ),
-      },
+    const report = storedReportFromParse(sample.text, d, {
       blast: sample.blast,
       sample_title: sample.title,
-    };
+    });
 
     const id = await storeReport(report);
     if (!id) {

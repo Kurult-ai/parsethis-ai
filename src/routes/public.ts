@@ -77,6 +77,7 @@ import { requireRole, hasRole } from "../lib/rbac.js";
 import { resolveOrgId } from "../lib/org-scope.js";
 import { renderTrustPage } from "../pages/trust-page.js";
 import { renderTrustPackagePage } from "../pages/trust-package.js";
+import { storeReport, storedReportFromParse } from "./attack-pack.js";
 import { renderDpaPage } from "../pages/dpa.js";
 import { renderAboutPage } from "../pages/about.js";
 import { renderFounderPage } from "../pages/founder.js";
@@ -116,7 +117,7 @@ const SUPPORT_INTAKE_IP_LIMIT = 5;
 const SUPPORT_INTAKE_EMAIL_LIMIT = 3;
 const SUPPORT_INTAKE_GLOBAL_LIMIT = 100;
 const supportIntakeMemoryRateLimits = new Map<string, { count: number; resetAt: number }>();
-const SUPPORT_ALLOWED_CATEGORIES = new Set(["support", "billing", "api", "account", "security"]);
+const SUPPORT_ALLOWED_CATEGORIES = new Set(["support", "billing", "api", "account", "security", "dpa"]);
 const API_KEY_SECRET_RE = /\bpfa_(?:live|test)_[A-Za-z0-9_-]{16,}\b/g;
 const LOCAL_KEYGEN_RATE_WINDOW_MS = 60_000;
 const LOCAL_KEYGEN_RATE_LIMIT = 5;
@@ -280,6 +281,7 @@ type SupportTicketIntakeBody = {
   body?: unknown;
   message?: unknown;
   category?: unknown;
+  company?: unknown;
   api_key_hint?: unknown;
   apiKeyHint?: unknown;
   website?: unknown;
@@ -872,9 +874,18 @@ return n`;
       );
     }
 
-    const data = await parseRes.json();
+    const data = await parseRes.json() as Record<string, unknown>;
+    let report_url: string | null = null;
+    try {
+      const report = storedReportFromParse(body.prompt, data, { blast: "", sample_title: "Landing hero" });
+      const id = await storeReport(report);
+      if (id) report_url = `/report/${id}`;
+    } catch {
+      report_url = null;
+    }
     return c.json({
       ...data,
+      report_url,
       use_count: useCount,
       remaining: demoRemaining(useCount),
       limit: DEMO_RATE_LIMIT_PER_HOUR,
@@ -3268,7 +3279,9 @@ async function handleSupportTicketIntake(c: Context, input: SupportTicketIntakeB
   const requesterEmail = optionalTrimmedString(input.requester_email) || optionalTrimmedString(input.email);
   const requesterName = optionalTrimmedString(input.requester_name) || optionalTrimmedString(input.name);
   const rawSubject = optionalTrimmedString(input.subject) || "Support request";
-  const rawBody = optionalTrimmedString(input.body) || optionalTrimmedString(input.message);
+  const company = optionalTrimmedString(input.company);
+  const rawMessage = optionalTrimmedString(input.body) || optionalTrimmedString(input.message);
+  const rawBody = company && rawMessage ? `[company: ${company}]\n${rawMessage}` : rawMessage;
   const rawCategory = optionalTrimmedString(input.category);
   const apiKeyHint = optionalTrimmedString(input.api_key_hint) || optionalTrimmedString(input.apiKeyHint);
 

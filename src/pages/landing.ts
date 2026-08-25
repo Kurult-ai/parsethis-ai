@@ -12,6 +12,7 @@ import {
   HERO_ENGINE_NOTE,
   HERO_ENGINE_NOTE_FULL,
   HERO_ENGINE_NOTE_PATTERN,
+  HERO_MISS_COPY,
 } from "./landing-hero-verdict.js";
 
 function escapeHtml(value: string): string {
@@ -533,14 +534,15 @@ Verification required before reporting done:
           <div id="hero-why" style="font-size:13px;color:rgba(255,255,255,.8);margin-top:8px;"></div>
           <div id="hero-engine" style="font-size:12px;color:rgba(255,255,255,.58);margin-top:8px;">${escapeHtml(HERO_ENGINE_NOTE)}</div>
           <div id="hero-ask" style="margin-top:13px;display:none;">
+            <a id="hero-report-link" href="#" style="display:none;font-size:13px;color:rgba(255,255,255,.88);">Open the 7-day report</a>
             <div id="hero-ask-refused" style="display:none;">
               <a class="btn btn-white" href="/pricing#solo">Start Solo $${PLAN_LIMITS.solo.pricePerMonth}</a>
               <a href="/get-started" style="margin-left:12px;font-size:13px;color:rgba(255,255,255,.78);">Install Parse &mdash; free, no card</a>
               <div style="font-size:12px;color:rgba(255,255,255,.62);margin-top:7px;">No idle expiry — the plan for an agent nobody is watching. Free stays available.</div>
             </div>
-            <div id="hero-ask-default">
-              <a class="btn btn-white" href="/get-started">Install Parse &mdash; free, no card</a>
-              <div style="font-size:12px;color:rgba(255,255,255,.62);margin-top:7px;">That verdict took milliseconds on the deterministic layer. The free tier runs it unlimited.</div>
+            <div id="hero-ask-miss" style="display:none;">
+              <div style="font-size:13px;color:rgba(255,255,255,.82);margin:0 0 8px;">${escapeHtml(HERO_MISS_COPY)}</div>
+              <a class="btn btn-white" href="/attack">See the Attack Pack</a>
             </div>
           </div>
         </div>
@@ -1393,12 +1395,23 @@ curl -s ${baseUrl}/v1/parse \\
           engineEl.textContent = llmRan ? ENGINE_FULL : ENGINE_PATTERN;
         }
         if (result) result.style.display = 'block';
-        /* The ask, after the proof — never before it. Solo $12 only after a refusal. */
+        /* The ask, after the proof — never before it. Solo $12 only after a refusal.
+           A miss does not sell Install-free as proof; it sells the 7-day report. */
         if (ask) ask.style.display = 'block';
         var refusedAsk = document.getElementById('hero-ask-refused');
-        var defaultAsk = document.getElementById('hero-ask-default');
+        var missAsk = document.getElementById('hero-ask-miss');
+        var reportLink = document.getElementById('hero-report-link');
         if (refusedAsk) refusedAsk.style.display = refused ? 'block' : 'none';
-        if (defaultAsk) defaultAsk.style.display = refused ? 'none' : 'block';
+        if (missAsk) missAsk.style.display = (!refused && !held) ? 'block' : 'none';
+        if (reportLink) {
+          if (d.report_url) {
+            reportLink.href = d.report_url;
+            reportLink.style.display = 'inline';
+            reportLink.style.marginRight = '12px';
+          } else {
+            reportLink.style.display = 'none';
+          }
+        }
       })
       .catch(function () {
         btn.disabled = false;

@@ -587,12 +587,15 @@ done
 Fixing this properly means giving that test's Redis client a bounded
 `maxRetriesPerRequest` / `retryStrategy` so it fails fast instead of spinning.
 
-**Hero widget gotcha (run 22).** The landing hero must key the verdict on
-`suggested_action`, never `score >= 7`. A hold (`sandbox` /
+**Hero widget gotcha (run 22 / runs 73–79).** The landing hero must key the
+verdict on `suggested_action`, never `score >= 7`. A hold (`sandbox` /
 `request_owner_approval`) is "Held for review", not green "Allowed".
 "Nothing flagged" keys on `flags.length`, not `matched_token`. The engine is
-named (`pattern-only`). `npm run check:inline-scripts` parses every rendered
-inline script — a template-literal newline will kill the widget invisibly.
+named (`pattern-only`). After a refuse, the ask is Start Solo $12. After an
+allow, do **not** sell Install-free as proof — sell the 7-day `/report/:id`
+(from `POST /demo/api` `report_url`) and an honest "deterministic layer did
+not fire." `npm run check:inline-scripts` parses every rendered inline
+script — a template-literal newline will kill the widget invisibly.
 
 **Keygen expiry.** `expires_at` and the response `note` must both come from
 `RETENTION.selfServiceKeyExpiryDays` (`src/lib/self-service-key-copy.ts`).
@@ -604,3 +607,15 @@ render, or a 10.0 pattern block reads as "semantic-only findings capped at
 report". GET `/v1/keys/self` is metadata only — never the secret. Anonymous
 keys still cannot `POST /v1/orgs/bootstrap`; qualify org-governance copy
 instead of opening bootstrap.
+
+**Concealment is a class, not a noun.** `intent.concealed_directive` hides a
+live tool grant from a human thread. Owner-class includes `member` and
+`{audience}-visible`. `mention the {credit|pass|adjustment|refund}` and
+`(keep|leave) … off the … (email|thread|reply)` only count when
+`TOOL_INVOCATION` is live. `fire` is a tool verb only with snake_case
+(`fire apply_store_credit`), never bare "fire the oven". Approval suppression
+is `omit|skip|without` + `approval`, not only "do not create an approval
+record". HTML-comment instructions include action-directives
+(`skip|set|enable|grant|add … to`), not only ignore/issue. Do not fit frozen
+evalset nouns. Pattern-only must block these; do not promote LLM-only sandbox
+to a stop.

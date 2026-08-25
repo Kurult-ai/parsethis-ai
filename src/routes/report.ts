@@ -168,10 +168,10 @@ reportRoutes.get("/report/:id", async (c) => {
     ${disp.label} — ${disp.line}
   </div>
 
-  <div class="rep-blast">
+  ${report.blast ? `<div class="rep-blast">
     <strong>What an unscreened agent would have done</strong>
     ${escapeHtml(report.blast)}
-  </div>
+  </div>` : ""}
 
   <div class="rep-sec">
     <h2>Categories</h2>

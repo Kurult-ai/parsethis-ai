@@ -52,6 +52,7 @@ ${notice}
         <option value="api">API / integration</option>
         <option value="account">Account</option>
         <option value="security">Security</option>
+        <option value="dpa">DPA / vendor review</option>
       </select>
     </label>
 

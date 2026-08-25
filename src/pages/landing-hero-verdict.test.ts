@@ -17,6 +17,7 @@ describe("formatHeroScreenResult — the shipped hero contract", () => {
     });
     assert.equal(view.label, "Refused");
     assert.equal(view.tone, "refused");
+    assert.equal(view.ask, "solo");
     assert.match(view.why, /ignore previous/);
   });
 
@@ -43,6 +44,7 @@ describe("formatHeroScreenResult — the shipped hero contract", () => {
     });
     assert.equal(view.label, "Allowed");
     assert.equal(view.tone, "allowed");
+    assert.equal(view.ask, "miss");
     assert.match(view.why, /Nothing flagged/);
   });
 
@@ -126,10 +128,14 @@ describe("the rendered landing hero script keeps the contract", () => {
 
   it("offers Start Solo $12 after a refusal, not as the default ask", () => {
     assert.match(html, /id="hero-ask-refused"/);
+    assert.match(html, /id="hero-ask-miss"/);
     assert.match(html, /Start Solo/);
     assert.match(html, /No idle expiry/);
+    assert.match(html, /deterministic layer did not fire/);
     assert.match(script!, /hero-ask-refused/);
+    assert.match(script!, /hero-ask-miss/);
     assert.match(script!, /refused \? 'block' : 'none'/);
+    assert.match(script!, /report_url/);
   });
 
   it("labels the engine and names the mode", () => {

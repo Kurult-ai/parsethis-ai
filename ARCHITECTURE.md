@@ -28,7 +28,8 @@ lives, and the run-22 rules that must not be re-derived from stale comments.
 4. **A Pro key must reach the registry the card sells.** Auto-provision or
    bootstrap; do not 403 both doors.
 5. **Hero and Stripe are production.** A hold is not "Allowed". Stripe copy
-   must not open with a volume figure that reads as a cap.
+   must not open with a volume figure that reads as a cap. A green hero must
+   not sell Install-free as proof; Start Solo $12 is the ask after a refuse.
 
 ## Run-23 decisions (2026-08-18)
 
