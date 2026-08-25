@@ -155,7 +155,7 @@ reportRoutes.get("/report/:id", async (c) => {
   <div class="rep-head">
     <div>
       <h1>Screening Evidence Report</h1>
-      <div class="rep-sub">${report.sample_title ? escapeHtml(report.sample_title) + " — Attack Pack sample" : "Custom text"} · screened by ${PRODUCT.name}</div>
+      <div class="rep-sub">${report.sample_title ? escapeHtml(report.sample_title) + (report.blast ? " — Attack Pack sample" : "") : "Custom text"} · screened by ${PRODUCT.name}</div>
     </div>
     <div class="rep-score">
       <div class="rep-score-num" style="color:${disp.color}">${v.risk_score.toFixed(1)}</div>
