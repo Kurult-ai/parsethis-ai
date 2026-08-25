@@ -517,13 +517,12 @@ One price variable per product. `STRIPE_AUDIT_PRICE_ID` belongs to the one-time
 $47 audit only, never to a subscription tier — Compliance used to share it, which
 would have sold the $999/mo plan for $47 the moment that price was wired up. A
 tier whose variable is unset is reported by `isTierPurchasable()` and its checkout
-returns 503 instead of throwing a 500. Only Solo, Pro and Team have prices in
-Stripe today; Compliance is sales-led (DPA/support, not a fifth plan on `/pricing`).
-Enterprise is not in `TIER_CONFIG`;
+returns 503 instead of throwing a 500. Solo, Pro, Team and Compliance have
+Stripe prices today. Enterprise is not in `TIER_CONFIG`;
 `POST /v1/billing/signup-checkout` and `/v1/billing/checkout` with
-`tier: "enterprise"` return 503 with the contact email (same door as
-Compliance), not `400 Invalid tier`. The `/pricing` volume slider still shows
-each plan's monthly price when the requested volume is above included deep —
+`tier: "enterprise"` return 503 with the contact email, not `400 Invalid tier`.
+Overflow rpm is an admin grant, not a checkout. The `/pricing` volume slider still
+shows each plan's monthly price when the requested volume is above included deep —
 going over never stops screening — and ranks “lowest-cost” by rate-limit fit,
 not the Free sticker.
 
