@@ -78,6 +78,7 @@ import { resolveOrgId } from "../lib/org-scope.js";
 import { renderTrustPage } from "../pages/trust-page.js";
 import { renderTrustPackagePage } from "../pages/trust-package.js";
 import { storeReport, storedReportFromParse } from "./attack-pack.js";
+import { REPORT_TTL_DAYS, reportExpiresAt } from "../lib/report-ttl.js";
 import { renderDpaPage } from "../pages/dpa.js";
 import { renderAboutPage } from "../pages/about.js";
 import { renderFounderPage } from "../pages/founder.js";
@@ -876,16 +877,23 @@ return n`;
 
     const data = await parseRes.json() as Record<string, unknown>;
     let report_url: string | null = null;
+    let report_expires_at: string | null = null;
     try {
       const report = storedReportFromParse(body.prompt, data, { blast: "", sample_title: "Landing hero" });
       const id = await storeReport(report);
-      if (id) report_url = `/report/${id}`;
+      if (id) {
+        report_url = `/report/${id}`;
+        report_expires_at = reportExpiresAt(report.screened_at).toISOString();
+      }
     } catch {
       report_url = null;
+      report_expires_at = null;
     }
     return c.json({
       ...data,
       report_url,
+      report_ttl_days: REPORT_TTL_DAYS,
+      report_expires_at,
       use_count: useCount,
       remaining: demoRemaining(useCount),
       limit: DEMO_RATE_LIMIT_PER_HOUR,

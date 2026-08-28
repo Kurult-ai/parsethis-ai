@@ -22,6 +22,7 @@ import { renderPage } from "../lib/html-template.js";
 import { organizationSchema } from "../lib/schema.js";
 import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
 import { flagsFiredDeterministicFloor } from "../lib/deterministic-floor.js";
+import { REPORT_TTL_DAYS, REPORT_TTL_SECONDS, reportExpiresAt } from "../lib/report-ttl.js";
 import type { AppEnv } from "../types.js";
 
 export const attackPackRoutes = new Hono<AppEnv>();
@@ -113,9 +114,8 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-// ── Shared report storage (Redis, 7-day TTL) ────────────────────────────────
+// ── Shared report storage (Redis, REPORT_TTL_DAYS from src/lib/report-ttl.ts) ─
 
-const REPORT_TTL_SECONDS = 60 * 60 * 24 * 7;
 const REPORT_KEY_PREFIX = "attackpack:report";
 
 interface StoredReport {
@@ -289,6 +289,16 @@ attackPackRoutes.get("/attack", (c) => {
     color: var(--text-soft);
     margin: 0;
   }
+  .attack-ttl {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+    margin: 10px 0 0;
+  }
+  .attack-ttl .lit { color: var(--gold); }
 
   .horizon { position: relative; width: min(72vw, 400px); aspect-ratio: 1; margin: 0 auto; }
   .accretion {
@@ -395,6 +405,7 @@ attackPackRoutes.get("/attack", (c) => {
     <h1 id="attack-title">Five pre-built injections. One click each. <span class="watch">Watch what it would have executed.</span></h1>
     <p class="attack-lede">Five real-world injections dressed as ordinary business text — an invoice, a knowledge-base article, an executive forward, a calendar invite, a support ticket. Every one of them reads as routine to a busy human. Every one carries a payload aimed at an AI agent's authority.</p>
     <p class="attack-fine">Screen one. Forward the report. That's the demo.</p>
+    <p class="attack-ttl">evidence url · <span class="lit">lives ${REPORT_TTL_DAYS} days</span> · re-screen to reissue</p>
   </div>
 </section>
 <section class="pack" aria-label="Five approaches">
@@ -489,9 +500,9 @@ attackPackRoutes.get("/attack/:slug", (c) => {
   <div class="sample-email">${escapeHtml(sample.text)}</div>
   <div class="sample-actions">
     <button class="sample-screen-btn" id="screen-btn" onclick="screenSample('${sample.slug}')">Screen this text →</button>
-    <span class="sample-status" id="status">Runs through the production /v1/parse pipeline.</span>
+    <span class="sample-status" id="status">Runs through the production /v1/parse pipeline — the evidence URL it mints lives ${REPORT_TTL_DAYS} days.</span>
   </div>
-  <p class="sample-note">This is a synthetic sample published for demonstration. No real vendor, customer, or endpoint is involved.</p>
+  <p class="sample-note">This is a synthetic sample published for demonstration. No real vendor, customer, or endpoint is involved. Screen it again any time — an expired report link reissues with one click.</p>
 </section>
 <script>
 async function screenSample(slug) {
@@ -582,7 +593,11 @@ attackPackRoutes.post("/attack/api/screen", async (c) => {
       // Report store down — return the verdict inline instead of a URL.
       return c.json({ report_url: null, verdict: report.verdict, detail: "Shared link unavailable; verdict returned inline." });
     }
-    return c.json({ report_url: `/report/${id}` });
+    return c.json({
+      report_url: `/report/${id}`,
+      report_ttl_days: REPORT_TTL_DAYS,
+      report_expires_at: reportExpiresAt(report.screened_at).toISOString(),
+    });
   } catch (err) {
     console.error("[attack-pack] screen failed:", (err as Error).message);
     return c.json({ error: "Screening error", detail: "Unexpected error. Try again." }, 500);
