@@ -53,7 +53,12 @@ describe("run 46 — advertised contracts (no DB)", () => {
   });
 
   it("BLOCKED report template's primary CTA is /ledger/sample", () => {
-    const src = readFileSync(fileURLToPath(new URL("./report.ts", import.meta.url)), "utf8");
+    // The report template lives in src/pages/evidence-report.ts (the route in
+    // ./report.ts only loads and delegates); the pin follows the template.
+    const src = readFileSync(
+      fileURLToPath(new URL("../pages/evidence-report.ts", import.meta.url)),
+      "utf8",
+    );
     assert.match(src, /href="\/ledger\/sample"/);
     assert.match(src, /v\.disposition === "block"/);
   });

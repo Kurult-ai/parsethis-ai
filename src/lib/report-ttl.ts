@@ -6,8 +6,8 @@
  * Every surface that states that lifetime — the /attack pages, the live
  * report, the expired report, the demo console, the screen API's JSON —
  * interpolates these values rather than typing a number, so the copy cannot
- * drift from the TTL the store actually enforces (the way "30 idle days"
- * once shipped against a 90-day key expiry).
+ * drift from the TTL the store actually enforces (the way a hardcoded
+ * key-expiry figure once shipped against a 90-day expires_at).
  *
  * This is the Attack Pack report TTL only. The $47 audit report TTL
  * (src/routes/audit-product.ts), ledger share TTL (src/routes/ledger.ts) and
