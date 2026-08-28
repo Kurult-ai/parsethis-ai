@@ -19,6 +19,7 @@
 import { Hono } from "hono";
 import { createHash } from "node:crypto";
 import { renderPage } from "../lib/html-template.js";
+import { BLACK_HOLE_ANIMATION_JS } from "../pages/blackhole-animation.js";
 import { organizationSchema } from "../lib/schema.js";
 import { getRedis, isRedisAvailable, ensureRedisConnected } from "../redis.js";
 import { flagsFiredDeterministicFloor } from "../lib/deterministic-floor.js";
@@ -260,6 +261,9 @@ attackPackRoutes.get("/attack", (c) => {
       radial-gradient(60% 50% at 22% 34%, rgba(255, 180, 84, 0.07), transparent 55%),
       repeating-radial-gradient(circle at 22% 38%, transparent 0 46px, rgba(255,255,255,.028) 47px 48px);
   }
+  /* The hole's canvas overhangs its box (transparent corners + dissolving
+     glow); clip the document edge exactly as the landing document does. */
+  html, body { overflow-x: clip; max-width: 100%; }
   [hidden] { display: none !important; }
 
   .attack-hero {
@@ -300,42 +304,29 @@ attackPackRoutes.get("/attack", (c) => {
   }
   .attack-ttl .lit { color: var(--gold); }
 
+  /* The hole is the landing hero's lensed-black-hole WebGL scene
+     (src/pages/blackhole-animation.ts) — the same shader, a smaller box.
+     Scale is carried entirely by .horizon's width. The canvas recipe matches
+     the hero (148% of the box, rotated -45deg): the bright photon ring spans
+     roughly two thirds of the canvas, so at 148% it lands where the old
+     static ring sat — the box's own edge. Only transparent corners and the
+     dissolving glow overhang. */
   .horizon { position: relative; width: min(72vw, 400px); aspect-ratio: 1; margin: 0 auto; }
-  .accretion {
-    position: absolute; inset: -22px; border-radius: 50%;
-    border: 1px solid color-mix(in srgb, var(--gold) 18%, transparent);
-    pointer-events: none;
+  #bh {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    width: 148%; aspect-ratio: 1; pointer-events: none;
   }
-  .horizon-ring {
-    position: absolute; inset: 0; border-radius: 50%;
-    background: conic-gradient(
-      from 205deg,
-      var(--yellow) 0deg,
-      var(--gold) 42deg,
-      color-mix(in srgb, var(--yellow) 38%, black) 110deg,
-      var(--bg) 168deg,
-      color-mix(in srgb, var(--yellow) 22%, black) 228deg,
-      var(--yellow) 300deg,
-      var(--gold) 360deg
-    );
-    opacity: 0.78;
-    animation: ringIn 320ms cubic-bezier(0.2, 0, 0, 1) both;
-    transition: opacity 200ms cubic-bezier(0.2, 0, 0.38, 0.9);
-  }
-  body[data-lit="true"] .horizon-ring { opacity: 1; }
-  .horizon-void {
-    position: absolute; inset: 12px; border-radius: 50%;
-    background: radial-gradient(circle at 42% 36%, color-mix(in srgb, var(--yellow) 14%, black) 0%, var(--bg) 64%);
-    display: grid; place-items: center; text-align: center;
-  }
+  /* The core label rides the shadow at the canvas centre; hovering a stream
+     still lights it (the old ring-brightening hover, now on the label). */
   .horizon-core {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
     font-family: var(--mono); font-size: 12px; letter-spacing: 0.16em;
     text-transform: uppercase; color: var(--text-soft); max-width: 12ch;
+    text-align: center;
+    transition: color 200ms cubic-bezier(0.2, 0, 0.38, 0.9);
   }
-  @keyframes ringIn {
-    from { opacity: 0; transform: scale(0.92); }
-    to { opacity: 0.78; transform: scale(1); }
-  }
+  body[data-lit="true"] .horizon-core { color: var(--gold); }
 
   .pack { margin-top: 28px; border-top: 1px solid var(--border); }
   .stream {
@@ -390,16 +381,11 @@ attackPackRoutes.get("/attack", (c) => {
     .cta { grid-column: 2; padding-top: 0; }
     .split { grid-template-columns: 1fr; }
   }
-  @media (prefers-reduced-motion: reduce) {
-    .horizon-ring { animation: none; opacity: 0.78; transform: none; }
-    body[data-lit="true"] .horizon-ring { opacity: 1; }
-  }
 </style>
 <section class="attack-hero" aria-labelledby="attack-title">
   <div class="horizon" aria-hidden="true">
-    <div class="accretion"></div>
-    <div class="horizon-ring"></div>
-    <div class="horizon-void"><div class="horizon-core">event horizon</div></div>
+    <canvas id="bh"></canvas>
+    <div class="horizon-core">event horizon</div>
   </div>
   <div>
     <h1 id="attack-title">Five pre-built injections. One click each. <span class="watch">Watch what it would have executed.</span></h1>
@@ -432,6 +418,9 @@ attackPackRoutes.get("/attack", (c) => {
     el.addEventListener("blur", dim);
   });
 })();
+</script>
+<script>
+${BLACK_HOLE_ANIMATION_JS}
 </script>`;
 
   return c.html(
