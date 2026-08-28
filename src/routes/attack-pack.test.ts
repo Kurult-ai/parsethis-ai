@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { app } from "../app.js";
 import { renderDemoPage } from "../pages/demo-page.js";
+import { renderLandingPage } from "../pages/landing.js";
+import { BLACK_HOLE_ANIMATION_JS } from "../pages/blackhole-animation.js";
 
 describe("Attack Pack pages", () => {
-  it("renders the photon-ring catalog on void, not light-theme cards", async () => {
+  it("renders the lensed-hole catalog on void, not light-theme cards", async () => {
     const res = await app.request("/attack");
     assert.equal(res.status, 200);
     const html = await res.text();
-    assert.match(html, /horizon-ring/);
+    assert.match(html, /<canvas id="bh">/);
     assert.match(html, /event horizon/);
     assert.match(html, /class="attack-pack"/);
     assert.match(html, /The invoice that redirects payment/);
@@ -18,6 +20,25 @@ describe("Attack Pack pages", () => {
     assert.doesNotMatch(html, /#2f6fed/);
     assert.doesNotMatch(html, /var\(--card, #fff\)/);
     assert.doesNotMatch(html, /background: var\(--card/);
+  });
+
+  it("renders the landing hero's black-hole animation, not a static disc", async () => {
+    const res = await app.request("/attack");
+    const html = await res.text();
+    // The exact landing shader script, embedded — one shader, smaller box.
+    assert.ok(html.includes(BLACK_HOLE_ANIMATION_JS), "shared animation script missing from /attack");
+    // The CSS-only placeholder discs are gone.
+    assert.doesNotMatch(html, /horizon-ring/);
+    assert.doesNotMatch(html, /horizon-void/);
+    assert.doesNotMatch(html, /class="accretion"/);
+  });
+
+  it("shares one animation source with the landing hero (no forked shader)", () => {
+    const landing = renderLandingPage("https://www.parsethis.ai");
+    assert.ok(landing.includes(BLACK_HOLE_ANIMATION_JS), "shared animation script missing from landing");
+    assert.match(landing, /<canvas id="bh"/);
+    // Landing hero keeps its full-size art column.
+    assert.match(landing, /hf-art/);
   });
 
   it("keeps a sample page on the void theme", async () => {
