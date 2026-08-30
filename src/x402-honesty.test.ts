@@ -35,6 +35,23 @@ describe("x402 honesty", () => {
     assert.doesNotMatch(slice, /sign USDC on \$\{X402_PAYMENT\.networkName\}, and retry/);
   });
 
+  it("docs index and pricing setup prompt do not sell a keyless billable path while disabled", () => {
+    if (isX402Enabled()) return;
+    const docs = readFileSync(fileURLToPath(new URL("./routes/public.ts", import.meta.url)), "utf8");
+    assert.doesNotMatch(docs, /pay-per-call screening for autonomous agents, no key required/);
+    // The honest try/demo line survives verbatim — the /demo page really is keyless.
+    assert.ok(
+      docs.includes(
+        '<li><a href="/demo">Try it</a> — paste a prompt, get a verdict in 30 seconds. No key required.</li>',
+      ),
+    );
+
+    const pricing = readFileSync(fileURLToPath(new URL("./pages/pricing.ts", import.meta.url)), "utf8");
+    assert.doesNotMatch(pricing, /If no account context exists or Parse returns HTTP 402, use x402/);
+    assert.match(pricing, /x402 is not configured on this deployment/);
+    assert.match(pricing, /Keyless billable POSTs return HTTP 401 auth\.required, not 402/);
+  });
+
   it("agent Task Router does not teach a live 402→USDC→retry path while disabled", () => {
     if (isX402Enabled()) return;
     const x402Route = ACTION_ROUTER.find((item) => item.tool === "get_pricing");

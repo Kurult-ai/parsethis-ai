@@ -9,13 +9,17 @@ export function renderPricingPage(baseUrl: string): string {
   const outputPrice = X402_ENDPOINTS.screen_output.price;
   const x402SetupPrompt = `Integrate Parse x402 pay-per-call screening.
 
+Deployment status:
+- x402 is not configured on this deployment — GET ${baseUrl}/v1/pricing reports enabled: false. Keyless billable POSTs return HTTP 401 auth.required, not 402.
+- Use Bearer auth today (POST ${baseUrl}/v1/keys/generate). Treat the x402 flow below as catalog reference to apply only after enabled reports true.
+
 Goal:
 - Use Parse before an autonomous agent lets untrusted text affect tools, memory, private owner data, credentials, payments, code execution, other agents, or user-visible output.
 - Prefer Bearer auth when PARSE_API_KEY exists.
-- If no account context exists or Parse returns HTTP 402, use x402.
+- Use x402 only when no account context exists and GET ${baseUrl}/v1/pricing reports enabled: true.
 - Make setup frictionless: expose or use status, doctor, test, pricing, and x402-status checks so the operator can see what is configured and what remains missing.
 
-Payment facts:
+Payment facts (catalog):
 - Prompt screening: ${X402_ENDPOINTS.parse.method} ${baseUrl}${X402_ENDPOINTS.parse.path} costs ${parsePrice} ${X402_PAYMENT.currency}.
 - Output screening: ${X402_ENDPOINTS.screen_output.method} ${baseUrl}${X402_ENDPOINTS.screen_output.path} costs ${outputPrice} ${X402_PAYMENT.currency}.
 - Asset: ${X402_PAYMENT.currency} at ${X402_PAYMENT.assetAddress}.
@@ -24,11 +28,11 @@ Payment facts:
 - Retry header: ${X402_PAYMENT.header}; legacy clients may send ${X402_PAYMENT.legacyHeader}.
 
 First-use path:
-1. Prefer Bearer auth when PARSE_API_KEY exists; use x402 as the no-account/pay-per-call fallback.
-2. Read ${baseUrl}/v1/pricing, make the unauthenticated request, then retry the identical request with the advertised x402 payment header only after operator spending approval.
+1. Prefer Bearer auth when PARSE_API_KEY exists; x402 is the no-account/pay-per-call fallback only while enabled is true.
+2. Read ${baseUrl}/v1/pricing and check enabled. While it is false (this deployment), keyless billable POSTs return HTTP 401, not 402 — stay on Bearer auth. Only when enabled is true: make the unauthenticated request, then retry the identical request with the advertised x402 payment header only after operator spending approval.
 3. Do not print private keys, seed phrases, payment signatures, API keys, or wallet secrets.
 
-Generic implementation steps:
+Generic implementation steps (only while enabled is true):
 1. Call GET ${baseUrl}/v1/pricing and read the x402 accepts[] payment requirements.
 2. Send the intended Parse request without a bearer key when using pay-per-call.
 3. On HTTP 402, sign the advertised USDC payment with a scoped funded wallet.
