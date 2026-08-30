@@ -1985,7 +1985,7 @@ you can send it to us (<code>pattern.*</code> flags may omit that field).</p>
 <ul>
   <li><a href="/docs/api">Full API Reference</a> — every endpoint, request, and response shape</li>
   <li><a href="/docs/risk-categories">Risk Categories</a> — the canonical threat taxonomy behind verdicts</li>
-  <li><a href="/docs/x402">x402 Guide</a> — pay-per-call screening for autonomous agents, no key required</li>
+  <li><a href="/docs/x402">x402 Guide</a> — catalog USDC prices; not configured on this deployment, use a Bearer key</li>
   <li><a href="/docs/screening-metrics">Screening Metrics</a> — the analytics endpoint and its fields</li>
   <li><a href="/docs/openapi-gpt-actions-prompt-screening">OpenAPI / GPT Actions Guide</a> — tool-calling setup</li>
   <li><a href="/security/limitations">Limitations</a> — what Parse does and does not guarantee</li>
@@ -1997,7 +1997,7 @@ you can send it to us (<code>pattern.*</code> flags may omit that field).</p>
 <ul>
   <li><a href="/trust">Trust &amp; Security</a> — Security posture, SOC 2 alignment, and vendor questionnaire</li>
   <li><a href="/technology">Technology</a> — Public architecture and non-claimable evidence state</li>
-  <li><a href="/pricing">Pricing</a> — Free through Team, and x402 pay-per-call. DPA handling is a support conversation, not a fifth plan.</li>
+  <li><a href="/pricing">Pricing</a> — Free through Team, plus the x402 pay-per-call catalog. DPA handling is a support conversation, not a fifth plan.</li>
   <li><a href="/faq">FAQ</a> — 20+ common questions</li>
   <li><a href="/blog">Blog</a> — release notes and boundary-defense writing</li>
 </ul>
