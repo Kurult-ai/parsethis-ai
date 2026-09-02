@@ -52,6 +52,19 @@ describe("x402 honesty", () => {
     assert.match(pricing, /Keyless billable POSTs return HTTP 401 auth\.required, not 402/);
   });
 
+  it("pricing meta/og/twitter description does not sell x402 as an offer while disabled", () => {
+    if (isX402Enabled()) return;
+    const pricing = readFileSync(fileURLToPath(new URL("./pages/pricing.ts", import.meta.url)), "utf8");
+    // The renderPage description is what html-template writes into meta
+    // description, og:description, and twitter:description.
+    assert.doesNotMatch(pricing, /also offers x402 pay-per-call/);
+    assert.match(
+      pricing,
+      /x402 pay-per-call is not configured on this deployment \(GET \/v1\/pricing reports enabled: false\)/,
+    );
+    assert.match(pricing, /USDC prices are catalog only; use a Bearer API key today/);
+  });
+
   it("agent Task Router does not teach a live 402→USDC→retry path while disabled", () => {
     if (isX402Enabled()) return;
     const x402Route = ACTION_ROUTER.find((item) => item.tool === "get_pricing");
