@@ -156,6 +156,13 @@ Verification required before reporting done:
   // overrides silently fall back to hash assignment.
   const hero = heroVariants[variantKey] ?? heroVariants.a;
 
+  // t_172f32d3 — one screening path from the homepage: the nav, hero and
+  // closer "Screen one" CTAs land on the same hero box the #hero-screen
+  // "Screen it" button runs, instead of forking off to /attack. The box only
+  // renders when DEMO_API_KEY is set, so keyless deployments keep the Attack
+  // Pack href — there is no homepage screen to point at.
+  const screenCtaHref = DEMO_API_KEY ? "#screen" : "/attack";
+
   const canonicalUrl = `${baseUrl}/`;
   const title = "Screen untrusted text before your AI agent can act";
   const description = `Parse is the gate in front of agents that read tickets, email or customer messages and then use tools. Deterministic injection/exfiltration/fraud screening on every message, a receipt on every verdict, monitor mode from $0 — production from $${PLAN_LIMITS.solo.pricePerMonth}/mo (Solo) or $${PLAN_LIMITS.pro.pricePerMonth}/mo (Pro).`;
@@ -483,7 +490,7 @@ Verification required before reporting done:
     </nav>
     <div class="nav-right">
       <a class="btn btn-ghost" href="/admin/login">Sign in</a>
-      <a class="btn btn-white" href="/attack">Screen one</a>
+      <a class="btn btn-white" href="${screenCtaHref}">Screen one</a>
     </div>
   </div>
 </header>
@@ -495,7 +502,7 @@ Verification required before reporting done:
       <h1>${hero.l1}<br><em>${hero.l2}</em></h1>
       <p class="hf-lede">${hero.lede}</p>
       <div class="hf-cta">
-        <a class="btn btn-white btn-lg" href="/attack">Screen one</a>
+        <a class="btn btn-white btn-lg" href="${screenCtaHref}">Screen one</a>
         ${DEMO_API_KEY ? '<a class="btn btn-ghost btn-lg" href="/demo">Paste your own</a>' : ""}
         <a class="btn btn-ghost btn-lg" href="/get-started">Install Parse</a>
       </div>
@@ -512,7 +519,9 @@ Verification required before reporting done:
         So the proof happens here, and the ask follows the verdict.
       -->
       ${DEMO_API_KEY ? `
-      <div class="hf-try" style="margin-top:22px;max-width:560px;">
+      <!-- scroll-margin keeps the box clear of the 64px sticky header when a
+           "Screen one" CTA anchors here. -->
+      <div class="hf-try" id="screen" style="margin-top:22px;max-width:560px;scroll-margin-top:84px;">
         <label for="hero-input" style="display:block;font-size:13px;color:rgba(255,255,255,.72);margin-bottom:6px;">
           Paste something your agent read. No key, no account.
         </label>
@@ -697,7 +706,7 @@ curl -s ${baseUrl}/v1/parse \\
   <div class="wrap">
     <h2>Agent governance,<br><em>receipted.</em></h2>
     <div class="hf-cta">
-      <a class="btn btn-white btn-lg" href="/attack">Screen one</a>
+      <a class="btn btn-white btn-lg" href="${screenCtaHref}">Screen one</a>
       <a class="btn btn-ghost btn-lg" href="/get-started">Install Parse</a>
     </div>
   </div>
