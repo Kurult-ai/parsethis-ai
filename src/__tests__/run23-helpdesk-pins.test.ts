@@ -167,7 +167,7 @@ test("pin: org-less critical, including llm-only, refuses summarize", () => {
   assert.match(d.reason, /no review path/);
 });
 
-test("pin: org-less llm-only critical + summarize stays block through parsePrompt", async () => {
+test("pin: org-less llm-only critical + summarize refuses the downgrade through parsePrompt", async () => {
   const saved = process.env.OPENROUTER_API_KEY;
   process.env.OPENROUTER_API_KEY = "test-key";
   __setLLMCallForTesting(async (messages) => {
@@ -191,7 +191,13 @@ test("pin: org-less llm-only critical + summarize stays block through parsePromp
       metadata: { intended_action: "summarize" },
       hasReviewPath: false,
     });
-    assert.equal(r.recommended_action, "block");
+    // dbc81e8 de-inflated single uncorroborated LLM readings: one model call
+    // naming two categories no longer corroborates itself into a 10, so the
+    // combined score lands at 6 and the action is `sandbox`, not `block`. The
+    // contract this pin protects is the DOWNGRADE refusal, not the action word:
+    // an org-less key declaring summarize must not turn the finding loose.
+    assert.equal(r.recommended_action, "sandbox");
+    assert.equal(r.verdict, "medium_risk");
     const role = (r as unknown as { analysis_role?: { downgrade_refused?: boolean } }).analysis_role;
     assert.equal(role?.downgrade_refused, true);
   } finally {
@@ -261,10 +267,13 @@ test("pin: /get-started names the two-mode trade and a false positive", () => {
   assert.match(html, /pattern-only/);
 });
 
-test("pin: hero still sends pattern-only and a hero source", () => {
+test("pin: hero still sends pattern-only by default and a hero source", () => {
   const html = renderLandingPage("https://www.parsethis.ai");
-  assert.match(html, /mode:\s*['"]pattern-only['"]/);
-  assert.match(html, /source:\s*['"]hero['"]/);
+  // 13849fe gave the shop window a full-mode toggle; pattern-only remains the
+  // default arm of the ternary, not a hardcoded literal (that pin moved to
+  // landing-hero-verdict.test.ts "wires a visible full-mode toggle").
+  assert.match(html, /mode: wantsFull \? 'full' : 'pattern-only'/);
+  assert.match(html, /source: 'hero'/);
 });
 
 test("pin: painted hero verdict matches recommended_action on a C1-shape block", async () => {

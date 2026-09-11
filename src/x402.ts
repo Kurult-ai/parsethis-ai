@@ -40,7 +40,20 @@ let x402Ready = false;
  * Initialize x402 payment middleware.
  * Uses try/catch + timeout race instead of deprecated node:domain.
  */
+// Tests and CI never have live facilitator credentials (CDP keys are prod
+// secrets). The SDK's paymentMiddleware fires its init fire-and-forget; when
+// the facilitator is unreachable the rejection lands AFTER the test run ends
+// and node's test runner treats it as fatal — so under the test runner the
+// middleware stays off unless a test explicitly opts in with X402_TEST_MODE=live.
+const IS_TEST_RUNNER = process.env.NODE_TEST_CONTEXT !== undefined;
+
 async function initX402(): Promise<void> {
+  if (IS_TEST_RUNNER && process.env.X402_TEST_MODE !== "live") {
+    if (X402_ENABLED) {
+      console.log("[x402] test runner detected — payment middleware disabled (set X402_TEST_MODE=live to force)");
+    }
+    return;
+  }
   if (!X402_ENABLED || !WALLET) {
     if (X402_ENABLED && !WALLET) {
       console.warn("[x402] X402_ENABLED=true but X402_PAY_TO_ADDRESS not set — payments disabled");
@@ -287,9 +300,17 @@ async function initX402(): Promise<void> {
     console.log(`[x402] Payment middleware enabled — wallet: ${WALLET.slice(0, 6)}...${WALLET.slice(-4)}, network: ${NETWORK}, facilitator: ${facilitatorLabel}`);
   })();
 
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error("x402 init timed out")), INIT_TIMEOUT_MS)
-  );
+  // A bare setTimeout-reject promise in Promise.race leaks: when init fails (or
+  // succeeds) before the timeout fires, the timer's later rejection lands on a
+  // promise nobody awaits — an unhandledRejection that node's test runner (and
+  // --unhandled-rejections=strict, the eventual default) treats as fatal. Clear
+  // the timer on settle and swallow the timeout's own rejection path.
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error("x402 init timed out")), INIT_TIMEOUT_MS);
+  });
+  // The loser of the race must never become an unhandled rejection.
+  timeoutPromise.catch(() => {});
 
   try {
     await Promise.race([initPromise, timeoutPromise]);
@@ -299,6 +320,8 @@ async function initX402(): Promise<void> {
     console.error("[x402] Server will continue without x402 payments — fix facilitator connectivity and redeploy");
     x402MW = null;
     x402Ready = false;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

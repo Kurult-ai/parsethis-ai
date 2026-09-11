@@ -34,14 +34,27 @@ export async function applyOrgPromptPolicies(
   },
 ): Promise<void> {
   const enforcementMode = opts.enforcementMode ?? "block";
-  const key = await prisma.apiKey.findUnique({
-    where: { id: opts.apiKeyId },
-    select: { orgId: true },
-  });
-  if (!key?.orgId) return;
+  // This lookup must not take the screening path down with it. In test/CI
+  // environments DATABASE_URL is intentionally absent, and an org-policy
+  // lookup is an enrichment, not a gate: when it cannot run, the screen
+  // returns exactly what it would have for a keyless caller. (The inner
+  // try/catch blocks below already follow this rule; the outer findUnique
+  // predates it and turned a DB outage into a JSON-RPC -32602.)
+  let orgId: string | null = null;
+  try {
+    const key = await prisma.apiKey.findUnique({
+      where: { id: opts.apiKeyId },
+      select: { orgId: true },
+    });
+    orgId = key?.orgId ?? null;
+  } catch (err) {
+    console.error("[org-policy] key lookup failed, continuing without org policies:", (err as Error).message);
+    return;
+  }
+  if (!orgId) return;
 
   try {
-    const ctx = await loadImagePromptContext(key.orgId);
+    const ctx = await loadImagePromptContext(orgId);
     if (ctx.mode !== "allow") {
       const declared = extractDeclaredFilePaths(opts.metadata);
       const attachments = extractPromptAttachments(
@@ -80,7 +93,7 @@ export async function applyOrgPromptPolicies(
   if (requested.length === 0) return;
 
   try {
-    const { mode, rules } = await getOrgToolPolicy(key.orgId);
+    const { mode, rules } = await getOrgToolPolicy(orgId);
     const { blocked } = resolveToolList(requested, rules, mode, {
       agentId: opts.agentId,
       apiKeyId: opts.apiKeyId,

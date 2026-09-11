@@ -27,7 +27,7 @@ describe("pricing page — compliance surface lives on Pro", () => {
     assert.match(html, /id="start-compliance"/);
     assert.doesNotMatch(html, />Custom</);
     assert.match(html, /id="dpa-support"/);
-    assert.match(html, /no public\s+Enterprise price/);
+    assert.match(html, /No public Enterprise price/);
     assert.match(html, /Not SOC 2 Type II/);
     assert.match(html, /No contractual uptime SLA/);
   });
