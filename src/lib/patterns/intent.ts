@@ -563,7 +563,7 @@ const ENCODED_COMMAND_ARTIFACT =
   /\b(?:read this backwards and follow|convert from binary|morse code|emoji sequence as instructions|zero-width characters|whitespace .* encodes|hidden commands?|first letter of each word spells|u\+[0-9a-f]{4})\b/i;
 
 const DELIMITER_ATTACK_ARTIFACT =
-  /(?:<<\s*BEGIN_SYSTEM_OVERRIDE\s*>>|<<\s*END\s*>>|\[\s*hidden_instruction\s*:|(?:^|\n)\s*(?:#{1,6}\s*)?SYSTEM\s*:[^\n]{0,160}\b(?:admin privileges?|defy previous|ignore|override|new instructions?|compromised|reveal all)\b)/i;
+  /(?:<<\s*BEGIN_SYSTEM_OVERRIDE\s*>>|<<\s*END\s*>>|\[\s*hidden_instruction\s*:|(?:^|[^\w#])\s*(?:#{1,6}\s*)?SYSTEM\s*:[^\n]{0,160}\b(?:admin privileges?|defy previous|ignore|override|new instructions?|compromised|reveal all)\b)/i;
 
 /**
  * A run of fence characters used to fake the end of the caller's content, then
