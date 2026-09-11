@@ -209,7 +209,7 @@ curl -s ${baseUrl}/v1/activity -H "Authorization: Bearer $PARSE_API_KEY"
 `;
 
   return renderPage({
-    title: "Parse for agents people share — personal, team and community assistants",
+    title: "Governance for agents people share — personal, team and community assistants",
     description:
       "Running one AI assistant for yourself? Parse screens what it reads before it acts — without refusing you when "
       + "you correct your own agent. Free tier, no account, and an install command that proves your key works.",
