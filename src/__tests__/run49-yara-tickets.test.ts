@@ -248,9 +248,9 @@ describe("run 49 Yara — GET export, MCP notification, calculator, copy", () =>
       const end = html.indexOf('class="hf-scroll"');
       assert.ok(start >= 0 && end > start, `missing .hf region for variant ${variant}`);
       const fold = html.slice(start, end);
-      assert.doesNotMatch(fold, /price-strip/, `price-strip leaked into fold for ${variant}`);
+      assert.doesNotMatch(fold, /price-strip/, `price-strip leaked into fold for variant ${variant}`);
       assert.match(fold, /fleet/i);
-      assert.match(fold, /11th agent/);
+      assert.match(fold, /past the tenth|11th agent/);
       assert.match(fold, /named env/i);
       assert.match(fold, /403/);
     }
@@ -259,7 +259,7 @@ describe("run 49 Yara — GET export, MCP notification, calculator, copy", () =>
     const end = live.indexOf('class="hf-scroll"');
     const fold = live.slice(start, end);
     assert.match(fold, /fleet/i);
-    assert.match(fold, /11th agent/);
+    assert.match(fold, /past the tenth|11th agent/);
   });
 
   it("docs name GET /billing/cancel as the leave door", async () => {

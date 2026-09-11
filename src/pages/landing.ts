@@ -566,12 +566,12 @@ Verification required before reporting done:
         rather than at the SDK.
       -->
       <div class="hf-fine" style="margin-top:6px;">
-        Running a fleet, not one inbox? Team is the 11th agent and named environments that persist.
+        Running a fleet, not one inbox? Team adds named environments that persist across sessions, and every agent past the tenth is free.
         Undeclared Chrome tools return HTTP 403 on the gateway.
         Running an assistant that drafts replies, triages tickets or reads customer messages?
         <a href="/demo">Screen a batch of your own tickets</a> and see what it would refuse.
-        On ${INPUT_PRECISION_FINCRIME.harmlessTotal} lines of financial-crime investigative prose the deterministic layer refused ${INPUT_PRECISION_FINCRIME.harmlessRefusedPatternOnly === 0 ? "none" : INPUT_PRECISION_FINCRIME.harmlessRefusedPatternOnly} — <a href="/docs#precision">the corpus size and measured surface are published</a>.
-        Two modes are a trade, not a speed setting; a false positive is why that trade is documented.
+        We publish the false-positive record: on ${INPUT_PRECISION_FINCRIME.harmlessTotal} lines of financial-crime investigative prose, the deterministic layer refused ${INPUT_PRECISION_FINCRIME.harmlessRefusedPatternOnly === 0 ? "none" : INPUT_PRECISION_FINCRIME.harmlessRefusedPatternOnly} (<a href="/docs#precision">corpus size and measured surface</a>).
+        Fast and full modes trade recall for false positives — that trade is documented, not hidden.
       </div>
     </div>
     <div class="hf-art">
