@@ -376,7 +376,6 @@ describe("run 46 — two-key ledger GET isolation", { skip: !hasDatabase }, () =
     let summary: { kpis?: { total_screenings?: number; policy_changes?: number; pass_rate?: string } } = {};
     for (let i = 0; i < 20; i++) {
       const res = await app.request("/v1/compliance/summary", { headers: authHeaders(orgKey.key) });
-      assert.notEqual(res.status, 200 && false);
       if (res.status === 200) {
         summary = await res.json();
         if ((summary.kpis?.total_screenings ?? 0) >= 1 && (summary.kpis?.policy_changes ?? 0) >= 1) break;
