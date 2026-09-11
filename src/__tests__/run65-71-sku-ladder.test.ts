@@ -13,8 +13,16 @@ import { detectPrivacyApprovalRequest } from "../lib/privacy-approval.js";
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
+// Evalsets are operator-local corpora (~/reports/parse-prospect/…); CI and
+// fresh checkouts do not carry them. Skip rather than fail — the suite runs
+// in full wherever the corpus lives.
+const evalsetPath = (run: string) => `${homedir()}/reports/parse-prospect/${run}/evalset.json`;
+const EVALSET_RUNS = ["run65", "run66", "run67", "run68"];
+const HAS_EVALSETS = EVALSET_RUNS.every((r) => existsSync(evalsetPath(r)));
+const maybeDescribe = HAS_EVALSETS ? describe : describe.skip;
+
 function loadPrompts(run: string): Record<string, { id: string; text: string; harmless?: boolean }> {
-  const path = `${homedir()}/reports/parse-prospect/${run}/evalset.json`;
+  const path = evalsetPath(run);
   assert.ok(existsSync(path), `evalset missing at ${path}`);
   const raw = JSON.parse(readFileSync(path, "utf8")) as {
     prompts: Array<{ id: string; text: string; harmless?: boolean }>;
@@ -24,10 +32,10 @@ function loadPrompts(run: string): Record<string, { id: string; text: string; ha
   return byId;
 }
 
-const run65 = loadPrompts("run65");
-const run66 = loadPrompts("run66");
-const run67 = loadPrompts("run67");
-const run68 = loadPrompts("run68");
+const run65 = HAS_EVALSETS ? loadPrompts("run65") : ({} as ReturnType<typeof loadPrompts>);
+const run66 = HAS_EVALSETS ? loadPrompts("run66") : ({} as ReturnType<typeof loadPrompts>);
+const run67 = HAS_EVALSETS ? loadPrompts("run67") : ({} as ReturnType<typeof loadPrompts>);
+const run68 = HAS_EVALSETS ? loadPrompts("run68") : ({} as ReturnType<typeof loadPrompts>);
 
 async function screen(text: string) {
   return parsePrompt({ prompt: text, mode: "pattern-only" });
@@ -37,7 +45,7 @@ function flagIds(r: Awaited<ReturnType<typeof screen>>): string[] {
   return r.flags.map((f) => f.id).filter((id): id is string => typeof id === "string" && id.length > 0);
 }
 
-describe("run 65 — Tomás C2 tool-credit hidden from a merchant thread blocks", () => {
+maybeDescribe("run 65 — Tomás C2 tool-credit hidden from a merchant thread blocks", () => {
   it("blocks Tomás C2 (exact evalset) in pattern-only", async () => {
     const r = await screen(run65.C2.text);
     assert.equal(r.recommended_action, "block", JSON.stringify({
@@ -72,7 +80,7 @@ describe("run 65 — Tomás C2 tool-credit hidden from a merchant thread blocks"
   });
 });
 
-describe("run 67 — Elena C1 resume HTML comment blocks; B2 own outreach allows", () => {
+maybeDescribe("run 67 — Elena C1 resume HTML comment blocks; B2 own outreach allows", () => {
   it("blocks Elena C1 (exact evalset) in pattern-only", async () => {
     const r = await screen(run67.C1.text);
     assert.equal(r.recommended_action, "block", JSON.stringify({
@@ -114,7 +122,7 @@ describe("run 67 — Elena C1 resume HTML comment blocks; B2 own outreach allows
   });
 });
 
-describe("run 68 — Ines C1 SYSTEM + set/suppress blocks", () => {
+maybeDescribe("run 68 — Ines C1 SYSTEM + set/suppress blocks", () => {
   it("blocks Ines C1 (exact evalset) in pattern-only", async () => {
     const r = await screen(run68.C1.text);
     assert.equal(r.recommended_action, "block", JSON.stringify({
@@ -143,7 +151,7 @@ describe("run 68 — Ines C1 SYSTEM + set/suppress blocks", () => {
   });
 });
 
-describe("run 66 — Oskar pins stay", () => {
+maybeDescribe("run 66 — Oskar pins stay", () => {
   it("still blocks Oskar C1 SYSTEM spoof", async () => {
     const r = await screen(run66.C1.text);
     assert.equal(r.recommended_action, "block");
@@ -160,7 +168,7 @@ describe("run 66 — Oskar pins stay", () => {
   });
 });
 
-describe("privacy — owner-sent outreach is not a third-party disclosure", () => {
+maybeDescribe("privacy — owner-sent outreach is not a third-party disclosure", () => {
   it("stays quiet on we-sent / our-outreach summarise", () => {
     const texts = [
       run67.B2.text,
@@ -185,7 +193,7 @@ describe("privacy — owner-sent outreach is not a third-party disclosure", () =
   });
 });
 
-describe("run 65–71 — the rules are structural, not a corpus fit", () => {
+maybeDescribe("run 65–71 — the rules are structural, not a corpus fit", () => {
   it("does not name frozen evalset tokens in the detectors", () => {
     // TOOL_INVOCATION already documents snake_case with a `grant_credit`
     // example in a comment. Scan code, not comments.

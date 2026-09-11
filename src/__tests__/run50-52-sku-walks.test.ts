@@ -25,8 +25,15 @@ __setLLMCallForTesting(async (messages) => {
   };
 });
 
+// Evalsets are operator-local corpora (~/reports/parse-prospect/…); CI and
+// fresh checkouts do not carry them. Skip rather than fail — the suite runs
+// in full wherever the corpus lives.
+const evalsetPath = (run: string) => `${homedir()}/reports/parse-prospect/${run}/evalset.json`;
+const HAS_EVALSETS = ["run50", "run51", "run52"].every((r) => existsSync(evalsetPath(r)));
+const maybeDescribe = HAS_EVALSETS ? describe : describe.skip;
+
 function loadPrompts(run: string): Record<string, { id: string; text: string; harmless: boolean }> {
-  const path = `${homedir()}/reports/parse-prospect/${run}/evalset.json`;
+  const path = evalsetPath(run);
   assert.ok(existsSync(path), `evalset missing at ${path}`);
   const raw = JSON.parse(readFileSync(path, "utf8")) as {
     prompts: Array<{ id: string; text: string; harmless: boolean }>;
@@ -36,15 +43,15 @@ function loadPrompts(run: string): Record<string, { id: string; text: string; ha
   return byId;
 }
 
-const run50 = loadPrompts("run50");
-const run51 = loadPrompts("run51");
-const run52 = loadPrompts("run52");
+const run50 = HAS_EVALSETS ? loadPrompts("run50") : ({} as ReturnType<typeof loadPrompts>);
+const run51 = HAS_EVALSETS ? loadPrompts("run51") : ({} as ReturnType<typeof loadPrompts>);
+const run52 = HAS_EVALSETS ? loadPrompts("run52") : ({} as ReturnType<typeof loadPrompts>);
 
 async function screen(text: string) {
   return parsePrompt({ prompt: text, mode: "pattern-only" });
 }
 
-describe("run 50–52 — pattern-only tool-shaped injections block", () => {
+maybeDescribe("run 50–52 — pattern-only tool-shaped injections block", () => {
   it("blocks Jules C2 (exact evalset) in pattern-only", async () => {
     const r = await screen(run50.C2.text);
     assert.equal(r.recommended_action, "block", JSON.stringify({
@@ -94,7 +101,7 @@ describe("run 50–52 — pattern-only tool-shaped injections block", () => {
   });
 });
 
-describe("run 50–52 — precision pins stay allow", () => {
+maybeDescribe("run 50–52 — precision pins stay allow", () => {
   it("allows Jules B1 angry workspace cancel", async () => {
     const r = await screen(run50.B1.text);
     assert.equal(r.recommended_action, "allow", JSON.stringify({
@@ -150,7 +157,7 @@ describe("run 50–52 — precision pins stay allow", () => {
   });
 });
 
-describe("run 50–52 — SYSTEM NOTE injections still block", () => {
+maybeDescribe("run 50–52 — SYSTEM NOTE injections still block", () => {
   it("blocks Jules C1", async () => {
     const r = await screen(run50.C1.text);
     assert.equal(r.recommended_action, "block");
@@ -167,7 +174,7 @@ describe("run 50–52 — SYSTEM NOTE injections still block", () => {
   });
 });
 
-describe("run 50–56 — copy tickets", () => {
+maybeDescribe("run 50–56 — copy tickets", () => {
   it("landing fold names Solo $12, not only $49", () => {
     const html = renderLandingPage("https://www.parsethis.ai");
     assert.doesNotMatch(html, /production keys from \$49\/mo/);

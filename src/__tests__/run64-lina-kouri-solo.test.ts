@@ -13,8 +13,16 @@ import { parsePrompt } from "../parse.js";
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
+// Evalsets are operator-local corpora (~/reports/parse-prospect/…); CI and
+// fresh checkouts do not carry them. Skip rather than fail — the suite runs
+// in full wherever the corpus lives.
+const evalsetPath = (run: string) => `${homedir()}/reports/parse-prospect/${run}/evalset.json`;
+const EVALSET_RUNS = ["run64"];
+const HAS_EVALSETS = EVALSET_RUNS.every((r) => existsSync(evalsetPath(r)));
+const maybeDescribe = HAS_EVALSETS ? describe : describe.skip;
+
 function loadPrompts(run: string): Record<string, { id: string; text: string; harmless: boolean }> {
-  const path = `${homedir()}/reports/parse-prospect/${run}/evalset.json`;
+  const path = evalsetPath(run);
   assert.ok(existsSync(path), `evalset missing at ${path}`);
   const raw = JSON.parse(readFileSync(path, "utf8")) as {
     prompts: Array<{ id: string; text: string; harmless: boolean }>;
@@ -24,7 +32,7 @@ function loadPrompts(run: string): Record<string, { id: string; text: string; ha
   return byId;
 }
 
-const run64 = loadPrompts("run64");
+const run64 = HAS_EVALSETS ? loadPrompts("run64") : ({} as ReturnType<typeof loadPrompts>);
 
 async function screen(text: string) {
   return parsePrompt({ prompt: text, mode: "pattern-only" });
@@ -34,7 +42,7 @@ function flagIds(r: Awaited<ReturnType<typeof screen>>): string[] {
   return r.flags.map((f) => f.id).filter((id): id is string => typeof id === "string" && id.length > 0);
 }
 
-describe("run 64 — C2 spend-cap lift with concealment blocks in pattern-only", () => {
+maybeDescribe("run 64 — C2 spend-cap lift with concealment blocks in pattern-only", () => {
   it("blocks Lina C2 (exact evalset) in pattern-only", async () => {
     const r = await screen(run64.C2.text);
     assert.equal(r.recommended_action, "block", JSON.stringify({
@@ -88,7 +96,7 @@ describe("run 64 — C2 spend-cap lift with concealment blocks in pattern-only",
   });
 });
 
-describe("run 64 — precision pins stay allow", () => {
+maybeDescribe("run 64 — precision pins stay allow", () => {
   it("allows Lina B1 furious skip-week mail (Ignore the freeze)", async () => {
     const r = await screen(run64.B1.text);
     assert.equal(r.recommended_action, "allow", JSON.stringify({
@@ -127,7 +135,7 @@ describe("run 64 — precision pins stay allow", () => {
   });
 });
 
-describe("run 64 — C1 still blocks; the HTML-comment floor is untouched", () => {
+maybeDescribe("run 64 — C1 still blocks; the HTML-comment floor is untouched", () => {
   it("blocks Lina C1 HTML-comment credit in pattern-only", async () => {
     const r = await screen(run64.C1.text);
     assert.equal(r.recommended_action, "block", JSON.stringify({
@@ -143,7 +151,7 @@ describe("run 64 — C1 still blocks; the HTML-comment floor is untouched", () =
   });
 });
 
-describe("run 64 — signup will not take a card for a Redis-fallback key", () => {
+maybeDescribe("run 64 — signup will not take a card for a Redis-fallback key", () => {
   it("refuses signup-checkout when the minted key id is redis_", () => {
     const billing = read("../routes/billing.ts");
     const fn = billing.slice(billing.indexOf('billingRoutes.post("/v1/billing/signup-checkout"'));
@@ -158,7 +166,7 @@ describe("run 64 — signup will not take a card for a Redis-fallback key", () =
   });
 });
 
-describe("run 64 — checkout success reads the key, not the Stripe session alone", () => {
+maybeDescribe("run 64 — checkout success reads the key, not the Stripe session alone", () => {
   it("looks up apiKey.tier before painting paid", () => {
     const publicRoutes = read("../routes/public.ts");
     const handler = publicRoutes.slice(publicRoutes.indexOf('publicRoutes.get("/checkout/success"'));
@@ -169,7 +177,7 @@ describe("run 64 — checkout success reads the key, not the Stripe session alon
   });
 });
 
-describe("run 64 — the rule is structural, not a corpus fit", () => {
+maybeDescribe("run 64 — the rule is structural, not a corpus fit", () => {
   it("does not name frozen evalset tokens in the detector", () => {
     const intent = read("../lib/patterns/intent.ts");
     assert.doesNotMatch(intent, /Lina/);
