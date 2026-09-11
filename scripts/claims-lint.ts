@@ -316,7 +316,19 @@ function checkFile(
       // Check if any qualifier phrase is present in the window
       const hasQualifier = QUALIFIER_PHRASES.some((q) => contextWindow.includes(q));
 
-      if (!hasQualifier) {
+      // A negated reference is not a claim. "Not SOC 2 Type II" states the
+      // absence of the certification — the exact honesty this lint enforces —
+      // so flagging it forces teams to delete true disclaimers to go green.
+      // Negation directly before the term ("not ", "no ", "isn't ", "n't ")
+      // within the same sentence-like span exempts the match.
+      const spanBefore = content
+        .slice(Math.max(0, idx - 24), idx)
+        .toLowerCase();
+      const isNegated = /\b(?:not|no|never|isn't|aren't|won't|hasn't|haven't|don't|doesn't|without)\s+(?:\w+\s+){0,3}$/.test(
+        spanBefore,
+      );
+
+      if (!hasQualifier && !isNegated) {
         const snippet = lineText.trim().slice(0, 120);
         violations.push({
           file: filePath.replace(repoRoot + "/", ""),
